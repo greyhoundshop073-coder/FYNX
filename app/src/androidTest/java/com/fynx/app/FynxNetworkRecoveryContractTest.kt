@@ -9,6 +9,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 /**
  * Final regression coverage for the production connectivity contract.
@@ -57,6 +58,49 @@ class FynxNetworkRecoveryContractTest {
             FynxBackendClient.configureBaseUrl(context, "")
             assertTrue(FynxBackendClient.baseUrl(context).startsWith("https://"))
             assertNotNull(FynxBackendClient.baseUrl(context))
+        } finally {
+            FynxBackendClient.configureBaseUrl(context, original)
+        }
+    }
+
+    @Test
+    fun staleUnmarkedBackendOverrideMigratesToRailwayForDebugBuilds() {
+        val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
+        val originalUrl = FynxBackendClient.baseUrl(context)
+        val originalExplicit = prefs.getBoolean("base_url_explicit", false)
+        try {
+            prefs.edit()
+                .putString("base_url", "https://fynx-ai-backend.onrender.com")
+                .putBoolean("base_url_explicit", false)
+                .commit()
+
+            val resolved = FynxBackendClient.baseUrl(context)
+            val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+            if (isDebuggable) {
+                assertEquals("https://fynx-backend-testing-testing.up.railway.app", resolved)
+                assertEquals(resolved, prefs.getString("base_url", null))
+            }
+        } finally {
+            prefs.edit()
+                .putString("base_url", originalUrl)
+                .putBoolean("base_url_explicit", originalExplicit)
+                .commit()
+        }
+    }
+
+    @Test
+    fun debugAndroidRuntimeCanReachLiveRailwayBackend() = runBlocking {
+        val original = FynxBackendClient.baseUrl(context)
+        try {
+            val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+            if (isDebuggable) {
+                FynxBackendClient.configureBaseUrl(context, "https://fynx-backend-testing-testing.up.railway.app")
+                val result = FynxBackendClient.health(context)
+                assertTrue(
+                    "Android runtime could not reach Railway backend: ${result.exceptionOrNull()?.message}",
+                    result.isSuccess
+                )
+            }
         } finally {
             FynxBackendClient.configureBaseUrl(context, original)
         }
