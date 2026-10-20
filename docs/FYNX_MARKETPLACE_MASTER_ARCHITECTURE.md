@@ -526,3 +526,33 @@ Each R6 batch must be:
 If a build or verifier is RED, stop the sequence and fix the exact failure before continuing.
 
 The R6 batches are ordered deliberately: financial correctness first, payment reliability second, payout third, protection fourth, accounting fifth, fulfillment sixth, cross-surface integration seventh, UX eighth, and adversarial verification last.
+
+
+## 22. Financial receipts and reconciliation contract
+
+A financial receipt is distinct from the buyer's fulfillment confirmation that goods were received. Receipt generation must not mutate order, escrow, dispute, inventory, or payout state.
+
+### Authoritative amount model
+Use the existing backend quote, canonical order snapshot, checkout-group allocations, payment provider records, and settlement ledger. Do not calculate receipt totals from UI text or trust client-supplied totals.
+
+For each item line, using integer minor units or the project's established decimal-safe money representation:
+
+- `line_gross = unit_price × quantity`
+- `line_net = line_gross − allocated_line_discount`
+- `buyer_amount_due = merchandise_subtotal − applicable_discounts + applicable_delivery + buyer_paid_fees + taxes_actually_charged`
+- `seller_net_proceeds = authoritative_seller_gross − seller_borne_fees − seller_borne_provider_costs − refunds/adjustments charged to seller`
+
+These are reconciliation shapes, not permission to invent or reassign a fee. The implementation must map every term to current authoritative fields and the configured fee policy. A fee paid by the buyer must not be deducted from seller proceeds a second time. If the stored provider amount, canonical order total, checkout-group allocation, or ledger does not reconcile, do not issue a misleading receipt; return a safe error and investigate the transaction.
+
+### Required receipt variants and privacy
+- **Buyer receipt:** all items in the buyer's canonical order, item quantity/unit and line totals, seller/shop identity, currency, subtotal, discount, delivery, each applicable fee/tax, verified amount paid, transaction date/time and timezone, order ID, receipt ID, payment reference and payment status.
+- **Seller sales receipt:** only that seller's item/sub-order rows, quantities, gross sales, relevant allocated discounts, explicit fee treatment, authoritative net proceeds and separate payout state. Never expose other sellers' line items or unnecessary buyer contact/delivery data.
+- A multi-seller cart may have one full buyer receipt plus a separate seller receipt per seller sub-order. All records must link to the canonical parent checkout/order without creating a duplicate transaction.
+- Store authoritative event time in UTC and display a clearly labelled timezone/offset. Preserve purchase-time item/title/price snapshots if the listing changes later.
+- Receipt creation is stable/idempotent and only enabled once the backend confirms payment. Refunds, disputes, delivery, inspection, settlement eligibility and payout remain separately labelled events/states; later adjustments must be recorded as linked adjustments/refund evidence, not silently rewrite history.
+- Provide authorized receipt retrieval, PDF generation, download to a user-accessible location, and Android share-sheet sharing. Sharing into FYNX chats should reuse the established message attachment/content-URI flow; never send a private filesystem path or leak bearer tokens.
+
+### Checkout and release gates
+Both single-item and multi-item checkout must show the exact server quote, itemized subtotal, discounts, delivery, buyer fees/taxes when applicable, currency and final amount in a consistent, uncluttered layout. The payment provider's hosted page remains provider-controlled.
+
+Before release, test calculation/rounding boundaries, NGN/USD isolation, multiple sellers, discount and delivery allocation, fee payer treatment, partial/full refunds, duplicate provider events, stale quotes, amount/currency mismatch, unverified payment, unauthorized receipt access, long receipts/PDF pagination, repeat download/share, and reconciliation across buyer total, seller allocations, platform/provider amounts and ledger. Run all existing Android, backend, chat/group, marketplace lifecycle/security and required instrumentation checks; stop and repair any red gate before proceeding.
