@@ -263,7 +263,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     OutlinedTextField(value = shopDescription, onValueChange = { shopDescription = it.take(800); shopMessage = null }, label = { Text("About your shop (optional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !shopSaving)
                     OutlinedTextField(value = shopLocation, onValueChange = { shopLocation = it.take(160); shopMessage = null }, label = { Text("Shop location (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null }, label = { Text("Public shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
-                    shopMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                    shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
                     Button(
                         onClick = {
                             shopSaving = true
