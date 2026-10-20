@@ -6,6 +6,7 @@ support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerFlowSu
 marketplace = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
 checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text()
 detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt").read_text()
+seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
 
 checks = [
     ("seller support keeps a bounded real media limit", "const val MAX_PRODUCT_MEDIA = 12" in support),
@@ -61,6 +62,12 @@ checks = [
     ("seller publish still requires a real listing area", "location.trim().isNotBlank()" in marketplace and "validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media)" in marketplace),
     ("seller listing location remains human-readable and privacy-preserving", "FynxPostLocationClient.currentPlace(context)" in marketplace and "your exact GPS coordinates are not published with the listing." in marketplace),
     ("buyer nearby discovery resolves the user area and requests nearby listings with the active search/filter", "FynxPostLocationClient.currentPlace(context)" in marketplace and "FynxRemoteSocialClient.nearbyMarketplaceListings(context, requestQuery, requestCategory, requestNearbyLabel)" in marketplace),
+    ("My Shop has separate overview, profile, listings, orders/delivery, and earnings/payout destinations", all(f'"{section}"' in seller_center for section in ("Overview", "Shop profile", "Listings", "Orders & delivery", "Earnings & payouts"))),
+    ("My Shop overview links to each management destination and uses existing loaded counts", "Your shop at a glance" in seller_center and 'activeSection = "Shop profile"' in seller_center and 'activeSection = "Listings"' in seller_center and 'activeSection = "Orders & delivery"' in seller_center and 'activeSection = "Earnings & payouts"' in seller_center and "listings.size" in seller_center and "moneyRecords.size" in seller_center),
+    ("My Shop preserves authenticated shop profile editing and save path", 'Text("Shop identity"' in seller_center and '"/api/marketplace/my-shop"' in seller_center and 'Text("Save shop details")' in seller_center),
+    ("My Shop preserves listing edit, delete, and per-listing delivery/pickup settings", 'Icon(Icons.Default.Edit, "Edit listing")' in seller_center and 'Icon(Icons.Default.Delete, "Remove listing")' in seller_center and "FynxMarketplaceShippingSettingsCard(" in seller_center),
+    ("My Shop keeps seller orders and driver deliveries in the Orders & delivery destination", 'if (activeSection == "Orders & delivery")' in seller_center and "FynxMarketplaceSellerOrders(context = context" in seller_center and "showDriverAssignments = true" in seller_center),
+    ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Earnings history"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
 ]
 
 failed = [name for name, ok in checks if not ok]
