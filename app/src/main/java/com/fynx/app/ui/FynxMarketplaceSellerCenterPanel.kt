@@ -1,6 +1,8 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -62,6 +64,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyError by remember { mutableStateOf<String?>(null) }
     var moneyRecords by remember { mutableStateOf(emptyList<SellerMoneyRecord>()) }
     var showDriverAssignments by remember { mutableStateOf(false) }
+    var activeSection by rememberSaveable { mutableStateOf("Overview") }
     var shopName by rememberSaveable { mutableStateOf("") }
     var shopDescription by rememberSaveable { mutableStateOf("") }
     var shopLocation by rememberSaveable { mutableStateOf("") }
@@ -176,20 +179,78 @@ fun FynxMarketplaceSellerCenterPanel() {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Seller Center", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("My Shop", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
-                    Text("Your Marketplace sales, protected funds and payout controls use your real FYNX account data.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Manage your storefront, listings, orders, deliveries and earnings from one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { refresh() }) { Icon(Icons.Default.Refresh, "Refresh seller center") }
-            }
-            OutlinedButton(onClick = { showDriverAssignments = true }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Driver deliveries")
+                IconButton(onClick = { refresh() }) { Icon(Icons.Default.Refresh, "Refresh My Shop") }
             }
         }
-
         item {
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Overview", "Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts").forEach { section ->
+                    FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section, maxLines = 1) })
+                }
+            }
+        }
+        if (activeSection == "Overview") {
+            item {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Your shop at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text(if (shopName.isBlank()) "Set up your shop identity so buyers can recognize your business." else shopName, style = MaterialTheme.typography.titleMedium)
+                        Text("${listings.size} listing${if (listings.size == 1) "" else "s"} • ${moneyRecords.size} order settlement record${if (moneyRecords.size == 1) "" else "s"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = { activeSection = "Shop profile" }, modifier = Modifier.weight(1f)) { Text("Shop profile") }
+                            OutlinedButton(onClick = { activeSection = "Listings" }, modifier = Modifier.weight(1f)) { Text("Manage listings") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = { activeSection = "Orders" }, modifier = Modifier.weight(1f)) { Text("Orders") }
+                            OutlinedButton(onClick = { activeSection = "Delivery & drivers" }, modifier = Modifier.weight(1f)) { Text("Delivery & drivers") }
+                        }
+                        OutlinedButton(onClick = { activeSection = "Earnings & payouts" }, modifier = Modifier.fillMaxWidth()) { Text("Earnings & payouts") }
+                        OutlinedButton(onClick = { showDriverAssignments = true }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Manage driver deliveries")
+                        }
+                        if (loading || shopLoading || moneyLoading) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CircularProgressIndicator(Modifier.size(16.dp))
+                                Text("Refreshing your shop information…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (activeSection == "Orders") {
+            item {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Orders", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FynxMarketplaceSellerOrders(context = context, onChanged = { refresh() })
+                    }
+                }
+            }
+        }
+        if (activeSection == "Delivery & drivers") {
+            item {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Delivery & drivers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Manage driver assignments and delivery coordination separately from order review and payout settings.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedButton(onClick = { showDriverAssignments = true }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Manage driver deliveries")
+                        }
+                    }
+                }
+            }
+        }
+        if (activeSection == "Shop profile") item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -237,7 +298,7 @@ fun FynxMarketplaceSellerCenterPanel() {
             }
         }
 
-        item {
+        if (activeSection == "Earnings & payouts") item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -265,7 +326,7 @@ fun FynxMarketplaceSellerCenterPanel() {
             }
         }
 
-        item {
+        if (activeSection == "Earnings & payouts") item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Earnings history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -286,7 +347,7 @@ fun FynxMarketplaceSellerCenterPanel() {
             }
         }
 
-        item {
+        if (activeSection == "Earnings & payouts") item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -304,13 +365,13 @@ fun FynxMarketplaceSellerCenterPanel() {
                         TextButton(onClick = { showPayoutAccount = true }) { Text(if (payoutAccount == null) "Set up" else "Manage") }
                     }
                     Text("Seller payouts remain blocked until FYNX confirms buyer completion and the protected settlement is eligible.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FynxMarketplaceSellerOrders(context = context, onChanged = { refresh() })
                 }
             }
         }
 
-        if (accountMessage != null) item { Text(accountMessage!!, color = MaterialTheme.colorScheme.error) }
-        if (error != null) item { Text(error!!, color = MaterialTheme.colorScheme.error) }
+        if (accountMessage != null && activeSection == "Earnings & payouts") item { Text(accountMessage!!, color = MaterialTheme.colorScheme.error) }
+        if (error != null && activeSection == "Listings") item { Text(error!!, color = MaterialTheme.colorScheme.error) }
+        if (activeSection == "Listings") {
         if (loading) {
             item { Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
         } else if (listings.isEmpty()) {
@@ -364,6 +425,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                 }
             }
+        }
         }
     }
 

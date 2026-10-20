@@ -660,7 +660,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 }
             )
             "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" })
-            "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, initialListingId = marketplaceListingId)
+            "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenSavedProducts = { selected = "Saved Products" }, initialListingId = marketplaceListingId)
             "Money Tools" -> MoneyCenterPanel()
             "Business Account" -> FynxBusinessAccountPanel(onBack = { selected = "Features" }, onOpenAdvertising = { selected = "Advertising" }, onOpenDashboard = { selected = "Advertising Dashboard" })
             "Features" -> FynxFeaturesPanel(isAdmin = adminRole != null, onSelect = { if (it != "Admin" || adminRole != null) selected = it })
@@ -715,7 +715,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
-            "Saved Products" -> FynxSavedMarketplaceProductsPanel()
+            "Saved Products" -> FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" })
             "Seller Center" -> FynxMarketplaceSellerCenterPanel()
             "AI" -> FynxAiAssistantPanel(onOpenDestination = { destination -> selected = destination }, initialMarketplaceListingId = marketplaceAiListingId)
             "AI Creation" -> { selected = "AI" }
