@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -44,6 +45,7 @@ internal fun MarketplaceReferenceProductCard(
     onProfile: () -> Unit,
     onContact: (() -> Unit)? = null,
     isFavorite: Boolean = false,
+    isFavoriteBusy: Boolean = false,
     onFavorite: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -62,16 +64,62 @@ internal fun MarketplaceReferenceProductCard(
                         Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(42.dp), tint = FynxMarketplaceReferenceStyle.primarySoft)
                     }
                 }
-                if (listing.condition.isNotBlank()) {
-                    Surface(
-                        modifier = Modifier.align(Alignment.TopStart).padding(9.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = FynxMarketplaceReferenceStyle.background.copy(alpha = 0.88f)
-                    ) { Text(listing.condition, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = androidx.compose.material3.MaterialTheme.typography.labelSmall, color = FynxMarketplaceReferenceStyle.text) }
+                Column(
+                    modifier = Modifier.align(Alignment.TopStart).padding(9.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    if (listing.condition.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = FynxMarketplaceReferenceStyle.background.copy(alpha = 0.88f)
+                        ) {
+                            Text(
+                                listing.condition,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                color = FynxMarketplaceReferenceStyle.text
+                            )
+                        }
+                    }
+                    if (listing.quantity <= 0) {
+                        Surface(shape = RoundedCornerShape(8.dp), color = androidx.compose.material3.MaterialTheme.colorScheme.errorContainer) {
+                            Text(
+                                "Out of stock",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    } else if (listing.quantity <= 5) {
+                        Surface(shape = RoundedCornerShape(8.dp), color = androidx.compose.material3.MaterialTheme.colorScheme.tertiaryContainer) {
+                            Text(
+                                "Only ${listing.quantity} left",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
                 }
                 onFavorite?.let { favorite ->
-                    IconButton(onClick = favorite, modifier = Modifier.align(Alignment.TopEnd).padding(3.dp).size(38.dp)) {
-                        Icon(if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isFavorite) "Remove from Saved Products" else "Save product", tint = if (isFavorite) FynxMarketplaceReferenceStyle.primarySoft else FynxMarketplaceReferenceStyle.text)
+                    IconButton(
+                        onClick = favorite,
+                        enabled = !isFavoriteBusy,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(3.dp).size(38.dp)
+                    ) {
+                        if (isFavoriteBusy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = FynxMarketplaceReferenceStyle.primarySoft
+                            )
+                        } else {
+                            Icon(
+                                if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                if (isFavorite) "Remove from Saved Products" else "Save product",
+                                tint = if (isFavorite) FynxMarketplaceReferenceStyle.primarySoft else FynxMarketplaceReferenceStyle.text
+                            )
+                        }
                     }
                 }
             }
