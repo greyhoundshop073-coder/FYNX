@@ -482,6 +482,29 @@ app.get("/api/media/:id", auth, async (req, res) => {
         if (marketplaceEvidenceError.code !== "42P01") throw marketplaceEvidenceError;
       }
     }
+    if (!result.rows[0]) {
+      // Dispute evidence photos are accessible only to the buyer/seller on the order
+      // that references the authenticated participant's uploaded image.
+      try {
+        const evidenceTable = await pool.query("SELECT to_regclass('public.marketplace_order_evidence') AS table_name");
+        if (evidenceTable.rows[0]?.table_name) {
+          result = await pool.query(`SELECT mm.mime_type, mm.data
+            FROM message_media mm
+            WHERE mm.id = $1
+              AND EXISTS (
+                SELECT 1
+                FROM marketplace_order_evidence e
+                JOIN marketplace_orders o ON o.id = e.order_id
+                WHERE e.kind = 'PHOTO'
+                  AND e.value = CAST(mm.id AS TEXT)
+                  AND (o.buyer_id = $2 OR o.seller_id = $2)
+              )
+            LIMIT 1`, [mediaId, req.user.sub]);
+        }
+      } catch (marketplaceEvidenceError) {
+        if (marketplaceEvidenceError.code !== "42P01") throw marketplaceEvidenceError;
+      }
+    }
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
     res.set("Cache-Control", "private, max-age=3600");
     res.type(result.rows[0].mime_type);
