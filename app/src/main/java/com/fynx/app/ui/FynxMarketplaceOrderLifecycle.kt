@@ -3,6 +3,10 @@ package com.fynx.app.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,6 +58,29 @@ fun FynxMarketplaceOrderLifecycle(
     var deliveryDetails by remember(order.id) { mutableStateOf<JSONObject?>(null) }
     var handoverPhotoMediaId by remember(order.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val photoEvidencePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+        if (uri != null) {
+            busy = true
+            error = null
+            scope.launch {
+                val uploaded = FynxProductionMessaging.uploadMedia(context, uri)
+                if (uploaded.isFailure) {
+                    error = uploaded.exceptionOrNull()?.message ?: "Photo upload failed."
+                } else {
+                    val media = uploaded.getOrThrow()
+                    val allowedImageTypes = setOf("image/jpeg", "image/png", "image/webp", "image/gif")
+                    if (media.mimeType.trim().lowercase() !in allowedImageTypes) {
+                        error = "Choose a JPEG, PNG, WebP or GIF image."
+                    } else {
+                        FynxRemoteSocialClient.submitMarketplaceOrderEvidence(context, order.id, "PHOTO", media.id)
+                            .onSuccess { error = "Photo evidence uploaded and attached to this order." }
+                            .onFailure { error = it.message ?: "Photo evidence could not be attached." }
+                    }
+                }
+                busy = false
+            }
+        }
+    }
 
     LaunchedEffect(order.id) {
         FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
@@ -133,6 +160,11 @@ fun FynxMarketplaceOrderLifecycle(
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    TextButton(
+                        enabled = !busy,
+                        onClick = { photoEvidencePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    ) { Text(if (busy) "Uploading photo..." else "Add photo evidence") }
+                    error?.let { Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error) }
                 } else {
                     Text(order.productTitle.ifBlank { "FYNX order" })
                     Text("${order.currency} ${"%.2f".format(order.totalAmount)}")
