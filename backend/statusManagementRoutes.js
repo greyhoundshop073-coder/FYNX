@@ -45,7 +45,7 @@ export function registerStatusManagementRoutes({ app }) {
           id:String(row.id), ownerUsername:row.username, ownerDisplayName:row.display_name,
           type:row.type, text:row.text || null,
           mediaId:row.media_id == null ? null : String(row.media_id),
-          mediaUrl:row.media_id == null ? null : \`/api/media/\${row.media_id}\`,
+          mediaUrl:row.media_id == null ? null : `/api/media/${row.media_id}`,
           backgroundColor:Number(row.background_color), foregroundColor:Number(row.foreground_color),
           font:row.font, alignment:Number(row.alignment), privateStatus:Boolean(row.private_status),
           audience:row.audience || (row.private_status ? 'FRIENDS' : 'EVERYONE'),
