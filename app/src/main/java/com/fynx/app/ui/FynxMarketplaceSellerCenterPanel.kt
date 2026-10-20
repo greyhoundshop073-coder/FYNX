@@ -199,7 +199,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Your shop at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text(if (shopName.isBlank()) "Set up your shop identity so buyers can recognize your business." else shopName, style = MaterialTheme.typography.titleMedium)
-                        Text("${listings.size} active listing${if (listings.size == 1) "" else "s"} • ${moneyRecords.size} order settlement record${if (moneyRecords.size == 1) "" else "s"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${listings.size} listing${if (listings.size == 1) "" else "s"} • ${moneyRecords.size} order settlement record${if (moneyRecords.size == 1) "" else "s"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(onClick = { activeSection = "Shop profile" }, modifier = Modifier.weight(1f)) { Text("Shop profile") }
                             OutlinedButton(onClick = { activeSection = "Listings" }, modifier = Modifier.weight(1f)) { Text("Manage listings") }
