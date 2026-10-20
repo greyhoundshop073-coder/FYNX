@@ -225,23 +225,32 @@ fun FynxMarketplaceSellerCenterPanel() {
                 }
             }
         }
-        if (activeSection == "Orders & delivery") {
+        if (activeSection == "Orders") {
             item {
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Orders and delivery", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                        Text("Review buyer orders, fulfillment progress, driver custody and delivery evidence without mixing them into your shop settings.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Orders", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         FynxMarketplaceSellerOrders(context = context, onChanged = { refresh() })
+                    }
+                }
+            }
+        }
+        if (activeSection == "Delivery & drivers") {
+            item {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Delivery & drivers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Manage driver assignments and delivery coordination separately from order review and payout settings.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         OutlinedButton(onClick = { showDriverAssignments = true }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Driver deliveries")
+                            Text("Manage driver deliveries")
                         }
                     }
                 }
             }
         }
-
         if (activeSection == "Shop profile") item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
