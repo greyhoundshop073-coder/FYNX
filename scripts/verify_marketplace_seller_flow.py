@@ -72,6 +72,7 @@ checks = [
     ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Earnings history"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
     ("Marketplace Home exposes direct My Shop, Orders, and Saved Products shortcuts", all(f'Text("{label}"' in marketplace for label in ("My Shop", "Orders", "Saved products")) and "onOpenSavedProducts" in marketplace and 'onOpenSavedProducts = { selected = "Saved Products" }' in app_shell),
     ("Saved Products can open the canonical listing in Marketplace", 'Text("View product")' in saved_products_panel and "onOpenListing(product.id)" in saved_products_panel and 'FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" })' in app_shell and "loadExactMarketplaceListing(context, listingId)" in marketplace),
+    ("Marketplace Orders shortcut fetches independently and shows loading/error states", "fun reloadOrders()" in marketplace and "ordersLoading" in marketplace and "ordersError" in marketplace and "Loading your orders…" in marketplace and "Orders could not load." in marketplace and "onOrders = { showOrders = true; reloadOrders() }" in marketplace),
 ]
 
 failed = [name for name, ok in checks if not ok]
