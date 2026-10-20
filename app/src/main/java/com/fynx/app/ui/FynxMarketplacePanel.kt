@@ -249,6 +249,17 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var priceWatchBusy by remember { mutableStateOf(false) }
     var savedProductIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var savedProductBusy by remember { mutableStateOf(false) }
+    var savedProductBusyIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    fun toggleSavedProductFromCard(listingId: String) {
+        if (listingId in savedProductBusyIds) return
+        savedProductBusyIds = savedProductBusyIds + listingId
+        scope.launch {
+            val result = if (listingId in savedProductIds) FynxRemoteSocialClient.unsaveMarketplaceProduct(context, listingId) else FynxRemoteSocialClient.saveMarketplaceProduct(context, listingId)
+            result.onSuccess { saved -> savedProductIds = if (saved) savedProductIds + listingId else savedProductIds - listingId }
+                .onFailure { error = it.message ?: "Saved Products could not be updated." }
+            savedProductBusyIds = savedProductBusyIds - listingId
+        }
+    }
     var nearbyMode by remember { mutableStateOf(false) }
     var nearbyLabel by remember { mutableStateOf("") }
     var nearbyLoading by remember { mutableStateOf(false) }
@@ -636,7 +647,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 sellerPhotoId = sellerPhotoIds[sellerKey],
                                 onOpen = { selected = listing },
                                 onProfile = { sellerStoreUsername = listing.sellerUsername },
-                                onContact = { contactSeller(listing.sellerUsername, listing.id) }
+                                onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                                isFavorite = listing.id in savedProductIds,
+                                onFavorite = { toggleSavedProductFromCard(listing.id) }
                             )
                         }
                         if (loadingMoreListings) {
@@ -693,7 +706,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                             onOpen = { selected = listing },
                                             onProfile = { sellerStoreUsername = listing.sellerUsername },
-                                            onContact = { contactSeller(listing.sellerUsername, listing.id) }
+                                            onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                                isFavorite = listing.id in savedProductIds,
+                                onFavorite = { toggleSavedProductFromCard(listing.id) }
                                         )
                                     }
                                 }
@@ -712,7 +727,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                         sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         onOpen = { selected = listing },
                                         onProfile = { sellerStoreUsername = listing.sellerUsername },
-                                        onContact = { contactSeller(listing.sellerUsername, listing.id) }
+                                        onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                                isFavorite = listing.id in savedProductIds,
+                                onFavorite = { toggleSavedProductFromCard(listing.id) }
                                     )
                                     }
                                 }
@@ -740,7 +757,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                             onOpen = { selected = listing },
                                             onProfile = { sellerStoreUsername = listing.sellerUsername },
-                                            onContact = { contactSeller(listing.sellerUsername, listing.id) }
+                                            onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                                isFavorite = listing.id in savedProductIds,
+                                onFavorite = { toggleSavedProductFromCard(listing.id) }
                                         )
                                     }
                                 }

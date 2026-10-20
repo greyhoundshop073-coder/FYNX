@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.ShoppingBag
@@ -42,6 +43,7 @@ internal fun MarketplaceReferenceProductCard(
     onOpen: () -> Unit,
     onProfile: () -> Unit,
     onContact: (() -> Unit)? = null,
+    isFavorite: Boolean = false,
     onFavorite: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -69,7 +71,7 @@ internal fun MarketplaceReferenceProductCard(
                 }
                 onFavorite?.let { favorite ->
                     IconButton(onClick = favorite, modifier = Modifier.align(Alignment.TopEnd).padding(3.dp).size(38.dp)) {
-                        Icon(Icons.Default.FavoriteBorder, "Save", tint = FynxMarketplaceReferenceStyle.text)
+                        Icon(if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isFavorite) "Remove from Saved Products" else "Save product", tint = if (isFavorite) FynxMarketplaceReferenceStyle.primarySoft else FynxMarketplaceReferenceStyle.text)
                     }
                 }
             }
