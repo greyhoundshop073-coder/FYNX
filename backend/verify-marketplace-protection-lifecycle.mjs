@@ -8,6 +8,7 @@ const transactions = read('./marketplaceTransactions.js');
 const settlement = read('./marketplaceSettlement.js');
 const inspection = read('./marketplaceInspectionExpiry.js');
 const paymentExpiry = read('./marketplacePaymentExpiry.js');
+const server = read('./server.js');
 
 const checks = [
   ['buyer can open a refund request', protection.includes("app.post('/api/marketplace/protection/order/:id/refund-request'") && protection.includes("only the buyer can request a refund")],
