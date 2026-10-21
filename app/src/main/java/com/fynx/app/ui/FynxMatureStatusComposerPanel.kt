@@ -196,8 +196,8 @@ fun FynxMatureStatusComposerPanel(
             try {
                 val source = mediaUri
                 val mediaId = if (type == FynxStatusType.TEXT || type == FynxStatusType.MUSIC) null else {
-                    val mime = (context.contentResolver.getType(source!!) ?: when (type) { FynxStatusType.PHOTO -> "image/jpeg"; FynxStatusType.VIDEO -> "video/mp4"; FynxStatusType.VOICE -> "audio/mp4"; FynxStatusType.TEXT -> "text/plain" }).substringBefore(';').trim().lowercase()
-                    val expectedPrefix = when (type) { FynxStatusType.PHOTO -> "image/"; FynxStatusType.VIDEO -> "video/"; FynxStatusType.VOICE -> "audio/"; FynxStatusType.TEXT -> null }
+                    val mime = (context.contentResolver.getType(source!!) ?: when (type) { FynxStatusType.PHOTO -> "image/jpeg"; FynxStatusType.VIDEO -> "video/mp4"; FynxStatusType.VOICE -> "audio/mp4"; FynxStatusType.TEXT, FynxStatusType.MUSIC -> "text/plain" }).substringBefore(';').trim().lowercase()
+                    val expectedPrefix = when (type) { FynxStatusType.PHOTO -> "image/"; FynxStatusType.VIDEO -> "video/"; FynxStatusType.VOICE -> "audio/"; FynxStatusType.TEXT, FynxStatusType.MUSIC -> null }
                     if (expectedPrefix == null || !mime.startsWith(expectedPrefix)) {
                         error = "The selected file is not valid media for this Status type."
                         return@launch
