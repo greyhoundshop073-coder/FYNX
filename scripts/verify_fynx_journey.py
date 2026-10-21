@@ -74,7 +74,7 @@ check("profile post and marketplace taps stay on real content paths", "FynxProfi
 create_menu_actions = re.findall(r"(?m)^\s*CreateMenuAction\(", create_menu)
 check("Home Create menu contains exactly Post, Status and Marketplace", len(create_menu_actions) == 3 and '"Post"' in create_menu and '"Status"' in create_menu and '"Marketplace"' in create_menu and "Groups" not in create_menu and "Camera" not in create_menu and "Money Tools" not in create_menu)
 check("Home Create menu routes Post to the existing post composer", "onPost = {" in home_panel and "onCreatePost()" in home_panel and "onCreatePost = { showComposer = true" in home_hub)
-check("Home Create menu routes Status to the mature Status composer", "onStatus = {" in home_panel and "showMatureStatusComposer = true" in home_panel and "FynxMatureStatusComposerPanel" in home_panel)
+check("Home Create menu routes Status to the full Status creator hub", "onStatus = {" in home_panel and "showStatusCreatorHub = true" in home_panel and "FynxStatusHubPanel(" in home_panel and "startWithCreator = true" in home_panel)
 check("Home Create menu routes Marketplace to the real Marketplace surface", "onMarketplace = {" in home_panel and "onOpenMarketplace()" in home_panel and "onOpenMarketplace" in home_hub)
 
 check("shareable deep-link routes cover social, chat, group, marketplace, stories and money", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink", "fun parse"]) and "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
