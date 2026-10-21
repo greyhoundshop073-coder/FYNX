@@ -381,6 +381,7 @@ private fun FynxStatusStoryViewer(
     var replying by remember { mutableStateOf(false) }
     var replyFocused by remember { mutableStateOf(false) }
     val replyPaused = replyFocused || WindowInsets.isImeVisible
+    val viewerPaused = replyPaused || showReactionPicker || showViewers || menuOpen || deleting
     var showReactionPicker by remember { mutableStateOf(false) }
     var showViewers by remember { mutableStateOf(false) }
     var viewers by remember(statuses, startIndex) { mutableStateOf<List<FynxStatusViewer>>(emptyList()) }
@@ -437,14 +438,14 @@ private fun FynxStatusStoryViewer(
         refreshInteractions()
     }
 
-    LaunchedEffect(status.id, replyPaused) {
+    LaunchedEffect(status.id, viewerPaused) {
         val duration = statusViewerAutoAdvanceMs(status)
         if (duration <= 0L) return@LaunchedEffect
         while (statusProgress < 1f) {
-            if (!replyPaused) statusProgress = (statusProgress + 50f / duration.toFloat()).coerceAtMost(1f)
+            if (!viewerPaused) statusProgress = (statusProgress + 50f / duration.toFloat()).coerceAtMost(1f)
             kotlinx.coroutines.delay(50L)
         }
-        if (!replyPaused) moveNext()
+        if (!viewerPaused) moveNext()
     }
 
     Dialog(
