@@ -641,20 +641,28 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 onOpenChat = { username ->
                     val normalized = username.removePrefix("@").trim()
                     if (normalized.isNotBlank()) {
-                        scope.launch {
-                            val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
-                            val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
-                            val chat = local ?: remote?.let { user ->
-                                ChatPreview(
-                                    name = user.displayName.ifBlank { normalized },
-                                    username = user.username.removePrefix("@").let { "@$it" },
-                                    lastMessage = "Start a conversation",
-                                    time = "Now",
-                                    avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
-                                )
-                            } ?: ChatPreview(normalized, "@$normalized", "Start a conversation", "Now")
-                            FynxChatStore.savePreview(context, chat)
-                            openChat = chat
+                        // Open locally first; remote discovery must not block navigation.
+                        val local = FynxChatStore.loadPreviews(context).firstOrNull {
+                            it.username.removePrefix("@").equals(normalized, true)
+                        }
+                        val initialChat = local ?: ChatPreview(normalized, "@" + normalized, "Start a conversation", "Now")
+                        openChatMarketplaceListingId = null
+                        openChat = initialChat
+                        FynxChatStore.savePreview(context, initialChat)
+                        if (local == null) {
+                            scope.launch {
+                                val user = FynxSocialClient.searchUsers(context, normalized).getOrNull()
+                                    ?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                                if (user != null) {
+                                    val resolvedChat = initialChat.copy(
+                                        name = user.displayName.ifBlank { normalized },
+                                        username = "@" + user.username.removePrefix("@"),
+                                        avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
+                                    )
+                                    FynxChatStore.savePreview(context, resolvedChat)
+                                    if (openChat?.username.equals(initialChat.username, true)) openChat = resolvedChat
+                                }
+                            }
                         }
                     }
                 }
