@@ -339,8 +339,16 @@ fun FynxMarketplaceSellerCenterPanel() {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Earnings history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    moneyError?.let { message ->
+                        Text(message, color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = { loadMoney() }, enabled = !moneyLoading) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Retry earnings")
+                        }
+                    }
                     if (moneyLoading) CircularProgressIndicator(Modifier.size(20.dp))
-                    else if (moneyRecords.isEmpty()) Text("Completed and protected Marketplace earnings will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else if (moneyRecords.isEmpty() && moneyError == null) Text("Completed and protected Marketplace earnings will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     else moneyRecords.take(20).forEach { record ->
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
