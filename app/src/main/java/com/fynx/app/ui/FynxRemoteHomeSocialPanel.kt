@@ -1241,6 +1241,7 @@ private fun HomeAuthorStatusDialog(statuses: List<FynxStatus>, onDismiss: () -> 
                     FynxStatusType.PHOTO -> status.contentUri?.let { FynxRemoteMedia(it, "image", Modifier.fillMaxWidth().heightIn(max = 560.dp)) }
                     FynxStatusType.VIDEO -> status.contentUri?.let { FynxRemoteMedia(it, "video", Modifier.fillMaxWidth().heightIn(max = 560.dp)) }
                     FynxStatusType.VOICE -> Text("Voice Status", color = Color(status.textStyle.foregroundColor))
+                    FynxStatusType.MUSIC -> Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(status.musicTitle ?: "FYNX Music", color = Color(status.textStyle.foregroundColor)); Text(status.musicArtist ?: "FYNX", color = Color(status.textStyle.foregroundColor).copy(alpha = 0.75f)) }
                 }
                 status.text?.takeIf { status.type != FynxStatusType.TEXT && it.isNotBlank() }?.let { Text(it, color = Color(status.textStyle.foregroundColor), modifier = Modifier.padding(top = 12.dp)) }
             }
