@@ -56,6 +56,8 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -98,7 +100,14 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     }
     val fallbackMessage = remember(chat.lastMessage, resolvedAvatarUri) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true, senderName = chat.name, senderUsername = chat.username, senderAvatarUri = resolvedAvatarUri) } }
     var text by remember(chat.username) { mutableStateOf("") }
-    var messages by remember(chat.username) { mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage)) }
+    var messages by remember(chat.username) { mutableStateOf(emptyList<ChatMessage>()) }
+    LaunchedEffect(chat.username, fallbackMessage) {
+        // Message history can grow large. Never parse its persisted JSON during Compose.
+        val localMessages = withContext(Dispatchers.IO) {
+            FynxChatStore.load(context, chat.username, fallbackMessage)
+        }
+        messages = localMessages
+    }
     var replyToId by remember { mutableStateOf<String?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
