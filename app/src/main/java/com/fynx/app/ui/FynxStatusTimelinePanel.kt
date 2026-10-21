@@ -116,7 +116,6 @@ fun FynxStatusTimelinePanel(
     val myStatus = latestByOwner.firstOrNull { normalizedOwner(it.ownerUsername) == normalizedOwner(username) }
     val recentUpdates = latestByOwner.filterNot { normalizedOwner(it.ownerUsername) == normalizedOwner(username) }
     var menuOpen by remember { mutableStateOf(false) }
-    val viewerPaused = replyPaused || showReactionPicker || showViewers || menuOpen || deleting
     var archiveOpen by remember { mutableStateOf(false) }
     var archivedStatuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
     var archiveLoading by remember { mutableStateOf(false) }
@@ -391,6 +390,7 @@ private fun FynxStatusStoryViewer(
     var showReplyEmojiPicker by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
+    val viewerPaused = replyPaused || showReactionPicker || showViewers || menuOpen || deleting
     BackHandler(onBack = onDismiss)
     var statusProgress by remember(status.id) { mutableFloatStateOf(0f) }
 
