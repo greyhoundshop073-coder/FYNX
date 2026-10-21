@@ -324,52 +324,62 @@ private fun FynxAddStatusPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = onCamera,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Take photo")
+                }
+                OutlinedButton(
+                    onClick = { deviceMediaPicker.launch(arrayOf("image/*", "video/*")) },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
+                ) {
+                    Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Gallery")
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 FynxStatusToolPill(
-                    icon = Icons.Default.MusicNote,
-                    label = "Music",
-                    onClick = onMusic,
-                    modifier = Modifier.weight(1f)
-                )
-                FynxStatusToolPill(
-                    icon = Icons.Default.GridView,
-                    label = "Layout",
-                    onClick = { layoutMode = true; selectionMode = true; selectedMediaUris = emptySet() },
-                    modifier = Modifier.weight(1f)
+                    icon = Icons.Default.Notes,
+                    label = "Text",
+                    onClick = onText,
+                    modifier = Modifier.widthIn(min = 94.dp)
                 )
                 FynxStatusToolPill(
                     icon = Icons.Default.Mic,
                     label = "Voice",
                     onClick = onVoice,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FynxStatusToolPill(
-                    icon = Icons.Default.Photo,
-                    label = "Photo",
-                    onClick = { deviceMediaPicker.launch(arrayOf("image/*")) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.widthIn(min = 94.dp)
                 )
                 FynxStatusToolPill(
-                    icon = Icons.Default.PlayArrow,
-                    label = "Video",
-                    onClick = { deviceMediaPicker.launch(arrayOf("video/*")) },
-                    modifier = Modifier.weight(1f)
+                    icon = Icons.Default.MusicNote,
+                    label = "Music",
+                    onClick = onMusic,
+                    modifier = Modifier.widthIn(min = 94.dp)
                 )
                 FynxStatusToolPill(
-                    icon = Icons.Default.Notes,
-                    label = "Text",
-                    onClick = onText,
-                    modifier = Modifier.weight(1f)
+                    icon = Icons.Default.GridView,
+                    label = "Layout",
+                    onClick = { layoutMode = true; selectionMode = true; selectedMediaUris = emptySet() },
+                    modifier = Modifier.widthIn(min = 94.dp)
                 )
             }
         }
