@@ -402,7 +402,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         }
                     }
                     if (order.status == "PAID" && order.fulfillment == "DELIVERY") OutlinedTextField(tracking, { tracking = it }, label = { Text("Tracking reference (optional)") }, singleLine = true)
-                    message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    message?.let { Text(it, color = if (it == "Handover photo selected; it will upload when you confirm handover.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
                     if (payoutQueued || retryQueued) Text("Payout processing has been queued. FYNX will verify the provider transfer before marking it paid.", color = MaterialTheme.colorScheme.primary)
                 }
             },
