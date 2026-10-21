@@ -404,8 +404,14 @@ const statusSchema = async () => {
     expires_at TIMESTAMPTZ NOT NULL
   );
   `);
-  await pool.query("ALTER TABLE statuses DROP CONSTRAINT IF EXISTS statuses_type_check");
-  await pool.query("ALTER TABLE statuses ADD CONSTRAINT statuses_type_check CHECK (type IN ('TEXT','PHOTO','VIDEO','VOICE','MUSIC'))");
+  await pool.query(`DO $ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'statuses_type_check' AND pg_get_constraintdef(oid) NOT LIKE '%MUSIC%') THEN
+      ALTER TABLE statuses DROP CONSTRAINT statuses_type_check;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'statuses_type_check') THEN
+      ALTER TABLE statuses ADD CONSTRAINT statuses_type_check CHECK (type IN ('TEXT','PHOTO','VIDEO','VOICE','MUSIC'));
+    END IF;
+  END $;`);
   await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS audience TEXT");
   await pool.query("UPDATE statuses SET audience = CASE WHEN private_status THEN 'FRIENDS' ELSE 'EVERYONE' END WHERE audience IS NULL");
   await pool.query("ALTER TABLE statuses ALTER COLUMN audience SET DEFAULT 'EVERYONE'");
