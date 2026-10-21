@@ -108,7 +108,8 @@ for needle in ('val previous = posts.firstOrNull { it.id == id }','optimisticLik
 
 require(home_shell, 'FynxRemoteHomeSocialPanel(', "Home feed host")
 require_normalized(home_shell, 'header = { FynxVisibleUpdatesPanel(', "Home AI/Status header wiring")
-require_normalized(home_shell, 'onCreateStatus = { showMatureStatusComposer = true }', "Home Create status -> existing composer wiring")
+require_normalized(home_shell, 'onCreateStatus = { showStatusCreatorHub = true }', "Home Status plus -> full Add status hub")
+require_normalized(home_shell, 'FynxStatusHubPanel( startWithCreator = true, onExitCreator = { showStatusCreatorHub = false } )', "Home Status creator exposes the full media/voice option hub and exits cleanly")
 require(visible_updates, 'onCreateStatus: () -> Unit', "Status create callback")
 require(visible_updates, 'IconButton(onClick = onCreateStatus', "Status create control action")
 require(visible_updates, 'FynxHomeLifecycleRefreshBus.currentVersion()', "Status strip follows Home lifecycle refresh")
@@ -185,4 +186,4 @@ require(ai_panel, 'FynxFutureIntelligencePolicy.authorize(', "full FYNX AI autho
 if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
 
-print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical feed surfaces or client API secrets.")
+print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and Home Status plus -> full Add status hub are present without duplicate vertical feed surfaces or client API secrets.")
