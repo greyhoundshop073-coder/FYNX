@@ -83,7 +83,6 @@ fun FynxMarketplaceSellerCenterPanel() {
                     val orders = JSONObject(raw).optJSONArray("orders")
                     val records = mutableListOf<SellerMoneyRecord>()
                     var settlementFailures = 0
-                    var settlementFailures = 0
                     if (orders != null) {
                         for (i in 0 until orders.length()) {
                             val order = orders.optJSONObject(i) ?: continue
