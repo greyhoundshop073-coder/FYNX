@@ -24,6 +24,7 @@ def contains_remote_audio_renderer(source):
 checks=[]
 def require(label, condition): checks.append((label, bool(condition)))
 server=read('backend/server.js'); management=read('backend/statusManagementRoutes.js'); scale=read('backend/scalability.js'); interactions=read('backend/statusInteractionRoutes.js')
+visible=read('app/src/main/java/com/fynx/app/ui/FynxVisibleUpdatesPanel.kt'); app=read('app/src/main/java/com/fynx/app/ui/FynxApp.kt')
 client=read('app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt'); foundation=read('app/src/main/java/com/fynx/app/ui/FynxStatusFoundation.kt')
 composer=read('app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt'); mature=read('app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt')
 timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt')
@@ -127,6 +128,9 @@ require('hub mature + creation route','FynxMatureStatusComposerPanel' in hub and
 require('hub camera route remains real','FynxCameraCapturePanel' in hub and 'openCapturedStatus' in hub)
 require('legacy Stories wrapper','FynxStatusTimelinePanel()' in stories and 'SharedPreferences' not in stories)
 require('timeline backend list','FynxStatusClient.list(context)' in timeline)
+require('Home Status tap routes to tapped owner's Stories','onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim())' in visible and 'onOpenStatusOwner = { statusOpenOwner = it; selected = "Stories" }' in app)
+require('Stories deep link selects latest active Status for tapped owner','openOwnerUsername?.removePrefix("@")?.trim()?.takeIf' in timeline and 'if (targetStatus != null) selected = targetStatus' in timeline and 'FynxStatusStoryViewer(' in timeline)
+require('Status timeline row tap opens the selected Status viewer','onClick = { selected = status }' in timeline and 'selected?.let { initial ->' in timeline and 'FynxStatusStoryViewer(' in timeline)
 require('timeline trusts backend visibility','FynxStatusClient.list(context)' in timeline and 'FynxProfileRemoteClient.following(context)' not in timeline and 'followingUsernames' not in timeline)
 require('timeline keeps server audience semantics','val visibleStatuses = statuses.filter' in timeline and 'owner == username.removePrefix("@").trim().lowercase() || owner in followingUsernames' not in timeline)
 require('timeline filters expired statuses','filterNot(FynxStatus::isExpired)' in timeline)
