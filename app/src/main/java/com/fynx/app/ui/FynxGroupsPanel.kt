@@ -289,10 +289,18 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
     var mentionQuery by remember { mutableStateOf<String?>(null) }
-    val group = remember(groupId) { FynxGroupsStore.load(context).firstOrNull { it.id == groupId } }
-    var currentGroup by remember(groupId) { mutableStateOf(group) }
+    var currentGroup by remember(groupId) { mutableStateOf<FynxGroup?>(null) }
     val groupTitle = currentGroup?.name ?: "Group"
-    var messages by remember(groupId) { mutableStateOf(FynxChatStore.load(context, "group_$groupId", null)) }
+    var messages by remember(groupId) { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    LaunchedEffect(groupId) {
+        // Group and message stores grow over time; parse them away from the UI thread.
+        val local = withContext(Dispatchers.IO) {
+            FynxGroupsStore.load(context).firstOrNull { it.id == groupId } to
+                FynxChatStore.load(context, "group_$groupId", null)
+        }
+        currentGroup = local.first
+        messages = local.second
+    }
     val latestMessages by rememberUpdatedState(messages)
     var showMembers by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
