@@ -260,15 +260,17 @@ private fun StatusAvatar(
         }
     }
     val avatarId = if (remoteProfileLoaded) profilePhotoMediaId else cachedPhotoId
+    // Keep the status owner's identity attached even when the cached photo ID is
+    // empty; the shared resolver can hydrate, invalidate, and clear that avatar.
+    val avatarOwnerUsername = status?.ownerUsername ?: ownerUsername
     Box(modifier.size(58.dp)) {
         Box(Modifier.fillMaxSize().border(2.dp, Color(0xFF22C55E), CircleShape).padding(3.dp)) {
-            if (!avatarId.isNullOrBlank()) {
-                FynxRemoteProfileAvatar(avatarId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape), ownerUsername = ownerUsername)
-            } else {
-                Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                    Text(ownerDisplayName.take(1).uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-            }
+            FynxRemoteProfileAvatar(
+                avatarId,
+                ownerDisplayName,
+                Modifier.fillMaxSize().clip(CircleShape),
+                ownerUsername = avatarOwnerUsername
+            )
         }
         if (showAdd) {
             Box(Modifier.size(22.dp).align(Alignment.BottomEnd).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
