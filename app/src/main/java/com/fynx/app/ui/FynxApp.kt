@@ -38,7 +38,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 
 private const val FYNX_PREVIEW_MODE = false
@@ -641,32 +643,35 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 onOpenChat = { username ->
                     val normalized = username.removePrefix("@").trim()
                     if (normalized.isNotBlank()) {
-                        // Open locally first; remote discovery must not block navigation.
-                        val local = FynxChatStore.loadPreviews(context).firstOrNull {
-                            it.username.removePrefix("@").equals(normalized, true)
-                        }
-                        val initialChat = local ?: ChatPreview(normalized, "@" + normalized, "Start a conversation", "Now")
+                        // Render immediately; do not parse persisted chat history on the UI thread.
+                        val initialChat = ChatPreview(normalized, "@" + normalized, "Start a conversation", "Now")
                         openChatMarketplaceListingId = null
                         openChat = initialChat
-                        FynxChatStore.savePreview(context, initialChat)
-                        if (local == null) {
-                            scope.launch {
+                        scope.launch {
+                            val local = withContext(Dispatchers.IO) {
+                                FynxChatStore.loadPreviews(context).firstOrNull {
+                                    it.username.removePrefix("@").equals(normalized, true)
+                                }
+                            }
+                            val baseChat = local ?: initialChat
+                            if (local != null && openChat?.username.equals(initialChat.username, true)) openChat = local
+                            withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, baseChat) }
+                            if (local == null) {
                                 val user = FynxSocialClient.searchUsers(context, normalized).getOrNull()
                                     ?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
                                 if (user != null) {
-                                    val resolvedChat = initialChat.copy(
+                                    val resolvedChat = baseChat.copy(
                                         name = user.displayName.ifBlank { normalized },
                                         username = "@" + user.username.removePrefix("@"),
                                         avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
                                     )
-                                    FynxChatStore.savePreview(context, resolvedChat)
+                                    withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, resolvedChat) }
                                     if (openChat?.username.equals(initialChat.username, true)) openChat = resolvedChat
                                 }
                             }
                         }
                     }
-                }
-            )
+                }            )
             "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" })
             "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenSavedProducts = { selected = "Saved Products" }, initialListingId = marketplaceListingId)
             "Money Tools" -> MoneyCenterPanel()
