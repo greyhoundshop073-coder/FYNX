@@ -128,18 +128,28 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         text = {
             when {
                 loading -> Box(Modifier.fillMaxWidth().height(100.dp), Alignment.Center) { CircularProgressIndicator() }
-                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                error != null && orders.isEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(error!!, color = MaterialTheme.colorScheme.error)
+                    Text("Check your connection and retry to load buyer orders.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { load() }, enabled = !loading) { Text("Retry seller orders") }
+                }
                 orders.isEmpty() -> Text("No buyer orders yet.")
-                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 430.dp)) {
-                    items(orders, key = { it.id }) { order ->
-                        Card(onClick = { selected = order }, modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(10.dp)) {
-                                Text(order.title, style = MaterialTheme.typography.titleMedium)
-                                Text("${order.currency} ${String.format(Locale.US, "%,.2f", order.total)} • ${order.status}")
-                                if (order.buyerName.isNotBlank()) Text("Buyer: ${order.buyerName}", style = MaterialTheme.typography.bodySmall)
-                                Text(if (order.fulfillment == "PICKUP") "Pickup" else "Delivery", style = MaterialTheme.typography.bodySmall)
-                                Text("Fulfillment: ${fulfillmentLabel(order.fulfillmentStatus)}", style = MaterialTheme.typography.bodySmall)
-                                order.tracking?.let { Text("Tracking: $it", style = MaterialTheme.typography.bodySmall) }
+                else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (error != null) {
+                        Text("Some order details could not refresh: ${error!!}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { load() }, enabled = !loading) { Text("Retry seller orders") }
+                    }
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 430.dp)) {
+                        items(orders, key = { it.id }) { order ->
+                            Card(onClick = { selected = order }, modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(10.dp)) {
+                                    Text(order.title, style = MaterialTheme.typography.titleMedium)
+                                    Text("${order.currency} ${String.format(Locale.US, "%,.2f", order.total)} • ${order.status}")
+                                    if (order.buyerName.isNotBlank()) Text("Buyer: ${order.buyerName}", style = MaterialTheme.typography.bodySmall)
+                                    Text(if (order.fulfillment == "PICKUP") "Pickup" else "Delivery", style = MaterialTheme.typography.bodySmall)
+                                    Text("Fulfillment: ${fulfillmentLabel(order.fulfillmentStatus)}", style = MaterialTheme.typography.bodySmall)
+                                    order.tracking?.let { Text("Tracking: $it", style = MaterialTheme.typography.bodySmall) }
+                                }
                             }
                         }
                     }
