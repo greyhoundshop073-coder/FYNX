@@ -34,6 +34,7 @@ media_privacy=read('backend/mediaPrivacy.js')
 
 require('backend Status schema + expiry','CREATE TABLE IF NOT EXISTS statuses' in server and 'expires_at TIMESTAMPTZ NOT NULL' in server)
 require('backend media ownership','message_media' in server and 'owner_id=$2' in server)
+require('backend Status media type validation','SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2' in server and 'expectedPrefix={PHOTO:"image/",VIDEO:"video/",VOICE:"audio/"}[type]' in server and 'media type does not match status' in server)
 require('backend Status privacy','private_status' in server and 'expires_at > NOW()' in server)
 require('backend Status media authorization','EXISTS (SELECT 1 FROM statuses s WHERE s.media_id = mm.id' in server and "s.audience = 'EVERYONE'" in server and "s.audience = 'FRIENDS'" in server and "f.status = 'accepted'" in server and "blocks b" in server)
 require('backend status media expires before delivery','s.expires_at > NOW()' in server)
