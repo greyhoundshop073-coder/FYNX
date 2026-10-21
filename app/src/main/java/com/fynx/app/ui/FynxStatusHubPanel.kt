@@ -188,6 +188,8 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                                                 }
                                                 Button(onClick = {
                                                     selectedStatusMusic = track
+                                                    selectedInitialType = FynxStatusType.MUSIC
+                                                    selectedInitialMedia = null
                                                     statusMusicPreviewId = null
                                                     showStatusMusicPicker = false
                                                     statusMusicSearch = ""
