@@ -632,6 +632,45 @@ if not FAILURES:
         if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
         else: FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
+    # The debug saved-device entry is intentionally a local UI-only route, not
+    # server authentication. Do not cold-start it: that returns to Sign In and
+    # makes unrelated navigation checks fail for the wrong reason. Certify the
+    # Status create affordance on the same live Home session instead.
+    if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+        home_xml = ""
+        for _ in range(4):
+            home_xml = dump_ui("authenticated-status-home.xml")
+            if (find_control(home_xml, ["Open FYNX camera"])
+                    and find_control(home_xml, ["Chat"])
+                    and find_control(home_xml, ["Friends"])):
+                break
+            run("adb", "shell", "input", "keyevent", "4")
+            time.sleep(0.8)
+        if (find_control(home_xml, ["Open FYNX camera"])
+                and find_control(home_xml, ["Chat"])
+                and find_control(home_xml, ["Friends"])):
+            screenshot("authenticated-status-home.png")
+            status_add_xml = tap_control(
+                home_xml, ["Create your status"], "status-create",
+                ["Add status", "Voice", "Text"]
+            )
+            if status_add_xml:
+                report.append("- PASS Home own-Status + button opens the real Add status panel")
+                report.append("- PASS Add status panel exposes Voice and Text creation choices")
+            else:
+                FAILURES.append("Home own-Status + button did not open the real Add status panel")
+        else:
+            FAILURES.append("could not return to Home through in-app Back navigation for Status runtime check")
+        report += ["", "## Captured Status surfaces",
+                   "- authenticated-status-home.png", "- authenticated-status-create.png",
+                   "", "Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only saved-device UI entry, which explicitly does not certify server authentication."]
+        report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+        if FAILURES:
+            report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+        (ROOT/"FYNX-authenticated-runtime.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
+        print("\\n".join(report))
+        raise SystemExit(1 if FAILURES else 0)
+
     run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
 
