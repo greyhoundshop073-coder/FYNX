@@ -163,7 +163,7 @@ require('status viewer horizontal swipe navigation','totalX > 120f' in timeline 
 require('status viewer smooth progress segments','LinearProgressIndicator' in timeline and 'segmentIndex < index' in timeline and 'segmentIndex == index -> statusProgress' in timeline)
 require('status viewer timed progress','statusViewerAutoAdvanceMs(status)' in timeline and 'delay(50L)' in timeline)
 require('Status viewer auto-advance pauses while reaction/viewer/menu overlays are open','val viewerPaused = replyPaused || showReactionPicker || showViewers || menuOpen || deleting' in timeline and 'LaunchedEffect(status.id, viewerPaused)' in timeline and 'if (!viewerPaused) moveNext()' in timeline)
-require('status viewer reply pauses progress',('if (!replyFocused)' in timeline or 'if (!replyPaused)' in timeline) and 'onFocusChanged' in timeline)
+require('status viewer reply pauses progress',('if (!replyFocused)' in timeline or 'if (!replyPaused)' in timeline or 'if (!viewerPaused)' in timeline) and 'onFocusChanged' in timeline)
 require('status viewer keyboard safe composer','navigationBarsPadding()' in timeline and 'imePadding()' in timeline and 'RoundedCornerShape(26.dp)' in timeline)
 require('status interaction controls','viewCount' in timeline and 'likeCount' in timeline and 'Reply to this Status' in timeline)
 require('status emoji reaction controls','EmojiEmotions' in timeline and 'showReactionPicker' in timeline and 'listOf("❤️", "😂", "😮", "😢", "👍", "👏", "🔥", "🎉")' in timeline)
