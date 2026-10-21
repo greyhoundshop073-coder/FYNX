@@ -114,7 +114,7 @@ require('mature photo preview preserves aspect ratio','ImageView.ScaleType.FIT_C
 require('status viewer renders media captions','status.type != FynxStatusType.TEXT && !status.text.isNullOrBlank()' in timeline and 'status.musicCatalogueId?.let' in timeline and 'status.text.orEmpty()' in timeline and 'maxLines = 3' in timeline and 'padding(horizontal = 12.dp, vertical = 9.dp)' in timeline and 'bottom = 154.dp' not in timeline)
 require('mature text emoji control','EmojiEmotions' in mature and 'showStatusEmoji' in mature)
 require('mature text editor uses responsive full view',(('bottom = if (showMediaTools || showColors) 220.dp else 120.dp' in mature or 'bottom = 220.dp' in mature) or ('bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp' in mature)) and 'horizontal = 12.dp' in mature and '.imePadding()' in mature and 'BoxWithConstraints' in mature)
-require('mature composer Android back closes safely','BackHandler(enabled = !publishing && !recording) { onClose() }' in mature)
+require('mature composer Android back is intercepted safely during recording/publishing','BackHandler { if (!publishing && !recording) onClose() }' in mature)
 require('mature voice preview before publish','FynxRemoteAudio(mediaUri.toString()' in mature and 'Voice Status ready' in mature)
 require('mature authenticated publish','FynxStatusClient.create(context, status, mediaId)' in mature and 'FynxStatusClient.uploadMedia(context, source, mime)' in mature)
 require('status camera owns lifecycle and back navigation','BackHandler' in camera and 'BackHandler { if (recording == null) onDismiss() }' in camera and 'cameraProvider?.unbindAll()' in camera)
