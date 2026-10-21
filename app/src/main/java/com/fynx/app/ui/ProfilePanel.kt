@@ -255,7 +255,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                 }
             }
         }
-        if (session.state == AuthState.SIGNED_IN) item { OutlinedButton(onClick = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) { Text("Sign out") } }
+        // Sign out is available in Settings > Session rather than at the end of the profile feed.
     }
     connectionType?.let { type ->
         ProfileConnectionsDialog(type, connections, connectionsLoading, connectionsError, onRetry = { openConnections(type) }) { connectionType = null }
@@ -362,6 +362,7 @@ fun SettingsPanel(
     var showNetworkStatusPage by remember { mutableStateOf(false) }
     var infoTitle by remember { mutableStateOf<String?>(null) }
     var infoDescription by remember { mutableStateOf("") }
+    var showSignOutConfirm by remember { mutableStateOf(false) }
 
     fun saveStoryVisibility(option: String) {
         if (storySaving) return
@@ -577,6 +578,15 @@ fun SettingsPanel(
                     }
                 }
             }
+            if (visible("Session", "sign out log out end session this device")) {
+                item { SettingsSectionTitle("SESSION") }
+                item {
+                    SettingsReferenceRow(Icons.Default.Security, "Sign out",
+                        "End your FYNX session on this device", androidx.compose.ui.graphics.Color(0xFFD94848)) {
+                        showSignOutConfirm = true
+                    }
+                }
+            }
             if (query.isNotBlank() && !listOf(
                 "Account & Profile" to "account profile username bio phone email account controls",
                 "Privacy & Security" to "profile privacy online status blocked users security people discovery",
@@ -588,7 +598,8 @@ fun SettingsPanel(
                 "Data & Network" to "data network mobile data wifi usage uploads downloads",
                 "Language & Accessibility" to "language accessibility english font size",
                 "Help & Support" to "help support contact troubleshooting",
-                "About FYNX" to "about version app information"
+                "About FYNX" to "about version app information",
+                "Session" to "sign out log out end session this device"
             ).any { (title, description) -> visible(title, description) }) {
                 item {
                     Text("No matching settings", modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -647,6 +658,13 @@ fun SettingsPanel(
             }
         )
     }
+    if (showSignOutConfirm) AlertDialog(
+        onDismissRequest = { showSignOutConfirm = false },
+        title = { Text("Sign out of FYNX?") },
+        text = { Text("You can sign in again later. This will end the current session on this device.") },
+        confirmButton = { TextButton(onClick = { showSignOutConfirm = false; onSignOut() }) { Text("Sign out", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") } }
+    )
     if (infoTitle != null) AlertDialog(
         onDismissRequest = { infoTitle = null },
         title = { Text(infoTitle!!) },
