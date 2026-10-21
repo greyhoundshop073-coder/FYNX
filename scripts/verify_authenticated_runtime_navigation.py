@@ -667,8 +667,8 @@ if not FAILURES:
         report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
         if FAILURES:
             report += ["", "Failures:"] + ["- " + item for item in FAILURES]
-        (ROOT/"FYNX-authenticated-runtime.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
-        print("\\n".join(report))
+        (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+        print("\n".join(report))
         raise SystemExit(1 if FAILURES else 0)
 
     run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
