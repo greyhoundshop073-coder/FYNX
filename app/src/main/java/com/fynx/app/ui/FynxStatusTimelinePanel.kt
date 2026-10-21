@@ -500,6 +500,7 @@ private fun FynxStatusStoryViewer(
                                 rounded = false
                             )
                         }
+                        FynxStatusType.MUSIC -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = 28.dp)) { Surface(shape = CircleShape, color = Color.White.copy(alpha = .12f), modifier = Modifier.size(132.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.MusicNote, "Music Status", tint = Color.White, modifier = Modifier.size(64.dp)) } }; Text(status.musicTitle?.ifBlank { "FYNX Music" } ?: "FYNX Music", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold); Text(status.musicArtist?.ifBlank { "FYNX" } ?: "FYNX", color = Color.White.copy(alpha = .75f), style = MaterialTheme.typography.titleMedium); status.musicCatalogueId?.let { FynxRemoteAudio("/api/social/music/catalogue/$it/media", Modifier.fillMaxWidth(), status.musicDurationMs.coerceAtLeast(1_000L)) } }
                         FynxStatusType.VOICE -> status.contentUri?.let {
                             Surface(
                                 shape = RoundedCornerShape(28.dp),
@@ -932,13 +933,14 @@ private fun statusViewerAutoAdvanceMs(status: FynxStatus): Long {
         FynxStatusType.PHOTO -> 7_000L
         FynxStatusType.VOICE -> status.voiceDurationMs.coerceIn(1_000L, FYNX_STATUS_MAX_VOICE_DURATION_MS)
         FynxStatusType.VIDEO -> 0L
+        FynxStatusType.MUSIC -> status.musicDurationMs.coerceAtLeast(1_000L)
     }
     return if (status.musicCatalogueId != null && status.musicDurationMs > 0L) {
         kotlin.math.max(base, status.musicDurationMs.coerceAtLeast(1_000L))
     } else base
 }
 
-private fun statusTypeLabel(type: FynxStatusType) = when (type) { FynxStatusType.TEXT -> "Text"; FynxStatusType.PHOTO -> "Photo"; FynxStatusType.VIDEO -> "Video"; FynxStatusType.VOICE -> "Voice" }
+private fun statusTypeLabel(type: FynxStatusType) = when (type) { FynxStatusType.TEXT -> "Text"; FynxStatusType.PHOTO -> "Photo"; FynxStatusType.VIDEO -> "Video"; FynxStatusType.VOICE -> "Voice"; FynxStatusType.MUSIC -> "Music" }
 
 private fun statusTimeLeft(createdAt: Long, now: Long = System.currentTimeMillis()): String {
     val remaining = (createdAt + FYNX_STATUS_EXPIRY_MS - now).coerceAtLeast(0L)
