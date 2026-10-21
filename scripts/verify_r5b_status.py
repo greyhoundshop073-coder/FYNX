@@ -66,6 +66,7 @@ require('Status client permits catalogue-backed music without uploaded media','s
 require('Status client parses catalogue music','musicCatalogueId=musicCatalogueId' in client and 'musicTitle=' in client and 'musicArtist=' in client)
 require('Status backend stores catalogue music','music_catalogue_id BIGINT' in server and 'music_title TEXT' in server and 'music_duration_ms BIGINT' in server)
 require('Status backend accepts music-only Status and migrates type constraint',"pg_get_constraintdef(oid) NOT LIKE '%MUSIC%'" in server and "ADD CONSTRAINT statuses_type_check CHECK (type IN ('TEXT','PHOTO','VIDEO','VOICE','MUSIC'))" in server and 'music-only Status must not include uploaded media' in server)
+require('Status music migration uses valid PostgreSQL dollar-quote delimiters', 'DO $$ BEGIN' in server and 'END $$;`);' in server and 'DO $ BEGIN' not in server and 'END $;`);' not in server)
 require('Status backend validates published music','fynx_music_catalogue' in server and 'c.active=TRUE' in server and 'music selection is not published in the FYNX catalogue' in server)
 require('Status backend preserves catalogue music duration','musicDurationMs = Math.max(0, Number(music.rows[0].duration_ms) || 0)' in server)
 require('Add Status Music opens catalogue','onMusic = { showStatusMusicPicker = true }' in hub and 'FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)' in hub)
