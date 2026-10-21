@@ -65,7 +65,7 @@ require('Status backend stores catalogue music','music_catalogue_id BIGINT' in s
 require('Status backend validates published music','fynx_music_catalogue' in server and 'c.active=TRUE' in server and 'music selection is not published in the FYNX catalogue' in server)
 require('Status backend preserves catalogue music duration','musicDurationMs = Math.max(0, Number(music.rows[0].duration_ms) || 0)' in server)
 require('Add Status Music opens catalogue','onMusic = { showStatusMusicPicker = true }' in hub and 'FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)' in hub)
-require('Status creator prioritizes camera and gallery','Text("Take photo")' in hub and 'Text("Gallery")' in hub)
+require('Status creator exposes Take photo, Record video, and Gallery','Text("Take photo")' in hub and 'Text("Record video")' in hub and 'Text("Gallery")' in hub)
 require('Status creator gallery selects both photos and videos','deviceMediaPicker.launch(arrayOf("image/*", "video/*"))' in hub)
 require('Status creator secondary tools are horizontally scrollable','.horizontalScroll(rememberScrollState())' in hub and 'label = "Text"' in hub and 'label = "Voice"' in hub and 'label = "Music"' in hub and 'label = "Layout"' in hub)
 
@@ -124,7 +124,7 @@ require('status camera returns to editable composer','fun openCapturedStatus(uri
 require('add status Recents filter','recentFilter' in hub and 'Photos' in hub and 'Videos' in hub and 'recentFilterMenu' in hub)
 require('add status media multi-select is functional','selectionMode' in hub and 'selectedMediaUris' in hub and 'toggleSelected' in hub and 'finishSelection' in hub and 'Select multiple media' in hub)
 require('add status Layout creates real collage media','layoutMode' in hub and 'createFynxLayoutCollage' in hub and 'Bitmap.createBitmap(1200, 1200' in hub and 'FynxStatusToolPill' in hub)
-require('Add status exposes a dedicated Video picker','label = "Video"' in hub and 'deviceMediaPicker.launch(arrayOf("video/*"))' in hub)
+require('Add status exposes a dedicated Record video picker','Text("Record video")' in hub and 'deviceMediaPicker.launch(arrayOf("video/*"))' in hub)
 require('Add status Voice opens the composer in voice mode','onVoice = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.VOICE; composing = true; addStatusOpen = false }' in hub and '?: selectedInitialType' in hub)
 require('Home Status plus opens the full Add status hub','startWithCreator: Boolean = false' in hub and 'onCreateStatus = { showStatusCreatorHub = true }' in read('app/src/main/java/com/fynx/app/ui/HomePanel.kt'))
 require('mature 24-hour expiry','expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS' in mature)
