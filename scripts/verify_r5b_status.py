@@ -73,7 +73,7 @@ require('Status creator exposes Take photo, Record video, and Gallery','Text("Ta
 require('Status creator gallery selects both photos and videos','deviceMediaPicker.launch(arrayOf("image/*", "video/*"))' in hub)
 require('Status creator secondary tools are horizontally scrollable','.horizontalScroll(rememberScrollState())' in hub and 'label = "Text"' in hub and 'label = "Voice"' in hub and 'label = "Music"' in hub and 'label = "Layout"' in hub)
 
-require('Add Status selected music reaches composer','selectedStatusMusic' in hub and 'initialMusic = selectedStatusMusic' in hub)
+require('Add Status selected music reaches composer','selectedStatusMusic' in hub and 'initialMusic = selectedStatusMusic' in hub and 'selectedInitialType = FynxStatusType.MUSIC' in hub)
 require('Status composer carries selected music','selectedMusic?.id' in mature and 'musicCatalogueId = selectedMusic?.id' in mature)
 require('Status composer supports music-only publishing','FynxStatusType.MUSIC && selectedMusic == null' in mature and 'FynxStatusType.MUSIC -> Box(' in mature and 'type == FynxStatusType.MUSIC && selectedMusic != null' in mature)
 require('Status composer previews selected music','FynxRemoteAudio("/api/social/music/catalogue/"' in mature and 'Remove music' in mature)
@@ -102,7 +102,7 @@ require('legacy composer real video preview','VideoView' in composer and 'setVid
 require('legacy composer voice recording','MediaRecorder' in composer and 'FYNX_STATUS_MAX_VOICE_DURATION_MS' in composer)
 require('legacy composer friends-only wording','Friends only' in composer and 'Only me' not in composer)
 require('mature composer exists','fun FynxMatureStatusComposerPanel' in mature)
-require('mature composer validates media type before upload','expectedPrefix = when (type) { FynxStatusType.PHOTO -> "image/"; FynxStatusType.VIDEO -> "video/"; FynxStatusType.VOICE -> "audio/"; FynxStatusType.TEXT -> null }' in mature and 'if (expectedPrefix == null || !mime.startsWith(expectedPrefix))' in mature and mature.index('if (expectedPrefix == null || !mime.startsWith(expectedPrefix))') < mature.index('FynxStatusClient.uploadMedia(context, source, mime)'))
+require('mature composer validates media type before upload','expectedPrefix = when (type) { FynxStatusType.PHOTO -> "image/"; FynxStatusType.VIDEO -> "video/"; FynxStatusType.VOICE -> "audio/"; FynxStatusType.TEXT, FynxStatusType.MUSIC -> null }' in mature and 'if (expectedPrefix == null || !mime.startsWith(expectedPrefix))' in mature and mature.index('if (expectedPrefix == null || !mime.startsWith(expectedPrefix))') < mature.index('FynxStatusClient.uploadMedia(context, source, mime)'))
 require('mature Text mode','FynxStatusType.TEXT' in mature and 'Type a Status' in mature)
 require('mature creation controls fit small screens','LazyRow(' in mature and 'Text("Stop • ${formatMatureTime(elapsed)}")' in mature)
 require('mature combined Photo/Video gallery mode','FynxStatusType.PHOTO' in mature and 'FynxStatusType.VIDEO' in mature and 'val pickMedia = rememberLauncherForActivityResult' in mature and 'pickMedia.launch(arrayOf("image/*", "video/*"))' in mature)
