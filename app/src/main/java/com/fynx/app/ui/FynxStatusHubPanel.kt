@@ -62,10 +62,10 @@ private data class FynxRecentMedia(
 
 /** Single Status/Stories surface. */
 @Composable
-fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}) {
+fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var addStatusOpen by remember { mutableStateOf(false) }
+    var addStatusOpen by remember { mutableStateOf(startWithCreator) }
     var composing by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
@@ -100,7 +100,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
         if (!composing && !cameraOpen && !addStatusOpen) timelineRefreshKey++
     }
 
-    BackHandler(enabled = addStatusOpen) { addStatusOpen = false }
+    BackHandler(enabled = addStatusOpen) { if (startWithCreator) onExitCreator() else addStatusOpen = false }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
@@ -109,10 +109,10 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                     initialMediaUri = selectedInitialMedia?.uri,
                     initialType = selectedInitialMedia?.let { if (it.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO },
                     initialMusic = selectedStatusMusic,
-                    onClose = { selectedInitialMedia = null; selectedStatusMusic = null; composing = false }
+                    onClose = { selectedInitialMedia = null; selectedStatusMusic = null; composing = false; if (startWithCreator) onExitCreator() }
                 )
                 addStatusOpen -> FynxAddStatusPanel(
-                    onClose = { addStatusOpen = false },
+                    onClose = { if (startWithCreator) onExitCreator() else addStatusOpen = false },
                     onCamera = {
                         if (!cameraOpen) {
                             cameraError = null
