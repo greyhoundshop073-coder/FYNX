@@ -30,6 +30,7 @@ checks = [
     ("Marketplace media privacy filters marketplace listing responses", "/api/marketplace/listings" in privacy),
     ("Marketplace media access has a dedicated privacy guard", "marketplace_listings" in marketplace_privacy and "mediaId" in marketplace_privacy),
     ("Marketplace listing detail route is authenticated", 'app.get("/api/marketplace/listing/:id", auth' in discovery_routes),
+    ("Marketplace discovery binds search, category, location, limit, and offset with PostgreSQL placeholders", all(fragment in discovery_routes for fragment in ("COALESCE(l.category", "COALESCE(l.store_name", "l.category=${params.length}", "l.location ILIKE ${params.length}", "LIMIT ${params.length - 1} OFFSET ${params.length}"))),
     ("Marketplace discovery route is authenticated", "app.get(\"/api/marketplace/discovery" in discovery_routes and "auth" in discovery_routes),
     ("Marketplace checkout remains protected", "FynxMarketplaceCheckoutDialog" in panel and "MarketplaceProtectedOrderDialog" in panel),
     ("Marketplace payment verification remains connected", "verifyMarketplacePayment" in panel),
