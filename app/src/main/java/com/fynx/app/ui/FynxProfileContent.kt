@@ -85,21 +85,23 @@ fun FynxProfileContentSection(
                 val selected = selectedTab == label
                 Column(
                     Modifier.clip(RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                        .clickable { selectedTab = label },
+                        .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .62f) else MaterialTheme.colorScheme.surface)
+                        .clickable { selectedTab = label }
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(label,
-                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-                    }
-                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        label,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(4.dp))
                     Box(
                         Modifier.fillMaxWidth()
-                            .height(if (selected) 3.dp else 1.dp)
-                            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = .18f))
+                            .height(2.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = .12f))
                     )
                 }
             }
