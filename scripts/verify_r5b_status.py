@@ -60,9 +60,12 @@ require('client supports replies','FynxStatusClient.reply(context, status.id, bo
 require('Status deep link survives failed fetch and remains pending for retry','LaunchedEffect(statuses, openOwnerUsername, openStatusId, loading, error)' in timeline and 'if (loading || error != null) return@LaunchedEffect' in timeline)
 require('audience model exists','enum class FynxStatusAudience' in foundation)
 require('Status foundation carries catalogue music','musicCatalogueId: Long?' in foundation and 'musicDurationMs: Long' in foundation)
+require('Status model supports music-only type','enum class FynxStatusType { TEXT, PHOTO, VIDEO, VOICE, MUSIC }' in foundation)
 require('Status client sends catalogue music','put("musicCatalogueId", status.musicCatalogueId ?: JSONObject.NULL)' in client)
+require('Status client permits catalogue-backed music without uploaded media','status.type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC)' in client and 'status.type == FynxStatusType.MUSIC && status.musicCatalogueId == null' in client)
 require('Status client parses catalogue music','musicCatalogueId=musicCatalogueId' in client and 'musicTitle=' in client and 'musicArtist=' in client)
 require('Status backend stores catalogue music','music_catalogue_id BIGINT' in server and 'music_title TEXT' in server and 'music_duration_ms BIGINT' in server)
+require('Status backend accepts music-only Status and migrates type constraint',"DROP CONSTRAINT IF EXISTS statuses_type_check" in server and "'MUSIC'" in server and 'music-only Status must not include uploaded media' in server)
 require('Status backend validates published music','fynx_music_catalogue' in server and 'c.active=TRUE' in server and 'music selection is not published in the FYNX catalogue' in server)
 require('Status backend preserves catalogue music duration','musicDurationMs = Math.max(0, Number(music.rows[0].duration_ms) || 0)' in server)
 require('Add Status Music opens catalogue','onMusic = { showStatusMusicPicker = true }' in hub and 'FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)' in hub)
@@ -72,8 +75,10 @@ require('Status creator secondary tools are horizontally scrollable','.horizonta
 
 require('Add Status selected music reaches composer','selectedStatusMusic' in hub and 'initialMusic = selectedStatusMusic' in hub)
 require('Status composer carries selected music','selectedMusic?.id' in mature and 'musicCatalogueId = selectedMusic?.id' in mature)
+require('Status composer supports music-only publishing','FynxStatusType.MUSIC && selectedMusic == null' in mature and 'FynxStatusType.MUSIC -> Box(' in mature and 'type == FynxStatusType.MUSIC && selectedMusic != null' in mature)
 require('Status composer previews selected music','FynxRemoteAudio("/api/social/music/catalogue/"' in mature and 'Remove music' in mature)
 require('Status viewer renders attached music','status.musicCatalogueId' in timeline and 'FynxRemoteAudio("/api/social/music/catalogue/"' in timeline)
+require('Status viewer renders music-only Status type','FynxStatusType.MUSIC -> Column(' in timeline and 'FynxStatusType.MUSIC -> status.musicDurationMs.coerceAtLeast(1_000L)' in timeline)
 require('Status viewer uses catalogue music duration','musicDurationMs.coerceAtLeast(1_000L)' in timeline and 'kotlin.math.max' in timeline)
 
 require('Status media upload uses authenticated backend client','FynxBackendClient.postJson(context, "/api/media", body)' in client)
