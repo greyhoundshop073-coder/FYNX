@@ -88,7 +88,7 @@ private fun StatusArchiveCard(status: FynxStatus, onOpen: () -> Unit, onDelete: 
                     FynxStatusType.PHOTO -> Icon(Icons.Default.Image, null, tint = Color.White, modifier = Modifier.size(28.dp))
                     FynxStatusType.VIDEO -> Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(30.dp))
                     FynxStatusType.VOICE -> Icon(Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(28.dp))
-                    FynxStatusType.MUSIC -> Icon(Icons.Default.MusicNote, null, tint = Color.White, modifier = Modifier.size(28.dp))
+                    FynxStatusType.MUSIC -> Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(30.dp))
                 }
             }
             Spacer(Modifier.width(14.dp))
