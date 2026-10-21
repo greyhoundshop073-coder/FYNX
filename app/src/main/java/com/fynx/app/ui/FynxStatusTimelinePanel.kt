@@ -668,7 +668,7 @@ private fun FynxStatusStoryViewer(
                                 )
                             }
                         }
-                        status.musicCatalogueId?.let { musicId ->
+                        if (status.type != FynxStatusType.MUSIC) status.musicCatalogueId?.let { musicId ->
                             Surface(
                                 color = Color.White.copy(alpha = 0.10f),
                                 shape = RoundedCornerShape(14.dp),
