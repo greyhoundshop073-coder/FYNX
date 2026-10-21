@@ -97,6 +97,7 @@ require('legacy composer real video preview','VideoView' in composer and 'setVid
 require('legacy composer voice recording','MediaRecorder' in composer and 'FYNX_STATUS_MAX_VOICE_DURATION_MS' in composer)
 require('legacy composer friends-only wording','Friends only' in composer and 'Only me' not in composer)
 require('mature composer exists','fun FynxMatureStatusComposerPanel' in mature)
+require('mature composer validates media type before upload','expectedPrefix = when (type) { FynxStatusType.PHOTO -> "image/"; FynxStatusType.VIDEO -> "video/"; FynxStatusType.VOICE -> "audio/"; FynxStatusType.TEXT -> null }' in mature and 'if (expectedPrefix == null || !mime.startsWith(expectedPrefix))' in mature and mature.index('if (expectedPrefix == null || !mime.startsWith(expectedPrefix))') < mature.index('FynxStatusClient.uploadMedia(context, source, mime)'))
 require('mature Text mode','FynxStatusType.TEXT' in mature and 'Type a Status' in mature)
 require('mature creation controls fit small screens','LazyRow(' in mature and 'Text("Stop • ${formatMatureTime(elapsed)}")' in mature)
 require('mature combined Photo/Video gallery mode','FynxStatusType.PHOTO' in mature and 'FynxStatusType.VIDEO' in mature and 'val pickMedia = rememberLauncherForActivityResult' in mature and 'pickMedia.launch(arrayOf("image/*", "video/*"))' in mature)
