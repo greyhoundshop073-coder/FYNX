@@ -654,11 +654,11 @@ if not FAILURES:
                 home_xml, ["Create your status"], "status-create",
                 ["Add status", "Voice", "Text"]
             )
-            if status_add_xml:
+            if status_add_xml and find_control(status_add_xml, ["Voice"]) and find_control(status_add_xml, ["Text"]):
                 report.append("- PASS Home own-Status + button opens the real Add status panel")
-                report.append("- PASS Add status panel exposes Voice and Text creation choices")
+                report.append("- PASS Add status panel exposes both Voice and Text creation choices")
             else:
-                FAILURES.append("Home own-Status + button did not open the real Add status panel")
+                FAILURES.append("Home own-Status + button did not open Add status with both Voice and Text choices")
         else:
             FAILURES.append("could not return to Home through in-app Back navigation for Status runtime check")
         report += ["", "## Captured Status surfaces",
