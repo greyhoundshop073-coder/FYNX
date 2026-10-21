@@ -3,7 +3,8 @@ package com.fynx.app.ui
 data class FynxProfile(
     val displayName: String = "Your name",
     val username: String = "@username",
-    val bio: String = "Welcome to FYNX"
+    val bio: String = "Welcome to FYNX",
+    val country: String = ""
 )
 
 data class FynxSettings(
