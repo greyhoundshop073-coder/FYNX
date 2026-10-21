@@ -82,6 +82,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                 .onSuccess { raw ->
                     val orders = JSONObject(raw).optJSONArray("orders")
                     val records = mutableListOf<SellerMoneyRecord>()
+                    var settlementFailures = 0
                     if (orders != null) {
                         for (i in 0 until orders.length()) {
                             val order = orders.optJSONObject(i) ?: continue
@@ -90,7 +91,10 @@ fun FynxMarketplaceSellerCenterPanel() {
                             FynxBackendClient.get(context, "/api/marketplace/settlement/order/$orderId")
                                 .onSuccess { settlementRaw ->
                                     val settlement = JSONObject(settlementRaw)
-                                    val accounting = settlement.optJSONObject("accounting") ?: return@onSuccess
+                                    val accounting = settlement.optJSONObject("accounting") ?: run {
+                                        settlementFailures += 1
+                                        return@onSuccess
+                                    }
                                     val protection = settlement.optJSONObject("protection")
                                     val escrow = settlement.optJSONObject("escrow")
                                     val funds = protection?.optString("funds").orEmpty().ifBlank { escrow?.optString("status").orEmpty() }.ifBlank { "UNKNOWN" }
@@ -118,9 +122,13 @@ fun FynxMarketplaceSellerCenterPanel() {
                                         updatedAt = updatedAt
                                     )
                                 }
+                                .onFailure { settlementFailures += 1 }
                         }
                     }
                     moneyRecords = records.sortedByDescending { it.updatedAt }
+                    if (settlementFailures > 0) {
+                        moneyError = "Some settlement records could not load. Refresh My Shop to retry."
+                    }
                 }
                 .onFailure { moneyError = it.message ?: "Seller earnings could not load." }
             moneyLoading = false
