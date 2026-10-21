@@ -46,10 +46,19 @@ fun HomePanel(
     val context = LocalContext.current
     var showCreateMenu by remember { mutableStateOf(false) }
     var showMatureStatusComposer by remember { mutableStateOf(false) }
+    var showStatusCreatorHub by remember { mutableStateOf(false) }
     var isPullRefreshing by remember { mutableStateOf(false) }
 
     fun dismissCreateMenu() {
         showCreateMenu = false
+    }
+
+    if (showStatusCreatorHub) {
+        FynxStatusHubPanel(
+            startWithCreator = true,
+            onExitCreator = { showStatusCreatorHub = false }
+        )
+        return
     }
 
     if (showMatureStatusComposer) {
@@ -99,7 +108,7 @@ fun HomePanel(
                             onOpenAi = onOpenAi,
                             onOpenCamera = onOpenCamera,
                             onOpenFastCamera = onOpenFastCamera,
-                            onCreateStatus = { showMatureStatusComposer = true },
+                            onCreateStatus = { showStatusCreatorHub = true },
                             onOpenStatusOwner = onOpenStatusOwner
                         ) }
                     )
@@ -117,7 +126,7 @@ fun HomePanel(
             },
             onStatus = {
                 dismissCreateMenu()
-                showMatureStatusComposer = true
+                showStatusCreatorHub = true
             },
             onMarketplace = {
                 dismissCreateMenu()
