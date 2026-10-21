@@ -150,10 +150,38 @@ fun OtherUserProfilePanel(
                                 }
                                 if (person.country.isNotBlank()) Text(person.country, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                                 Spacer(Modifier.height(14.dp))
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                                    ProfileCount("Posts", person.postCount)
-                                    person.followerCount?.let { ProfileCount("Followers", it) }
-                                    person.followingCount?.let { ProfileCount("Following", it) }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f)
+                                    ) {
+                                        Box(Modifier.padding(horizontal = 4.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                            ProfileCount("Posts", person.postCount)
+                                        }
+                                    }
+                                    person.followerCount?.let { count ->
+                                        Surface(
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f)
+                                        ) {
+                                            Box(Modifier.padding(horizontal = 4.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                                ProfileCount("Followers", count)
+                                            }
+                                        }
+                                    }
+                                    person.followingCount?.let { count ->
+                                        Surface(
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f)
+                                        ) {
+                                            Box(Modifier.padding(horizontal = 4.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                                ProfileCount("Following", count)
+                                            }
+                                        }
+                                    }
                                 }
                                 Spacer(Modifier.height(16.dp))
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
