@@ -53,7 +53,8 @@ object FynxStatusClient {
     }
 
     suspend fun create(context: Context, status: FynxStatus, mediaId: String?): Result<Unit> = runCatching {
-        if (status.type != FynxStatusType.TEXT && mediaId.isNullOrBlank()) error("Status media is missing.")
+        if (status.type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaId.isNullOrBlank()) error("Status media is missing.")
+        if (status.type == FynxStatusType.MUSIC && status.musicCatalogueId == null) error("Choose a published FYNX music track.")
         if (status.type == FynxStatusType.VOICE && mediaId.isNullOrBlank()) error("Voice Status media is missing.")
         val body = JSONObject().apply {
             put("id", status.id); put("type", status.type.name); put("text", status.text ?: "")
