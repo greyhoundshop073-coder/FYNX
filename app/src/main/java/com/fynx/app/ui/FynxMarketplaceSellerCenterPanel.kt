@@ -259,15 +259,16 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     Text("Set a shop name and details that stay with your seller account. A Business Account is not required.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    OutlinedTextField(value = shopName, onValueChange = { shopName = it.take(120); shopMessage = null }, label = { Text("Shop name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
-                    OutlinedTextField(value = shopDescription, onValueChange = { shopDescription = it.take(800); shopMessage = null }, label = { Text("About your shop (optional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !shopSaving)
-                    OutlinedTextField(value = shopLocation, onValueChange = { shopLocation = it.take(160); shopMessage = null }, label = { Text("Shop location (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
-                    OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null }, label = { Text("Public shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
+                    OutlinedTextField(value = shopName, onValueChange = { shopName = it.take(120); shopMessage = null; shopError = null }, label = { Text("Shop name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
+                    OutlinedTextField(value = shopDescription, onValueChange = { shopDescription = it.take(800); shopMessage = null; shopError = null }, label = { Text("About your shop (optional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !shopSaving)
+                    OutlinedTextField(value = shopLocation, onValueChange = { shopLocation = it.take(160); shopMessage = null; shopError = null }, label = { Text("Shop location (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
+                    OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null; shopError = null }, label = { Text("Public shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
                     Button(
                         onClick = {
                             shopSaving = true
                             shopMessage = null
+                            shopError = null
                             scope.launch {
                                 val payload = JSONObject()
                                     .put("shopName", shopName.trim())
