@@ -101,7 +101,8 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                 profile = profile.copy(
                     displayName = remote.displayName.ifBlank { profile.displayName },
                     username = remote.username.ifBlank { profile.username },
-                    bio = remote.bio.ifBlank { profile.bio }
+                    bio = remote.bio.ifBlank { profile.bio },
+                    country = remote.country
                 )
             }.onFailure { syncError = it.message }
         }
@@ -124,7 +125,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                 }
                 val removeRemotePhoto = updatedPhoto == null && (originalPhoto != null || remotePhotoId != null)
                 if (syncError == null) {
-                    FynxProfileRemoteClient.update(context, updatedProfile.displayName, updatedProfile.username, updatedProfile.bio, profilePhotoMediaId = photoId, removeProfilePhoto = removeRemotePhoto)
+                    FynxProfileRemoteClient.update(context, updatedProfile.displayName, updatedProfile.username, updatedProfile.bio, country = updatedProfile.country, profilePhotoMediaId = photoId, removeProfilePhoto = removeRemotePhoto)
                         .onSuccess { remote ->
                             profile = updatedProfile
                             description = updatedDescription
@@ -191,6 +192,14 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                             modifier = Modifier.fillMaxWidth(0.9f)
                         )
                     }
+                    if (profile.country.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Language, contentDescription = "Profile location", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(profile.country, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     if (description.isNotBlank()) {
                         Spacer(Modifier.height(3.dp))
                         Text(
@@ -255,7 +264,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                 }
             }
         }
-        if (session.state == AuthState.SIGNED_IN) item { OutlinedButton(onClick = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) { Text("Sign out") } }
+        // Sign out is available in Settings > Session rather than at the end of the profile feed.
     }
     connectionType?.let { type ->
         ProfileConnectionsDialog(type, connections, connectionsLoading, connectionsError, onRetry = { openConnections(type) }) { connectionType = null }
@@ -315,10 +324,11 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
     var displayName by remember(profile) { mutableStateOf(profile.displayName) }
     var username by remember(profile) { mutableStateOf(profile.username) }
     var bio by remember(profile) { mutableStateOf(profile.bio) }
+    var country by remember(profile) { mutableStateOf(profile.country) }
     var about by remember(profile, description) { mutableStateOf(description) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) onPhotoChanged(uri.toString()) }
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { TextButton(enabled = !syncing, onClick = onCancel) { Text("Cancel") }; Text("Edit profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); TextButton(enabled = !syncing, onClick = { onSave(profile.copy(displayName = displayName.trim().ifBlank { profile.displayName }, username = username.trim().removePrefix("@").replace(" ", "").ifBlank { profile.username }, bio = bio.trim()), about.trim(), photoUri) }) { Text(if (syncing) "Saving…" else "Save") } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { TextButton(enabled = !syncing, onClick = onCancel) { Text("Cancel") }; Text("Edit profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); TextButton(enabled = !syncing, onClick = { onSave(profile.copy(displayName = displayName.trim().ifBlank { profile.displayName }, username = username.trim().removePrefix("@").replace(" ", "").ifBlank { profile.username }, bio = bio.trim(), country = country.trim()), about.trim(), photoUri) }) { Text(if (syncing) "Saving…" else "Save") } }
         syncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         HorizontalDivider()
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { FynxProfileImage(displayName, photoUri, Modifier.size(112.dp).clip(CircleShape)) }
@@ -326,6 +336,37 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
         OutlinedTextField(displayName, { displayName = it }, Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true, shape = RoundedCornerShape(14.dp))
         OutlinedTextField(username.removePrefix("@"), { username = it.removePrefix("@").replace(" ", "") }, Modifier.fillMaxWidth(), label = { Text("Username") }, prefix = { Text("@") }, singleLine = true, shape = RoundedCornerShape(14.dp))
         OutlinedTextField(bio, { bio = it }, Modifier.fillMaxWidth(), label = { Text("Bio") }, minLines = 3, shape = RoundedCornerShape(14.dp))
+        Text("Bio suggestions", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text("Tap a suggestion to use it, then edit it to sound like you.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val bioSuggestions = listOf(
+            "Sharing my world, one moment at a time.",
+            "Building, learning and connecting with good people.",
+            "Lifestyle • creativity • everyday moments",
+            "Here to connect, create and grow."
+        )
+        bioSuggestions.forEach { suggestion ->
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable { bio = suggestion },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+            ) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(suggestion, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Use bio suggestion", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        OutlinedTextField(
+            value = country,
+            onValueChange = { country = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Location (optional)") },
+            placeholder = { Text("City, region or country") },
+            supportingText = { Text("Only the location you enter here will appear on your profile. Leave blank to hide it.") },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp)
+        )
         OutlinedTextField(about, { about = it }, Modifier.fillMaxWidth(), label = { Text("About / description") }, minLines = 3, maxLines = 6, shape = RoundedCornerShape(14.dp))
     }
 }
@@ -362,6 +403,7 @@ fun SettingsPanel(
     var showNetworkStatusPage by remember { mutableStateOf(false) }
     var infoTitle by remember { mutableStateOf<String?>(null) }
     var infoDescription by remember { mutableStateOf("") }
+    var showSignOutConfirm by remember { mutableStateOf(false) }
 
     fun saveStoryVisibility(option: String) {
         if (storySaving) return
@@ -577,6 +619,15 @@ fun SettingsPanel(
                     }
                 }
             }
+            if (visible("Session", "sign out log out end session this device")) {
+                item { SettingsSectionTitle("SESSION") }
+                item {
+                    SettingsReferenceRow(Icons.Default.Security, "Sign out",
+                        "End your FYNX session on this device", androidx.compose.ui.graphics.Color(0xFFD94848)) {
+                        showSignOutConfirm = true
+                    }
+                }
+            }
             if (query.isNotBlank() && !listOf(
                 "Account & Profile" to "account profile username bio phone email account controls",
                 "Privacy & Security" to "profile privacy online status blocked users security people discovery",
@@ -588,7 +639,8 @@ fun SettingsPanel(
                 "Data & Network" to "data network mobile data wifi usage uploads downloads",
                 "Language & Accessibility" to "language accessibility english font size",
                 "Help & Support" to "help support contact troubleshooting",
-                "About FYNX" to "about version app information"
+                "About FYNX" to "about version app information",
+                "Session" to "sign out log out end session this device"
             ).any { (title, description) -> visible(title, description) }) {
                 item {
                     Text("No matching settings", modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -647,6 +699,13 @@ fun SettingsPanel(
             }
         )
     }
+    if (showSignOutConfirm) AlertDialog(
+        onDismissRequest = { showSignOutConfirm = false },
+        title = { Text("Sign out of FYNX?") },
+        text = { Text("You can sign in again later. This will end the current session on this device.") },
+        confirmButton = { TextButton(onClick = { showSignOutConfirm = false; onSignOut() }) { Text("Sign out", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") } }
+    )
     if (infoTitle != null) AlertDialog(
         onDismissRequest = { infoTitle = null },
         title = { Text(infoTitle!!) },
