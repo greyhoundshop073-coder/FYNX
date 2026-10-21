@@ -16,6 +16,7 @@ object FynxPreferencesStore {
     private const val KEY_DISPLAY_NAME = "display_name"
     private const val KEY_USERNAME = "username"
     private const val KEY_BIO = "bio"
+    private const val KEY_PROFILE_COUNTRY = "profile_country"
     private const val KEY_DESCRIPTION = "description"
     private const val KEY_NOTIFICATIONS = "notifications"
     private const val KEY_PRIVATE_PROFILE = "private_profile"
@@ -47,12 +48,13 @@ object FynxPreferencesStore {
         return FynxProfile(
             displayName = prefs.getString(KEY_DISPLAY_NAME, null)?.takeIf { it.isNotBlank() } ?: "Your name",
             username = username.removePrefix("@"),
-            bio = prefs.getString(KEY_BIO, null) ?: "Welcome to FYNX"
+            bio = prefs.getString(KEY_BIO, null) ?: "Welcome to FYNX",
+            country = prefs.getString(KEY_PROFILE_COUNTRY, "") ?: ""
         )
     }
     fun loadDescription(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DESCRIPTION, "") ?: ""
     fun saveDescription(context: Context, description: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_DESCRIPTION, description.trim()).apply() }
-    fun saveProfile(context: Context, profile: FynxProfile) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_DISPLAY_NAME, profile.displayName.trim()).putString(KEY_USERNAME, profile.username.removePrefix("@").trim()).putString(KEY_BIO, profile.bio.trim()).apply() }
+    fun saveProfile(context: Context, profile: FynxProfile) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_DISPLAY_NAME, profile.displayName.trim()).putString(KEY_USERNAME, profile.username.removePrefix("@").trim()).putString(KEY_BIO, profile.bio.trim()).putString(KEY_PROFILE_COUNTRY, profile.country.trim()).apply() }
     fun loadSettings(context: Context): FynxSettings {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return FynxSettings(
