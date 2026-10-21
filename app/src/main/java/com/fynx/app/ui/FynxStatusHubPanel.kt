@@ -71,6 +71,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
     var cameraError by remember { mutableStateOf<String?>(null) }
     var timelineRefreshKey by remember { mutableIntStateOf(0) }
     var selectedInitialMedia by remember { mutableStateOf<FynxRecentMedia?>(null) }
+    var selectedInitialType by remember { mutableStateOf<FynxStatusType?>(null) }
     var selectedStatusMusic by remember { mutableStateOf<FynxMusicCatalogueTrack?>(null) }
     var showStatusMusicPicker by remember { mutableStateOf(false) }
     var statusMusicSearch by remember { mutableStateOf("") }
@@ -80,6 +81,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
 
     fun openCapturedStatus(uri: Uri, type: String) {
         selectedInitialMedia = FynxRecentMedia(uri = uri, isVideo = type == "video", dateAddedSeconds = System.currentTimeMillis() / 1000L)
+        selectedInitialType = if (type == "video") FynxStatusType.VIDEO else FynxStatusType.PHOTO
         cameraError = null
         cameraOpen = false
         addStatusOpen = false
@@ -107,9 +109,9 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
             when {
                 composing -> FynxMatureStatusComposerPanel(
                     initialMediaUri = selectedInitialMedia?.uri,
-                    initialType = selectedInitialMedia?.let { if (it.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO },
+                    initialType = selectedInitialMedia?.let { if (it.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO } ?: selectedInitialType,
                     initialMusic = selectedStatusMusic,
-                    onClose = { selectedInitialMedia = null; selectedStatusMusic = null; composing = false; if (startWithCreator) onExitCreator() }
+                    onClose = { selectedInitialMedia = null; selectedInitialType = null; selectedStatusMusic = null; composing = false; if (startWithCreator) onExitCreator() }
                 )
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { if (startWithCreator) onExitCreator() else addStatusOpen = false },
@@ -119,11 +121,12 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                             cameraOpen = true
                         }
                     },
-                    onText = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
-                    onVoice = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
+                    onText = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.TEXT; composing = true; addStatusOpen = false },
+                    onVoice = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.VOICE; composing = true; addStatusOpen = false },
                     onMusic = { showStatusMusicPicker = true },
                     onMediaSelected = { media ->
                         selectedInitialMedia = media
+                        selectedInitialType = if (media.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO
                         composing = true
                         addStatusOpen = false
                     }
@@ -353,7 +356,13 @@ private fun FynxAddStatusPanel(
                 FynxStatusToolPill(
                     icon = Icons.Default.Photo,
                     label = "Photo",
-                    onClick = { deviceMediaPicker.launch(arrayOf("image/*", "video/*")) },
+                    onClick = { deviceMediaPicker.launch(arrayOf("image/*")) },
+                    modifier = Modifier.weight(1f)
+                )
+                FynxStatusToolPill(
+                    icon = Icons.Default.PlayArrow,
+                    label = "Video",
+                    onClick = { deviceMediaPicker.launch(arrayOf("video/*")) },
                     modifier = Modifier.weight(1f)
                 )
                 FynxStatusToolPill(
