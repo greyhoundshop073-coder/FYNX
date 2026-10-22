@@ -160,8 +160,9 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         FROM marketplace_listings l
         JOIN users u ON u.id=l.seller_id
         WHERE l.id=$1 AND UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')
+          AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$2))
         LIMIT 1
-      `, [listingId]);
+      `, [listingId, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: "listing not found" });
       const row = result.rows[0];
       if (!row.active || Number(row.quantity) <= 0) return res.status(404).json({ error: "listing unavailable" });
