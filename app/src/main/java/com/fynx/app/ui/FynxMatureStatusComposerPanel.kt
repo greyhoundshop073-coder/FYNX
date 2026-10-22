@@ -440,7 +440,7 @@ fun FynxMatureStatusComposerPanel(
                             ) {
                                 Icon(Icons.Default.TextFields, "Text styling", tint = Color.White)
                             }
-                            var showStatusEmoji by remember { mutableStateOf(false) }
+                            // Shares composer-level state so Back dismisses this menu first.
                             Box {
                                 IconButton(
                                     onClick = { showStatusEmoji = true },
