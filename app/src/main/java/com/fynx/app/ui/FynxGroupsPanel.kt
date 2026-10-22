@@ -556,12 +556,12 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             .distinctBy { it.id }
                             .sortedBy { it.timestamp }
                         messages = mergedMessages
+                        if (showError) syncMessage = null
                         runCatching {
                             withContext(Dispatchers.IO) {
                                 FynxChatStore.save(context, "group_$groupId", mergedMessages)
                             }
                         }.onFailure { if (showError) syncMessage = "Your group messages could not be saved locally. Please try again." }
-                        if (showError) syncMessage = null
                     }
                     .onFailure {
                         if (showError && FynxBackendClient.hasAccessToken(context)) {
