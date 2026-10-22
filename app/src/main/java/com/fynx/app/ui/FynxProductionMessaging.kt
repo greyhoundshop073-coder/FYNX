@@ -240,14 +240,14 @@ object FynxProductionMessaging {
         return asSequence().filter { it.senderUsername?.trim()?.removePrefix("@").orEmpty().lowercase() == currentUsername }.filter { it.text == text && it.replyToId == replyToId && it.mediaId == mediaId && it.mediaType == mediaType }.filter { it.timestamp == 0L || kotlin.math.abs(now - it.timestamp) <= 120_000L }.maxByOrNull { it.timestamp }
     }
 
-    suspend fun sendStructuredMessage(context: Context, recipientUsername: String, messageType: String, payload: Map<String, String>, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null): Result<RemoteMessage> {
+    suspend fun sendStructuredMessage(context: Context, recipientUsername: String, messageType: String, payload: Map<String, String>, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null, requestId: String = UUID.randomUUID().toString()): Result<RemoteMessage> {
         val allowed = setOf("location", "contact", "poll", "sticker", "gif")
         if (messageType !in allowed) return Result.failure(IllegalArgumentException("Unsupported message type."))
         if (payload.isEmpty()) return Result.failure(IllegalArgumentException("Message details are required."))
         val normalizedPayload = if (messageType == "poll") {
             payload.mapValues { (key, value) -> if (key == "options") value.replace("\\u001F", "\u001F") else value }
         } else payload
-        val body = JSONObject().apply { put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase()); put("text", ""); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("messageType", messageType); put("messagePayload", JSONObject(normalizedPayload)) }
+        val body = JSONObject().apply { put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase()); put("text", ""); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("messageType", messageType); put("messagePayload", JSONObject(normalizedPayload)); put("clientMessageId", requestId) }
         return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
     }
 
