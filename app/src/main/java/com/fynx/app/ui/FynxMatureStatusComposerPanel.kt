@@ -234,7 +234,6 @@ fun FynxMatureStatusComposerPanel(
         }
     }
 
-    BackHandler { if (!publishing && !recording) onClose() }
 
     Box(Modifier.fillMaxSize().background(Color(background))) {
         when (type) {
