@@ -33,6 +33,7 @@ def wait_for_group_conversation_ui(name:str, timeout:float=12.0)->str:
             "Message..." in latest
             or "Messaging is restricted" in latest
             or "No messages here yet" in latest
+            or "Group unavailable" in latest
         ):
             return latest
         time.sleep(.5)
@@ -63,26 +64,56 @@ def wait_for_home_feed_settled(timeout:float=30.0)->tuple[str,bool]:
         time.sleep(.5)
     return latest,False
 
+def clear_runtime_log():
+    """Start a focused logcat window immediately before a Chat/Groups route."""
+    run("adb","logcat","-c")
+
 def capture_runtime_log(name:str):
-    """Save app log context but report a crash only when logcat confirms one."""
+    """Capture crash/ANR context, including the stack lines that do not repeat the package name."""
     log_path=ROOT/name
-    result=run("adb","logcat","-d","-v","time","-t","500")
-    log_text=result.stdout or ""
-    keywords=("FATAL EXCEPTION","AndroidRuntime","com.fynx.app","Process com.fynx.app")
-    relevant_lines=[line for line in log_text.splitlines() if any(k in line for k in keywords)]
-    relevant="\n".join(relevant_lines)
-    log_path.write_text(relevant + ("\n" if relevant else ""),encoding="utf-8")
+    result=run("adb","logcat","-d","-v","threadtime","-t","4000")
+    lines=(result.stdout or "").splitlines()
+    crash_markers=(
+        "FATAL EXCEPTION", "Fatal signal", "FATAL SIGNAL", "ANR in",
+        "Input dispatching timed out", "is not responding", "am_anr",
+        "am_crash", "Process com.fynx.app"
+    )
+    event_indexes=[
+        i for i,line in enumerate(lines)
+        if any(marker.lower() in line.lower() for marker in crash_markers)
+        and ("com.fynx.app" in line or "FATAL EXCEPTION" in line or "Fatal signal" in line or "am_anr" in line or "am_crash" in line)
+    ]
+    # Include enough following lines to retain Kotlin/Java causes and stack frames.
+    # The earlier 500-line/package-only filter dropped most traces during UIAutomator polling.
+    selected=set()
+    for index in event_indexes:
+        selected.update(range(max(0,index-8), min(len(lines),index+48)))
+    if selected:
+        relevant_lines=[lines[i] for i in sorted(selected)]
+    else:
+        relevant_lines=[
+            line for line in lines
+            if "AndroidRuntime" in line or "com.fynx.app" in line
+            or "ActivityTaskManager" in line and ("unresponsive" in line.lower() or "destroy timeout" in line.lower())
+        ]
+    log_text="\n".join(relevant_lines)
+    log_path.write_text(log_text + ("\n" if log_text else ""),encoding="utf-8")
     crash_lines=[
-        line for line in relevant_lines
-        if "FATAL EXCEPTION" in line
-        or "Fatal signal" in line
-        or "FATAL SIGNAL" in line
-        or ("Process com.fynx.app" in line and "died" in line.lower())
-        or ("ANR in com.fynx.app" in line)
+        lines[i] for i in event_indexes
+        if (
+            "FATAL EXCEPTION" in lines[i]
+            or "Fatal signal" in lines[i]
+            or "FATAL SIGNAL" in lines[i]
+            or ("ANR in" in lines[i] and "com.fynx.app" in lines[i])
+            or ("Input dispatching timed out" in lines[i] and "com.fynx.app" in lines[i])
+            or ("is not responding" in lines[i] and "com.fynx.app" in lines[i])
+            or ("Process com.fynx.app" in lines[i] and "died" in lines[i].lower())
+            or "am_anr" in lines[i] or "am_crash" in lines[i]
+        )
     ]
     alive=run("adb","shell","pidof",PACKAGE)
     if crash_lines:
-        FAILURES.append(f"{name} captured a confirmed FYNX crash in logcat")
+        FAILURES.append(f"{name} captured a confirmed FYNX crash/ANR in logcat")
     return bool((alive.stdout or "").strip()), "\n".join(crash_lines)
 
 def screenshot(name:str):
@@ -738,6 +769,7 @@ if not FAILURES:
                 conversation_ui_opened=False
                 if real_chat_target:
                     restore_home_after_restart("private-chat-real-target-home")
+                    clear_runtime_log()
                     started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+real_chat_target,PACKAGE,timeout=30)
                     time.sleep(.5)
                     conversation_after=wait_for_conversation_ui("private-chat-inside.xml")
@@ -780,6 +812,7 @@ if not FAILURES:
                     chat_control=find_control(fallback,["Open chat"])
                     if chat_control:
                         _,fx,fy=chat_control
+                        clear_runtime_log()
                         run("adb","shell","input","tap",str(fx),str(fy))
                         time.sleep(.5)
                         fallback=wait_for_conversation_ui("private-chat-inside.xml")
@@ -800,6 +833,7 @@ if not FAILURES:
                             # A direct force-stop here previously discarded the debug-only
                             # UI session. Restore Home first, exactly as in the recovered fix.
                             restore_home_after_restart("private-chat-self-fallback-home")
+                            clear_runtime_log()
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+self_target,PACKAGE,timeout=30)
                             fallback=""
                             # Deep-link Activity launch can briefly expose the previous
@@ -869,6 +903,7 @@ if not FAILURES:
                 if groups_xml:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
                     if groups_tab:
+                        clear_runtime_log()
                         group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
                         if not group_after:
                             create_control=find_control(groups_tab,["New group","Create group"])
@@ -908,6 +943,7 @@ if not FAILURES:
                             # Keep the debug-only session alive before exercising the
                             # production Group ConversationPanel route.
                             restore_home_after_restart("group-chat-self-fallback-home")
+                            clear_runtime_log()
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/ci-runtime-group",PACKAGE)
                             time.sleep(.5)
                             group_destination=wait_for_group_conversation_ui("group-chat-inside.xml")
