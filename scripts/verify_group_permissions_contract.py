@@ -31,6 +31,10 @@ checks.update({
     "only newly inserted group messages broadcast": "if(!inserted.rows.length)return res.status(200).json({message,duplicate:true});await broadcastGroupMessage(groupId,message)" in normalized_group_routes,
     "new group message response marks first delivery": "res.status(201).json({message,duplicate:false})" in normalized_group_routes,
 })
+checks.update({
+    "group send failures show friendly retry copy instead of raw HTTP details": "Message not sent yet. It is saved; tap Retry to try again." in active and "FYNX backend returned HTTP" not in active,
+    "group attachment failures show friendly retry copy": "Attachment not sent yet. It is saved for retry; try again when the connection is ready." in active,
+})
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
     print(("PASS: " if ok else "FAIL: ") + name)
