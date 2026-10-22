@@ -23,6 +23,7 @@ checks = {
     "active group member action no longer uses manager-only full-group sync": "FynxGroupRemoteClient.addMember(context, groupId, cleanUsername)" in active and "onInvite = { username ->" in active,
     "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds=remote.disappearingSeconds" in settings and "approveNewMembers,disappearingSeconds" in settings,
     "story shares are pending until the backend accepts them and remain retryable on failure": 'ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false)' in active and "Story not sent yet. Your share is saved" in active,
+    "Group Tools media shares use the staged retry-safe attachment pipeline instead of a separate send path": 'onMedia = { uri, type ->' in active and 'sendGroupAttachment(uri, type)' in active[active.find('onMedia = { uri, type ->'):active.find('}, onStoryShare = {', active.find('onMedia = { uri, type ->'))] and 'createGroupMediaMessage(uri, type)' not in active[active.find('onMedia = { uri, type ->'):active.find('}, onStoryShare = {', active.find('onMedia = { uri, type ->'))],
     "group message sync does not clear a local persistence error immediately after setting it": active.find("if (showError) syncMessage = null") < active.find('FynxChatStore.save(context, "group_$groupId", mergedMessages)') and "Your group messages could not be saved locally. Please try again." in active,
 }
 failed = [name for name, ok in checks.items() if not ok]
