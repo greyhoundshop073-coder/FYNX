@@ -45,6 +45,7 @@ require('management route authentication','jwt.verify(token, JWT_SECRET)' in man
 require('management route production wiring','registerStatusManagementRoutes({ app });' in scale and './statusManagementRoutes.js' in scale)
 require('status interactions route wiring','registerStatusInteractionRoutes({ app });' in scale and './statusInteractionRoutes.js' in scale)
 require('status interaction tables','status_views' in interactions and 'status_likes' in interactions and 'status_reactions' in interactions and 'status_replies' in interactions)
+require('Status reply private-chat delivery requires mutual follows and rejects blocks','sender_follows_owner' in interactions and 'owner_follows_sender' in interactions and "if (!relation?.sender_follows_owner || !relation?.owner_follows_sender)" in interactions and 'relation?.blocked' in interactions)
 require('status interaction user ids match users','viewer_id BIGINT NOT NULL REFERENCES users(id)' in interactions and 'user_id BIGINT NOT NULL REFERENCES users(id)' in interactions and 'sender_id BIGINT NOT NULL REFERENCES users(id)' in interactions)
 require('status interaction visibility guard','expires_at > NOW()' in interactions and 'friendships' in interactions and 'blocks' in interactions)
 require('authenticated status view','app.post(\'/api/statuses/:statusId/view\'' in interactions and 'jwt.verify(token, JWT_SECRET)' in interactions)
