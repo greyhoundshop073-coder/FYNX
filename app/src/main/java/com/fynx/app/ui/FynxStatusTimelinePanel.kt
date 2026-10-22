@@ -65,6 +65,10 @@ fun FynxStatusTimelinePanel(
     var error by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<FynxStatus?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
+    // A Home-row tap can arrive while the initial Status list is still settling on
+    // the server. Retry one successful-but-unmatched owner lookup before consuming
+    // the navigation command, otherwise the tap silently lands on the timeline.
+    var retriedOwnerCommand by remember { mutableStateOf<String?>(null) }
     var viewerDisplayName by remember(username) { mutableStateOf(username) }
     val scope = rememberCoroutineScope()
     fun normalizedOwner(value: String): String = value.removePrefix("@").trim().lowercase()
@@ -105,7 +109,22 @@ fun FynxStatusTimelinePanel(
         } ?: openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }?.let { target ->
             statuses.filterNot(FynxStatus::isExpired).filter { normalizedOwner(it.ownerUsername) == normalizedOwner(target) }.maxByOrNull { it.createdAtMillis }
         }
-        if (targetStatus != null) selected = targetStatus
+        if (targetStatus != null) {
+            selected = targetStatus
+            retriedOwnerCommand = null
+        } else {
+            val requestedOwner = openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+            if (requestedOwner != null && openStatusId.isNullOrBlank()) {
+                val normalizedTarget = normalizedOwner(requestedOwner)
+                if (retriedOwnerCommand != normalizedTarget) {
+                    // Re-fetch once while retaining the pending owner command. This
+                    // also covers a Home tap racing the first list refresh.
+                    retriedOwnerCommand = normalizedTarget
+                    refreshKey++
+                    return@LaunchedEffect
+                }
+            }
+        }
         onOpenCommandConsumed()
     }
 
