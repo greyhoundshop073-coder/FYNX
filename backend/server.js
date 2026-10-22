@@ -250,6 +250,18 @@ function validateSignalPayload(signalType, body) {
   return null;
 }
 
+// Public, non-secret deployment identity lets operators distinguish a healthy old build from the current source.
+app.get("/version", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    service: "fynx-backend",
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.SOURCE_VERSION || "unknown",
+    branch: process.env.RAILWAY_GIT_BRANCH || "unknown",
+    environment: process.env.RAILWAY_ENVIRONMENT_NAME || "unknown",
+    deploymentId: process.env.RAILWAY_DEPLOYMENT_ID || "unknown"
+  });
+});
+
 app.get("/ready", async (_req, res) => {
   if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured" });
   try { await pool.query("SELECT 1"); return res.status(200).json({ ok: true, service: "fynx-backend", database: "ready" }); }
