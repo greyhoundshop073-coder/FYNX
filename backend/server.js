@@ -120,8 +120,11 @@ async function initDatabase() {
       read_at TIMESTAMPTZ,
       edited BOOLEAN NOT NULL DEFAULT FALSE,
       deleted BOOLEAN NOT NULL DEFAULT FALSE,
-      reply_to_id BIGINT REFERENCES messages(id) ON DELETE SET NULL
+      reply_to_id BIGINT REFERENCES messages(id) ON DELETE SET NULL,
+      client_message_id TEXT
     );
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS client_message_id TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS messages_sender_client_message_id_unique ON messages (sender_id, client_message_id) WHERE client_message_id IS NOT NULL;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_id BIGINT;
@@ -689,6 +692,8 @@ app.post("/api/messages", auth, async (req, res) => {
     const voiceDurationMs = req.body?.voiceDurationMs == null ? 0 : Number(req.body.voiceDurationMs);
     const messageType = typeof req.body?.messageType === 'string' ? req.body.messageType.trim().toLowerCase() : 'text';
     const messagePayload = req.body?.messagePayload && typeof req.body.messagePayload === 'object' && !Array.isArray(req.body.messagePayload) ? req.body.messagePayload : null;
+    const clientMessageId = typeof req.body?.clientMessageId === 'string' ? req.body.clientMessageId.trim().toLowerCase() : null;
+    if (clientMessageId != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(clientMessageId)) return res.status(400).json({ error: "invalid client message id" });
     if (!/^(text|location|contact|poll|sticker|gif)$/.test(messageType)) return res.status(400).json({ error: 'invalid message type' });
     if (messageType !== 'text' && !messagePayload) return res.status(400).json({ error: 'message payload is required' });
     if (!recipientUsername || text.length > 4000 || (!text && !Number.isInteger(mediaId))) return res.status(400).json({ error: "valid recipientUsername and message content are required" });
@@ -708,11 +713,22 @@ app.post("/api/messages", auth, async (req, res) => {
       const reply = await pool.query("SELECT id FROM messages WHERE id = $1 AND ((sender_id = $2 AND recipient_id = $3) OR (sender_id = $3 AND recipient_id = $2))", [replyToId, req.user.sub, recipient.id]);
       if (!reply.rows[0]) return res.status(400).json({ error: "invalid reply target" });
     }
-    const result = await pool.query("INSERT INTO messages (sender_id, recipient_id, text, reply_to_id, media_id, media_type, voice_duration_ms, message_type, message_payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, created_at", [req.user.sub, recipient.id, text, replyToId, mediaId, mediaType, voiceDurationMs, messageType, messagePayload]);
-    const sender = await pool.query("SELECT username, display_name FROM users WHERE id = $1", [req.user.sub]);
-    const message = { id: String(result.rows[0].id), senderId: String(req.user.sub), senderUsername: sender.rows[0]?.username || req.user.username || null, senderDisplayName: sender.rows[0]?.display_name || null, recipientId: String(recipient.id), recipientUsername: recipient.username, recipientDisplayName: recipient.display_name, text, timestamp: new Date(result.rows[0].created_at).getTime(), delivered: false, read: false, edited: false, deleted: false, replyToId: replyToId == null ? null : String(replyToId), mediaId: mediaId == null ? null : String(mediaId), mediaType, mediaUrl: mediaId == null ? null : `/api/media/${mediaId}`, voiceDurationMs, messageType, messagePayload };
-    await broadcastMessage(message);
-    return res.status(201).json({ message });
+    const insert = await pool.query(
+      "INSERT INTO messages (sender_id, recipient_id, text, reply_to_id, media_id, media_type, voice_duration_ms, message_type, message_payload, client_message_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (sender_id, client_message_id) WHERE client_message_id IS NOT NULL DO NOTHING RETURNING id",
+      [req.user.sub, recipient.id, text, replyToId, mediaId, mediaType, voiceDurationMs, messageType, messagePayload, clientMessageId]
+    );
+    let messageId = insert.rows[0]?.id;
+    const created = Boolean(messageId);
+    if (!created && clientMessageId) {
+      const existing = await pool.query("SELECT id FROM messages WHERE sender_id=$1 AND client_message_id=$2 LIMIT 1", [req.user.sub, clientMessageId]);
+      messageId = existing.rows[0]?.id;
+    }
+    if (!messageId) return res.status(500).json({ error: "message persistence failed" });
+    const full = await pool.query(messageProjection() + " WHERE m.id=$1 LIMIT 1", [messageId]);
+    if (!full.rows[0]) return res.status(500).json({ error: "message persistence failed" });
+    const message = rowToMessage(full.rows[0]);
+    if (created) await broadcastMessage(message);
+    return res.status(created ? 201 : 200).json({ message });
   } catch (error) { console.error("send message", error); return res.status(500).json({ error: "message send failed" }); }
 });
 
