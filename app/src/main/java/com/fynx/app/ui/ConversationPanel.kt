@@ -245,7 +245,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 messages = byId.values.sortedBy { it.timestamp }
                                 networkError = null
                             }
-                            .onFailure { error -> networkError = error.message ?: "Conversation refresh failed" }
+                            .onFailure { networkError = "Messages could not refresh yet. Your saved conversation is still here; check your connection and retry." }
                     }
                 }
             },
@@ -354,7 +354,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
-            networkError = error.message ?: "Unable to initialize this conversation."
+            networkError = "This conversation could not connect yet. Check your connection and try again."
             isNewConversation = false
         }
     }
