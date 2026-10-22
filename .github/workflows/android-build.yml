@@ -291,16 +291,16 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Verify APK is built from the exact checked-out commit
-        if: always() && !cancelled()
+        if: ${{ !cancelled() && hashFiles('app/build/outputs/apk/debug/app-debug.apk') != '' }}
         run: |
           test -s app/build/outputs/apk/debug/app-debug.apk
           echo "APK source commit: ${GITHUB_SHA}"
           sha256sum app/build/outputs/apk/debug/app-debug.apk
       - name: Prepare exact-commit debug APK filename
-        if: always() && !cancelled()
+        if: ${{ !cancelled() && hashFiles('app/build/outputs/apk/debug/app-debug.apk') != '' }}
         run: cp app/build/outputs/apk/debug/app-debug.apk "FYNX-debug-${GITHUB_SHA}.apk"
       - name: Upload exact-commit debug APK
-        if: always() && !cancelled()
+        if: ${{ !cancelled() && hashFiles('app/build/outputs/apk/debug/app-debug.apk') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-debug-apk-${{ github.sha }}
