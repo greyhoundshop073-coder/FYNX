@@ -45,6 +45,9 @@ import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -295,51 +298,26 @@ fun FynxMatureStatusComposerPanel(
             Spacer(Modifier.weight(1f))
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (showColors && type == FynxStatusType.TEXT) {
-                        Surface(
-                            color = Color(0xFF202124),
-                            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                            tonalElevation = 8.dp,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp)
+                        ModalBottomSheet(
+                            onDismissRequest = { if (!publishing && !recording) showColors = false },
+                            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                            containerColor = Color(0xFF202124),
+                            dragHandle = {
+                                BottomSheetDefaults.DragHandle(
+                                    color = Color(0xFF858A91),
+                                    width = 44.dp,
+                                    height = 5.dp
+                                )
+                            }
                         ) {
                             Column(
                                 Modifier
+                                    .fillMaxWidth()
                                     .heightIn(max = 360.dp)
                                     .verticalScroll(rememberScrollState())
                                     .padding(horizontal = 16.dp, vertical = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                var handleDragDistance by remember { mutableFloatStateOf(0f) }
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(28.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .pointerInput(showColors, publishing, recording) {
-                                            detectVerticalDragGestures(
-                                                onVerticalDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    handleDragDistance += dragAmount
-                                                },
-                                                onDragEnd = {
-                                                    if (handleDragDistance > 36f && !publishing && !recording) {
-                                                        showColors = false
-                                                    }
-                                                    handleDragDistance = 0f
-                                                },
-                                                onDragCancel = { handleDragDistance = 0f }
-                                            )
-                                        }
-                                        .clickable(enabled = !publishing && !recording) { showColors = false },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Box(
-                                        Modifier
-                                            .width(44.dp)
-                                            .height(5.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(Color(0xFF858A91))
-                                    )
-                                }
                                 Text(
                                     "Styling & Options",
                                     color = Color.White,
