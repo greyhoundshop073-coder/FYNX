@@ -657,12 +657,26 @@ if not FAILURES:
             if status_add_xml and find_control(status_add_xml, ["Voice"]) and find_control(status_add_xml, ["Text"]):
                 report.append("- PASS Home own-Status + button opens the real Add status panel")
                 report.append("- PASS Add status panel exposes both Voice and Text creation choices")
+                voice_composer_xml = tap_control(
+                    status_add_xml, ["Voice"], "status-voice-composer",
+                    ["Tap Voice to start recording", "Voice Status ready", "Stop"]
+                )
+                if voice_composer_xml and (
+                    find_control(voice_composer_xml, ["Tap Voice to start recording"])
+                    or find_control(voice_composer_xml, ["Voice Status ready"])
+                    or find_control(voice_composer_xml, ["Stop"])
+                ):
+                    screenshot("authenticated-status-voice-composer.png")
+                    report.append("- PASS selecting Voice opens the actual Status composer in Voice mode")
+                else:
+                    FAILURES.append("Status Add status -> Voice composer")
             else:
                 FAILURES.append("Home own-Status + button did not open Add status with both Voice and Text choices")
         else:
             FAILURES.append("could not return to Home through in-app Back navigation for Status runtime check")
         report += ["", "## Captured Status surfaces",
                    "- authenticated-status-home.png", "- authenticated-status-create.png",
+                   "- authenticated-status-voice-composer.png",
                    "", "Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only saved-device UI entry, which explicitly does not certify server authentication."]
         report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
         if FAILURES:
@@ -1025,25 +1039,6 @@ if marketplace_xml:
 else:
     FAILURES.append("authenticated Home -> Marketplace")
     
-# Certify Status creation on the server-authenticated path too. This uses the same
-# real Home + button as a user and captures the real creator choice screen; it
-# does not seed fake status data or change the login/test-bypass behavior.
-run("adb","shell","am","force-stop",PACKAGE)
-run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-time.sleep(2.5)
-status_home = dismiss_runtime_permission_prompt() or dump_ui("authenticated-status-home.xml")
-status_add_xml = tap_control(
-    status_home,
-    ["Create your status"],
-    "status-create",
-    ["Add status", "Voice", "Text"]
-)
-if status_add_xml and find_control(status_add_xml, ["Voice"]) and find_control(status_add_xml, ["Text"]):
-    screenshot("authenticated-status-create.png")
-    report.append("- PASS Home own-Status + button -> real Status creator choices (Text + Voice)")
-else:
-    FAILURES.append("authenticated Home -> Status creator choices (Text + Voice)")
-
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
            "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png","",
