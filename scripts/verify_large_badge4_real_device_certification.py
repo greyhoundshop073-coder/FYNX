@@ -15,10 +15,11 @@ workflow = read(".github/workflows/android-build.yml")
 app = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 runtime_path = "scripts/verify_authenticated_runtime_navigation.py" if (ROOT / "scripts/verify_authenticated_runtime_navigation.py").is_file() else "scripts/verify_runtime_navigation.py"
 runtime = read(runtime_path).lower()
+runtime_script = read("scripts/run_android_runtime_certification.sh").lower()
 
 check("real emulator runner is configured", "reactivecircus/android-emulator-runner@v2" in workflow)
-check("connected Android instrumentation is executed", "connecteddebugandroidtest" in workflow.lower())
-check("authenticated runtime navigation verification is executed", runtime_path.lower() in workflow.lower())
+check("connected Android instrumentation is executed by the extracted runner", "connecteddebugandroidtest" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow.lower())
+check("authenticated runtime navigation verification is executed", runtime_path.lower() in runtime_script)
 check("runtime screenshots and UI hierarchies are uploaded", "fynx-runtime-visual-check-" in workflow.lower() and "fynx-runtime-screenshots/" in workflow.lower())
 check("Home, Chat, Friends, Stories and Features are reachable", all(x in app for x in ['"Home"', '"Chats"', '"Friends"', '"Stories"', '"Features"']))
 check("major secondary surfaces have real navigation routes", all(x in app for x in ['"Marketplace"', '"Calls"', '"Groups"', '"Notifications"', '"Privacy"', '"Money Tools"', '"AI"']))

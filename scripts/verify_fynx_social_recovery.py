@@ -17,7 +17,6 @@ connection = read("app/src/main/java/com/fynx/app/ui/FynxAppConnectionManager.kt
 backend = read("backend/socialRoutes.js")
 workflow = read(".github/workflows/android-build.yml")
 runtime_script = read("scripts/run_android_runtime_certification.sh")
-runtime_script = read("scripts/run_android_runtime_certification.sh")
 
 checks = []
 def check(name, ok):
@@ -46,7 +45,7 @@ check("main push has the full static/unit/lint Android build", 'on:\n  push:' in
 # The workflow intentionally uses a commit-named file and commit-named artifact.
 # Keep this gate aligned with the live android-build.yml contract.
 check("main push publishes an exact-commit APK artifact", 'name: FYNX-debug-apk-${{ github.sha }}' in workflow and 'path: FYNX-debug-${{ github.sha }}.apk' in workflow and 'GITHUB_SHA' in workflow and 'if-no-files-found: error' in workflow and 'uses: actions/upload-artifact@v4' in workflow)
-check("authenticated runtime certification is available as the explicit full-runtime path", 'verify_authenticated_runtime_navigation.py' in runtime_script and 'FYNX_E2E_USERNAME' in workflow and 'FYNX_E2E_PASSWORD' in workflow and 'connectedDebugAndroidTest' in runtime_script and "github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true'" in workflow and 'Upload exact-commit debug APK' in workflow)
+check("authenticated runtime certification is available as the explicit full-runtime path", 'verify_authenticated_runtime_navigation.py' in runtime_script and 'FYNX_E2E_USERNAME' in workflow and 'FYNX_E2E_PASSWORD' in workflow and 'connectedDebugAndroidTest' in runtime_script and 'bash scripts/run_android_runtime_certification.sh' in workflow and "github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true'" in workflow and 'Upload exact-commit debug APK' in workflow)
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

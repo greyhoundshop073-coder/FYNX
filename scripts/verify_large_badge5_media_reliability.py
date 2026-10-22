@@ -8,6 +8,7 @@ camera = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").
 status = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt").read_text(encoding="utf-8")
 home_media = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomePostMediaClient.kt").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+runtime_script = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 
 remote_checks = {
     "authenticated backend media download": "FynxBackendClient.downloadToFile" in remote,
@@ -36,7 +37,7 @@ surface_checks = {
     "Status video completion": "onVideoCompleted" in status,
     "Home uses real media manifest": "optJSONArray(\"media\")" in home_media,
     "Home preserves media ordering": "sortedBy { it.position }" in home_media,
-    "runtime instrumentation remains": "connectedDebugAndroidTest" in workflow,
+    "runtime instrumentation remains": "connectedDebugAndroidTest" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow,
     "camera/media gate remains": "verify_stage16_camera.py" in workflow,
     "camera-to-post gate remains": "verify_camera_post_journey.py" in workflow,
 }
