@@ -1025,6 +1025,25 @@ if marketplace_xml:
 else:
     FAILURES.append("authenticated Home -> Marketplace")
     
+# Certify Status creation on the server-authenticated path too. This uses the same
+# real Home + button as a user and captures the real creator choice screen; it
+# does not seed fake status data or change the login/test-bypass behavior.
+run("adb","shell","am","force-stop",PACKAGE)
+run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+time.sleep(2.5)
+status_home = dismiss_runtime_permission_prompt() or dump_ui("authenticated-status-home.xml")
+status_add_xml = tap_control(
+    status_home,
+    ["Create your status"],
+    "status-create",
+    ["Add status", "Voice", "Text"]
+)
+if status_add_xml and find_control(status_add_xml, ["Voice"]) and find_control(status_add_xml, ["Text"]):
+    screenshot("authenticated-status-create.png")
+    report.append("- PASS Home own-Status + button -> real Status creator choices (Text + Voice)")
+else:
+    FAILURES.append("authenticated Home -> Status creator choices (Text + Voice)")
+
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
            "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png","",
