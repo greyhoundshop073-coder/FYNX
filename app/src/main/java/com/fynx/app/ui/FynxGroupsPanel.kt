@@ -790,7 +790,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }
                                     .onFailure { error ->
                                         failedCount += 1
-                                        lastError = error.message
+                                        lastError = if (failedMessage.attachmentUri != null || failedMessage.attachmentType != null) "Attachment not sent yet. It is saved for retry; try again when the connection is ready." else "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
                                     }
                             }
                             syncMessage = if (failedCount == 0) null else
