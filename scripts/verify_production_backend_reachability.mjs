@@ -1,7 +1,6 @@
-const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-ai-backend.onrender.com").replace(/\/$/, "");
-// Render cold starts can legitimately take longer than the previous 45s request
-// budget. Keep the certification strict (health + database readiness are still
-// required) while allowing enough time for the production service to wake up.
+const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\/$/, "");
+// Keep certification strict: HTTP health and database readiness are both required.
+// The URL is configurable so certification can target the intended Railway service.
 const TIMEOUT_MS = 120_000;
 const RETRIES = 3;
 const RETRY_DELAY_MS = 10_000;

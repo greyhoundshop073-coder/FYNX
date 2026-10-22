@@ -20,8 +20,35 @@ class FynxNetworkRecoveryContractTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun productionBackendUsesHttps() {
-        assertTrue(FynxBackendClient.baseUrl(context).startsWith("https://"))
+    fun productionBackendDefaultsToTheActiveRailwayService() {
+        val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
+        val originalUrl = prefs.getString("base_url", null)
+        val originalExplicit = prefs.getBoolean("base_url_explicit", false)
+        try {
+            prefs.edit().remove("base_url").putBoolean("base_url_explicit", false).commit()
+            assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
+        } finally {
+            val edit = prefs.edit().putBoolean("base_url_explicit", originalExplicit)
+            if (originalUrl == null) edit.remove("base_url") else edit.putString("base_url", originalUrl)
+            edit.commit()
+        }
+    }
+
+    @Test
+    fun retiredRenderBackendAddressMigratesForEveryBuildType() {
+        val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
+        val originalUrl = prefs.getString("base_url", null)
+        val originalExplicit = prefs.getBoolean("base_url_explicit", false)
+        try {
+            prefs.edit().putString("base_url", "https://fynx-ai-backend.onrender.com")
+                .putBoolean("base_url_explicit", true).commit()
+            assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
+            assertFalse(FynxBackendClient.baseUrl(context).contains("onrender.com"))
+        } finally {
+            val edit = prefs.edit().putBoolean("base_url_explicit", originalExplicit)
+            if (originalUrl == null) edit.remove("base_url") else edit.putString("base_url", originalUrl)
+            edit.commit()
+        }
     }
 
     @Test
