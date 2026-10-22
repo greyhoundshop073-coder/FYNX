@@ -400,31 +400,36 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                 else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
                                 else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
                             }
-                            Box(Modifier.align(Alignment.BottomEnd)) {
-                                IconButton(
-                                    onClick = { profileAvatarMenuOpen = true },
-                                    modifier = Modifier.size(22.dp).semantics { contentDescription = "Profile menu, three dots" }
-                                ) {
-                                    Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
-                                }
-                                DropdownMenu(
-                                    expanded = profileAvatarMenuOpen,
-                                    onDismissRequest = { profileAvatarMenuOpen = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Open profile") },
-                                        onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = false },
-                                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Profile settings") },
-                                        onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = true },
-                                        leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
-                                    )
-                                }
+                        }
+                        // Keep the 3-dot control beside the avatar, not on top of it.
+                        // Material IconButton expands to a 48dp touch target even when its
+                        // visual icon is smaller; overlaying it makes the profile target
+                        // unclickable on real devices and in accessibility/UI automation.
+                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            IconButton(
+                                onClick = { profileAvatarMenuOpen = true },
+                                modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
+                            ) {
+                                Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+                            }
+                            DropdownMenu(
+                                expanded = profileAvatarMenuOpen,
+                                onDismissRequest = { profileAvatarMenuOpen = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Open profile") },
+                                    onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = false },
+                                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Profile settings") },
+                                    onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = true },
+                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
+                                )
                             }
                         }
                         Row(
+                            Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (appConnectionState == FynxAppConnectionManager.State.CONNECTED) {
