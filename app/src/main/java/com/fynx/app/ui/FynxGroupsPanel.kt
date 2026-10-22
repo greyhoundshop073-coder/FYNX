@@ -550,8 +550,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         messages = (remoteMessages + pendingLocal)
                             .distinctBy { it.id }
                             .sortedBy { it.timestamp }
-                        runCatching { FynxChatStore.save(context, "group_$groupId", messages) }
-                            .onFailure { if (showError) syncMessage = it.message ?: "Unable to save local group messages." }
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                FynxChatStore.save(context, "group_$groupId", messages)
+                            }
+                        }.onFailure { if (showError) syncMessage = it.message ?: "Unable to save local group messages." }
                         if (showError) syncMessage = null
                     }
                     .onFailure {
@@ -614,7 +617,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 val pendingLocal = latestMessages.filter { it.id !in remoteIds }
                                 val merged = (remoteMessages + pendingLocal).distinctBy { it.id }.sortedBy { it.timestamp }
                                 messages = merged
-                                FynxChatStore.save(context, "group_$groupId", merged)
+                                // Group history may contain years of chat JSON. Keep
+                                // local persistence off Main just like initial restoration.
+                                withContext(Dispatchers.IO) {
+                                    FynxChatStore.save(context, "group_$groupId", merged)
+                                }
                                 syncMessage = null
                             }
                             .onFailure {
