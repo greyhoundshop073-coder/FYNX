@@ -197,6 +197,15 @@ fun FynxMatureStatusComposerPanel(
     }
     DisposableEffect(Unit) { onDispose { recorder?.let { runCatching { it.stop() }; runCatching { it.release() } }; recordingFile?.let { if (it.exists()) runCatching { it.delete() } } } }
 
+    // Android system Back must behave like the visible close control on every composer mode.
+    // During publishing, ignore Back so an in-flight upload is not abandoned accidentally.
+    BackHandler(enabled = !publishing) {
+        if (showColors) showColors = false
+        else if (showTools) showTools = false
+        else if (showMediaTools) showMediaTools = false
+        else onClose()
+    }
+
     fun clearDraft() { if (publishing || recording) return; mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; showMediaTools = false; error = null }
     fun publish() {
         if (publishing || recording) return
@@ -279,7 +288,15 @@ fun FynxMatureStatusComposerPanel(
             FynxStatusType.MUSIC -> Box(Modifier.fillMaxSize().background(Color(background)).padding(horizontal = 28.dp, vertical = 96.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) { Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(124.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.MusicNote, null, tint = Color(foreground), modifier = Modifier.size(58.dp)) } }; Text(selectedMusic?.title ?: "Choose a song", color = Color(foreground), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold); Text(selectedMusic?.artist ?: "FYNX Music", color = Color(foreground).copy(alpha = .76f), style = MaterialTheme.typography.titleMedium); selectedMusic?.let { FynxRemoteAudio("/api/social/music/catalogue/${it.id}/media", Modifier.fillMaxWidth(), it.durationMs.coerceAtLeast(1_000L)) } } }
         }
         Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { if (!publishing) onClose() },
+                    enabled = !publishing,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Back from Status composer", tint = Color.White)
+                }
+                Spacer(Modifier.width(4.dp))
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     FynxProfileImage(username, FynxPreferencesStore.loadProfilePhoto(context), Modifier.size(40.dp).clip(CircleShape))
                     Spacer(Modifier.width(10.dp))
