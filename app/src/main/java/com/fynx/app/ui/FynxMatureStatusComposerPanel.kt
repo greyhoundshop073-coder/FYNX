@@ -228,7 +228,7 @@ fun FynxMatureStatusComposerPanel(
             FynxStatusType.TEXT -> {
                 val editorTextAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
                 val editorWeight = if (font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
-                BoxWithConstraints(Modifier.fillMaxSize().background(Color(background)), contentAlignment = Alignment.Center) {
+                BoxWithConstraints(Modifier.fillMaxSize().imePadding().background(Color(background)), contentAlignment = Alignment.Center) {
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
@@ -263,7 +263,7 @@ fun FynxMatureStatusComposerPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
-                        .padding(top = 76.dp, bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp),
+                        .padding(top = 76.dp, bottom = 24.dp),
                     minLines = 2,
                         maxLines = 10
                     )
@@ -297,8 +297,9 @@ fun FynxMatureStatusComposerPanel(
                     if (showColors && type == FynxStatusType.TEXT) {
                         Surface(
                             color = Color(0xFF202124),
-                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                            tonalElevation = 8.dp,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp)
                         ) {
                             Column(
                                 Modifier
@@ -310,8 +311,8 @@ fun FynxMatureStatusComposerPanel(
                                 var handleDragDistance by remember { mutableFloatStateOf(0f) }
                                 Box(
                                     Modifier
-                                        .width(48.dp)
-                                        .height(24.dp)
+                                        .fillMaxWidth()
+                                        .height(28.dp)
                                         .clip(RoundedCornerShape(12.dp))
                                         .pointerInput(showColors, publishing, recording) {
                                             detectVerticalDragGestures(
@@ -333,8 +334,8 @@ fun FynxMatureStatusComposerPanel(
                                 ) {
                                     Box(
                                         Modifier
-                                            .width(40.dp)
-                                            .height(4.dp)
+                                            .width(44.dp)
+                                            .height(5.dp)
                                             .clip(RoundedCornerShape(2.dp))
                                             .background(Color(0xFF858A91))
                                     )

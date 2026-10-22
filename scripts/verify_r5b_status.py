@@ -196,6 +196,12 @@ require('external sharing uses Android share chooser','Intent.ACTION_SEND' in sh
 require('Marketplace link parses back to Marketplace','"marketplace"->if(normalizedPath.size<=2)FynxDeepLinkDestination.Marketplace(value)' in deeplink)
 require('Marketplace product detail share button reaches the real listing share action','FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title))' in marketplace and 'onShare = {' in marketplace and 'IconButton(onClick = onShare)' in marketplace_detail and 'Icon(Icons.Default.Share, "Share"' in marketplace_detail)
 
+
+require('status editor resizes above the keyboard using IME insets','BoxWithConstraints(Modifier.fillMaxSize().imePadding().background(Color(background))' in mature)
+require('status text editor avoids oversized fixed bottom spacer','padding(top = 76.dp, bottom = 24.dp)' in mature)
+require('status style panel is bounded and elevated as a bottom sheet','tonalElevation = 8.dp' in mature and 'heightIn(min = 180.dp, max = 360.dp)' in mature and 'RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)' in mature)
+require('status style panel handle spans the sheet header and remains draggable','Modifier\n                                        .fillMaxWidth()\n                                        .height(28.dp)' in mature and 'detectVerticalDragGestures' in mature)
+
 failed=[label for label,ok in checks if not ok]
 for label,ok in checks: print(('GREEN' if ok else 'RED')+' - '+label)
 if failed:
