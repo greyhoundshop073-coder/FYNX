@@ -151,7 +151,7 @@ require('add status Layout prevents video thumbnails and communicates selection 
 require('Add status Record video launches camera capture in video mode','Text("Record video"' in hub and 'onClick = onRecordVideo' in hub and 'cameraInitialMode = CameraMode.VIDEO' in hub and 'initialMode = cameraInitialMode' in hub)
 require('Add status camera and Record video have distinct capture modes','onCamera = {' in hub and 'cameraInitialMode = CameraMode.PHOTO' in hub and 'onRecordVideo = {' in hub and 'cameraInitialMode = CameraMode.VIDEO' in hub)
 require('Add status Voice opens the composer in voice mode','onVoice = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.VOICE; composing = true; addStatusOpen = false }' in hub and '?: selectedInitialType' in hub)
-require('Home Status plus opens the full Add status hub','startWithCreator: Boolean = false' in hub and 'onCreateStatus = { showStatusCreatorHub = true }' in read('app/src/main/java/com/fynx/app/ui/HomePanel.kt'))
+require('Home Status creation routes to immersive Stories without Home header','onCreateStatus: () -> Unit = {}' in read('app/src/main/java/com/fynx/app/ui/HomePanel.kt') and 'onCreateStatus = onCreateStatus' in read('app/src/main/java/com/fynx/app/ui/HomePanel.kt') and 'onCreateStatus = onCreateStatus' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt') and 'onCreateStatus = { statusCreatorRequested = true' in app and 'startWithCreator = statusCreatorRequested' in app and 'if (selected == "Stories")' in app)
 require('mature 24-hour expiry','expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS' in mature)
 require('mature publish validation','Write something first.' in mature and 'Add your media first.' in mature)
 
