@@ -24,6 +24,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
 
 @Composable
 fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit = {}, onCreateGroup: () -> Unit = {}, onOpenContacts: () -> Unit = {}) {
@@ -40,19 +42,17 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var openMenuFor by remember { mutableStateOf<String?>(null) }
     var chatSearch by remember { mutableStateOf("") }
 
-    fun refreshChats() {
+    suspend fun refreshChats() {
         // Computing unread counts parses each stored conversation. Run that work off
         // Main and never save previews from this collector: savePreview emits
         // previewUpdates, so writing here created a recursive refresh/event storm.
-        scope.launch {
-            val refreshed = withContext(Dispatchers.IO) {
-                FynxChatStore.loadPreviews(context).map { preview ->
-                    val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
-                    preview.copy(unreadCount = unread)
-                }
+        val refreshed = withContext(Dispatchers.IO) {
+            FynxChatStore.loadPreviews(context).map { preview ->
+                val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
+                preview.copy(unreadCount = unread)
             }
-            chats = refreshed
         }
+        chats = refreshed
     }
 
     LaunchedEffect(Unit) {
@@ -87,7 +87,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     }
 
     LaunchedEffect(Unit) {
-        FynxChatStore.previewUpdates.collect { refreshChats() }
+        FynxChatStore.previewUpdates.conflate().collectLatest { refreshChats() }
     }
 
     val rowSpacing = when (listView) { "Compact" -> 2.dp; "Large" -> 14.dp; else -> 8.dp }
@@ -254,7 +254,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                         onClick = {
                                             FynxPreferencesStore.setChatPinned(context, chat.username, !pinned)
                                             openMenuFor = null
-                                            refreshChats()
+                                            scope.launch { refreshChats() }
                                         }
                                     )
                                     DropdownMenuItem(
@@ -262,7 +262,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                         onClick = {
                                             FynxPreferencesStore.setChatMuted(context, chat.username, !muted)
                                             openMenuFor = null
-                                            refreshChats()
+                                            scope.launch { refreshChats() }
                                         }
                                     )
                                     DropdownMenuItem(
@@ -270,7 +270,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                         onClick = {
                                             FynxPreferencesStore.setChatArchived(context, chat.username, !showArchived)
                                             openMenuFor = null
-                                            refreshChats()
+                                            scope.launch { refreshChats() }
                                         }
                                     )
                                 }
