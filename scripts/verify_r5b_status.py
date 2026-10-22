@@ -160,7 +160,7 @@ require('hub mature + creation route','FynxMatureStatusComposerPanel' in hub and
 require('hub camera route remains real','FynxCameraCapturePanel' in hub and 'openCapturedStatus' in hub)
 require('legacy Stories wrapper','FynxStatusTimelinePanel()' in stories and 'SharedPreferences' not in stories)
 require('timeline backend list','FynxStatusClient.list(context)' in timeline)
-require('Home Status tap routes to the tapped user Stories','onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim())' in visible and 'onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; selected = "Stories" }' in app)
+require('Home Status tap routes to the tapped user Stories','onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim())' in visible and 'onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }' in app)
 require('own Status plus overlays avatar instead of occupying a separate row slot','Modifier.align(Alignment.BottomEnd).requiredSize(25.dp)' in visible and 'contentDescription = "Create your status"' in visible and 'Box(Modifier.requiredSize(78.dp), contentAlignment = Alignment.Center)' in visible and 'Modifier.size(70.dp)' in visible)
 require('Stories deep link selects latest active Status for tapped user','openOwnerUsername?.removePrefix("@")?.trim()?.takeIf' in timeline and 'if (targetStatus != null) {' in timeline and 'selected = targetStatus' in timeline and 'retriedOwnerCommand != normalizedTarget' in timeline and 'FynxStatusStoryViewer(' in timeline)
 require('Status timeline row tap opens the selected Status viewer','onClick = { selected = status }' in timeline and 'selected?.let { initial ->' in timeline and 'FynxStatusStoryViewer(' in timeline)
