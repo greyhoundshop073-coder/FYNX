@@ -137,7 +137,7 @@ require('status creator applies IME insets to the bottom controls as one group',
 require('status caption field does not double-apply IME insets','modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),' in mature and 'modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).imePadding()' not in mature)
 require('status text styling sheet has a Done action','Text("Done"' in mature and 'onClick = { showColors = false }' in mature)
 require('mature text editor uses responsive full view', 'horizontal = 12.dp' in mature and '.imePadding()' in mature and 'BoxWithConstraints' in mature and '.padding(top = 76.dp, bottom = 24.dp)' in mature and 'maxWidth.value' in mature)
-require('mature composer Android back is intercepted safely during recording/publishing','BackHandler { if (!publishing && !recording) onClose() }' in mature)
+require('mature composer Android back closes nested panels before exiting and has one handler','BackHandler(enabled = !publishing)' in mature and 'if (showColors) showColors = false' in mature and 'else if (showTools) showTools = false' in mature and 'else if (showMediaTools) showMediaTools = false' in mature and 'BackHandler { if (!publishing && !recording) onClose() }' not in mature)
 require('mature voice preview before publish','FynxRemoteAudio(mediaUri.toString()' in mature and 'Voice Status ready' in mature)
 require('mature authenticated publish','FynxStatusClient.create(context, status, mediaId)' in mature and 'FynxStatusClient.uploadMedia(context, source, mime)' in mature)
 require('status camera owns lifecycle and back navigation','BackHandler' in camera and 'BackHandler { if (recording == null) onDismiss() }' in camera and 'cameraProvider?.unbindAll()' in camera)
