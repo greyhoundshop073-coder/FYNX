@@ -199,8 +199,8 @@ require('Marketplace product detail share button reaches the real listing share 
 
 require('status editor resizes above the keyboard using IME insets','BoxWithConstraints(Modifier.fillMaxSize().imePadding().background(Color(background))' in mature)
 require('status text editor avoids oversized fixed bottom spacer','padding(top = 76.dp, bottom = 24.dp)' in mature)
-require('status style panel is bounded and elevated as a bottom sheet','tonalElevation = 8.dp' in mature and 'heightIn(min = 180.dp, max = 360.dp)' in mature and 'RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)' in mature)
-require('status style panel handle spans the sheet header and remains draggable','Modifier\n                                        .fillMaxWidth()\n                                        .height(28.dp)' in mature and 'detectVerticalDragGestures' in mature)
+require('status style panel is a bounded modal bottom sheet','ModalBottomSheet(' in mature and 'containerColor = Color(0xFF202124)' in mature and '.heightIn(max = 360.dp)' in mature and 'rememberModalBottomSheetState(skipPartiallyExpanded = true)' in mature)
+require('status style panel uses the Material 3 drag handle','dragHandle = {' in mature and 'BottomSheetDefaults.DragHandle(' in mature and 'width = 44.dp' in mature and 'height = 5.dp' in mature)
 
 failed=[label for label,ok in checks if not ok]
 for label,ok in checks: print(('GREEN' if ok else 'RED')+' - '+label)
