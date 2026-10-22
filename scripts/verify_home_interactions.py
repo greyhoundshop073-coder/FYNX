@@ -157,8 +157,9 @@ profile_touch_region = app_source[profile_button_index:profile_menu_index]
 if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
     raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")
 require(profile_touch_region, 'Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', "profile avatar has its own non-overlapped 48dp touch target")
-menu_region = app_source[profile_menu_index:profile_menu_index + 900]
-require(menu_region, 'Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', "three-dot profile menu has a separate 48dp touch target")
+menu_box_start = app_source.rfind('Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', profile_button_index, profile_menu_index)
+if menu_box_start <= profile_button_index:
+    raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling 48dp touch target")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
 require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
 require(app_source, '"Contacts" -> "Chats"', "Contacts back returns to Chats")
