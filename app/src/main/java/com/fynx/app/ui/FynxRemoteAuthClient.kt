@@ -56,11 +56,13 @@ object FynxRemoteAuthClient {
         FynxBackendClient.postJson(context, path, body.toString()).mapCatching { raw ->
             val json = JSONObject(raw)
             val user = json.getJSONObject("user")
+            val token = json.getString("accessToken").trim()
+            require(token.isNotBlank()) { "FYNX authentication response did not include an access token." }
             ResultData(
                 username = user.getString("username"),
                 displayName = user.optString("display_name"),
                 phone = user.optString("phone"),
-                token = json.getString("accessToken")
+                token = token
             )
         }
 }
