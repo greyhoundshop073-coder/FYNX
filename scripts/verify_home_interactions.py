@@ -149,6 +149,16 @@ if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
     raise SystemExit("HOME INTERACTIONS RED: OpenAI API key must never be present in Android client code")
 
 app_source = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
+profile_button_index = app_source.find('contentDescription = "Open FYNX profile"')
+profile_menu_index = app_source.find('contentDescription = "Profile menu, three dots"')
+if profile_button_index < 0 or profile_menu_index < 0 or profile_menu_index <= profile_button_index:
+    raise SystemExit("HOME INTERACTIONS RED: Home profile and profile-menu accessibility controls are missing or out of order")
+profile_touch_region = app_source[profile_button_index:profile_menu_index]
+if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
+    raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")
+require(profile_touch_region, 'Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', "profile avatar has its own non-overlapped 48dp touch target")
+menu_region = app_source[profile_menu_index:profile_menu_index + 900]
+require(menu_region, 'Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', "three-dot profile menu has a separate 48dp touch target")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
 require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
 require(app_source, '"Contacts" -> "Chats"', "Contacts back returns to Chats")
