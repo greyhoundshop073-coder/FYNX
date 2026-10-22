@@ -120,6 +120,24 @@ assert.ok(generatedRuntime.includes("await initDatabase();"),
 assert.ok(!generatedRuntime.includes('initDatabase().catch((error) => { console.error("database initialization failed"'),
   "generated runtime must not silently continue after database initialization failure");
 
+// Guard every route family injected by the compatibility bootstrap. A successful
+// source check is insufficient if a future edit changes a replacement marker.
+for (const contract of [
+  "registerBusinessRoutes({ app, auth })",
+  "startMarketplaceInspectionReconciliation({ pool })",
+  "registerMarketplacePaystackWebhook({ app, pool })",
+  "registerMarketplaceCheckoutRoutes({ app, pool, auth })",
+  "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
+  "registerMarketplaceShippingRoutes({ app, pool, auth })",
+  "registerMarketplaceCompletionRoutes({ app, pool, auth })"
+]) {
+  assert.ok(generatedRuntime.includes(contract), `generated runtime missing route registration: ${contract}`);
+}
+const generatedSocial = await readFile(runtimeSocialPath, "utf8");
+assert.ok(generatedSocial.includes("/api/social/posts/multi"),
+  "generated social runtime must preserve multi-media post creation");
+assert.ok(generatedSocial.includes("/api/social/posts/:id/media"),
+  "generated social runtime must preserve post media retrieval");
 
 await import("./scalability.js");
 await new Promise((resolve) => setImmediate(resolve));
