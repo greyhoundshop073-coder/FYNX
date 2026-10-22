@@ -255,8 +255,7 @@ fun FynxMatureStatusComposerPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
-                        .padding(top = 76.dp, bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp)
-                        .imePadding(),
+                        .padding(top = 76.dp, bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp),
                     minLines = 2,
                         maxLines = 10
                     )
@@ -267,7 +266,7 @@ fun FynxMatureStatusComposerPanel(
             FynxStatusType.VOICE -> Box(Modifier.fillMaxSize().background(Color(background)).padding(top = 64.dp, bottom = if (showMediaTools) 176.dp else 104.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) { Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(112.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Mic, null, tint = Color(foreground), modifier = Modifier.size(48.dp)) } }; Text(if (recording) formatMatureTime(elapsed) else if (mediaUri != null) "Voice Status ready" else "Press the microphone to record", color = Color(foreground), style = MaterialTheme.typography.titleMedium); if (recording) LinearProgressIndicator(progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f, 1f) }, modifier = Modifier.width(220.dp)) } }
             FynxStatusType.MUSIC -> Box(Modifier.fillMaxSize().background(Color(background)).padding(horizontal = 28.dp, vertical = 96.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) { Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(124.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.MusicNote, null, tint = Color(foreground), modifier = Modifier.size(58.dp)) } }; Text(selectedMusic?.title ?: "Choose a song", color = Color(foreground), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold); Text(selectedMusic?.artist ?: "FYNX Music", color = Color(foreground).copy(alpha = .76f), style = MaterialTheme.typography.titleMedium); selectedMusic?.let { FynxRemoteAudio("/api/social/music/catalogue/${it.id}/media", Modifier.fillMaxWidth(), it.durationMs.coerceAtLeast(1_000L)) } } }
         }
-        Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+        Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     FynxProfileImage(username, FynxPreferencesStore.loadProfilePhoto(context), Modifier.size(40.dp).clip(CircleShape))
@@ -509,7 +508,7 @@ fun FynxMatureStatusComposerPanel(
                         OutlinedTextField(
                             value = text,
                             onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).imePadding(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                             singleLine = true,
                             placeholder = { Text("Add a caption…", color = Color.White.copy(alpha = .72f)) },
                             textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
