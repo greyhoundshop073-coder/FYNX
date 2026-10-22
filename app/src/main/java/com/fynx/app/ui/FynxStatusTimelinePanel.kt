@@ -378,6 +378,8 @@ private fun FynxStatusStoryViewer(
     var interactions by remember(statuses, startIndex) { mutableStateOf(FynxStatusInteractions()) }
     var interactionError by remember(statuses, startIndex) { mutableStateOf<String?>(null) }
     var replyText by remember(statuses, startIndex) { mutableStateOf("") }
+    var canReplyToStatus by remember(statuses, startIndex) { mutableStateOf(false) }
+    var replyRelationshipLoading by remember(statuses, startIndex) { mutableStateOf(true) }
     var replying by remember { mutableStateOf(false) }
     var replyFocused by remember { mutableStateOf(false) }
     val replyPaused = replyFocused || WindowInsets.isImeVisible
@@ -436,6 +438,19 @@ private fun FynxStatusStoryViewer(
         statusProgress = 0f
         FynxStatusClient.markViewed(context, status.id)
         refreshInteractions()
+    }
+
+    LaunchedEffect(status.id, viewerUsername) {
+        canReplyToStatus = false
+        replyRelationshipLoading = true
+        if (status.ownerUsername.equals(viewerUsername, true)) {
+            replyRelationshipLoading = false
+        } else {
+            FynxStatusClient.mutualFollowUsernames(context, listOf(status.ownerUsername))
+                .onSuccess { mutual -> canReplyToStatus = status.ownerUsername.lowercase() in mutual }
+                .onFailure { canReplyToStatus = false }
+            replyRelationshipLoading = false
+        }
     }
 
     LaunchedEffect(status.id, viewerPaused) {
@@ -712,11 +727,11 @@ private fun FynxStatusStoryViewer(
                                     .weight(1f)
                                     .heightIn(min = 52.dp, max = 120.dp)
                                     .onFocusChanged { replyFocused = it.isFocused },
-                                enabled = !replying,
+                                enabled = !replying && canReplyToStatus,
                                 minLines = 1,
                                 maxLines = 4,
                                 shape = RoundedCornerShape(26.dp),
-                                placeholder = { Text("Reply to this Status…", color = Color.White.copy(alpha = 0.72f)) },
+                                placeholder = { Text(if (replyRelationshipLoading) "Checking who can reply…" else if (canReplyToStatus) "Reply to this Status…" else "Mutual follow required to reply", color = Color.White.copy(alpha = 0.72f)) },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Color.White,
                                     unfocusedTextColor = Color.White,
@@ -730,12 +745,12 @@ private fun FynxStatusStoryViewer(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(
                                             onClick = { showReplyEmojiPicker = !showReplyEmojiPicker },
-                                            enabled = !replying
+                                            enabled = !replying && canReplyToStatus
                                         ) {
                                             Icon(Icons.Default.EmojiEmotions, "Add emoji", tint = Color.White)
                                         }
                                         IconButton(
-                                            enabled = !replying && replyText.trim().isNotEmpty(),
+                                            enabled = !replying && canReplyToStatus && replyText.trim().isNotEmpty(),
                                             onClick = {
                                                 val body = replyText.trim()
                                                 if (body.isEmpty()) return@IconButton
