@@ -153,12 +153,16 @@ profile_button_index = app_source.find('contentDescription = "Open FYNX profile"
 profile_menu_index = app_source.find('contentDescription = "Profile menu, three dots"')
 if profile_button_index < 0 or profile_menu_index < 0 or profile_menu_index <= profile_button_index:
     raise SystemExit("HOME INTERACTIONS RED: Home profile and profile-menu accessibility controls are missing or out of order")
-profile_touch_region = app_source[profile_button_index:profile_menu_index]
+# Start at the avatar Box, not its accessibility label: the label occurs at
+# the end of the modifier chain, so slicing from it cannot see size/clickable.
+profile_box_index = app_source.rfind("Box(", 0, profile_button_index)
+if profile_box_index < 0:
+    raise SystemExit("HOME INTERACTIONS RED: profile avatar Box is missing")
+profile_touch_region = app_source[profile_box_index:profile_menu_index]
 if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
     raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")
 # The avatar is intentionally a standalone 48dp clickable Box. Formatting and
-# modifier chains may span lines, so assert its actual size/click semantics rather
-# than requiring one exact source spelling.
+# modifier chains may span lines, so assert its actual size/click semantics.
 normalized_profile_region = normalize_source(profile_touch_region)
 if "Modifier.size(48.dp).clickable" not in normalized_profile_region:
     raise SystemExit("HOME INTERACTIONS RED: profile avatar must own a standalone 48dp clickable touch target")
