@@ -412,7 +412,15 @@ private fun FynxStatusStoryViewer(
     var menuOpen by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
     val viewerPaused = replyPaused || showReactionPicker || showViewers || menuOpen || deleting
-    BackHandler(onBack = onDismiss)
+    BackHandler(onBack = {
+        when {
+            showViewers -> showViewers = false
+            showReactionPicker -> showReactionPicker = false
+            showReplyEmojiPicker -> showReplyEmojiPicker = false
+            menuOpen -> menuOpen = false
+            else -> onDismiss()
+        }
+    })
     var statusProgress by remember(status.id) { mutableFloatStateOf(0f) }
 
     fun refreshInteractions() {
