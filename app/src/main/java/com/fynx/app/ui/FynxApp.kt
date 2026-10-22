@@ -117,7 +117,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         onDispose { appConnectionManager.dispose() }
     }
     DisposableEffect(lifecycleOwner, authSession.state) {
-        if (authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
+        // Backend reachability is a public health probe, so the app-level connection
+        // indicator must run for the supported debug saved-device session too.
+        // Requiring a bearer token here leaves that session stuck at "Waiting for network".
+        if (authSession.state == AuthState.SIGNED_IN) {
             lifecycleOwner.lifecycle.addObserver(appConnectionManager)
         }
         onDispose {
