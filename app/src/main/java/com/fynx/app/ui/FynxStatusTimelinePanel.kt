@@ -264,7 +264,7 @@ private fun StatusAvatar(
     // empty; the shared resolver can hydrate, invalidate, and clear that avatar.
     val avatarOwnerUsername = status?.ownerUsername ?: ownerUsername
     Box(modifier.size(58.dp)) {
-        Box(Modifier.fillMaxSize().border(2.dp, Color(0xFF22C55E), CircleShape).padding(3.dp)) {
+        Box(Modifier.fillMaxSize().border(2.dp, androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color(0xFFFF3D8D), Color(0xFFFF9F1C), Color(0xFFB44CFF), Color(0xFF22C55E), Color(0xFF20C8E8), Color(0xFFFF3D8D))), CircleShape).padding(3.dp)) {
             FynxRemoteProfileAvatar(
                 avatarId,
                 ownerDisplayName,
