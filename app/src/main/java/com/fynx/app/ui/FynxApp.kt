@@ -390,78 +390,72 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         .graphicsLayer { alpha = 1f - homeChromeProgress },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                        IconButton(
+                            onClick = { selected = "Profile"; openProfileSettings = false },
+                            modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" }
+                        ) {
+                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
+                            else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
+                            else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
+                        }
+                    }
+                    // The avatar and overflow menu are fixed-width siblings. Keep the
+                    // brand label in the remaining space; nesting another weighted Row
+                    // here makes Compose allocate overlapping bounds on narrow screens.
+                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                        IconButton(
+                            onClick = { profileAvatarMenuOpen = true },
+                            modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
+                        ) {
+                            Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                        DropdownMenu(
+                            expanded = profileAvatarMenuOpen,
+                            onDismissRequest = { profileAvatarMenuOpen = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Open profile") },
+                                onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = false },
+                                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Profile settings") },
+                                onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = true },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
+                            )
+                        }
+                    }
                     Row(
                         Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            IconButton(
-                                onClick = { selected = "Profile"; openProfileSettings = false },
-                                modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" }
-                            ) {
-                                if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
-                                else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
-                                else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
-                            }
-                        }
-                        // Keep the 3-dot control beside the avatar, not on top of it.
-                        // Material IconButton expands to a 48dp touch target even when its
-                        // visual icon is smaller; overlaying it makes the profile target
-                        // unclickable on real devices and in accessibility/UI automation.
-                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            IconButton(
-                                onClick = { profileAvatarMenuOpen = true },
-                                modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
-                            ) {
-                                Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
-                            }
-                            DropdownMenu(
-                                expanded = profileAvatarMenuOpen,
-                                onDismissRequest = { profileAvatarMenuOpen = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Open profile") },
-                                    onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = false },
-                                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Profile settings") },
-                                    onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = true },
-                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
-                                )
-                            }
-                        }
-                        Row(
-                            Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (appConnectionState == FynxAppConnectionManager.State.CONNECTED) {
-                                Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                Spacer(Modifier.width(4.dp))
-                                Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
-                            } else {
-                                var connectingDotCount by remember { mutableIntStateOf(1) }
-                                LaunchedEffect(appConnectionState) {
-                                    if (appConnectionState != FynxAppConnectionManager.State.CONNECTING) {
-                                        connectingDotCount = 1
-                                        return@LaunchedEffect
-                                    }
-                                    while (true) {
-                                        delay(450L)
-                                        connectingDotCount = connectingDotCount % 3 + 1
-                                    }
+                        if (appConnectionState == FynxAppConnectionManager.State.CONNECTED) {
+                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
+                        } else {
+                            var connectingDotCount by remember { mutableIntStateOf(1) }
+                            LaunchedEffect(appConnectionState) {
+                                if (appConnectionState != FynxAppConnectionManager.State.CONNECTING) {
+                                    connectingDotCount = 1
+                                    return@LaunchedEffect
                                 }
-                                Text(
-                                    if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
-                                        "Waiting for network..."
-                                    } else {
-                                        "Connecting" + ".".repeat(connectingDotCount)
-                                    },
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleLarge
-                                )
+                                while (true) {
+                                    delay(450L)
+                                    connectingDotCount = connectingDotCount % 3 + 1
+                                }
                             }
+                            Text(
+                                if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
+                                    "Waiting for network..."
+                                } else {
+                                    "Connecting" + ".".repeat(connectingDotCount)
+                                },
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleLarge
+                            )
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
