@@ -136,7 +136,7 @@ require('mature text emoji control','EmojiEmotions' in mature and 'showStatusEmo
 require('status creator applies IME insets to the bottom controls as one group','Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {' in mature)
 require('status caption field does not double-apply IME insets','modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),' in mature and 'modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).imePadding()' not in mature)
 require('status text styling sheet has a Done action','Text("Done"' in mature and 'onClick = { showColors = false }' in mature)
-require('mature text editor uses responsive full view',(('bottom = if (showMediaTools || showColors) 220.dp else 120.dp' in mature or 'bottom = 220.dp' in mature) or ('bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp' in mature)) and 'horizontal = 12.dp' in mature and '.imePadding()' in mature and 'BoxWithConstraints' in mature)
+require('mature text editor uses responsive full view', 'horizontal = 12.dp' in mature and '.imePadding()' in mature and 'BoxWithConstraints' in mature and '.padding(top = 76.dp, bottom = 24.dp)' in mature and 'maxWidth.value' in mature)
 require('mature composer Android back is intercepted safely during recording/publishing','BackHandler { if (!publishing && !recording) onClose() }' in mature)
 require('mature voice preview before publish','FynxRemoteAudio(mediaUri.toString()' in mature and 'Voice Status ready' in mature)
 require('mature authenticated publish','FynxStatusClient.create(context, status, mediaId)' in mature and 'FynxStatusClient.uploadMedia(context, source, mime)' in mature)
