@@ -115,6 +115,13 @@ assert.ok(generatedRuntime.includes("registerDiscoveryRoutes({ app, pool, auth }
   "generated runtime must register Marketplace discovery");
 assert.ok(generatedRuntime.includes('app.get("/api/media/:id"') || generatedRuntime.includes("app.get('/api/media/:id'"),
   "generated runtime must contain authenticated media retrieval");
+for (const contract of [
+  'app.post("/api/auth/login"',
+  'app.get("/api/me", auth',
+  'app.get("/api/statuses", auth'
+]) {
+  assert.ok(generatedRuntime.includes(contract), `generated runtime missing core API contract: ${contract}`);
+}
 assert.ok(generatedRuntime.includes("await initDatabase();"),
   "generated runtime must await database initialization before accepting traffic");
 assert.ok(!generatedRuntime.includes('initDatabase().catch((error) => { console.error("database initialization failed"'),
@@ -134,6 +141,8 @@ for (const contract of [
   assert.ok(generatedRuntime.includes(contract), `generated runtime missing route registration: ${contract}`);
 }
 const generatedSocial = await readFile(runtimeSocialPath, "utf8");
+assert.ok(generatedSocial.includes("/api/social/feed"),
+  "generated social runtime must preserve the authenticated Home feed");
 assert.ok(generatedSocial.includes("/api/social/posts/multi"),
   "generated social runtime must preserve multi-media post creation");
 assert.ok(generatedSocial.includes("/api/social/posts/:id/media"),
