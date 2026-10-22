@@ -362,7 +362,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 .onFailure { error ->
                     messages = messages.map { if (it.id == message.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = error.message ?: "Shared message could not be sent. Tap Retry to try again."
+                    syncMessage = "Message not sent yet. It is saved; tap Retry to try again."
                 }
         }
     }
@@ -394,7 +394,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 .onFailure { error ->
                     messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = error.message ?: "Attachment could not be saved for retry. Choose it again."
+                    syncMessage = "Attachment could not be saved for retry. Please choose it again."
                 }
             if (stagedUri == null) return@launch
             val stagedMessage = messages.firstOrNull { it.id == optimistic.id } ?: optimistic.copy(attachmentUri = stagedUri.toString())
@@ -410,7 +410,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 .onFailure { error ->
                     messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = error.message ?: "Attachment could not be sent. Tap Retry to try again."
+                    syncMessage = "Attachment not sent yet. It is saved for retry; try again when the connection is ready."
                 }
         }
     }
@@ -440,7 +440,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             voiceFile = null
             voiceRecording = false
             file.delete()
-            syncMessage = error.message ?: "Could not start voice recording."
+            syncMessage = "Could not start voice recording. Check microphone permission and try again."
         }
     }
 
@@ -790,7 +790,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }
                                     .onFailure { error ->
                                         failedCount += 1
-                                        lastError = error.message
+                                        lastError = "Some messages could not be sent. Your saved messages are still here; reconnect and retry."
                                     }
                             }
                             syncMessage = if (failedCount == 0) null else
@@ -1094,7 +1094,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         .onFailure { error ->
                                             messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                                             FynxChatStore.save(context, "group_$groupId", messages)
-                                            syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
+                                            syncMessage = "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
                                         }
                                     sending = false
                                 }
@@ -1127,7 +1127,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                                 .onFailure { error ->
                                                     messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                                                     FynxChatStore.save(context, "group_$groupId", messages)
-                                                    syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
+                                                    syncMessage = "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
                                                 }
                                             sending = false
                                         }
