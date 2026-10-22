@@ -9,8 +9,10 @@ const remoteAuth = await read("app/src/main/java/com/fynx/app/ui/FynxRemoteAuthC
 const server = await read("backend/server.js");
 const bootstrap = await read("backend/serverBootstrap.js");
 
-assert.match(remoteAuth, /token\s*=\s*json\.getString\("accessToken"\)/,
-  "login and registration must parse the issued access token");
+assert.match(remoteAuth, /token\s*=\s*json\.getString\("accessToken"\)\.trim\(\)/,
+  "login and registration must parse and normalize the issued access token");
+assert.match(remoteAuth, /require\(token\.isNotBlank\(\)\)/,
+  "authentication must fail closed when the server returns an empty access token");
 assert.match(authUi, /FynxBackendClient\.saveAccessToken\(context, account\.token\)/,
   "successful authentication must persist the issued token");
 assert.match(backend, /fun saveAccessToken\(context: Context, token: String\?\)/,
