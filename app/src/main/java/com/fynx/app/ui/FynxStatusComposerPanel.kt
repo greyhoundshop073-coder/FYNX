@@ -63,8 +63,22 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
 
-    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { uri -> mediaUri = uri; type = FynxStatusType.PHOTO; preview = false } }
-    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { uri -> mediaUri = uri; type = FynxStatusType.VIDEO; preview = false } }
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            val mime = context.contentResolver.getType(it).orEmpty().substringBefore(';').trim().lowercase()
+            if (mime.startsWith("image/")) {
+                mediaUri = it; type = FynxStatusType.PHOTO; preview = false; error = null
+            } else error = "Choose an image file for Photo Status."
+        }
+    }
+    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            val mime = context.contentResolver.getType(it).orEmpty().substringBefore(';').trim().lowercase()
+            if (mime.startsWith("video/")) {
+                mediaUri = it; type = FynxStatusType.VIDEO; preview = false; error = null
+            } else error = "Choose a video file for Video Status."
+        }
+    }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) startStatusRecording(context) { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true } else error = "Microphone permission is required for a voice Status." }
     LaunchedEffect(recording, recordingStarted) { while (recording) { elapsed = System.currentTimeMillis() - recordingStarted; if (elapsed >= FYNX_STATUS_MAX_VOICE_DURATION_MS) stopStatusRecording(recorder, recordingFile) { uri -> mediaUri = uri; recorder = null; recordingFile = null; recording = false; type = FynxStatusType.VOICE }; delay(200) } }
     DisposableEffect(Unit) { onDispose { runCatching { recorder?.stop() }; recorder?.release() } }
