@@ -293,7 +293,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     isRecordingPaused = false
                     isRecording = true
                 }
-            }.onFailure { networkError = it.message ?: "Unable to start recording" }
+            }.onFailure { networkError = "Could not start voice recording. Check microphone permission and try again." }
         }
     }
 
@@ -349,7 +349,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 }
                 .onFailure {
                     isNewConversation = false
-                    networkError = it.message ?: "Unable to load messages"
+                    networkError = "Messages could not load yet. Check your connection and retry."
                 }
         } catch (cancel: CancellationException) {
             throw cancel
@@ -437,7 +437,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             runCatching { r.pause() }.onSuccess {
                 recordingPausedAt = System.currentTimeMillis()
                 isRecordingPaused = true
-            }.onFailure { networkError = it.message ?: "Recording could not be paused" }
+            }.onFailure { networkError = "Voice recording could not be paused. Please try again." }
         }
     }
     fun resumeRecording() {
@@ -447,7 +447,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 recordingPausedTotalMs += (System.currentTimeMillis() - recordingPausedAt).coerceAtLeast(0L)
                 recordingPausedAt = 0L
                 isRecordingPaused = false
-            }.onFailure { networkError = it.message ?: "Recording could not be resumed" }
+            }.onFailure { networkError = "Voice recording could not be resumed. Please try again." }
         }
     }
     fun retryVoiceMessage() {
@@ -471,9 +471,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             pendingVoiceRetry = null
                             uploadedVoiceCache = null
                         }
-                        .onFailure { networkError = it.message ?: "Voice message could not be sent. Tap Retry voice message." }
+                        .onFailure { networkError = "Voice message not sent yet. Your recording is saved; tap Retry voice message." }
                 }
-                .onFailure { networkError = it.message ?: "Voice recording upload failed. Tap Retry voice message." }
+                .onFailure { networkError = "Voice recording could not upload yet. Your recording is saved; tap Retry voice message." }
             sending = false
         }
     }
@@ -558,7 +558,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         editingId = null
                         replyToId = null
                     }
-                    .onFailure { networkError = it.message ?: "Message could not be edited" }
+                    .onFailure { networkError = "Message could not be edited yet. Please try again." }
             } else {
                 val selectedAttachment = attachment
                 val selectedMessageType = attachmentMessageType
@@ -602,7 +602,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
                             FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
                                 .onSuccess { marketplaceContextAttached = true }
-                                .onFailure { networkError = it.message ?: "Marketplace listing could not be attached to this message" }
+                                .onFailure { networkError = "The listing could not be attached to this message. Please try again." }
                         }
                         text = ""
                         editingId = null
@@ -613,7 +613,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         uploadedAttachmentCache = null
                         composerVideoMode = false
                     }
-                    .onFailure { networkError = it.message ?: "Message could not be sent" }
+                    .onFailure { networkError = "Message not sent yet. Your message is saved; check your connection and retry." }
             }
             sending = false
         }
@@ -716,7 +716,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 sending = true
                                 FynxSocialClient.sendRequest(context, chat.username.removePrefix("@"))
                                     .onSuccess { networkError = "Contact request sent." }
-                                    .onFailure { networkError = it.message ?: "Contact request could not be sent." }
+                                    .onFailure { networkError = "Contact request could not be sent yet. Please try again." }
                                 sending = false
                             }
                         }
@@ -729,7 +729,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 sending = true
                                 FynxSocialClient.block(context, chat.username.removePrefix("@"))
                                     .onSuccess { networkError = "User blocked."; onBack() }
-                                    .onFailure { networkError = it.message ?: "User could not be blocked." }
+                                    .onFailure { networkError = "This user could not be blocked yet. Please try again." }
                                 sending = false
                             }
                         }
@@ -916,7 +916,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                         conversationScope.launch {
                                                             FynxProductionMessaging.votePoll(context, message.id, optionIndex)
                                                                 .onSuccess { pollVoteNotice = "Vote recorded" }
-                                                                .onFailure { pollVoteNotice = it.message ?: "Vote failed" }
+                                                                .onFailure { pollVoteNotice = "Your vote could not be saved yet. Please try again." }
                                                         }
                                                     }, modifier = Modifier.fillMaxWidth()) { Text(option) }
                                                 }
@@ -963,7 +963,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                         }
                                                     }
                                                 }
-                                                .onFailure { networkError = it.message ?: "Reaction could not be removed" }
+                                                .onFailure { networkError = "Reaction could not be removed yet. Please try again." }
                                         }
                                     },
                                     shape = RoundedCornerShape(14.dp),
@@ -1010,7 +1010,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                     if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing
                                                 }
                                             }
-                                        }.onFailure { networkError = it.message ?: "Reaction could not be saved" }
+                                        }.onFailure { networkError = "Reaction could not be saved yet. Please try again." }
                                     }
                                 },
                                 modifier = Modifier.size(56.dp),
@@ -1052,7 +1052,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                             }
                                         }
                                     }
-                                    .onFailure { networkError = it.message ?: "Message pin state could not be changed" }
+                                    .onFailure { networkError = "Message pin could not be updated yet. Please try again." }
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -1082,7 +1082,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                         }
                                         menuMessageId = null
                                     }
-                                    .onFailure { networkError = it.message ?: "Message could not be deleted" }
+                                    .onFailure { networkError = "Message could not be deleted yet. Please try again." }
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -1271,7 +1271,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     sending = true
                     FynxProductionMessaging.sendStructuredMessage(context, chat.username, "location", mapOf("latitude" to location.latitude.toString(), "longitude" to location.longitude.toString()))
                         .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
-                        .onFailure { networkError = it.message ?: "Location could not be sent" }
+                        .onFailure { networkError = "Location could not be sent yet. Check your connection and retry." }
                     sending = false
                 }
             }) { Text("Share") } },
@@ -1310,7 +1310,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 pendingContactPhone = ""
                                 pendingContactUsername = ""
                             }
-                            .onFailure { networkError = it.message ?: "Contact could not be sent" }
+                            .onFailure { networkError = "Contact could not be sent yet. Please try again." }
                         sending = false
                     }
                 }) { Text("Send") }
@@ -1335,7 +1335,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     sending = true
                     FynxProductionMessaging.sendStructuredMessage(context, chat.username, "poll", mapOf("question" to question, "options" to cleanOptions.joinToString("\\u001F")))
                         .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
-                        .onFailure { networkError = it.message ?: "Poll could not be sent" }
+                        .onFailure { networkError = "Poll could not be sent yet. Please try again." }
                     sending = false
                 }
             }) { Text("Send poll") } },
@@ -1430,7 +1430,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     forwardMessageId = null
                                     forwardUsername = ""
                                 }
-                                .onFailure { networkError = it.message ?: "Message could not be forwarded" }
+                                .onFailure { networkError = "Message could not be forwarded yet. Please try again." }
                             sending = false
                         }
                     },
