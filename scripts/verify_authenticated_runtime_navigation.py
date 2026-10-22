@@ -628,7 +628,8 @@ report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
         "This journey uses a real FYNX account supplied through GitHub Actions secrets.",
-        "No fabricated users, posts, messages, listings or application records are created.",
+        "No fabricated users, posts, messages or listings are created.",
+        "If the test account has no group, the journey creates one dedicated CI Chat Recovery Group only on the configured isolated testing backend so the real Groups screen can be exercised.",
         "Credentials are never written to the APK or repository."]
 
 if not USERNAME or not PASSWORD:
@@ -901,7 +902,7 @@ if not FAILURES:
                 reset=restore_home_after_restart("authenticated-home-chat-group-reset") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 if groups_xml:
-                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
+                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["Search groups","Your communities in one place","No groups yet"])
                     if groups_tab:
                         clear_runtime_log()
                         group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
