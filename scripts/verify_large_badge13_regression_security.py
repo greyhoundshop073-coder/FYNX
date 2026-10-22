@@ -37,7 +37,10 @@ check("release hardening files exist", all(exists(p) for p in required))
 check("backend secrets remain environment-backed",
       all(x in server for x in ["process.env.JWT_SECRET", "process.env.DATABASE_URL", "process.env.OPENAI_API_KEY"]))
 check("JWT authentication fails closed",
-      "jwt.verify(token, JWT_SECRET)" in server and 'if (!token || !JWT_SECRET) return res.status(401)' in server)
+      "jwt.verify(token, JWT_SECRET)" in server and
+      "if (!JWT_SECRET)" in server and
+      "if (!token)" in server and
+      "return res.status(401).json({ error: \"authentication required\" })" in server)
 check("HTTP transport requires HTTPS",
       'startsWith("https://")' in client or 'startsWith("https://")' in client)
 check("trusted backend media host is enforced",
