@@ -341,7 +341,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         .filter { it.recipientId == loadedCurrentUserId && !it.read }
                         .map { it.id }
                     if (unread.isNotEmpty()) {
-                        // HTTP mark-read remains valid before the WebSocket is connected.
+                        // The stable connection effect can connect while history is loading;
+                        // send the realtime acknowledgement and retain HTTP as the durable path.
+                        realtimeClient.sendRead(unread)
                         conversationScope.launch { FynxProductionMessaging.markRead(context, unread) }
                     }
                 }
