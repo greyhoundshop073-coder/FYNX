@@ -20,8 +20,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit = {}, onCreateGroup: () -> Unit = {}, onOpenContacts: () -> Unit = {}) {
@@ -37,18 +39,30 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var chatSearch by remember { mutableStateOf("") }
 
     fun refreshChats() {
-        chats = FynxChatStore.loadPreviews(context).map { preview ->
-            val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
-            preview.copy(unreadCount = unread)
+        // Computing unread counts parses each stored conversation. Run that work off
+        // Main and never save previews from this collector: savePreview emits
+        // previewUpdates, so writing here created a recursive refresh/event storm.
+        scope.launch {
+            val refreshed = withContext(Dispatchers.IO) {
+                FynxChatStore.loadPreviews(context).map { preview ->
+                    val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
+                    preview.copy(unreadCount = unread)
+                }
+            }
+            chats = refreshed
         }
-        chats.forEach { FynxChatStore.savePreview(context, it) }
     }
 
     LaunchedEffect(Unit) {
-        listView = FynxPreferencesStore.loadChatListView(context)
-        selfUsername = (FynxAuthStore.load(context).username ?: "").removePrefix("@").trim().lowercase()
-        refreshChats()
-        val stored = FynxChatStore.loadPreviews(context)
+        val (initialListView, initialSelfUsername, stored) = withContext(Dispatchers.IO) {
+            Triple(
+                FynxPreferencesStore.loadChatListView(context),
+                (FynxAuthStore.load(context).username ?: "").removePrefix("@").trim().lowercase(),
+                FynxChatStore.loadPreviews(context)
+            )
+        }
+        listView = initialListView
+        selfUsername = initialSelfUsername
         val refreshed = stored.map { chat ->
             val normalized = chat.username.removePrefix("@").trim()
             if (normalized.isBlank()) chat else FynxProfileRemoteClient.get(context, normalized).getOrNull()?.let { profile ->
@@ -57,9 +71,17 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             } ?: chat
         }
         if (refreshed != stored) {
-            refreshed.forEach { FynxChatStore.savePreview(context, it) }
-            chats = refreshed
+            val changed = refreshed.zip(stored).filter { (next, previous) -> next != previous }.map { it.first }
+            withContext(Dispatchers.IO) { changed.forEach { FynxChatStore.savePreview(context, it) } }
         }
+        val hydrated = withContext(Dispatchers.IO) {
+            FynxChatStore.loadPreviews(context).map { preview ->
+                val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
+                preview.copy(unreadCount = unread)
+            }
+        }
+        chats = hydrated
+        groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
     }
 
     LaunchedEffect(Unit) {
@@ -133,7 +155,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     items(visibleChats, key = { it.username }) { chat ->
                         val pinned = FynxPreferencesStore.isChatPinned(context, chat.username)
                         val muted = FynxPreferencesStore.isChatMuted(context, chat.username)
-                        val unread = FynxChatStore.load(context, chat.username).count { !it.fromMe && !it.read }
+                        val unread = chat.unreadCount
 
                         Row(
                             modifier = Modifier
