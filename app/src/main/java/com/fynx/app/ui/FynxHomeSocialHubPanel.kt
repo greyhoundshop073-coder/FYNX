@@ -63,6 +63,7 @@ fun FynxHomeSocialHubPanel(
     onOpenChats: () -> Unit = {},
     onOpenStories: () -> Unit = {},
     onOpenStatusOwner: (String) -> Unit = {},
+    onCreateStatus: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
     onOpenMarketplace: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
