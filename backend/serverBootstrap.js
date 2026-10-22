@@ -122,6 +122,11 @@ for (const contract of [
 ]) {
   assert.ok(generatedRuntime.includes(contract), `generated runtime missing core API contract: ${contract}`);
 }
+// Keep safe auth diagnostics in generated runtime; never log credentials or bearer tokens.
+assert.ok(generatedRuntime.includes('[fynx-auth] rejected request: bearer token missing'),
+  "generated runtime must retain safe auth failure diagnostics");
+assert.ok(generatedRuntime.includes("JWT_SECRET is not configured"),
+  "generated runtime must diagnose missing JWT configuration");
 assert.ok(generatedRuntime.includes("await initDatabase();"),
   "generated runtime must await database initialization before accepting traffic");
 assert.ok(!generatedRuntime.includes('initDatabase().catch((error) => { console.error("database initialization failed"'),

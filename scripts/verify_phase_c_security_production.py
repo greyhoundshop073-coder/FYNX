@@ -25,7 +25,7 @@ workflow = read(".github/workflows/android-build.yml")
 
 check("production security gate files exist", all(exists(p) for p in ["backend/server.js", "backend/realtimeIsolationBootstrap.js", "backend/mediaPrivacy.js", "app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt", "app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt", "app/src/main/java/com/fynx/app/ui/FynxAuthStore.kt", "app/src/main/java/com/fynx/app/ui/FynxSecureTokenStore.kt"]))
 check("backend secrets come from environment", "process.env.JWT_SECRET" in server and "process.env.DATABASE_URL" in server and "process.env.OPENAI_API_KEY" in server)
-check("missing JWT configuration fails closed", 'if (!token || !JWT_SECRET) return res.status(401)' in server)
+check("missing JWT configuration fails closed", 'if (!JWT_SECRET)' in server and 'if (!token)' in server and 'return res.status(401)' in server)
 check("HTTP authentication verifies JWT", "jwt.verify(token, JWT_SECRET)" in server)
 check("realtime authentication verifies JWT", "jwt.verify(token, secret)" in realtime or "jwt.verify(token, JWT_SECRET)" in server)
 check("realtime account isolation is enforced", "userId" in realtime_client and "currentAccountKey()" in realtime_client and "belongsToCurrentAccount" in realtime_client)
