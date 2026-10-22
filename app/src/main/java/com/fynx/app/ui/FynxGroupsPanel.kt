@@ -80,10 +80,14 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     val glassPalette = fynxGlassPalette(glassThemeId)
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
+    var groups by remember { mutableStateOf(emptyList<FynxGroup>()) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var createError by remember { mutableStateOf<String?>(null) }
     val visible = groups.filter { it.name.contains(query, true) || it.description.contains(query, true) }
+
+    LaunchedEffect(Unit) {
+        groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
+    }
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -156,8 +160,10 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                 createError = null
                 val remote = FynxGroupRemoteClient.syncGroup(context, group)
                 remote.onSuccess {
-                    FynxGroupsStore.add(context, group)
-                    groups = FynxGroupsStore.load(context)
+                    withContext(Dispatchers.IO) {
+                        FynxGroupsStore.add(context, group)
+                        FynxGroupsStore.load(context)
+                    }.also { refreshedGroups -> groups = refreshedGroups }
                     showCreateDialog = false
                 }.onFailure {
                     createError = it.message ?: "The group could not be created on FYNX."
