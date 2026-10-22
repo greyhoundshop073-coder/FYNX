@@ -26,5 +26,6 @@ assert.match(sql, /privacy_settings/i, "profile-photo visibility rules must be e
 assert.match(sql, /FROM\s+blocks/i, "blocked users must be excluded");
 assert.match(sql, /FROM\s+statuses/i, "status media must retain audience checks");
 assert.doesNotMatch(sql, /ORDER\s+BY\s+m\.id\s+DESC/i, "media query must not order by an unjoined messages alias");
+assert.doesNotMatch(sql, /ORDER\\s+BY/i, "single-media authorization lookup must not contain an unnecessary or invalid ORDER BY clause");
 
 console.log("Media route SQL regression checks passed.");
