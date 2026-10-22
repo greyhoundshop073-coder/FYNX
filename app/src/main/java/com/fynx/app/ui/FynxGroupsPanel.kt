@@ -1177,7 +1177,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             }
         }, onMedia = { uri, type ->
-            if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = "Group details could not sync yet. Check your connection and retry." } } }
+            if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = "Message not sent yet. It is saved for retry; check your connection." } } }
         }, onStoryShare = {
             if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = true, read = true); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = "Group details could not sync yet. Check your connection and retry." } } }
         }, openContentInitially = showPollsDirectly)
