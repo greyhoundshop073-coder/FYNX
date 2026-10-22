@@ -287,11 +287,22 @@ jobs:
           test -x "$sdkmanager" || { echo "::error::sdkmanager not found under $sdk"; exit 1; }
           package="system-images;android-35;google_apis;x86_64"
           for attempt in 1 2 3; do
-            if yes | "$sdkmanager" --install "$package" --channel=0; then
+            # sdkmanager can finish successfully before the "yes" process exits.
+            # With pipefail enabled, yes then reports SIGPIPE (141), falsely
+            # marking a successfully installed image as failed and deleting it.
+            set +o pipefail
+            yes | "$sdkmanager" --install "$package" --channel=0
+            install_status=$?
+            set -o pipefail
+            if [ "$install_status" -eq 0 ]; then
+              test -d "$sdk/system-images/android-35/google_apis/x86_64" || {
+                echo "::error::sdkmanager exited successfully but the Android 35 image directory is missing"
+                exit 1
+              }
               echo "System image ready (attempt $attempt)"
               exit 0
             fi
-            echo "::warning::Android system image install attempt $attempt failed; clearing partial download state before retry"
+            echo "::warning::Android system image install attempt $attempt failed (sdkmanager exit $install_status); clearing partial download state before retry"
             rm -rf "$sdk/.temp" "$sdk/.downloadIntermediates" "$sdk/system-images/android-35/google_apis/x86_64" || true
             sleep 8
           done
