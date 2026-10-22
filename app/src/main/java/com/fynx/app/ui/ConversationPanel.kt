@@ -102,10 +102,11 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var text by remember(chat.username) { mutableStateOf("") }
     var messages by remember(chat.username) { mutableStateOf(emptyList<ChatMessage>()) }
     var messagesLoaded by remember(chat.username) { mutableStateOf(false) }
-    LaunchedEffect(chat.username, fallbackMessage) {
+    LaunchedEffect(chat.username) {
         // Message history and JSON-backed SharedPreferences can grow large. Keep the
         // UI unblocked while loading and never persist the initial empty placeholder
-        // before the existing conversation has finished restoring.
+        // before the existing conversation has finished restoring. Do not reload an
+        // active conversation when only the recipient's remote avatar resolves.
         messagesLoaded = false
         val localMessages = withContext(Dispatchers.IO) {
             FynxChatStore.load(context, chat.username, fallbackMessage)
@@ -363,9 +364,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         // conversation; savePreview() also reads message history to compute unread
         // counts. Keep both operations off the UI thread so opening a long chat
         // cannot monopolize Main and trigger an input-dispatch ANR.
+        val snapshot = messages
         withContext(Dispatchers.IO) {
-            FynxChatStore.save(context, chat.username, messages)
-            val latest = messages.maxByOrNull { it.timestamp }
+            FynxChatStore.save(context, chat.username, snapshot)
+            val latest = snapshot.maxByOrNull { it.timestamp }
             if (latest != null) {
                 val previewText = when {
                     latest.voiceUri != null -> "Voice message"
