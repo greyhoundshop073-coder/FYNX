@@ -101,12 +101,17 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     val fallbackMessage = remember(chat.lastMessage, resolvedAvatarUri) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true, senderName = chat.name, senderUsername = chat.username, senderAvatarUri = resolvedAvatarUri) } }
     var text by remember(chat.username) { mutableStateOf("") }
     var messages by remember(chat.username) { mutableStateOf(emptyList<ChatMessage>()) }
+    var messagesLoaded by remember(chat.username) { mutableStateOf(false) }
     LaunchedEffect(chat.username, fallbackMessage) {
-        // Message history can grow large. Never parse its persisted JSON during Compose.
+        // Message history and JSON-backed SharedPreferences can grow large. Keep the
+        // UI unblocked while loading and never persist the initial empty placeholder
+        // before the existing conversation has finished restoring.
+        messagesLoaded = false
         val localMessages = withContext(Dispatchers.IO) {
             FynxChatStore.load(context, chat.username, fallbackMessage)
         }
         messages = localMessages
+        messagesLoaded = true
     }
     var replyToId by remember { mutableStateOf<String?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
@@ -352,16 +357,23 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
-    LaunchedEffect(messages) {
-        FynxChatStore.save(context, chat.username, messages)
-        val latest = messages.maxByOrNull { it.timestamp }
-        if (latest != null) {
-            val previewText = when {
-                latest.voiceUri != null -> "Voice message"
-                latest.attachmentUri != null && latest.text.isBlank() -> when (latest.attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "audio" -> "Voice message"; else -> "Photo" }
-                else -> latest.text
+    LaunchedEffect(messagesLoaded, messages) {
+        if (!messagesLoaded) return@LaunchedEffect
+        // Store.save() parses the previous JSON history and serializes the full
+        // conversation; savePreview() also reads message history to compute unread
+        // counts. Keep both operations off the UI thread so opening a long chat
+        // cannot monopolize Main and trigger an input-dispatch ANR.
+        withContext(Dispatchers.IO) {
+            FynxChatStore.save(context, chat.username, messages)
+            val latest = messages.maxByOrNull { it.timestamp }
+            if (latest != null) {
+                val previewText = when {
+                    latest.voiceUri != null -> "Voice message"
+                    latest.attachmentUri != null && latest.text.isBlank() -> when (latest.attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "audio" -> "Voice message"; else -> "Photo" }
+                    else -> latest.text
+                }
+                FynxChatStore.savePreview(context, chat.copy(lastMessage = previewText, time = formatChatTime(latest.timestamp)))
             }
-            FynxChatStore.savePreview(context, chat.copy(lastMessage = previewText, time = formatChatTime(latest.timestamp)))
         }
     }
 
