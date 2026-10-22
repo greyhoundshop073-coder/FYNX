@@ -31,6 +31,7 @@ def fail(message: str) -> None:
 failures: list[str] = []
 
 conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
+groups = read("app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt")
 realtime = read("app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt")
 messaging = read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt")
 backend = read("backend/server.js")
@@ -38,6 +39,21 @@ isolation = read("backend/realtimeIsolationBootstrap.js")
 compat = read("backend/chatRealtimeCompatibility.js")
 preload = read("backend/renderScalabilityPreload.js")
 package_json = read("backend/package.json")
+
+# 0. Runtime crash regression: both conversation composables are created while
+# entering their screens. PickMultipleVisualMedia rejects maxItems <= 1 at
+# construction time, so a one-item gallery must use the single-item contract.
+for panel, label in ((conversation, "Private Chat"), (groups, "Group Chat")):
+    forbid(
+        panel,
+        r"PickMultipleVisualMedia\s*\(\s*maxItems\s*=\s*1\s*\)",
+        f"{label} must not instantiate PickMultipleVisualMedia with maxItems=1",
+    )
+    require(
+        panel,
+        r"ActivityResultContracts\.PickVisualMedia\s*\(\s*\)",
+        f"{label} must use the supported single-item photo/video picker contract",
+    )
 
 # 1. Android conversation entry and authenticated identity resolution.
 require(conversation, r"FynxBackendClient\.currentUserId\(context\)", "ConversationPanel must resolve the authenticated current user")

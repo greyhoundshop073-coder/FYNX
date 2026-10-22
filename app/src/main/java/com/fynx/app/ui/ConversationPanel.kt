@@ -189,14 +189,14 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             attachmentMessageType = null
         }
     }
-    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(maxItems = 1)) { uris ->
-        val uri = uris.firstOrNull() ?: return@rememberLauncherForActivityResult
-        val mimeType = context.contentResolver.getType(uri)
+    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val selectedUri = uri ?: return@rememberLauncherForActivityResult
+        val mimeType = context.contentResolver.getType(selectedUri)
         if (mimeType.isNullOrBlank() || (!mimeType.startsWith("image/") && !mimeType.startsWith("video/"))) {
             networkError = "Choose a photo or video from Gallery."
             return@rememberLauncherForActivityResult
         }
-        attachment = uri
+        attachment = selectedUri
         attachmentType = mimeType
         attachmentMessageType = null
     }

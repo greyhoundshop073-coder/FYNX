@@ -482,8 +482,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
     }
 
-    val groupMediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(maxItems = 1)) { uris ->
-        val uri = uris.firstOrNull()
+    val groupMediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             val mime = context.contentResolver.getType(uri)?.lowercase().orEmpty()
             val type = when {
