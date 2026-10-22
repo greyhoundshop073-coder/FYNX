@@ -109,16 +109,15 @@ source = source.replace(
 );
 await writeFile(runtimePath, source, "utf8");
 const generatedRuntime = await readFile(runtimePath, "utf8");
-assert.match(generatedRuntime, /app\\.get\\(["']\\/version["']/,
+assert.ok(generatedRuntime.includes('app.get("/version"') || generatedRuntime.includes("app.get('/version'"),
   "generated runtime must expose deployment provenance");
-assert.match(generatedRuntime, /registerDiscoveryRoutes\\(\\{ app, pool, auth \\}\\)/,
+assert.ok(generatedRuntime.includes("registerDiscoveryRoutes({ app, pool, auth })"),
   "generated runtime must register Marketplace discovery");
-assert.match(generatedRuntime, /app\\.get\\(["']\\/api\\/media\\/:id["']/,
+assert.ok(generatedRuntime.includes('app.get("/api/media/:id"') || generatedRuntime.includes("app.get('/api/media/:id'"),
   "generated runtime must contain authenticated media retrieval");
-assert.match(generatedRuntime, /await initDatabase\\(\\);/,
+assert.ok(generatedRuntime.includes("await initDatabase();"),
   "generated runtime must await database initialization before accepting traffic");
-assert.doesNotMatch(generatedRuntime,
-  /initDatabase\\(\\)\\.catch\\(\\(error\\) => \\{ console\\.error\\("database initialization failed"/,
+assert.ok(!generatedRuntime.includes('initDatabase().catch((error) => { console.error("database initialization failed"'),
   "generated runtime must not silently continue after database initialization failure");
 
 
