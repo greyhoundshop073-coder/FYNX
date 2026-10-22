@@ -547,12 +547,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         }
                         val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
                         val pendingLocal = messages.filter { it.id !in remoteIds }
-                        messages = (remoteMessages + pendingLocal)
+                        val mergedMessages = (remoteMessages + pendingLocal)
                             .distinctBy { it.id }
                             .sortedBy { it.timestamp }
+                        messages = mergedMessages
                         runCatching {
                             withContext(Dispatchers.IO) {
-                                FynxChatStore.save(context, "group_$groupId", messages)
+                                FynxChatStore.save(context, "group_$groupId", mergedMessages)
                             }
                         }.onFailure { if (showError) syncMessage = it.message ?: "Unable to save local group messages." }
                         if (showError) syncMessage = null
