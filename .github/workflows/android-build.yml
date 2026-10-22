@@ -273,6 +273,30 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo 'ERROR: /dev/kvm is unavailable on this runner'; exit 1; fi
+      - name: Preinstall Android 35 Google APIs image with retry for corrupt downloads
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/neat-status-creator-music-20261021')))) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$sdk" || { echo "::error::Android SDK root is not set"; exit 1; }
+          sdkmanager="$(command -v sdkmanager || true)"
+          if [ -z "$sdkmanager" ]; then
+            sdkmanager="$(find "$sdk/cmdline-tools" -path '*/bin/sdkmanager' -type f 2>/dev/null | sort | tail -n 1)"
+          fi
+          test -x "$sdkmanager" || { echo "::error::sdkmanager not found under $sdk"; exit 1; }
+          package="system-images;android-35;google_apis;x86_64"
+          for attempt in 1 2 3; do
+            if yes | "$sdkmanager" --install "$package" --channel=0; then
+              echo "System image ready (attempt $attempt)"
+              exit 0
+            fi
+            echo "::warning::Android system image install attempt $attempt failed; clearing partial download state before retry"
+            rm -rf "$sdk/.temp" "$sdk/.downloadIntermediates" "$sdk/system-images/android-35/google_apis/x86_64" || true
+            sleep 8
+          done
+          echo "::error::Android 35 Google APIs system image install failed after 3 attempts"
+          exit 1
       - name: Run Android instrumentation tests and capture the real FYNX UI
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/neat-status-creator-music-20261021')))) }}
         uses: reactivecircus/android-emulator-runner@v2.38.0
