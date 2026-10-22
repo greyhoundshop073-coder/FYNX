@@ -38,8 +38,10 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
 
     fun finish(result: Result<FynxRemoteAuthClient.ResultData>, allowOfflineEntry: Boolean = false) {
         result.onSuccess { account ->
-            FynxBackendClient.saveAccessToken(context, account.token)
+            // Account switching can clear the previous session, including its token.
+            // Persist the new account identity first, then store the token issued for it.
             FynxAuthStore.saveAccount(context, account.displayName.ifBlank { displayName.trim() }, account.username, account.phone.ifBlank { phone.trim() })
+            FynxBackendClient.saveAccessToken(context, account.token)
             scope.launch { FynxNotificationDeviceManager.registerCurrentToken(context) }
             busy = false
             error = null
