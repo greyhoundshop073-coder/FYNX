@@ -512,7 +512,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             .onSuccess { remotePermissions = it; permissionLoadError = null }
             .onFailure {
                 remotePermissions = null
-                permissionLoadError = it.message ?: "Group permissions could not be loaded. Reconnect and retry."
+                permissionLoadError = "Group permissions could not load yet. Check your connection and retry."
             }
     }
     val senderAvatarUris = remember(groupId) { mutableStateMapOf<String, String?>() }
@@ -565,14 +565,14 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     }
                     .onFailure {
                         if (showError && FynxBackendClient.hasAccessToken(context)) {
-                            syncMessage = it.message ?: "Unable to sync group messages."
+                            syncMessage = "Group messages could not sync yet. Your saved messages are still here; reconnect and retry."
                         }
                     }
             }
 
             FynxGroupRemoteClient.syncGroup(context, selected)
                 .onFailure {
-                    if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message
+                    if (FynxBackendClient.hasAccessToken(context)) syncMessage = "Group details could not sync yet. Check your connection and retry."
                 }
 
             refreshGroupMessages(showError = true)
@@ -632,7 +632,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             }
                             .onFailure {
                                 if (FynxBackendClient.hasAccessToken(context)) {
-                                    syncMessage = it.message ?: "New group messages could not be refreshed."
+                                    syncMessage = "New group messages could not refresh yet. Check your connection and try again."
                                 }
                             }
                     }
