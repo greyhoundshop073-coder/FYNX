@@ -121,7 +121,7 @@ require('mature audience control','FynxStatusAudience.EVERYONE' in mature and 'F
 require('mature visible Send action','Icons.Default.Send' in mature and 'Text(if (publishing) "Sending…" else "Send")' in mature)
 require('mature Send is not a field trailing action','trailingIcon' not in mature)
 require('mature text limit indicator only appears at limit','if (text.length >= FYNX_STATUS_MAX_TEXT_LENGTH)' in mature and 'Text("$FYNX_STATUS_MAX_TEXT_LENGTH/$FYNX_STATUS_MAX_TEXT_LENGTH"' in mature)
-require('mature text style controls consume layout','Text("Text style"' in mature and 'showColors && type == FynxStatusType.TEXT' in mature and 'FormatAlignCenter' in mature)
+require('mature text style controls open a true Material 3 modal bottom sheet','Text("Text style"' in mature and 'showColors && type == FynxStatusType.TEXT' in mature and 'ModalBottomSheet(' in mature and 'rememberModalBottomSheetState(skipPartiallyExpanded = true)' in mature and 'BottomSheetDefaults.DragHandle(' in mature and 'FormatAlignCenter' in mature)
 require('mature text style sheet exposes Done close action', 'Text("Done", color = Color.White, fontWeight = FontWeight.SemiBold)' in mature and 'onClick = { showColors = false }' in mature)
 require('mature composer top tools close stale media and style panels','showTools = !showTools; showColors = false; showMediaTools = false' in mature)
 require('mature text styling and media tools are mutually exclusive','showColors = !showColors; showMediaTools = false; showTools = false' in mature and 'showMediaTools = !showMediaTools; showColors = false; showTools = false' in mature)
