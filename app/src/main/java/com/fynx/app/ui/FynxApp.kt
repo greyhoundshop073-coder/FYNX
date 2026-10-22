@@ -390,26 +390,26 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         .graphicsLayer { alpha = 1f - homeChromeProgress },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                        IconButton(
-                            onClick = { selected = "Profile"; openProfileSettings = false },
-                            modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" }
-                        ) {
-                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
-                            else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
-                            else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
-                        }
+                    Box(
+                        Modifier.size(48.dp).clickable {
+                            selected = "Profile"
+                            openProfileSettings = false
+                        }.semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
+                        else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
+                        else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
                     }
                     // The avatar and overflow menu are fixed-width siblings. Keep the
                     // brand label in the remaining space; nesting another weighted Row
                     // here makes Compose allocate overlapping bounds on narrow screens.
-                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                        IconButton(
-                            onClick = { profileAvatarMenuOpen = true },
-                            modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
-                        ) {
-                            Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
-                        }
+                    Box(
+                        Modifier.size(48.dp).clickable { profileAvatarMenuOpen = true }
+                            .semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
                         DropdownMenu(
                             expanded = profileAvatarMenuOpen,
                             onDismissRequest = { profileAvatarMenuOpen = false }
