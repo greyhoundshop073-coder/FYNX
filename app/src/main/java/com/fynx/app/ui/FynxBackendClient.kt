@@ -174,7 +174,9 @@ object FynxBackendClient {
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.use { input -> val output = StringBuilder(); val buffer = ByteArray(16 * 1024); var total = 0; while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > MAX_RESPONSE_BYTES) throw IOException("FYNX backend response is too large"); output.append(String(buffer, 0, count, Charsets.UTF_8)) }; output.toString() }.orEmpty()
             if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                // A local saved-device session may have no server token yet. A tokenless 401\n                // must not erase that local session; clear only a token the server rejected.\n                if (requiresAuthentication && !accessToken(context).isNullOrBlank()) FynxAuthStore.clear(context)
+                // A local saved-device session may have no server token yet. A tokenless 401
+                // must not erase that local session; clear only a token the server rejected.
+                if (requiresAuthentication && !accessToken(context).isNullOrBlank()) FynxAuthStore.clear(context)
                 throw FynxUnauthorizedException()
             }
             if (status !in 200..299) throw FynxHttpException(status, response)
