@@ -413,12 +413,29 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         // Material IconButton expands to a 48dp touch target even when its
                         // visual icon is smaller; overlaying it makes the profile target
                         // unclickable on real devices and in accessibility/UI automation.
-                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            IconButton(
-                                onClick = { profileAvatarMenuOpen = true },
-                                modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .shadow(2.dp, RoundedCornerShape(50))
+                                .then(Modifier)
+                                .semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
+                                .clickable { profileAvatarMenuOpen = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                shape = RoundedCornerShape(50),
+                                color = Color(0xFF1877F2),
+                                contentColor = Color.White
                             ) {
-                                Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.MoreHoriz,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = Color.White
+                                    )
+                                }
                             }
                             DropdownMenu(
                                 expanded = profileAvatarMenuOpen,
