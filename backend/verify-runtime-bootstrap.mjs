@@ -15,3 +15,15 @@ for (const contract of [
 assert.match(packageJson.scripts.prestart, /verify-runtime-bootstrap\.mjs/,
   "runtime bootstrap verifier must run before service startup");
 console.log("Runtime bootstrap integrity checks passed.");
+
+for (const contract of [
+  "registerBusinessRoutes({ app, auth })",
+  "startMarketplaceInspectionReconciliation({ pool })",
+  "registerMarketplacePaystackWebhook({ app, pool })",
+  "registerMarketplaceCheckoutRoutes({ app, pool, auth })",
+  "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
+  "registerMarketplaceShippingRoutes({ app, pool, auth })",
+  "registerMarketplaceCompletionRoutes({ app, pool, auth })",
+  "/api/social/posts/multi",
+  "/api/social/posts/:id/media"
+]) assert.ok(bootstrap.includes(contract), `runtime bootstrap must protect route contract: ${contract}`);
