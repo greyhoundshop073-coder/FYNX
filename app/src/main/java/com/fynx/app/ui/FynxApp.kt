@@ -29,6 +29,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -415,16 +416,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         // unclickable on real devices and in accessibility/UI automation.
                         Box(
                             Modifier
-                                .size(40.dp)
-                                .shadow(2.dp, RoundedCornerShape(50))
-                                .then(Modifier)
+                                .size(28.dp)
+                                .shadow(2.dp, CircleShape)
                                 .semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
                                 .clickable { profileAvatarMenuOpen = true },
                             contentAlignment = Alignment.Center
                         ) {
                             Surface(
                                 modifier = Modifier.fillMaxSize(),
-                                shape = RoundedCornerShape(50),
+                                shape = CircleShape,
                                 color = Color(0xFF1877F2),
                                 contentColor = Color.White
                             ) {
@@ -432,7 +432,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                     Icon(
                                         Icons.Default.MoreHoriz,
                                         contentDescription = null,
-                                        modifier = Modifier.size(20.dp),
+                                        modifier = Modifier.size(18.dp),
                                         tint = Color.White
                                     )
                                 }
