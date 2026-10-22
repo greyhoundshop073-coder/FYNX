@@ -101,12 +101,18 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     val fallbackMessage = remember(chat.lastMessage, resolvedAvatarUri) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true, senderName = chat.name, senderUsername = chat.username, senderAvatarUri = resolvedAvatarUri) } }
     var text by remember(chat.username) { mutableStateOf("") }
     var messages by remember(chat.username) { mutableStateOf(emptyList<ChatMessage>()) }
-    LaunchedEffect(chat.username, fallbackMessage) {
-        // Message history can grow large. Never parse its persisted JSON during Compose.
+    var messagesLoaded by remember(chat.username) { mutableStateOf(false) }
+    LaunchedEffect(chat.username) {
+        // Message history and JSON-backed SharedPreferences can grow large. Keep the
+        // UI unblocked while loading and never persist the initial empty placeholder
+        // before the existing conversation has finished restoring. Do not reload an
+        // active conversation when only the recipient's remote avatar resolves.
+        messagesLoaded = false
         val localMessages = withContext(Dispatchers.IO) {
             FynxChatStore.load(context, chat.username, fallbackMessage)
         }
         messages = localMessages
+        messagesLoaded = true
     }
     var replyToId by remember { mutableStateOf<String?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
@@ -196,14 +202,20 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     }
     var stopRecordingAction: (() -> Unit)? = null
 
-    val realtimeClient = remember(chat.username, currentUserId, recipientUserId, resolvedAvatarUri) {
+    // A transport instance belongs to this conversation, not to mutable identity/avatar
+    // state. Those values are resolved below; including them as remember keys used to close
+    // and recreate the socket repeatedly while the same LaunchedEffect was still initializing.
+    val currentUserIdLatest by rememberUpdatedState(currentUserId)
+    val recipientUserIdLatest by rememberUpdatedState(recipientUserId)
+    val resolvedAvatarUriLatest by rememberUpdatedState(resolvedAvatarUri)
+    val realtimeClient = remember(chat.username) {
         FynxRealtimeClient(
             context = context,
             onMessage = { remote ->
-                val myId = currentUserId ?: return@FynxRealtimeClient
+                val myId = currentUserIdLatest ?: return@FynxRealtimeClient
                 if (remote.senderId != myId && remote.recipientId != myId) return@FynxRealtimeClient
                 val converted = FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                    if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                    if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUriLatest)
                 }
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
@@ -215,15 +227,15 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             },
             onStateChanged = { state ->
                 realtimeState = state
-                if (state == FynxRealtimeClient.State.CONNECTED && !currentUserId.isNullOrBlank()) {
+                if (state == FynxRealtimeClient.State.CONNECTED && !currentUserIdLatest.isNullOrBlank()) {
                     conversationScope.launch {
                         FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
                             .onSuccess { remoteMessages ->
-                                val myId = currentUserId ?: return@onSuccess
+                                val myId = currentUserIdLatest ?: return@onSuccess
                                 val authoritative = remoteMessages.mapIndexedNotNull { index, remote ->
                                     runCatching {
                                         FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUriLatest)
                                         }
                                     }.getOrNull()?.let { message ->
                                         if (message.id.isBlank()) message.copy(id = "remote-" + index + "-" + message.timestamp) else message
@@ -248,8 +260,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             }
                         }
                     }
-                    is FynxRealtimeClient.Event.Typing -> if (event.userId == recipientUserId) otherIsTyping = event.isTyping
-                    is FynxRealtimeClient.Event.Presence -> if (event.userId == recipientUserId) isOnline = event.online
+                    is FynxRealtimeClient.Event.Typing -> if (event.userId == recipientUserIdLatest) otherIsTyping = event.isTyping
+                    is FynxRealtimeClient.Event.Presence -> if (event.userId == recipientUserIdLatest) isOnline = event.online
                 }
             }
         )
@@ -285,34 +297,52 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
-    LaunchedEffect(chat.username, currentUserId, recipientUserId, resolvedAvatarUri) {
+    // Resolve identity, profile and history exactly once per conversation. Previously
+    // this effect was keyed by currentUserId, recipientUserId and resolvedAvatarUri —
+    // values that the effect itself mutates — so Compose cancelled and restarted it
+    // mid-request, repeatedly recreating the realtime socket and interrupting setup.
+    LaunchedEffect(chat.username) {
         val normalizedUsername = chat.username.removePrefix("@").trim()
         if (normalizedUsername.isBlank()) {
             networkError = "This conversation has no valid username."
             return@LaunchedEffect
         }
         try {
-            currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
+            val loadedCurrentUserId = FynxBackendClient.currentUserId(context).getOrNull()
+            currentUserId = loadedCurrentUserId
+
             val searchedUser = FynxSocialClient.searchUsers(context, normalizedUsername)
                 .getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalizedUsername, true) }
-            recipientUserId = searchedUser?.id
+            val loadedRecipientUserId = searchedUser?.id
+            recipientUserId = loadedRecipientUserId
             recipientCreatedAt = searchedUser?.createdAt
-            FynxProfileRemoteClient.get(context, normalizedUsername)
-                .onSuccess { profile ->
-                    recipientProfile = profile
-                    remoteProfileLoaded = true
-                }
+
+            val profileResult = FynxProfileRemoteClient.get(context, normalizedUsername)
+            profileResult.onSuccess { profile ->
+                recipientProfile = profile
+                remoteProfileLoaded = true
+            }
+            val historyAvatarUri = profileResult.getOrNull()
+                ?.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }
+                ?.let { "/api/media/$it" }
+                ?: if (profileResult.isFailure) chat.avatarUri else null
+
             FynxProductionMessaging.history(context, normalizedUsername)
                 .onSuccess { remoteMessages ->
                     isNewConversation = remoteMessages.isEmpty()
-                    val myId = currentUserId
-                    if (myId != null) messages = remoteMessages.map { remote ->
-                        FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                    if (loadedCurrentUserId != null) {
+                        messages = remoteMessages.map { remote ->
+                            FynxProductionMessaging.toChatMessage(remote, loadedCurrentUserId).let { message ->
+                                if (message.fromMe) message else message.copy(senderAvatarUri = historyAvatarUri)
+                            }
                         }
                     }
-                    val unread = remoteMessages.filter { it.recipientId == myId && !it.read }.map { it.id }
+                    val unread = remoteMessages
+                        .filter { it.recipientId == loadedCurrentUserId && !it.read }
+                        .map { it.id }
                     if (unread.isNotEmpty()) {
+                        // The stable connection effect can connect while history is loading;
+                        // send the realtime acknowledgement and retain HTTP as the durable path.
                         realtimeClient.sendRead(unread)
                         conversationScope.launch { FynxProductionMessaging.markRead(context, unread) }
                     }
@@ -321,14 +351,19 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     isNewConversation = false
                     networkError = it.message ?: "Unable to load messages"
                 }
-            if (!recipientUserId.isNullOrBlank() && !currentUserId.isNullOrBlank()) {
-                realtimeClient.connect()
-            }
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
             networkError = error.message ?: "Unable to initialize this conversation."
             isNewConversation = false
+        }
+    }
+
+    // Connect only after identity resolution has completed. This effect is keyed by the
+    // resolved IDs, but never changes those IDs itself, so it cannot cancel its own setup.
+    LaunchedEffect(chat.username, currentUserId, recipientUserId) {
+        if (!currentUserId.isNullOrBlank() && !recipientUserId.isNullOrBlank()) {
+            realtimeClient.connect()
         }
     }
 
@@ -352,16 +387,24 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
-    LaunchedEffect(messages) {
-        FynxChatStore.save(context, chat.username, messages)
-        val latest = messages.maxByOrNull { it.timestamp }
-        if (latest != null) {
-            val previewText = when {
-                latest.voiceUri != null -> "Voice message"
-                latest.attachmentUri != null && latest.text.isBlank() -> when (latest.attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "audio" -> "Voice message"; else -> "Photo" }
-                else -> latest.text
+    LaunchedEffect(messagesLoaded, messages) {
+        if (!messagesLoaded) return@LaunchedEffect
+        // Store.save() parses the previous JSON history and serializes the full
+        // conversation; savePreview() also reads message history to compute unread
+        // counts. Keep both operations off the UI thread so opening a long chat
+        // cannot monopolize Main and trigger an input-dispatch ANR.
+        val snapshot = messages
+        withContext(Dispatchers.IO) {
+            FynxChatStore.save(context, chat.username, snapshot)
+            val latest = snapshot.maxByOrNull { it.timestamp }
+            if (latest != null) {
+                val previewText = when {
+                    latest.voiceUri != null -> "Voice message"
+                    latest.attachmentUri != null && latest.text.isBlank() -> when (latest.attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "audio" -> "Voice message"; else -> "Photo" }
+                    else -> latest.text
+                }
+                FynxChatStore.savePreview(context, chat.copy(lastMessage = previewText, time = formatChatTime(latest.timestamp)))
             }
-            FynxChatStore.savePreview(context, chat.copy(lastMessage = previewText, time = formatChatTime(latest.timestamp)))
         }
     }
 

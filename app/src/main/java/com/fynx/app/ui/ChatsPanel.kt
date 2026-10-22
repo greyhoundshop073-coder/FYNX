@@ -20,35 +20,51 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
 
 @Composable
 fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit = {}, onCreateGroup: () -> Unit = {}, onOpenContacts: () -> Unit = {}) {
     var section by remember { mutableStateOf("Chats") }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var chats by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
-    var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
+    // Disk-backed stores must not be parsed inside composition. Load previews,
+    // groups and list preferences in the IO-bound startup effect below.
+    var chats by remember { mutableStateOf(emptyList<ChatPreview>()) }
+    var groups by remember { mutableStateOf(emptyList<FynxGroup>()) }
     var selfUsername by remember { mutableStateOf("") }
-    var listView by remember { mutableStateOf(FynxPreferencesStore.loadChatListView(context)) }
+    var listView by remember { mutableStateOf("Default") }
     var showArchived by remember { mutableStateOf(false) }
     var openMenuFor by remember { mutableStateOf<String?>(null) }
     var chatSearch by remember { mutableStateOf("") }
 
-    fun refreshChats() {
-        chats = FynxChatStore.loadPreviews(context).map { preview ->
-            val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
-            preview.copy(unreadCount = unread)
+    suspend fun refreshChats() {
+        // Computing unread counts parses each stored conversation. Run that work off
+        // Main and never save previews from this collector: savePreview emits
+        // previewUpdates, so writing here created a recursive refresh/event storm.
+        val refreshed = withContext(Dispatchers.IO) {
+            FynxChatStore.loadPreviews(context).map { preview ->
+                val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
+                preview.copy(unreadCount = unread)
+            }
         }
-        chats.forEach { FynxChatStore.savePreview(context, it) }
+        chats = refreshed
     }
 
     LaunchedEffect(Unit) {
-        listView = FynxPreferencesStore.loadChatListView(context)
-        selfUsername = (FynxAuthStore.load(context).username ?: "").removePrefix("@").trim().lowercase()
-        refreshChats()
-        val stored = FynxChatStore.loadPreviews(context)
+        val (initialListView, initialSelfUsername, stored) = withContext(Dispatchers.IO) {
+            Triple(
+                FynxPreferencesStore.loadChatListView(context),
+                (FynxAuthStore.load(context).username ?: "").removePrefix("@").trim().lowercase(),
+                FynxChatStore.loadPreviews(context)
+            )
+        }
+        listView = initialListView
+        selfUsername = initialSelfUsername
         val refreshed = stored.map { chat ->
             val normalized = chat.username.removePrefix("@").trim()
             if (normalized.isBlank()) chat else FynxProfileRemoteClient.get(context, normalized).getOrNull()?.let { profile ->
@@ -57,13 +73,21 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             } ?: chat
         }
         if (refreshed != stored) {
-            refreshed.forEach { FynxChatStore.savePreview(context, it) }
-            chats = refreshed
+            val changed = refreshed.zip(stored).filter { (next, previous) -> next != previous }.map { it.first }
+            withContext(Dispatchers.IO) { changed.forEach { FynxChatStore.savePreview(context, it) } }
         }
+        val hydrated = withContext(Dispatchers.IO) {
+            FynxChatStore.loadPreviews(context).map { preview ->
+                val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
+                preview.copy(unreadCount = unread)
+            }
+        }
+        chats = hydrated
+        groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
     }
 
     LaunchedEffect(Unit) {
-        FynxChatStore.previewUpdates.collect { refreshChats() }
+        FynxChatStore.previewUpdates.conflate().collectLatest { refreshChats() }
     }
 
     val rowSpacing = when (listView) { "Compact" -> 2.dp; "Large" -> 14.dp; else -> 8.dp }
@@ -133,7 +157,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     items(visibleChats, key = { it.username }) { chat ->
                         val pinned = FynxPreferencesStore.isChatPinned(context, chat.username)
                         val muted = FynxPreferencesStore.isChatMuted(context, chat.username)
-                        val unread = FynxChatStore.load(context, chat.username).count { !it.fromMe && !it.read }
+                        val unread = chat.unreadCount
 
                         Row(
                             modifier = Modifier
@@ -230,7 +254,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                         onClick = {
                                             FynxPreferencesStore.setChatPinned(context, chat.username, !pinned)
                                             openMenuFor = null
-                                            refreshChats()
+                                            scope.launch { refreshChats() }
                                         }
                                     )
                                     DropdownMenuItem(
@@ -238,7 +262,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                         onClick = {
                                             FynxPreferencesStore.setChatMuted(context, chat.username, !muted)
                                             openMenuFor = null
-                                            refreshChats()
+                                            scope.launch { refreshChats() }
                                         }
                                     )
                                     DropdownMenuItem(
@@ -246,7 +270,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                         onClick = {
                                             FynxPreferencesStore.setChatArchived(context, chat.username, !showArchived)
                                             openMenuFor = null
-                                            refreshChats()
+                                            scope.launch { refreshChats() }
                                         }
                                     )
                                 }

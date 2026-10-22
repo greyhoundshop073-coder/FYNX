@@ -80,10 +80,14 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     val glassPalette = fynxGlassPalette(glassThemeId)
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
+    var groups by remember { mutableStateOf(emptyList<FynxGroup>()) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var createError by remember { mutableStateOf<String?>(null) }
     val visible = groups.filter { it.name.contains(query, true) || it.description.contains(query, true) }
+
+    LaunchedEffect(Unit) {
+        groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
+    }
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -156,8 +160,10 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                 createError = null
                 val remote = FynxGroupRemoteClient.syncGroup(context, group)
                 remote.onSuccess {
-                    FynxGroupsStore.add(context, group)
-                    groups = FynxGroupsStore.load(context)
+                    withContext(Dispatchers.IO) {
+                        FynxGroupsStore.add(context, group)
+                        FynxGroupsStore.load(context)
+                    }.also { refreshedGroups -> groups = refreshedGroups }
                     showCreateDialog = false
                 }.onFailure {
                     createError = it.message ?: "The group could not be created on FYNX."
@@ -547,11 +553,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         }
                         val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
                         val pendingLocal = messages.filter { it.id !in remoteIds }
-                        messages = (remoteMessages + pendingLocal)
+                        val mergedMessages = (remoteMessages + pendingLocal)
                             .distinctBy { it.id }
                             .sortedBy { it.timestamp }
-                        runCatching { FynxChatStore.save(context, "group_$groupId", messages) }
-                            .onFailure { if (showError) syncMessage = it.message ?: "Unable to save local group messages." }
+                        messages = mergedMessages
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                FynxChatStore.save(context, "group_$groupId", mergedMessages)
+                            }
+                        }.onFailure { if (showError) syncMessage = it.message ?: "Unable to save local group messages." }
                         if (showError) syncMessage = null
                     }
                     .onFailure {
@@ -614,7 +624,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 val pendingLocal = latestMessages.filter { it.id !in remoteIds }
                                 val merged = (remoteMessages + pendingLocal).distinctBy { it.id }.sortedBy { it.timestamp }
                                 messages = merged
-                                FynxChatStore.save(context, "group_$groupId", merged)
+                                // Group history may contain years of chat JSON. Keep
+                                // local persistence off Main just like initial restoration.
+                                withContext(Dispatchers.IO) {
+                                    FynxChatStore.save(context, "group_$groupId", merged)
+                                }
                                 syncMessage = null
                             }
                             .onFailure {
