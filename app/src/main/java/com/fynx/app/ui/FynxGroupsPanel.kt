@@ -362,7 +362,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 .onFailure { error ->
                     messages = messages.map { if (it.id == message.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = error.message ?: "Shared message could not be sent. Tap Retry to try again."
+                    syncMessage = "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
                 }
         }
     }
@@ -410,7 +410,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 .onFailure { error ->
                     messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = error.message ?: "Attachment could not be sent. Tap Retry to try again."
+                    syncMessage = "Attachment not sent yet. It is saved for retry; try again when the connection is ready."
                 }
         }
     }
@@ -1094,7 +1094,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         .onFailure { error ->
                                             messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                                             FynxChatStore.save(context, "group_$groupId", messages)
-                                            syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
+                                            syncMessage = "Message not sent yet. It is saved; tap Retry to try again."
                                         }
                                     sending = false
                                 }
@@ -1127,7 +1127,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                                 .onFailure { error ->
                                                     messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                                                     FynxChatStore.save(context, "group_$groupId", messages)
-                                                    syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
+                                                    syncMessage = "Message not sent yet. It is saved; tap Retry to try again."
                                                 }
                                             sending = false
                                         }
@@ -1148,7 +1148,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
 
     }
     selectedGroup?.let { groupForDialogs ->
-        if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = it.message } } } }
+        if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = "Message not sent yet. It is saved; tap Retry to try again." } } } }
         if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
         if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
         if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, onInvite = { username ->
@@ -1177,9 +1177,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             }
         }, onMedia = { uri, type ->
-            if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = it.message } } }
+            if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = "Message not sent yet. It is saved; tap Retry to try again." } } }
         }, onStoryShare = {
-            if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = true, read = true); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = it.message } } }
+            if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = true, read = true); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = "Message not sent yet. It is saved; tap Retry to try again." } } }
         }, openContentInitially = showPollsDirectly)
         if (showLocationShare) FynxGroupLocationShareDialog(onDismiss = { showLocationShare = false }) { label, details ->
             val mapsQuery = java.net.URLEncoder.encode(listOf(label, details).filter { it.isNotBlank() }.joinToString(" "), "UTF-8")
