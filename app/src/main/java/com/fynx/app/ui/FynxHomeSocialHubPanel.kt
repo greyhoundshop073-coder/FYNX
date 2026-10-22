@@ -491,6 +491,7 @@ fun FynxHomeSocialHubPanel(
                 showCamera = true
             },
             onCreatePost = { showComposer = true; notice = null },
+            onCreateStatus = onCreateStatus,
             onOpenFastCamera = {
                 if (!posting) {
                     capturedUris = emptyList()
