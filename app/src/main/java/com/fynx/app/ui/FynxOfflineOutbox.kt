@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /** Small durable outbox for retryable chat sends. Existing server chat remains the source of truth. */
 object FynxOfflineOutbox {
@@ -54,7 +55,7 @@ object FynxOfflineOutbox {
             buildList {
                 for (i in 0 until array.length()) {
                     val o = array.getJSONObject(i)
-                    add(Item(o.getString("id"), o.optString("requestId").takeIf { it.isNotBlank() && it != "null" } ?: o.getString("id"), o.getString("recipient"), o.optString("text"), o.optString("replyToId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optLong("voiceDurationMs"), o.optLong("createdAt")))
+                    add(Item(o.getString("id"), o.optString("requestId").takeIf { it.isNotBlank() && it != "null" } ?: UUID.nameUUIDFromBytes(o.getString("id").toByteArray(Charsets.UTF_8)).toString(), o.getString("recipient"), o.optString("text"), o.optString("replyToId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optLong("voiceDurationMs"), o.optLong("createdAt")))
                 }
             }
         }.getOrDefault(emptyList())
