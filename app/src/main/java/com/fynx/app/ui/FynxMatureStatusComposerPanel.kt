@@ -173,6 +173,7 @@ fun FynxMatureStatusComposerPanel(
             mediaUri = it
             showColors = false
             showTools = false
+            showMediaTools = false
             error = null
         }
     }
@@ -284,9 +285,9 @@ fun FynxMatureStatusComposerPanel(
                     }
                 }
                 Box {
-                    IconButton(onClick = { showTools = !showTools; showColors = false }, enabled = !recording && !publishing) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }
+                    IconButton(onClick = { showTools = !showTools; showColors = false; showMediaTools = false }, enabled = !recording && !publishing) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }
                     DropdownMenu(expanded = showTools, onDismissRequest = { showTools = false }) {
-                        if (type == FynxStatusType.TEXT) DropdownMenuItem(text = { Text("Text style") }, onClick = { showColors = true; showTools = false })
+                        if (type == FynxStatusType.TEXT) DropdownMenuItem(text = { Text("Text style") }, onClick = { showColors = true; showTools = false; showMediaTools = false })
                         DropdownMenuItem(text = { Text("Clear draft") }, onClick = ::clearDraft)
                     }
                 }
@@ -431,7 +432,7 @@ fun FynxMatureStatusComposerPanel(
                         ) {
                             // Keep the three composition tools grouped like the reference.
                             IconButton(
-                                onClick = { showColors = !showColors },
+                                onClick = { showColors = !showColors; showMediaTools = false; showTools = false },
                                 enabled = !recording && !publishing,
                                 modifier = Modifier.size(44.dp)
                             ) {
@@ -459,7 +460,7 @@ fun FynxMatureStatusComposerPanel(
                                 }
                             }
                             IconButton(
-                                onClick = { showMediaTools = !showMediaTools },
+                                onClick = { showMediaTools = !showMediaTools; showColors = false; showTools = false },
                                 enabled = !recording && !publishing,
                                 modifier = Modifier.size(44.dp)
                             ) {
