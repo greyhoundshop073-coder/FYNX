@@ -27,7 +27,7 @@ checks.update({
     "group message insert uses RETURNING to detect first delivery": "".join("ON CONFLICT(id) DO NOTHING RETURNING id,group_id,sender_id".split()) in normalized_group_routes,
     "duplicate group message IDs are checked against original group and sender": "String(row.group_id)!==groupId||String(row.sender_id)!==String(req.user.sub)" in normalized_group_routes,
     "conflicting group message ID returns HTTP 409": "MESSAGE_ID_CONFLICT" in group_routes and "res.status(409)" in normalized_group_routes,
-    "duplicate group retry rebroadcasts persisted message for recovery": "".join("if(!inserted.rows.length){await broadcastGroupMessage(groupId,message);return res.status(200).json({message,duplicate:true})}".split()) in normalized_group_routes,
+    "duplicate group retry rebroadcasts persisted message for recovery": "".join("if(!inserted.rows.length){await broadcastGroupMessage(groupId,message);return res.status(200).json({message,duplicate:true});}".split()) in normalized_group_routes,
     "new and duplicate group deliveries both broadcast after message ownership validation": "".join("if(String(row.group_id)!==groupId||String(row.sender_id)!==String(req.user.sub))return res.status(409).json({error:'message id already belongs to another message',code:'MESSAGE_ID_CONFLICT'});const message=messageJson(row);if(!inserted.rows.length){await broadcastGroupMessage(groupId,message);return res.status(200).json({message,duplicate:true});}await broadcastGroupMessage(groupId,message)".split()) in normalized_group_routes,
     "new group message response marks first delivery": "res.status(201).json({message,duplicate:false})" in normalized_group_routes,
 })
