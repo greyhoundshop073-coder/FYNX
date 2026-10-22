@@ -773,8 +773,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
-                TextButton(enabled = !sending, onClick = {
-                    if (!sending) {
+                TextButton(enabled = !sending && canSendMessages, onClick = {
+                    if (!sending && canSendMessages) {
                         sending = true
                         scope.launch {
                             val pendingMessages = messages.filter { it.fromMe && !it.delivered }
