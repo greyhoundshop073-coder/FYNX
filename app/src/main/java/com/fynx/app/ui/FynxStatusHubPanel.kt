@@ -68,6 +68,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
     var addStatusOpen by remember { mutableStateOf(startWithCreator) }
     var composing by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
+    var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var timelineRefreshKey by remember { mutableIntStateOf(0) }
     var selectedInitialMedia by remember { mutableStateOf<FynxRecentMedia?>(null) }
@@ -118,6 +119,14 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                     onCamera = {
                         if (!cameraOpen) {
                             cameraError = null
+                            cameraInitialMode = CameraMode.PHOTO
+                            cameraOpen = true
+                        }
+                    },
+                    onRecordVideo = {
+                        if (!cameraOpen) {
+                            cameraError = null
+                            cameraInitialMode = CameraMode.VIDEO
                             cameraOpen = true
                         }
                     },
@@ -141,6 +150,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                         onCameraClick = {
                             if (!cameraOpen) {
                                 cameraError = null
+                                cameraInitialMode = CameraMode.PHOTO
                                 cameraOpen = true
                             }
                         },
@@ -231,6 +241,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                 Box(Modifier.fillMaxSize()) {
                     FynxCameraCapturePanel(
                         onCaptured = { uri, type -> openCapturedStatus(uri, type) },
+                        initialMode = cameraInitialMode,
                         onDismiss = { cameraOpen = false }
                     )
                 }
@@ -243,6 +254,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
 private fun FynxAddStatusPanel(
     onClose: () -> Unit,
     onCamera: () -> Unit,
+    onRecordVideo: () -> Unit,
     onText: () -> Unit,
     onVoice: () -> Unit,
     onMusic: () -> Unit,
@@ -344,7 +356,7 @@ private fun FynxAddStatusPanel(
                     Text("Take photo", maxLines = 1, style = MaterialTheme.typography.labelMedium)
                 }
                 OutlinedButton(
-                    onClick = { deviceMediaPicker.launch(arrayOf("video/*")) },
+                    onClick = onRecordVideo,
                     modifier = Modifier.weight(1f).height(48.dp),
                     shape = RoundedCornerShape(14.dp),
                     contentPadding = PaddingValues(horizontal = 3.dp)
