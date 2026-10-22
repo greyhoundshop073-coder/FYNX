@@ -290,6 +290,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var text by remember { mutableStateOf("") }
     var mentionQuery by remember { mutableStateOf<String?>(null) }
     var currentGroup by remember(groupId) { mutableStateOf<FynxGroup?>(null) }
+    var groupLoadComplete by remember(groupId) { mutableStateOf(false) }
     val groupTitle = currentGroup?.name ?: "Group"
     var messages by remember(groupId) { mutableStateOf<List<ChatMessage>>(emptyList()) }
     LaunchedEffect(groupId) {
@@ -300,6 +301,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
         currentGroup = local.first
         messages = local.second
+        groupLoadComplete = true
     }
     val latestMessages by rememberUpdatedState(messages)
     var showMembers by remember { mutableStateOf(false) }
