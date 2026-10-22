@@ -23,6 +23,14 @@ checks = {
     "active group member action no longer uses manager-only full-group sync": "FynxGroupRemoteClient.addMember(context, groupId, cleanUsername)" in active and "onInvite = { username ->" in active,
     "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds=remote.disappearingSeconds" in settings and "approveNewMembers,disappearingSeconds" in settings,
 }
+checks.update({
+    "group message insert uses RETURNING to detect first delivery": "ON CONFLICT(id) DO NOTHING RETURNING id,group_id,sender_id" in normalized_group_routes,
+    "duplicate group message IDs are checked against original group and sender": "String(row.group_id)!==groupId||String(row.sender_id)!==String(req.user.sub)" in normalized_group_routes,
+    "conflicting group message ID returns HTTP 409": "MESSAGE_ID_CONFLICT" in group_routes and "res.status(409)" in normalized_group_routes,
+    "duplicate group retry returns HTTP 200 without rebroadcast": "if(!inserted.rows.length)return res.status(200).json({message,duplicate:true})" in normalized_group_routes,
+    "only newly inserted group messages broadcast": "if(!inserted.rows.length)return res.status(200).json({message,duplicate:true});await broadcastGroupMessage(groupId,message)" in normalized_group_routes,
+    "new group message response marks first delivery": "res.status(201).json({message,duplicate:false})" in normalized_group_routes,
+})
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
     print(("PASS: " if ok else "FAIL: ") + name)
