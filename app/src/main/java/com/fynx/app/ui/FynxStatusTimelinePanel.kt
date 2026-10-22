@@ -378,6 +378,8 @@ private fun FynxStatusStoryViewer(
     var interactions by remember(statuses, startIndex) { mutableStateOf(FynxStatusInteractions()) }
     var interactionError by remember(statuses, startIndex) { mutableStateOf<String?>(null) }
     var replyText by remember(statuses, startIndex) { mutableStateOf("") }
+    var canReplyToStatus by remember(statuses, startIndex) { mutableStateOf(false) }
+    var replyRelationshipLoading by remember(statuses, startIndex) { mutableStateOf(true) }
     var replying by remember { mutableStateOf(false) }
     var replyFocused by remember { mutableStateOf(false) }
     val replyPaused = replyFocused || WindowInsets.isImeVisible
@@ -390,6 +392,7 @@ private fun FynxStatusStoryViewer(
     var showReplyEmojiPicker by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
+    val viewerPaused = replyPaused || showReactionPicker || showViewers || menuOpen || deleting
     BackHandler(onBack = onDismiss)
     var statusProgress by remember(status.id) { mutableFloatStateOf(0f) }
 
@@ -437,14 +440,27 @@ private fun FynxStatusStoryViewer(
         refreshInteractions()
     }
 
-    LaunchedEffect(status.id, replyPaused) {
+    LaunchedEffect(status.id, viewerUsername) {
+        canReplyToStatus = false
+        replyRelationshipLoading = true
+        if (status.ownerUsername.equals(viewerUsername, true)) {
+            replyRelationshipLoading = false
+        } else {
+            FynxStatusClient.mutualFollowUsernames(context, listOf(status.ownerUsername))
+                .onSuccess { mutual -> canReplyToStatus = status.ownerUsername.lowercase() in mutual }
+                .onFailure { canReplyToStatus = false }
+            replyRelationshipLoading = false
+        }
+    }
+
+    LaunchedEffect(status.id, viewerPaused) {
         val duration = statusViewerAutoAdvanceMs(status)
         if (duration <= 0L) return@LaunchedEffect
         while (statusProgress < 1f) {
-            if (!replyPaused) statusProgress = (statusProgress + 50f / duration.toFloat()).coerceAtMost(1f)
+            if (!viewerPaused) statusProgress = (statusProgress + 50f / duration.toFloat()).coerceAtMost(1f)
             kotlinx.coroutines.delay(50L)
         }
-        if (!replyPaused) moveNext()
+        if (!viewerPaused) moveNext()
     }
 
     Dialog(
@@ -500,6 +516,7 @@ private fun FynxStatusStoryViewer(
                                 rounded = false
                             )
                         }
+                        FynxStatusType.MUSIC -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = 28.dp)) { Surface(shape = CircleShape, color = Color.White.copy(alpha = .12f), modifier = Modifier.size(132.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.MusicNote, "Music Status", tint = Color.White, modifier = Modifier.size(64.dp)) } }; Text(status.musicTitle?.ifBlank { "FYNX Music" } ?: "FYNX Music", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold); Text(status.musicArtist?.ifBlank { "FYNX" } ?: "FYNX", color = Color.White.copy(alpha = .75f), style = MaterialTheme.typography.titleMedium); status.musicCatalogueId?.let { FynxRemoteAudio("/api/social/music/catalogue/$it/media", Modifier.fillMaxWidth(), status.musicDurationMs.coerceAtLeast(1_000L)) } }
                         FynxStatusType.VOICE -> status.contentUri?.let {
                             Surface(
                                 shape = RoundedCornerShape(28.dp),
@@ -667,7 +684,7 @@ private fun FynxStatusStoryViewer(
                                 )
                             }
                         }
-                        status.musicCatalogueId?.let { musicId ->
+                        if (status.type != FynxStatusType.MUSIC) status.musicCatalogueId?.let { musicId ->
                             Surface(
                                 color = Color.White.copy(alpha = 0.10f),
                                 shape = RoundedCornerShape(14.dp),
@@ -710,11 +727,11 @@ private fun FynxStatusStoryViewer(
                                     .weight(1f)
                                     .heightIn(min = 52.dp, max = 120.dp)
                                     .onFocusChanged { replyFocused = it.isFocused },
-                                enabled = !replying,
+                                enabled = !replying && canReplyToStatus,
                                 minLines = 1,
                                 maxLines = 4,
                                 shape = RoundedCornerShape(26.dp),
-                                placeholder = { Text("Reply to this Status…", color = Color.White.copy(alpha = 0.72f)) },
+                                placeholder = { Text(if (status.ownerUsername.equals(viewerUsername, true)) "Your Status" else if (replyRelationshipLoading) "Checking who can reply…" else if (canReplyToStatus) "Reply to this Status…" else "Mutual follow required to reply", color = Color.White.copy(alpha = 0.72f)) },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Color.White,
                                     unfocusedTextColor = Color.White,
@@ -728,12 +745,12 @@ private fun FynxStatusStoryViewer(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(
                                             onClick = { showReplyEmojiPicker = !showReplyEmojiPicker },
-                                            enabled = !replying
+                                            enabled = !replying && canReplyToStatus
                                         ) {
                                             Icon(Icons.Default.EmojiEmotions, "Add emoji", tint = Color.White)
                                         }
                                         IconButton(
-                                            enabled = !replying && replyText.trim().isNotEmpty(),
+                                            enabled = !replying && canReplyToStatus && replyText.trim().isNotEmpty(),
                                             onClick = {
                                                 val body = replyText.trim()
                                                 if (body.isEmpty()) return@IconButton
@@ -932,13 +949,14 @@ private fun statusViewerAutoAdvanceMs(status: FynxStatus): Long {
         FynxStatusType.PHOTO -> 7_000L
         FynxStatusType.VOICE -> status.voiceDurationMs.coerceIn(1_000L, FYNX_STATUS_MAX_VOICE_DURATION_MS)
         FynxStatusType.VIDEO -> 0L
+        FynxStatusType.MUSIC -> status.musicDurationMs.coerceAtLeast(1_000L)
     }
     return if (status.musicCatalogueId != null && status.musicDurationMs > 0L) {
         kotlin.math.max(base, status.musicDurationMs.coerceAtLeast(1_000L))
     } else base
 }
 
-private fun statusTypeLabel(type: FynxStatusType) = when (type) { FynxStatusType.TEXT -> "Text"; FynxStatusType.PHOTO -> "Photo"; FynxStatusType.VIDEO -> "Video"; FynxStatusType.VOICE -> "Voice" }
+private fun statusTypeLabel(type: FynxStatusType) = when (type) { FynxStatusType.TEXT -> "Text"; FynxStatusType.PHOTO -> "Photo"; FynxStatusType.VIDEO -> "Video"; FynxStatusType.VOICE -> "Voice"; FynxStatusType.MUSIC -> "Music" }
 
 private fun statusTimeLeft(createdAt: Long, now: Long = System.currentTimeMillis()): String {
     val remaining = (createdAt + FYNX_STATUS_EXPIRY_MS - now).coerceAtLeast(0L)

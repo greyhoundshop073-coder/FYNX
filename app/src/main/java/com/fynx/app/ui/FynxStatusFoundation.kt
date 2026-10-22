@@ -10,7 +10,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
-enum class FynxStatusType { TEXT, PHOTO, VIDEO, VOICE }
+enum class FynxStatusType { TEXT, PHOTO, VIDEO, VOICE, MUSIC }
 enum class FynxStatusAudience { EVERYONE, FRIENDS, ONLY_ME }
 enum class FynxStatusTextFont { CLASSIC, CLEAN, BOLD, SERIF, TYPEWRITER }
 
@@ -98,7 +98,7 @@ object FynxStatusStore {
                 FynxStatusType.PHOTO -> ".jpg"
                 FynxStatusType.VIDEO -> ".mp4"
                 FynxStatusType.VOICE -> ".m4a"
-                FynxStatusType.TEXT -> return@runCatching null
+                FynxStatusType.MUSIC, FynxStatusType.TEXT -> return@runCatching null
             }
             val account = FynxAuthStore.accountStorageKey(context) ?: return@runCatching null
             val safeAccount = storageKey(account)

@@ -68,6 +68,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
     var addStatusOpen by remember { mutableStateOf(startWithCreator) }
     var composing by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
+    var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var timelineRefreshKey by remember { mutableIntStateOf(0) }
     var selectedInitialMedia by remember { mutableStateOf<FynxRecentMedia?>(null) }
@@ -118,6 +119,14 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                     onCamera = {
                         if (!cameraOpen) {
                             cameraError = null
+                            cameraInitialMode = CameraMode.PHOTO
+                            cameraOpen = true
+                        }
+                    },
+                    onRecordVideo = {
+                        if (!cameraOpen) {
+                            cameraError = null
+                            cameraInitialMode = CameraMode.VIDEO
                             cameraOpen = true
                         }
                     },
@@ -141,6 +150,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                         onCameraClick = {
                             if (!cameraOpen) {
                                 cameraError = null
+                                cameraInitialMode = CameraMode.PHOTO
                                 cameraOpen = true
                             }
                         },
@@ -188,6 +198,8 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                                                 }
                                                 Button(onClick = {
                                                     selectedStatusMusic = track
+                                                    selectedInitialType = FynxStatusType.MUSIC
+                                                    selectedInitialMedia = null
                                                     statusMusicPreviewId = null
                                                     showStatusMusicPicker = false
                                                     statusMusicSearch = ""
@@ -229,6 +241,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                 Box(Modifier.fillMaxSize()) {
                     FynxCameraCapturePanel(
                         onCaptured = { uri, type -> openCapturedStatus(uri, type) },
+                        initialMode = cameraInitialMode,
                         onDismiss = { cameraOpen = false }
                     )
                 }
@@ -241,6 +254,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
 private fun FynxAddStatusPanel(
     onClose: () -> Unit,
     onCamera: () -> Unit,
+    onRecordVideo: () -> Unit,
     onText: () -> Unit,
     onVoice: () -> Unit,
     onMusic: () -> Unit,
@@ -255,6 +269,7 @@ private fun FynxAddStatusPanel(
     var selectionMode by remember { mutableStateOf(false) }
     var selectedMediaUris by remember { mutableStateOf<Set<String>>(emptySet()) }
     var layoutMode by remember { mutableStateOf(false) }
+    var selectionMessage by remember { mutableStateOf<String?>(null) }
     var recentFilter by remember { mutableStateOf("Recents") }
     var recentFilterMenu by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -279,16 +294,41 @@ private fun FynxAddStatusPanel(
         loadingMedia = false
     }
 
-    fun toggleSelected(media: FynxRecentMedia) { val key = media.uri.toString(); selectedMediaUris = if (key in selectedMediaUris) selectedMediaUris - key else selectedMediaUris + key }
+    fun toggleSelected(media: FynxRecentMedia) {
+        val key = media.uri.toString()
+        if (layoutMode && media.isVideo) {
+            selectionMessage = "Layouts use photos only. Choose a photo instead."
+            return
+        }
+        if (layoutMode && key !in selectedMediaUris && selectedMediaUris.size >= 6) {
+            selectionMessage = "Choose up to 6 photos for one layout."
+            return
+        }
+        selectionMessage = null
+        selectedMediaUris = if (key in selectedMediaUris) selectedMediaUris - key else selectedMediaUris + key
+    }
     fun finishSelection() {
-        val selected = recentMedia.filter { it.uri.toString() in selectedMediaUris }.take(4)
-        if (selected.isEmpty()) return
-        if (layoutMode && selected.size > 1) {
-            createFynxLayoutCollage(context, selected)?.let { onMediaSelected(FynxRecentMedia(it, false, System.currentTimeMillis() / 1000L)) }
-        } else onMediaSelected(selected.first())
+        val selected = recentMedia.filter { it.uri.toString() in selectedMediaUris }
+        if (layoutMode) {
+            val photos = selected.filterNot { it.isVideo }.take(6)
+            if (photos.size < 2) {
+                selectionMessage = "Choose at least 2 photos and up to 6 to create a layout."
+                return
+            }
+            val collage = createFynxLayoutCollage(context, photos)
+            if (collage == null) {
+                selectionMessage = "The layout could not be created. Try different photos."
+                return
+            }
+            onMediaSelected(FynxRecentMedia(collage, false, System.currentTimeMillis() / 1000L))
+        } else {
+            val first = selected.firstOrNull() ?: return
+            onMediaSelected(first)
+        }
         selectedMediaUris = emptySet()
         selectionMode = false
         layoutMode = false
+        selectionMessage = null
     }
 
     LaunchedEffect(mediaPermissionGranted) {
@@ -324,52 +364,70 @@ private fun FynxAddStatusPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = onCamera,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 3.dp)
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Take photo", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                }
+                OutlinedButton(
+                    onClick = onRecordVideo,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 3.dp)
+                ) {
+                    Text("Record video", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                }
+                OutlinedButton(
+                    onClick = { deviceMediaPicker.launch(arrayOf("image/*", "video/*")) },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 3.dp)
+                ) {
+                    Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Gallery", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 FynxStatusToolPill(
-                    icon = Icons.Default.MusicNote,
-                    label = "Music",
-                    onClick = onMusic,
-                    modifier = Modifier.weight(1f)
-                )
-                FynxStatusToolPill(
-                    icon = Icons.Default.GridView,
-                    label = "Layout",
-                    onClick = { layoutMode = true; selectionMode = true; selectedMediaUris = emptySet() },
-                    modifier = Modifier.weight(1f)
+                    icon = Icons.Default.Notes,
+                    label = "Text",
+                    onClick = onText,
+                    modifier = Modifier.widthIn(min = 94.dp)
                 )
                 FynxStatusToolPill(
                     icon = Icons.Default.Mic,
                     label = "Voice",
                     onClick = onVoice,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FynxStatusToolPill(
-                    icon = Icons.Default.Photo,
-                    label = "Photo",
-                    onClick = { deviceMediaPicker.launch(arrayOf("image/*")) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.widthIn(min = 94.dp)
                 )
                 FynxStatusToolPill(
-                    icon = Icons.Default.PlayArrow,
-                    label = "Video",
-                    onClick = { deviceMediaPicker.launch(arrayOf("video/*")) },
-                    modifier = Modifier.weight(1f)
+                    icon = Icons.Default.MusicNote,
+                    label = "Music",
+                    onClick = onMusic,
+                    modifier = Modifier.widthIn(min = 94.dp)
                 )
                 FynxStatusToolPill(
-                    icon = Icons.Default.Notes,
-                    label = "Text",
-                    onClick = onText,
-                    modifier = Modifier.weight(1f)
+                    icon = Icons.Default.GridView,
+                    label = "Layout",
+                    onClick = { layoutMode = true; selectionMode = true; selectedMediaUris = emptySet(); selectionMessage = "Choose 2–6 photos. Videos cannot be added to a layout." },
+                    modifier = Modifier.widthIn(min = 94.dp)
                 )
             }
         }
@@ -467,13 +525,16 @@ private fun FynxAddStatusPanel(
     ) {
         Icon(Icons.Default.SelectAll, contentDescription = if (selectionMode) "Cancel media selection" else "Select multiple media")
     }
-    if (selectionMode) { Surface(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding(), tonalElevation = 6.dp, color = MaterialTheme.colorScheme.surface) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Text("${selectedMediaUris.size} selected", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); TextButton(onClick = { selectedMediaUris = emptySet(); selectionMode = false }) { Text("Cancel") }; Button(onClick = ::finishSelection, enabled = selectedMediaUris.isNotEmpty()) { Text(if (layoutMode) "Create layout" else "Next") } } } }
+    if (selectionMode) { Surface(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding(), tonalElevation = 6.dp, color = MaterialTheme.colorScheme.surface) { Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { selectionMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("${selectedMediaUris.size} selected", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); TextButton(onClick = { selectedMediaUris = emptySet(); selectionMessage = null; selectionMode = false; layoutMode = false }) { Text("Cancel") }; Button(onClick = ::finishSelection, enabled = selectedMediaUris.isNotEmpty()) { Text(if (layoutMode) "Create layout" else "Next") } } } } }
     }
 }
 
 private fun createFynxLayoutCollage(context: android.content.Context, media: List<FynxRecentMedia>): Uri? {
     if (media.isEmpty()) return null
-    val thumbs = media.take(4).mapNotNull { item ->
+    // Layout is a photo collage; never silently turn a selected video into a still thumbnail.
+    val photos = media.filterNot { it.isVideo }.take(6)
+    if (photos.size < 2) return null
+    val thumbs = photos.mapNotNull { item ->
         runCatching {
             if (android.os.Build.VERSION.SDK_INT >= 29) context.contentResolver.loadThumbnail(item.uri, Size(600, 600), null)
             else context.contentResolver.openInputStream(item.uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
@@ -484,8 +545,8 @@ private fun createFynxLayoutCollage(context: android.content.Context, media: Lis
     val canvas = Canvas(out)
     canvas.drawColor(android.graphics.Color.BLACK)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    val columns = if (thumbs.size == 1) 1 else 2
-    val rows = when (thumbs.size) { 1 -> 1; 2 -> 1; else -> 2 }
+    val columns = minOf(3, thumbs.size)
+    val rows = (thumbs.size + columns - 1) / columns
     val cellW = 1200f / columns
     val cellH = 1200f / rows
     thumbs.forEachIndexed { index, bitmap ->
