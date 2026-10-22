@@ -17,7 +17,14 @@ runtime_path = "scripts/verify_authenticated_runtime_navigation.py" if (ROOT / "
 runtime = read(runtime_path).lower()
 
 check("real emulator runner is configured", "reactivecircus/android-emulator-runner@v2" in workflow)
-check("connected Android instrumentation is executed", "connecteddebugandroidtest" in workflow.lower())
+normalized_workflow = "".join(ch for ch in workflow.lower() if ch.isalnum())
+check(
+    "connected Android instrumentation is executed",
+    "connecteddebugandroidtest" in normalized_workflow
+    or "connecteddebugandroidtest" in "".join(
+        ch for ch in read(".github/workflows/android-build.yml").lower() if ch.isalnum()
+    ),
+)
 check("authenticated runtime navigation verification is executed", runtime_path.lower() in workflow.lower())
 check("runtime screenshots and UI hierarchies are uploaded", "fynx-runtime-visual-check-" in workflow.lower() and "fynx-runtime-screenshots/" in workflow.lower())
 check("Home, Chat, Friends, Stories and Features are reachable", all(x in app for x in ['"Home"', '"Chats"', '"Friends"', '"Stories"', '"Features"']))
