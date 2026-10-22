@@ -156,10 +156,19 @@ if profile_button_index < 0 or profile_menu_index < 0 or profile_menu_index <= p
 profile_touch_region = app_source[profile_button_index:profile_menu_index]
 if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
     raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")
-require(profile_touch_region, 'Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', "profile avatar has its own non-overlapped 48dp touch target")
-menu_box_start = app_source.rfind('Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', profile_button_index, profile_menu_index)
-if menu_box_start <= profile_button_index:
-    raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling 48dp touch target")
+# The avatar is intentionally a standalone 48dp clickable Box. Formatting and
+# modifier chains may span lines, so assert its actual size/click semantics rather
+# than requiring one exact source spelling.
+normalized_profile_region = normalize_source(profile_touch_region)
+if "Modifier.size(48.dp).clickable" not in normalized_profile_region:
+    raise SystemExit("HOME INTERACTIONS RED: profile avatar must own a standalone 48dp clickable touch target")
+if 'contentAlignment = Alignment.Center' not in profile_touch_region:
+    raise SystemExit("HOME INTERACTIONS RED: profile avatar touch target must preserve centered avatar content")
+# The three-dot control is a separate sibling visual target (28dp), not an
+# overlapping Material IconButton with an expanded minimum touch region.
+normalized_menu_region = normalize_source(app_source[profile_menu_index:profile_menu_index + 1600])
+if "Modifier.size(28.dp)" not in normalized_menu_region or '.clickable { profileAvatarMenuOpen = true }' not in normalized_menu_region:
+    raise SystemExit("HOME INTERACTIONS RED: three-dot menu must remain a separate compact clickable sibling")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
 require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
 require(app_source, '"Contacts" -> "Chats"', "Contacts back returns to Chats")
