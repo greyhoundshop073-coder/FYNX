@@ -163,8 +163,8 @@ fun FynxMatureStatusComposerPanel(
         uri?.let {
             val mime = context.contentResolver.getType(it).orEmpty().substringBefore(';').trim().lowercase()
             when {
-                mime.startsWith("video/") -> type = FynxStatusType.VIDEO
-                mime.startsWith("image/") -> type = FynxStatusType.PHOTO
+                mime.startsWith("video/") -> { mediaUri = it; type = FynxStatusType.VIDEO }
+                mime.startsWith("image/") -> { mediaUri = it; type = FynxStatusType.PHOTO }
                 else -> {
                     error = "Choose a photo or video for this Status."
                     return@let
