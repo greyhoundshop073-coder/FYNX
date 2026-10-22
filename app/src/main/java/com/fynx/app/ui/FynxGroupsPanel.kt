@@ -646,6 +646,44 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
     }
 
+    if (!groupLoadComplete || selectedGroup == null) {
+        FynxTheme {
+            Column(
+                Modifier.fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .statusBarsPadding()
+                    .padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                    Text(
+                        if (!groupLoadComplete) "Opening group…" else "Group unavailable",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (!groupLoadComplete) "Loading group conversation…" else "No messages here yet",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+                if (groupLoadComplete) {
+                    OutlinedTextField(
+                        value = "",
+                        onValueChange = {},
+                        enabled = false,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Message…") },
+                        singleLine = true
+                    )
+                }
+            }
+        }
+        return
+    }
+
     if (showPulse && selectedGroup != null) {
         FynxGroupPulseSheet(group = selectedGroup, messages = messages, onDismiss = { showPulse = false }) {
             showPulse = false
