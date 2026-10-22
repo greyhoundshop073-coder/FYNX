@@ -354,7 +354,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             modifier = Modifier.nestedScroll(homeScrollConnection),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-            if (selected == "Home") {
+            if (selected == "Stories") {
+                // Stories and its creator/viewer are immersive surfaces. Do not reserve
+                // the global page-title/back header above them; their own controls live
+                // inside the Status UI, giving the creator the full available height.
+                Spacer(Modifier.height(0.dp))
+            } else if (selected == "Home") {
                 // Home header is part of the normal top-bar flow, not a floating overlay.
                 // This keeps the feed clear while preserving the profile, FYNX title,
                 // camera, Settings and notification controls.
