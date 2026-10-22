@@ -57,11 +57,15 @@ object FynxBackendClient {
             "https://ai-creative-studio-572v.onrender.com"
         )
         if (normalized in retiredRenderUrls) {
+            // Persist the replacement URL, not just return it for this request.
+            // Otherwise each app start can rediscover the retired host, and callers
+            // inspecting preferences still see no migrated endpoint.
+            val replacementUrl = if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL
             prefs.edit()
-                .remove(KEY_BASE_URL)
+                .putString(KEY_BASE_URL, replacementUrl)
                 .putBoolean(KEY_BASE_URL_EXPLICIT, false)
                 .apply()
-            return if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL
+            return replacementUrl
         }
 
         if (isDebuggable) {
