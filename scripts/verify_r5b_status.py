@@ -119,6 +119,7 @@ require('mature visible Send action','Icons.Default.Send' in mature and 'Text(if
 require('mature Send is not a field trailing action','trailingIcon' not in mature)
 require('mature text limit indicator only appears at limit','if (text.length >= FYNX_STATUS_MAX_TEXT_LENGTH)' in mature and 'Text("$FYNX_STATUS_MAX_TEXT_LENGTH/$FYNX_STATUS_MAX_TEXT_LENGTH"' in mature)
 require('mature text style controls consume layout','Text("Text style"' in mature and 'showColors && type == FynxStatusType.TEXT' in mature and 'FormatAlignCenter' in mature)
+require('mature text style sheet exposes Done close action', 'Text("Done", color = Color.White, fontWeight = FontWeight.SemiBold)' in mature and 'onClick = { showColors = false }' in mature)
 require('mature text style applies alignment in editor','editorTextAlign = when (alignment)' in mature and 'textAlign = editorTextAlign' in mature)
 require('mature text style weight matches viewer','editorWeight = if (font == FynxStatusTextFont.BOLD)' in mature and 'fontWeight = editorWeight' in mature and 'fontWeight = weight' in timeline)
 require('mature text preview sizing is responsive','BoxWithConstraints' in mature and 'maxWidth.value' in mature and '.coerceIn(24f, 42f)' in mature and 'text.length > 240' in mature)
