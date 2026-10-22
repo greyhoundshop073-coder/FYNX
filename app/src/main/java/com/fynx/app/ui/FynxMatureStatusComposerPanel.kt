@@ -161,6 +161,8 @@ fun FynxMatureStatusComposerPanel(
     var showColors by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
     var showMediaTools by remember { mutableStateOf(false) }
+    var showStatusEmoji by remember { mutableStateOf(false) }
+    var audienceMenu by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -200,10 +202,14 @@ fun FynxMatureStatusComposerPanel(
     // Android system Back must behave like the visible close control on every composer mode.
     // During publishing, ignore Back so an in-flight upload is not abandoned accidentally.
     BackHandler(enabled = !publishing) {
-        if (showColors) showColors = false
-        else if (showTools) showTools = false
-        else if (showMediaTools) showMediaTools = false
-        else onClose()
+        when {
+            showStatusEmoji -> showStatusEmoji = false
+            audienceMenu -> audienceMenu = false
+            showColors -> showColors = false
+            showTools -> showTools = false
+            showMediaTools -> showMediaTools = false
+            else -> onClose()
+        }
     }
 
     fun clearDraft() { if (publishing || recording) return; mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; showMediaTools = false; error = null }
