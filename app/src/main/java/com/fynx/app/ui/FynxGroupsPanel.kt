@@ -765,6 +765,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         permissionLoadError?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         syncMessage?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         val unsentCount = messages.count { it.fromMe && !it.delivered }
+        val retryablePendingMessages = messages.filter { failedMessage ->
+            failedMessage.fromMe && !failedMessage.delivered && (
+                if (failedMessage.attachmentUri != null || failedMessage.attachmentType in setOf("image", "video", "video_note", "audio", "document")) {
+                    canSendMedia
+                } else {
+                    canSendMessages
+                }
+            )
+        }
         if (unsentCount > 0) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -773,11 +782,19 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
-                TextButton(enabled = !sending && canSendMessages, onClick = {
-                    if (!sending && canSendMessages) {
+                TextButton(enabled = !sending && retryablePendingMessages.isNotEmpty(), onClick = {
+                    if (!sending && retryablePendingMessages.isNotEmpty()) {
                         sending = true
                         scope.launch {
-                            val pendingMessages = messages.filter { it.fromMe && !it.delivered }
+                            val pendingMessages = messages.filter { failedMessage ->
+                                failedMessage.fromMe && !failedMessage.delivered && (
+                                    if (failedMessage.attachmentUri != null || failedMessage.attachmentType in setOf("image", "video", "video_note", "audio", "document")) {
+                                        canSendMedia
+                                    } else {
+                                        canSendMessages
+                                    }
+                                )
+                            }
                             var failedCount = 0
                             var lastError: String? = null
                             for (failedMessage in pendingMessages) {
