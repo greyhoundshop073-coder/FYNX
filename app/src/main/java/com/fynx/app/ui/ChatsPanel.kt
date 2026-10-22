@@ -30,10 +30,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var section by remember { mutableStateOf("Chats") }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var chats by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
-    var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
+    // Disk-backed stores must not be parsed inside composition. Load previews,
+    // groups and list preferences in the IO-bound startup effect below.
+    var chats by remember { mutableStateOf(emptyList<ChatPreview>()) }
+    var groups by remember { mutableStateOf(emptyList<FynxGroup>()) }
     var selfUsername by remember { mutableStateOf("") }
-    var listView by remember { mutableStateOf(FynxPreferencesStore.loadChatListView(context)) }
+    var listView by remember { mutableStateOf("Default") }
     var showArchived by remember { mutableStateOf(false) }
     var openMenuFor by remember { mutableStateOf<String?>(null) }
     var chatSearch by remember { mutableStateOf("") }
