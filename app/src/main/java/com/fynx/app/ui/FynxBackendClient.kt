@@ -25,7 +25,7 @@ object FynxBackendClient {
     private const val KEY_BASE_URL = "base_url"
     private const val KEY_BASE_URL_EXPLICIT = "base_url_explicit"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
-    private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
+    private const val PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
     private const val DEBUG_TEST_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 750L
@@ -50,15 +50,27 @@ object FynxBackendClient {
         val normalized = stored?.trimEnd('/')?.takeIf { it.isNotBlank() }
         val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
+        // Render was retired. Migrate persisted addresses from older APKs in both
+        // debug and release builds so an upgrade cannot silently keep calling it.
+        val retiredRenderUrls = setOf(
+            "https://fynx-ai-backend.onrender.com",
+            "https://ai-creative-studio-572v.onrender.com"
+        )
+        if (normalized in retiredRenderUrls) {
+            prefs.edit()
+                .remove(KEY_BASE_URL)
+                .putBoolean(KEY_BASE_URL_EXPLICIT, false)
+                .apply()
+            return if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL
+        }
+
         if (isDebuggable) {
-            // Older APKs could persist a stale backend URL across upgrades. Only honor a
-            // debug override when this version explicitly configured it; migrate legacy
-            // unmarked values to the active Railway testing service.
+            // Only honor a debug override when this version explicitly configured it.
             val explicitlyConfigured = prefs.getBoolean(KEY_BASE_URL_EXPLICIT, false)
             val safeExplicitOverride = explicitlyConfigured &&
                 normalized != null &&
                 normalized != PRODUCTION_BASE_URL &&
-                normalized != "https://ai-creative-studio-572v.onrender.com"
+                normalized != DEBUG_TEST_BASE_URL
             if (safeExplicitOverride) return checkNotNull(normalized)
             if (normalized != DEBUG_TEST_BASE_URL || !explicitlyConfigured) {
                 prefs.edit()
@@ -69,10 +81,6 @@ object FynxBackendClient {
             return DEBUG_TEST_BASE_URL
         }
 
-        if (normalized == "https://ai-creative-studio-572v.onrender.com") {
-            prefs.edit().remove(KEY_BASE_URL).apply()
-            return PRODUCTION_BASE_URL
-        }
         return normalized ?: PRODUCTION_BASE_URL
     }
     fun configureBaseUrl(context: Context, value: String) { val normalized = value.trim().trimEnd('/'); require(normalized.isBlank() || normalized.startsWith("https://")) { "FYNX backend must use HTTPS." }; context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).putBoolean(KEY_BASE_URL_EXPLICIT, true).apply() }
