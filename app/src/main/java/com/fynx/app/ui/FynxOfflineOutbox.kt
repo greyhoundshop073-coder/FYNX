@@ -12,6 +12,7 @@ object FynxOfflineOutbox {
 
     data class Item(
         val id: String,
+        val requestId: String,
         val recipient: String,
         val text: String,
         val replyToId: String?,
@@ -53,7 +54,7 @@ object FynxOfflineOutbox {
             buildList {
                 for (i in 0 until array.length()) {
                     val o = array.getJSONObject(i)
-                    add(Item(o.getString("id"), o.getString("recipient"), o.optString("text"), o.optString("replyToId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optLong("voiceDurationMs"), o.optLong("createdAt")))
+                    add(Item(o.getString("id"), o.optString("requestId").takeIf { it.isNotBlank() && it != "null" } ?: o.getString("id"), o.getString("recipient"), o.optString("text"), o.optString("replyToId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optLong("voiceDurationMs"), o.optLong("createdAt")))
                 }
             }
         }.getOrDefault(emptyList())
@@ -63,7 +64,7 @@ object FynxOfflineOutbox {
         val array = JSONArray()
         items.forEach { item ->
             array.put(JSONObject().apply {
-                put("id", item.id); put("recipient", item.recipient); put("text", item.text)
+                put("id", item.id); put("requestId", item.requestId); put("recipient", item.recipient); put("text", item.text)
                 put("replyToId", item.replyToId ?: JSONObject.NULL); put("mediaId", item.mediaId ?: JSONObject.NULL)
                 put("mediaType", item.mediaType ?: JSONObject.NULL); put("voiceDurationMs", item.voiceDurationMs); put("createdAt", item.createdAt)
             })
