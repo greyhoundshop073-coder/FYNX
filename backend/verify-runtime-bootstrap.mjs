@@ -24,6 +24,10 @@ for (const contract of [
   "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
   "registerMarketplaceShippingRoutes({ app, pool, auth })",
   "registerMarketplaceCompletionRoutes({ app, pool, auth })",
+  'app.post("/api/auth/login"',
+  'app.get("/api/me", auth',
+  'app.get("/api/statuses", auth',
+  "/api/social/feed",
   "/api/social/posts/multi",
   "/api/social/posts/:id/media"
 ]) assert.ok(bootstrap.includes(contract), `runtime bootstrap must protect route contract: ${contract}`);
