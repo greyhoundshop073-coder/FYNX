@@ -32,6 +32,7 @@ production_messaging = read('app/src/main/java/com/fynx/app/ui/FynxProductionMes
 chat_store = read('app/src/main/java/com/fynx/app/ui/FynxChatStore.kt')
 runtime_navigation = read('scripts/verify_authenticated_runtime_navigation.py')
 chats_panel = read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt')
+groups_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
 
 check('remote media uses the authenticated central downloader', 'FynxBackendClient.downloadToFile' in remote_media and 'MAX_REMOTE_MEDIA_BYTES' in remote_media)
 check('remote media is account scoped', 'FynxAuthStore.accountStorageKey(context)' in remote_media and 'FynxBackendClient.hasAccessToken(context)' in remote_media)
@@ -74,6 +75,7 @@ check('private-chat identity setup cannot cancel itself or recreate its socket w
 check('Chat/Groups runtime gate captures complete crash and ANR context', 'def clear_runtime_log():' in runtime_navigation and '"-t","4000"' in runtime_navigation and 'Input dispatching timed out' in runtime_navigation and 'Group unavailable' in runtime_navigation)
 check('Chat list refresh cannot recursively publish another preview update', 'fun refreshChats() {' in chats_panel and 'FynxChatStore.previewUpdates.collect { refreshChats() }' in chats_panel and 'FynxChatStore.savePreview(context,' not in chats_panel[chats_panel.index('fun refreshChats()'):chats_panel.index('LaunchedEffect(Unit)')])
 check('Chat list history and unread counts are not loaded from disk during composition', 'mutableStateOf(emptyList<ChatPreview>())' in chats_panel and 'mutableStateOf(emptyList<FynxGroup>())' in chats_panel and 'val unread = chat.unreadCount' in chats_panel and 'val unread = FynxChatStore.load(context, chat.username)' not in chats_panel)
+check('Groups list defers the disk-backed group read until after composition', 'var groups by remember { mutableStateOf(emptyList<FynxGroup>()) }' in groups_panel and 'LaunchedEffect(Unit)' in groups_panel and 'groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }' in groups_panel and 'mutableStateOf(FynxGroupsStore.load(context))' not in groups_panel[:groups_panel.index('private fun FynxCreateGroupDialog')])
 check('group chat starts from its local message store', 'mutableStateOf(loadGroupMessages(context, group.id))' in group_panel)
 check('group chat refresh preserves pending local messages not yet visible remotely', 'val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()' in group_panel and 'val pendingLocal = messages.filter { it.id !in remoteIds }' in group_panel and 'messages = (remoteMessages + pendingLocal)' in group_panel)
 check('Friends refresh preserves last-known people data after transient failures', 'friends = fr.getOrElse { friends }' in friends_panel and 'val requests = rr.getOrElse { incoming + outgoing }' in friends_panel and 'blocked = br.getOrElse { blocked }' in friends_panel)
