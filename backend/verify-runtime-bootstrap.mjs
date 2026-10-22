@@ -10,7 +10,7 @@ for (const contract of [
   /register Marketplace discovery/,
   /authenticated media retrieval/,
   /await database initialization/,
-  /must not silently continue after database initialization failure/
+  /must not silently continue after database initialization failure/,\n  /safe auth failure diagnostics/,\n  /missing JWT configuration/
 ]) assert.match(bootstrap, contract, `runtime guard missing contract: ${contract}`);
 assert.match(packageJson.scripts.prestart, /verify-runtime-bootstrap\.mjs/,
   "runtime bootstrap verifier must run before service startup");

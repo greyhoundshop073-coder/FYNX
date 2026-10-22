@@ -183,8 +183,19 @@ function issueToken(user) {
 function auth(req, res, next) {
   const header = req.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token || !JWT_SECRET) return res.status(401).json({ error: "authentication required" });
-  try { req.user = jwt.verify(token, JWT_SECRET); return next(); } catch { return res.status(401).json({ error: "invalid or expired token" }); }
+  if (!JWT_SECRET) {
+    console.error("[fynx-auth] rejected request: JWT_SECRET is not configured", { method: req.method, path: req.path });
+    return res.status(401).json({ error: "authentication required" });
+  }
+  if (!token) {
+    console.warn("[fynx-auth] rejected request: bearer token missing", { method: req.method, path: req.path });
+    return res.status(401).json({ error: "authentication required" });
+  }
+  try { req.user = jwt.verify(token, JWT_SECRET); return next(); } catch (error) {
+    const reason = error?.name === "TokenExpiredError" ? "expired" : error?.name === "JsonWebTokenError" ? "invalid" : "verification_failed";
+    console.warn("[fynx-auth] rejected request: bearer token rejected", { method: req.method, path: req.path, reason });
+    return res.status(401).json({ error: reason === "expired" ? "token expired" : "invalid or expired token" });
+  }
 }
 async function findUserByUsername(username) {
   const result = await pool.query("SELECT id, username, display_name, phone, created_at FROM users WHERE username = $1", [username]);
