@@ -21,8 +21,12 @@ assert.match(backend, /FynxSecureTokenStore\.save\(context, token\)/,
   "access tokens must be saved through encrypted storage");
 assert.match(backend, /if \(requiresAuthentication\) accessToken\(context\)\?\.let \{ setRequestProperty\("Authorization", "Bearer \$it"\) \}/,
   "protected API requests must attach the stored bearer token");
-assert.match(backend, /if \(requiresAuthentication\) FynxAuthStore\.clear\(context\)/,
-  "an unauthorized protected request must clear the invalid session");
+assert.match(backend, /if \(requiresAuthentication && !accessToken\(context\)\.isNullOrBlank\(\)\) FynxAuthStore\.clear\(context\)/,
+  "an unauthorized request clears only a server token that was actually present");
+assert.match(backend, /isPublicAuthPath\(path\): Boolean = path ===? "\/health" \|\| path ===? "\/ready"/,
+  "health and readiness probes must remain public so they measure backend reachability, not login state");
+assert.ok(authUi.indexOf("FynxAuthStore.saveAccount(context, account.displayName") < authUi.indexOf("FynxBackendClient.saveAccessToken(context, account.token)"),
+  "account identity must be saved before its token so account-switch cleanup cannot erase the new token");
 assert.match(server, /jwt\.sign\(\{ sub: String\(user\.id\), username: user\.username \}, JWT_SECRET, \{ expiresIn: "30d" \}\)/,
   "login token issuance must use the configured JWT secret and bounded expiry");
 assert.match(server, /jwt\.verify\(token, JWT_SECRET\)/,
