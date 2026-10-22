@@ -34,6 +34,10 @@ checks.update({
 checks.update({
     "group send failures show friendly retry copy instead of raw HTTP details": "Message not sent yet. It is saved; tap Retry to try again." in active and "FYNX backend returned HTTP" not in active,
     "group attachment failures show friendly retry copy": "Attachment not sent yet. It is saved for retry; try again when the connection is ready." in active,
+    "initial group sync failure uses friendly recovery copy": "Group details could not sync yet. Check your connection and retry." in active,
+    "periodic group message sync failure uses friendly recovery copy": "Group messages could not sync yet. Your saved messages are still here; reconnect and retry." in active,
+    "realtime group refresh failure uses friendly recovery copy": "New group messages could not refresh yet. Check your connection and try again." in active,
+    "group permission load failure uses friendly recovery copy": "Group permissions could not load yet. Check your connection and retry." in active,
 })
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
