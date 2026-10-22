@@ -227,7 +227,7 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
                 Box(
                     Modifier.size(70.dp)
                         .background(if (status?.type == FynxStatusType.TEXT) Color(status.textStyle.backgroundColor) else FynxDesign.SurfaceRaised, CircleShape)
-                        .border(3.dp, if (active) Brush.sweepGradient(listOf(Color(0xFFE1306C), Color(0xFF22C55E), Color(0xFFE1306C))) else Brush.sweepGradient(listOf(FynxDesign.Outline, FynxDesign.Outline)), CircleShape)
+                        .border(3.dp, if (active) Brush.sweepGradient(listOf(Color(0xFFFF3D8D), Color(0xFFFF9F1C), Color(0xFFB44CFF), Color(0xFF22C55E), Color(0xFF20C8E8), Color(0xFFFF3D8D))) else Brush.sweepGradient(listOf(FynxDesign.Outline, FynxDesign.Outline)), CircleShape)
                         .clip(CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
