@@ -75,6 +75,7 @@ import java.util.UUID
 private val MATURE_STATUS_BACKGROUNDS = listOf(0xFF111111, 0xFF4527A0, 0xFF1565C0, 0xFF00695C, 0xFF2E7D32, 0xFFEF6C00, 0xFFC62828, 0xFFAD1457, 0xFF37474F, 0xFF455A64)
 private val MATURE_STATUS_TEXT_COLORS = listOf(0xFFFFFFFF, 0xFF000000, 0xFFFFEB3B, 0xFFFFCDD2, 0xFFB3E5FC)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FynxMatureStatusComposerPanel(
     initialMediaUri: Uri? = null,
