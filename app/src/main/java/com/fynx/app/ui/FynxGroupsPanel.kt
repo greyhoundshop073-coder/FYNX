@@ -166,7 +166,7 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                     }.also { refreshedGroups -> groups = refreshedGroups }
                     showCreateDialog = false
                 }.onFailure {
-                    createError = it.message ?: "The group could not be created on FYNX."
+                    createError = "The group could not be created yet. Check your connection and try again."
                 }
             }
         }
@@ -362,7 +362,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 .onFailure { error ->
                     messages = messages.map { if (it.id == message.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = error.message ?: "Shared message could not be sent. Tap Retry to try again."
+                    syncMessage = "Message not sent yet. It is saved; tap Retry to try again."
                 }
         }
     }
@@ -394,7 +394,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 .onFailure { error ->
                     messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = error.message ?: "Attachment could not be saved for retry. Choose it again."
+                    syncMessage = "Attachment could not be saved for retry. Please choose it again."
                 }
             if (stagedUri == null) return@launch
             val stagedMessage = messages.firstOrNull { it.id == optimistic.id } ?: optimistic.copy(attachmentUri = stagedUri.toString())
@@ -410,7 +410,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 .onFailure { error ->
                     messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = error.message ?: "Attachment could not be sent. Tap Retry to try again."
+                    syncMessage = "Attachment not sent yet. It is saved for retry; try again when the connection is ready."
                 }
         }
     }
@@ -440,7 +440,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             voiceFile = null
             voiceRecording = false
             file.delete()
-            syncMessage = error.message ?: "Could not start voice recording."
+            syncMessage = "Could not start voice recording. Check microphone permission and try again."
         }
     }
 
@@ -512,7 +512,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             .onSuccess { remotePermissions = it; permissionLoadError = null }
             .onFailure {
                 remotePermissions = null
-                permissionLoadError = it.message ?: "Group permissions could not be loaded. Reconnect and retry."
+                permissionLoadError = "Group permissions could not be loaded. Reconnect and retry."
             }
     }
     val senderAvatarUris = remember(groupId) { mutableStateMapOf<String, String?>() }
@@ -556,23 +556,23 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             .distinctBy { it.id }
                             .sortedBy { it.timestamp }
                         messages = mergedMessages
+                        if (showError) syncMessage = null
                         runCatching {
                             withContext(Dispatchers.IO) {
                                 FynxChatStore.save(context, "group_$groupId", mergedMessages)
                             }
-                        }.onFailure { if (showError) syncMessage = it.message ?: "Unable to save local group messages." }
-                        if (showError) syncMessage = null
+                        }.onFailure { if (showError) syncMessage = "Your group messages could not be saved locally. Please try again." }
                     }
                     .onFailure {
                         if (showError && FynxBackendClient.hasAccessToken(context)) {
-                            syncMessage = it.message ?: "Unable to sync group messages."
+                            syncMessage = "Group messages could not sync yet. Check your connection and retry."
                         }
                     }
             }
 
             FynxGroupRemoteClient.syncGroup(context, selected)
                 .onFailure {
-                    if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message
+                    if (FynxBackendClient.hasAccessToken(context)) syncMessage = "Group messages could not sync yet. Check your connection and retry."
                 }
 
             refreshGroupMessages(showError = true)
@@ -586,14 +586,14 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             .onSuccess { remotePermissions = it; permissionLoadError = null }
                             .onFailure {
                                 remotePermissions = null
-                                permissionLoadError = it.message ?: "Group permissions could not be loaded. Reconnect and retry."
+                                permissionLoadError = "Group permissions could not be loaded. Reconnect and retry."
                             }
                     }
                 }
             }
         }.onFailure {
             if (FynxBackendClient.hasAccessToken(context)) {
-                syncMessage = it.message ?: "Group conversation could not be loaded safely."
+                syncMessage = "This group conversation could not load yet. Check your connection and retry."
             }
         }
     }
@@ -632,7 +632,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             }
                             .onFailure {
                                 if (FynxBackendClient.hasAccessToken(context)) {
-                                    syncMessage = it.message ?: "New group messages could not be refreshed."
+                                    syncMessage = "New group messages could not refresh yet. Try again shortly."
                                 }
                             }
                     }
@@ -790,7 +790,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }
                                     .onFailure { error ->
                                         failedCount += 1
-                                        lastError = error.message
+                                        lastError = "Some messages could not be sent. Your saved messages are still here; reconnect and retry."
                                     }
                             }
                             syncMessage = if (failedCount == 0) null else
@@ -923,7 +923,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                             scope.launch {
                                                 FynxGroupRemoteClient.reactToMessage(context, groupId, message.id, if (message.reaction == emoji) null else emoji)
                                                     .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages) }
-                                                    .onFailure { syncMessage = it.message ?: "Reaction could not be saved" }
+                                                    .onFailure { syncMessage = "Reaction could not be saved yet. Please try again." }
                                             }
                                         }, modifier = Modifier.size(48.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
                                     }
@@ -940,14 +940,14 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     scope.launch {
                                         FynxGroupRemoteClient.setPinned(context, groupId, message.id, !message.pinned)
                                             .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
-                                            .onFailure { syncMessage = it.message ?: "Pin could not be saved" }
+                                            .onFailure { syncMessage = "Message pin could not be updated yet. Please try again." }
                                     }
                                 }, leadingIcon = { Icon(Icons.Default.PushPin, null) })
                                 DropdownMenuItem(text = { Text("Delete") }, onClick = {
                                     scope.launch {
                                         FynxGroupRemoteClient.deleteMessage(context, groupId, message.id)
                                             .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
-                                            .onFailure { syncMessage = it.message ?: "Message could not be deleted" }
+                                            .onFailure { syncMessage = "Message could not be deleted yet. Please try again." }
                                     }
                                 }, leadingIcon = { Icon(Icons.Default.Delete, null) })
                             }
@@ -1094,7 +1094,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         .onFailure { error ->
                                             messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                                             FynxChatStore.save(context, "group_$groupId", messages)
-                                            syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
+                                            syncMessage = "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
                                         }
                                     sending = false
                                 }
@@ -1127,7 +1127,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                                 .onFailure { error ->
                                                     messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                                                     FynxChatStore.save(context, "group_$groupId", messages)
-                                                    syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
+                                                    syncMessage = "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
                                                 }
                                             sending = false
                                         }
@@ -1148,7 +1148,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
 
     }
     selectedGroup?.let { groupForDialogs ->
-        if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = it.message } } } }
+        if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = "Group details could not sync yet. Check your connection and retry." } } } }
         if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
         if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
         if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, onInvite = { username ->
@@ -1173,13 +1173,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         FynxGroupsStore.updateGroup(context, updated)
                         currentGroup = updated
                         syncMessage = null
-                    }.onFailure { syncMessage = it.message ?: "Member could not be added." }
+                    }.onFailure { syncMessage = "This member could not be added. Check group permissions and try again." }
                 }
             }
         }, onMedia = { uri, type ->
-            if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = it.message } } }
+            if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = "Message not sent yet. It is saved for retry; check your connection." } } }
         }, onStoryShare = {
-            if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = true, read = true); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = it.message } } }
+            if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onSuccess { sent -> messages = messages.map { if (it.id == sent.id) FynxGroupRemoteClient.toChatMessage(sent, currentUsername, FynxBackendClient.baseUrl(context)) else it }; FynxChatStore.save(context, "group_$groupId", messages) }.onFailure { syncMessage = "Story not sent yet. Your share is saved; check your connection and retry." } } }
         }, openContentInitially = showPollsDirectly)
         if (showLocationShare) FynxGroupLocationShareDialog(onDismiss = { showLocationShare = false }) { label, details ->
             val mapsQuery = java.net.URLEncoder.encode(listOf(label, details).filter { it.isNotBlank() }.joinToString(" "), "UTF-8")
