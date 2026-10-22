@@ -281,22 +281,7 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_7_pro # [home-cert]
-          script: |
-            set +e
-            mkdir -p fynx-runtime-screenshots
-            ./gradlew connectedDebugAndroidTest --no-daemon --build-cache
-            TEST_EXIT=$?
-            # Always preserve emulator evidence, including when a smoke test fails
-            # before the authenticated navigation collector can start.
-            adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
-            adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
-            adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
-            if [ "$TEST_EXIT" -eq 0 ]; then
-              python3 scripts/verify_authenticated_runtime_navigation.py
-              TEST_EXIT=$?
-              adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
-            fi
-            exit "$TEST_EXIT"
+          script: bash scripts/run_android_runtime_certification.sh
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015'))))) }}
         uses: actions/upload-artifact@v4
