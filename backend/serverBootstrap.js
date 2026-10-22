@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
@@ -107,6 +108,18 @@ source = source.replace(
   'await initDatabase();'
 );
 await writeFile(runtimePath, source, "utf8");
+const generatedRuntime = await readFile(runtimePath, "utf8");
+assert.ok(generatedRuntime.includes('app.get("/version"') || generatedRuntime.includes("app.get('/version'"),
+  "generated runtime must expose deployment provenance");
+assert.ok(generatedRuntime.includes("registerDiscoveryRoutes({ app, pool, auth })"),
+  "generated runtime must register Marketplace discovery");
+assert.ok(generatedRuntime.includes('app.get("/api/media/:id"') || generatedRuntime.includes("app.get('/api/media/:id'"),
+  "generated runtime must contain authenticated media retrieval");
+assert.ok(generatedRuntime.includes("await initDatabase();"),
+  "generated runtime must await database initialization before accepting traffic");
+assert.ok(!generatedRuntime.includes('initDatabase().catch((error) => { console.error("database initialization failed"'),
+  "generated runtime must not silently continue after database initialization failure");
+
 
 await import("./scalability.js");
 await new Promise((resolve) => setImmediate(resolve));
