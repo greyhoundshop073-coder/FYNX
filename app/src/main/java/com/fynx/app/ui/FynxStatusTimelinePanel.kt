@@ -731,7 +731,7 @@ private fun FynxStatusStoryViewer(
                                 minLines = 1,
                                 maxLines = 4,
                                 shape = RoundedCornerShape(26.dp),
-                                placeholder = { Text(if (replyRelationshipLoading) "Checking who can reply…" else if (canReplyToStatus) "Reply to this Status…" else "Mutual follow required to reply", color = Color.White.copy(alpha = 0.72f)) },
+                                placeholder = { Text(if (status.ownerUsername.equals(viewerUsername, true)) "Your Status" else if (replyRelationshipLoading) "Checking who can reply…" else if (canReplyToStatus) "Reply to this Status…" else "Mutual follow required to reply", color = Color.White.copy(alpha = 0.72f)) },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Color.White,
                                     unfocusedTextColor = Color.White,
