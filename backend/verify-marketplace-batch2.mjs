@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { selectMarketplaceRefundByIdentity } from './marketplaceBatch2FinalHardening.js';
-import { classifyPaystackTransferVerification, nextPayoutVerificationProgress, payoutSweepIdempotencyKey } from './marketplaceSettlementWorker.js';
+import { classifyPaystackTransferVerification, nextPayoutVerificationProgress, payoutSweepIdempotencyKey, payoutVerificationJobIdempotencyKey } from './marketplaceSettlementWorker.js';
 
 const read = (name) => fs.readFileSync(new URL(`./${name}`, import.meta.url), 'utf8');
 const payment = read('marketplaceReputation.js');
@@ -24,6 +24,7 @@ const checks = [
   ['payout polling stores the canonical transfer reference rather than a transfer code', worker.includes("const providerReference = String(data?.data?.reference || reference);") && !worker.includes('data?.data?.transfer_code || reference')],
   ['payout scanner creates idempotent time-bucketed sweeps for stale pending payout operations', worker.includes("fo.updated_at <= NOW() - INTERVAL '2 minutes'") && worker.includes("payoutSweepIdempotencyKey('VERIFY', operationId, bucketTime)") && worker.includes("payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime)")],
   ['verification scan resets the bounded attempt counter after a cycle while recording completed cycles', worker.includes('verificationAttempts: progress.verificationAttempts') && worker.includes('verificationCycles: progress.verificationCycles') && worker.includes('return progress.shouldContinue')],
+  ['every payout verification cycle uses unique chained job keys so completed prior jobs cannot block later sweeps', worker.includes('payoutVerificationJobIdempotencyKey(operationId, verificationCycle, attempt)') && worker.includes('payoutVerificationJobIdempotencyKey(operationId, verificationCycle, 0)') && worker.includes('verificationCycle }, { idempotencyKey: verificationCycle')],
   ['payout provider amount and currency are validated', worker.includes('transferMatchesOperation') && worker.includes('Paystack payout amount or currency does not match')],
   ['refund webhook amount and currency are validated', webhook.includes('providerAmount !== expectedAmount') && webhook.includes('providerCurrency !== expectedCurrency')],
   ['refund mismatches block protected funds', webhook.includes("status='BLOCKED'") && webhook.includes("status='DISPUTED'")],
@@ -71,7 +72,10 @@ const payoutProgressChecks = [
   ['a subsequent payout sweep starts a new verification cycle', (() => { const p = nextPayoutVerificationProgress({ verificationAttempts: 0, verificationCycles: 3 }); return p.shouldContinue === true && p.verificationAttempts === 1 && p.verificationCycles === 3; })()],
   ['stale payout sweeps are idempotent within a two-minute time bucket', payoutSweepIdempotencyKey('VERIFY', 'operation-1', 240000) === payoutSweepIdempotencyKey('VERIFY', 'operation-1', 299999)],
   ['stale payout sweeps get a fresh idempotency key in the next bucket', payoutSweepIdempotencyKey('VERIFY', 'operation-1', 240000) !== payoutSweepIdempotencyKey('VERIFY', 'operation-1', 360000)],
-  ['release sweeps have distinct idempotency keys from verify sweeps', payoutSweepIdempotencyKey('RELEASE', 'operation-1', 240000) !== payoutSweepIdempotencyKey('VERIFY', 'operation-1', 240000)]
+  ['release sweeps have distinct idempotency keys from verify sweeps', payoutSweepIdempotencyKey('RELEASE', 'operation-1', 240000) !== payoutSweepIdempotencyKey('VERIFY', 'operation-1', 240000)],
+  ['a later verification cycle does not reuse completed attempt keys from the first cycle', payoutVerificationJobIdempotencyKey('operation-1', 'cycle-one', 1) !== payoutVerificationJobIdempotencyKey('operation-1', 'cycle-two', 1)],
+  ['verification attempts within one cycle keep stable idempotency keys', payoutVerificationJobIdempotencyKey('operation-1', 'cycle-one', 1) === payoutVerificationJobIdempotencyKey('operation-1', 'cycle-one', 1)],
+  ['the initial payout verification cycle has a unique cycle-scoped key', payoutVerificationJobIdempotencyKey('operation-1', 'initial', 0) !== payoutVerificationJobIdempotencyKey('operation-1', 'RELEASE-SWEEP-operation-1-2', 0)]
 ];
 const payoutProgressFailures = payoutProgressChecks.filter(([, ok]) => !ok).map(([name]) => name);
 for (const [name, ok] of payoutProgressChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
