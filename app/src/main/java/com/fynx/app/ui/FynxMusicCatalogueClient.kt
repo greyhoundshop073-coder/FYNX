@@ -37,25 +37,25 @@ object FynxMusicCatalogueClient {
                     "/api/social/music/catalogue?q=" + java.net.URLEncoder.encode(suffix, "UTF-8")
                 }
                 val raw = FynxBackendClient.get(context, path).getOrThrow()
-                JSONArray(raw).let { array ->
-                    buildList {
-                        for (index in 0 until array.length()) {
-                            val row = array.optJSONObject(index) ?: continue
-                            val id = row.optLong("id", 0L)
-                            val mediaId = row.optLong("mediaId", 0L)
-                            if (id < 1L || mediaId < 1L) continue
-                            add(
-                                FynxMusicCatalogueTrack(
-                                    id = id,
-                                    mediaId = mediaId,
-                                    title = row.optString("title").trim().take(120),
-                                    artist = row.optString("artist").trim().take(120),
-                                    durationMs = row.optLong("durationMs", 0L).coerceAtLeast(0L)
-                                )
-                            )
-                        }
-                    }
+                val array = JSONArray(raw)
+                val result = ArrayList<FynxMusicCatalogueTrack>(array.length())
+                for (index in 0 until array.length()) {
+                    val row = array.optJSONObject(index)
+                    if (row == null) continue
+                    val id = row.optLong("id", 0L)
+                    val mediaId = row.optLong("mediaId", 0L)
+                    if (id < 1L || mediaId < 1L) continue
+                    result.add(
+                        FynxMusicCatalogueTrack(
+                            id = id,
+                            mediaId = mediaId,
+                            title = row.optString("title").trim().take(120),
+                            artist = row.optString("artist").trim().take(120),
+                            durationMs = row.optLong("durationMs", 0L).coerceAtLeast(0L)
+                        )
+                    )
                 }
+                result.toList()
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
