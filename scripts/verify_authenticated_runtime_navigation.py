@@ -391,6 +391,7 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
     base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    stage="backend login"
     try:
         login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
         login_req=urllib.request.Request(
@@ -408,11 +409,16 @@ def backend_real_chat_target()->str:
         queries=[]
         prefix=self_name[:2]
         if len(prefix)>=2: queries.append(prefix)
-        queries.extend(["a","e","i","o","u","n","m"])
+        # /api/users/search rejects one-character queries with HTTP 400. These
+        # two-character fallbacks let discovery continue instead of aborting on "a".
+        queries.extend(["an","el","jo","ma","ch","fn","te","ri","sa"])
         seen=set()
         for query in queries:
-            if query in seen: continue
+            query=query.strip()
+            if len(query)<2 or len(query)>32 or query in seen:
+                continue
             seen.add(query)
+            stage="authenticated user search"
             url=base+"/api/users/search?"+urllib.parse.urlencode({"q":query,"mode":"username"})
             request=urllib.request.Request(
                 url,
@@ -426,7 +432,8 @@ def backend_real_chat_target()->str:
                 if username and username.lower()!=self_name:
                     return username
     except Exception as error:
-        report.append("- Real chat target discovery unavailable: "+type(error).__name__)
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        report.append("- Real chat target discovery unavailable during "+stage+":"+status+" "+type(error).__name__)
     return ""
 
 def input_text(value:str):
