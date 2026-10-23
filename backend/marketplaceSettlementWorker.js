@@ -256,7 +256,7 @@ async function initiatePayout(payload) {
         await markPayoutSucceeded(finishClient, current, providerReference, providerStatus);
       } else if (accepted || unresolvedProviderState) {
         await finishClient.query(`UPDATE marketplace_financial_operations SET provider_reference=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [providerReference, JSON.stringify({ providerStatus: providerStatus || 'unknown', initiatedAt: new Date().toISOString(), recoveryCheckedFirst: existingTransfer.found }), current.id]);
-      } else if (terminalFailure || (!response.ok && !payoutInitializationOutcomeIsUncertain(response, data))) {
+      } else if (terminalFailure || (data?.status !== true && !payoutInitializationOutcomeIsUncertain(response, data)) || (!response.ok && !payoutInitializationOutcomeIsUncertain(response, data))) {
         await markPayoutFailed(finishClient, current, data?.message || `Paystack transfer failed (${response.status})`);
       } else {
         // A successful HTTP envelope with a malformed transfer payload is not
