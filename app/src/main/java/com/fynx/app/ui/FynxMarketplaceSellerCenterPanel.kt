@@ -394,6 +394,14 @@ fun FynxMarketplaceSellerCenterPanel() {
         if (activeSection == "Listings") {
         if (loading) {
             item { Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+        } else if (listings.isEmpty() && error != null) {
+            item {
+                OutlinedButton(onClick = { refresh() }, modifier = Modifier.fillMaxWidth(), enabled = !loading) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Retry loading listings")
+                }
+            }
         } else if (listings.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
