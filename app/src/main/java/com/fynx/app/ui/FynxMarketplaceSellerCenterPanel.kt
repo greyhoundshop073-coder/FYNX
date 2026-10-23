@@ -526,7 +526,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 selected = editCondition == condition,
                                 onClick = { editCondition = condition },
                                 enabled = !editSaving,
-                                label = { Text(condition.replaceFirstChar { it.titlecase(Locale.US) }, maxLines = 1)
+                                label = { Text(condition.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }, maxLines = 1)
                                 }
                             )
                         }
