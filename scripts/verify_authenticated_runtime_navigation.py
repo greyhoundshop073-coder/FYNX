@@ -987,17 +987,21 @@ if not FAILURES:
                                                 return last_ui
                                         return ""
 
-                                    keyboard_marker = "CI_GROUP_KEYBOARD_" + str(int(time.time()))
-                                    if enter_marker(keyboard_marker, "group-keyboard-send"):
+                                    keyboard_marker = "CI_GROUP_KEYBOARD_" + str(time.time_ns())
+                                    sent_markers = []
+                                    if not group_id:
+                                        FAILURES.append("group send tests blocked: no real persisted group ID was available")
+                                    elif enter_marker(keyboard_marker, "group-keyboard-send"):
                                         run("adb", "shell", "input", "keyevent", "66")
                                         keyboard_ui = wait_for_sent_marker(keyboard_marker, "group-keyboard-send")
                                         if keyboard_ui:
+                                            sent_markers.append((keyboard_marker, "keyboard Send/Enter"))
                                             report.append("- PASS keyboard Send/Enter moved the unique marker from the editable composer into a visible group message")
                                         else:
-                                            FAILURES.append("keyboard Send/Enter did not clear the composer and show the unique marker as a separate group message")
+                                            FAILURES.append("keyboard Send/Enter did not move the marker out of the editable composer into a separate group message")
 
-                                    app_button_marker = "CI_GROUP_BUTTON_" + str(int(time.time()) + 1)
-                                    if enter_marker(app_button_marker, "group-app-send-button"):
+                                    app_button_marker = "CI_GROUP_BUTTON_" + str(time.time_ns())
+                                    if sent_markers and enter_marker(app_button_marker, "group-app-send-button"):
                                         current_ui = dump_ui("group-app-send-button-before-tap.xml")
                                         app_send_control = find_control(current_ui, ["Record voice message"])
                                         if app_send_control:
@@ -1007,24 +1011,23 @@ if not FAILURES:
                                             run("adb", "shell", "input", "tap", str(bx), str(by))
                                             button_ui = wait_for_sent_marker(app_button_marker, "group-app-send-button")
                                             if button_ui:
+                                                sent_markers.append((app_button_marker, "FYNX composer button"))
                                                 report.append("- PASS FYNX composer button sent the typed marker as a separate visible group message")
                                             else:
                                                 FAILURES.append("FYNX composer button tap did not clear the composer and show its marker as a separate group message")
                                         else:
                                             FAILURES.append("FYNX composer button test could not find the actual trailing composer button")
 
-                                    if group_id:
+                                    if sent_markers and group_id:
                                         restore_home_after_restart("group-chat-send-persistence-home")
                                         run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://group/" + group_id, PACKAGE)
                                         persisted_ui = wait_for_group_conversation_ui("group-chat-send-persistence.xml")
-                                        for persisted_marker, method in ((keyboard_marker, "keyboard Send/Enter"), (app_button_marker, "FYNX composer button")):
+                                        for persisted_marker, method in sent_markers:
                                             in_message, in_editor, _ = marker_state(persisted_ui, persisted_marker)
                                             if in_message and not in_editor:
-                                                report.append("- PASS " + method + " message remained visible after reopening the same group")
+                                                report.append("- PASS " + method + " message remained visible after process restart and reopening the same group")
                                             else:
-                                                FAILURES.append(method + " message did not persist as a separate group message after reopening")
-                                    else:
-                                        FAILURES.append("send tests ran without a readable real group ID; server persistence could not be verified")
+                                                FAILURES.append(method + " message did not persist as a separate group message after process restart and reopening")
                                 elif "Messaging is restricted" in group_after:
                                     report.append("- Group send tests blocked by the actual group's messaging permissions")
                                 else:
