@@ -48,6 +48,25 @@ function amountSubunit(amount, currency) {
   return Math.round(value * 100);
 }
 
+export function validateUnreferencedOrderPaymentRecovery({ response, data, order, reference }) {
+  const transaction = data?.data || {};
+  const expectedAmount = amountSubunit(order?.total_amount, order?.currency);
+  const status = String(transaction.status || '').trim().toLowerCase();
+  const metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || '');
+  const metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '');
+  const fee = transaction.fees;
+  const numericFee = Number(fee);
+  const hasValidProviderFee = fee !== null && fee !== undefined && Number.isFinite(numericFee) && numericFee >= 0;
+  const valid = Boolean(response?.ok && data?.status === true && status === 'success'
+    && expectedAmount !== null
+    && Number(transaction.amount) === expectedAmount
+    && String(transaction.currency || '').trim().toUpperCase() === String(order?.currency || '').trim().toUpperCase()
+    && String(transaction.reference || '') === String(reference || '')
+    && metadataOrderId === String(order?.id || '')
+    && metadataBuyerId === String(order?.buyer_id || '')
+    && hasValidProviderFee);
+  return { valid, transaction, providerFee: hasValidProviderFee ? Math.round((numericFee / 100) * 100) / 100 : 0 };
+}
 export function payoutTransferMatchesStoredIdentity(transfer, storedIdentifier) {
   const expected = String(storedIdentifier || '').trim();
   if (!expected) return false;
@@ -87,10 +106,10 @@ async function recoverPaymentWithoutLocalReference({ logger = console } = {}) {
     try {
       const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const data = await response.json().catch(() => ({}));
-      const transaction = data?.data || {};
-      const valid = response.ok && data?.status === true && String(transaction.status || '').toLowerCase() === 'success' && amountSubunit(order.total_amount, order.currency) === Number(transaction.amount) && String(transaction.currency || '').toUpperCase() === String(order.currency || '').toUpperCase() && String(transaction.reference || '') === reference && String(transaction.metadata?.orderId || transaction.metadata?.order_id || '') === String(order.id);
-      if (!valid) continue;
-      const providerFee = Number.isFinite(Number(transaction.fees)) && Number(transaction.fees) >= 0 ? Math.round((Number(transaction.fees) / 100) * 100) / 100 : 0;
+      const paymentVerification = validateUnreferencedOrderPaymentRecovery({ response, data, order, reference });
+      const transaction = paymentVerification.transaction;
+      if (!paymentVerification.valid) continue;
+      const providerFee = paymentVerification.providerFee;
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
