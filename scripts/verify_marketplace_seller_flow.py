@@ -37,9 +37,9 @@ checks = [
     ("active seller flow supports media removal", 'media = media.filterNot { it == uri }' in marketplace),
     ("active seller flow publishes the selected media list", "createMarketplaceListing" in marketplace and ", media)" in marketplace),
     ("seller form and discovery expose the same expanded category set",
-     _extract_string_list(r"val categories = listOf\\(([^)]*)\\)", marketplace) == EXPECTED_DISCOVERY_CATEGORIES
-     and _extract_string_list(r'Text\("Category"[^\\n]*?listOf\\(([^)]*)\\)\\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
-     and _extract_string_list(r'FYNX uses a human-readable area[^\\n]*?listOf\\(([^)]*)\\)\\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
+     _extract_string_list(r"val categories = listOf\(([^)]*)\)", marketplace) == EXPECTED_DISCOVERY_CATEGORIES
+     and _extract_string_list(r'Text\("Category"[^\n]*?listOf\(([^)]*)\)\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
+     and _extract_string_list(r'FYNX uses a human-readable area[^\n]*?listOf\(([^)]*)\)\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
      and '"REFURBISHED" to "Refurbished"' in marketplace),
     ("seller form shows category-specific product specifications", all(term in marketplace for term in ('"Brand"', '"Model / model number"', '"Size / fit"', '"Dimensions (e.g. 120 × 60 × 75 cm)"', '"Year"', '"Ingredients, skin/hair type, or expiry details"', '"What is included, duration, and service area"'))),
     ("category specifications are included in the saved product description with bounded length", 'append("\\n\\nProduct specifications\\n")' in marketplace and "MAX_DESCRIPTION_LENGTH" in marketplace and "listingDescription" in marketplace),
