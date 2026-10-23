@@ -619,7 +619,33 @@ fun FynxMatureStatusComposerPanel(
                                     }
                                 }
                             } else {
-                                Text("Tap Voice to start recording", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall)
+                                Button(
+                                    onClick = {
+                                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                            beginMatureVoiceRecording(
+                                                context,
+                                                onStarted = { r, f ->
+                                                    recorder = r
+                                                    recordingFile = f
+                                                    recordingStarted = System.currentTimeMillis()
+                                                    elapsed = 0L
+                                                    accumulatedRecordingMs = 0L
+                                                    recordingPaused = false
+                                                    recording = true
+                                                    error = null
+                                                },
+                                                onError = { message -> error = message }
+                                            )
+                                        } else {
+                                            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
+                                    enabled = !publishing
+                                ) {
+                                    Icon(Icons.Default.Mic, contentDescription = "Start voice recording")
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Start recording")
+                                }
                             }
                         }
                     }
