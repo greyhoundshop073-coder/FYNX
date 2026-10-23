@@ -512,6 +512,24 @@ app.get("/api/media/:id", auth, async (req, res) => {
           )
           OR EXISTS (
             SELECT 1
+            FROM marketplace_listings ml
+            WHERE ml.active = TRUE
+              AND EXISTS (
+                SELECT 1
+                FROM regexp_split_to_table(
+                  regexp_replace(CAST(ml.media_ids AS TEXT), '[^0-9]+', ',', 'g'),
+                  ','
+                ) listing_media_id
+                WHERE listing_media_id = CAST(mm.id AS TEXT)
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM blocks b
+                WHERE (b.blocker_id = $2 AND b.blocked_id = ml.seller_id)
+                   OR (b.blocked_id = $2 AND b.blocker_id = ml.seller_id)
+              )
+          )
+          OR EXISTS (
+            SELECT 1
             FROM users u
             LEFT JOIN privacy_settings ps ON ps.user_id = u.id
             WHERE u.id = mm.owner_id
