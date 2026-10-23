@@ -315,15 +315,11 @@ export function registerMarketplaceSettlementRoutes({ app }) {
         if (!payoutAccount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'verified seller payout account is required' }); }
         const sellerNetAmount = Number(order.seller_net_amount ?? order.total_amount), protectedAmount = Number(escrow.amount), marketplaceFee = Number(order.marketplace_fee ?? 0);
         if (!Number.isFinite(sellerNetAmount) || sellerNetAmount <= 0 || !Number.isFinite(protectedAmount) || !Number.isFinite(marketplaceFee) || Math.round((sellerNetAmount + marketplaceFee) * 100) / 100 !== protectedAmount || String(order.currency).toUpperCase() !== String(escrow.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order accounting does not reconcile with the protected escrow' }); }
-        // Serialize repeated payout requests by the already-locked order row. A
-        // pending, successful, or blocked operation remains idempotent; a terminal
-        // FAILED operation may be retried only after the escrow returned to eligibility.
-        const existing = (await client.query(`SELECT * FROM marketplace_financial_operations WHERE order_id=$1 AND operation_type='PAYOUT_RELEASE' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [order.id])).rows[0];
-        if (existing && existing.status !== 'FAILED') { await client.query('COMMIT'); return res.json({ operation: existing, idempotent: true }); }
-        if (existing && escrow.status !== 'RELEASE_ELIGIBLE') { await client.query('COMMIT'); return res.json({ operation: existing, idempotent: true }); }
+        const key = `PAYOUT-${order.id}`;
+        const existing = (await client.query('SELECT * FROM marketplace_financial_operations WHERE idempotency_key=$1 FOR UPDATE', [key])).rows[0];
+        if (existing) { await client.query('COMMIT'); return res.json({ operation: existing, idempotent: true }); }
         const operationId = crypto.randomUUID();
-        const key = existing?.status === 'FAILED' ? `PAYOUT-${order.id}-RETRY-${operationId}` : `PAYOUT-${order.id}`;
-        const operation = await client.query(`INSERT INTO marketplace_financial_operations (id,order_id,operation_type,idempotency_key,status,provider,amount,currency,metadata) VALUES ($1,$2,'PAYOUT_RELEASE',$3,'PENDING','paystack',$4,$5,$6::jsonb) RETURNING *`, [operationId,order.id,key,sellerNetAmount,order.currency,JSON.stringify({ recipientCode: payoutAccount.recipient_code, escrowAmount: protectedAmount, sellerNetAmount, marketplaceFee, marketplaceFeeBuyer: Number(order.marketplace_fee_buyer || 0), marketplaceFeeSeller: Number(order.marketplace_fee_seller || 0), feePolicy: order.fee_policy, feePolicyVersion: order.fee_policy_version, retryOfOperationId: existing?.status === 'FAILED' ? String(existing.id) : null })]);
+        const operation = await client.query(`INSERT INTO marketplace_financial_operations (id,order_id,operation_type,idempotency_key,status,provider,amount,currency,metadata) VALUES ($1,$2,'PAYOUT_RELEASE',$3,'PENDING','paystack',$4,$5,$6::jsonb) RETURNING *`, [operationId,order.id,key,sellerNetAmount,order.currency,JSON.stringify({ recipientCode: payoutAccount.recipient_code, escrowAmount: protectedAmount, sellerNetAmount, marketplaceFee, marketplaceFeeBuyer: Number(order.marketplace_fee_buyer || 0), marketplaceFeeSeller: Number(order.marketplace_fee_seller || 0), feePolicy: order.fee_policy, feePolicyVersion: order.fee_policy_version })]);
         await client.query(`UPDATE marketplace_escrows SET status='RELEASE_PENDING',updated_at=NOW() WHERE id=$1`, [escrow.id]);
         await client.query('COMMIT');
         return res.status(202).json({ operation: operation.rows[0], message: 'payout release queued; provider transfer will be executed by the settlement worker' });
