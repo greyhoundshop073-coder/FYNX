@@ -658,12 +658,12 @@ if not FAILURES:
             report.append("- PASS Add status panel exposes both Voice and Text creation choices")
             voice_composer_xml = tap_control(
                 status_add_xml, ["Voice"], "status-voice-composer",
-                ["Tap Voice to start recording", "Voice Status ready", "Stop"]
+                ["Start recording", "Press the microphone to record", "Voice Status ready"]
             )
             if voice_composer_xml and (
-                find_control(voice_composer_xml, ["Tap Voice to start recording"])
+                find_control(voice_composer_xml, ["Start recording"])
+                or find_control(voice_composer_xml, ["Press the microphone to record"])
                 or find_control(voice_composer_xml, ["Voice Status ready"])
-                or find_control(voice_composer_xml, ["Stop"])
             ):
                 screenshot("authenticated-status-voice-composer.png")
                 report.append("- PASS selecting Voice opens the actual Status composer in Voice mode")
@@ -718,6 +718,19 @@ if not FAILURES:
                "- authenticated-status-create.png",
                "- authenticated-status-voice-composer.png",
                "- authenticated-status-voice-caption-keyboard.png"]
+    if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+        # This APK's saved-device path deliberately provides local UI access,
+        # not a server-authenticated session. Certify the Status journey above,
+        # then stop before unrelated account-backed chat/friends/marketplace
+        # journeys would be misreported as Status regressions.
+        report += ["", "## Authenticated-only journeys",
+                   "- SKIP chat/friends/features/marketplace checks: this run entered through the debug-only local UI path and is not server-authenticated."]
+        report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+        if FAILURES:
+            report += ["", "Failures:"] + ["- " + x for x in FAILURES]
+        (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(1 if FAILURES else 0)
     if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
         run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
         xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
