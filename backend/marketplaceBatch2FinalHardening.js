@@ -228,12 +228,17 @@ async function reconcilePostSuccessPayoutReversals({ logger = console } = {}) {
       AND f.status='SUCCEEDED'
       AND e.status='RELEASED'
       AND f.provider_reference IS NOT NULL
-    ORDER BY f.updated_at ASC
+    ORDER BY f.metadata->>'lastProviderReconciledAt' ASC NULLS FIRST, f.updated_at ASC
     LIMIT 25
   `);
   let repaired = 0;
   for (const row of rows.rows) {
     try {
+      // Mark the attempt before calling Paystack so transient errors and mismatched
+      // provider responses also rotate out of this limited scan window. Otherwise
+      // the same first 25 successful payouts could starve all later reversals.
+      const reconciliationAttemptedAt = new Date().toISOString();
+      await pool.query(`UPDATE marketplace_financial_operations SET metadata=metadata || $1::jsonb WHERE id=$2 AND status='SUCCEEDED' AND provider_reference=$3`, [JSON.stringify({ lastProviderReconciledAt: reconciliationAttemptedAt }), row.id, row.provider_reference]);
       const response = await fetch(`https://api.paystack.co/transfer/verify/${encodeURIComponent(row.provider_reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.status !== true || !data?.data) continue;
