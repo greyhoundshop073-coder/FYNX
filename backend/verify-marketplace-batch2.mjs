@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { selectMarketplaceRefundByIdentity } from './marketplaceBatch2FinalHardening.js';
-import { classifyPaystackTransferVerification, classifyPaystackTransferFetch, nextPayoutVerificationProgress, payoutSweepIdempotencyKey, payoutVerificationJobIdempotencyKey, payoutReferenceForOperation } from './marketplaceSettlementWorker.js';
+import { classifyPaystackTransferVerification, classifyPaystackTransferFetch, payoutInitializationOutcomeIsUncertain, nextPayoutVerificationProgress, payoutSweepIdempotencyKey, payoutVerificationJobIdempotencyKey, payoutReferenceForOperation } from './marketplaceSettlementWorker.js';
 
 const read = (name) => fs.readFileSync(new URL(`./${name}`, import.meta.url), 'utf8');
 const payment = read('marketplaceReputation.js');
@@ -22,6 +22,8 @@ const checks = [
   ['first payout attempts preserve the legacy provider reference while retry operations use their own stable operation ID', worker.includes('payoutReferenceForOperation(operation)') && worker.includes('`fynx-payout-${orderId}`') && worker.includes('`fynx-payout-${operationId}`')],
   ['payout recovery verifies the deterministic transfer before creating a new transfer', worker.includes('verifyTransferByReference(reference)') && worker.includes('recoveryCheckedFirst')],
   ['payout transfer verification treats only HTTP 404 as not found and binds successful data to the requested reference', worker.includes('response?.status === 404') && worker.includes('classifyPaystackTransferVerification(verifyResult.response, verifyResult.data, cleanReference)') && !worker.includes('response.status === 404 || data?.status === false')],
+  ['ambiguous payout create responses are followed by exact-reference verification before state changes', worker.includes('const afterCreateCheck = await verifyTransferByReference(reference);') && worker.includes('if (afterCreateCheck.found)') && worker.includes('payoutInitializationOutcomeIsUncertain(response, data)') && worker.includes('Paystack payout initialization outcome is unresolved')],
+  ['unknown provider transfer states remain pending instead of being treated as payout failure', worker.includes('const unresolvedProviderState = response.ok') && worker.includes('accepted || unresolvedProviderState') && worker.includes("providerStatus: providerStatus || 'unknown'")],
   ['every payout polling result uses exact-reference verification or exact transfer-code recovery before updating settlement', worker.includes('const verification = await verifyTransferByReference(operation.provider_reference);') && worker.includes('const verifiedTransfer = verification.found ? verification.data.data : null;') && worker.includes('if (verification.found && !transferMatchesOperation(verifiedTransfer, current))')],
   ['payout polling stores the canonical transfer reference rather than a transfer code', worker.includes("const providerReference = String(data?.data?.reference || reference);") && !worker.includes('data?.data?.transfer_code || reference')],
   ['legacy payout rows stored with transfer codes can fetch the exact transfer and replace the stored value with its canonical reference', worker.includes("const fetchUrl = 'https://api.paystack.co/transfer/'") && worker.includes('classifyPaystackTransferFetch(fetchResult.response, fetchResult.data, cleanReference)') && worker.includes('providerReferenceRecovered: true')],
@@ -98,6 +100,11 @@ const transferVerificationChecks = [
   ['legacy transfer-code recovery rejects an unrelated transfer identity', shouldThrow(() => classifyPaystackTransferFetch({ status: 200, ok: true }, { status: true, data: { reference: 'other-ref', transfer_code: 'TRF_other-code', amount: 10000, currency: 'NGN' } }, 'TRF_legacy-code'))],
   ['fetching legacy transfer code returns not-found only on HTTP 404', classifyPaystackTransferFetch({ status: 404, ok: false }, { status: false, message: 'Transfer not found' }, 'TRF_legacy-code').found === false],
   ['legacy transfer-code recovery retries indeterminate provider failures', shouldThrow(() => classifyPaystackTransferFetch({ status: 503, ok: false }, { status: false, message: 'Provider unavailable' }, 'TRF_legacy-code'))]
+  ['payout initialization 5xx is ambiguous and must be verified again', payoutInitializationOutcomeIsUncertain({ status: 500, ok: false }, { status: false, message: 'Internal server error' })],
+  ['payout initialization 429 is ambiguous and must be verified again', payoutInitializationOutcomeIsUncertain({ status: 429, ok: false }, { status: false, message: 'Rate limited' })],
+  ['duplicate-reference response stays unresolved rather than making a new payout attempt', payoutInitializationOutcomeIsUncertain({ status: 400, ok: false }, { status: false, message: 'Duplicate reference already used' })],
+  ['clear validation rejection can be marked failed only after follow-up verification confirms absence', payoutInitializationOutcomeIsUncertain({ status: 400, ok: false }, { status: false, message: 'Invalid recipient code' }) === false],
+  ['success envelope without transfer details is unresolved and stays pending', payoutInitializationOutcomeIsUncertain({ status: 200, ok: true }, { status: true, data: null })],
 ];
 const transferVerificationFailures = transferVerificationChecks.filter(([, ok]) => !ok).map(([name]) => name);
 for (const [name, ok] of transferVerificationChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
