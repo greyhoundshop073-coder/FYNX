@@ -931,6 +931,46 @@ if not FAILURES:
                         if group_after:
                             if find_control(group_after,["Message composer","Edit message composer","Chat message composer area","Messaging is restricted"]):
                                 screenshot("group-chat-inside.png")
+                                # Exercise the actual group send path, not only screen navigation.
+                                # This runs against the configured isolated E2E backend account.
+                                marker = "CI_GROUP_SEND_" + str(int(time.time()))
+                                composer = find_control(group_after, ["Message...", "Message composer", "Edit message composer", "Chat message composer area"])
+                                if composer and "Messaging is restricted" not in group_after:
+                                    _, mx, my = composer
+                                    run("adb", "shell", "input", "tap", str(mx), str(my))
+                                    input_text(marker)
+                                    time.sleep(.3)
+                                    before_send = dump_ui("group-chat-before-send.xml")
+                                    send_button = find_control(before_send, ["Send message", "Send"])
+                                    if send_button:
+                                        _, sx, sy = send_button
+                                        run("adb", "shell", "input", "tap", str(sx), str(sy))
+                                        delivered_ui = ""
+                                        for _ in range(12):
+                                            time.sleep(.5)
+                                            delivered_ui = dump_ui("group-chat-send-result.xml")
+                                            if marker in delivered_ui:
+                                                break
+                                        if marker in delivered_ui:
+                                            report.append("- PASS group message send reached the visible conversation: " + marker)
+                                            if group_id:
+                                                restore_home_after_restart("group-chat-send-persistence-home")
+                                                run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://group/" + group_id, PACKAGE)
+                                                persisted_ui = wait_for_group_conversation_ui("group-chat-send-persistence.xml")
+                                                if marker in persisted_ui:
+                                                    report.append("- PASS group message persisted after reopening the group")
+                                                else:
+                                                    FAILURES.append("group message was visible after send but did not persist after reopening")
+                                            else:
+                                                report.append("- Group persistence assertion skipped: could not read the real group ID")
+                                        else:
+                                            FAILURES.append("group send was tapped but unique test message did not appear in the conversation")
+                                    else:
+                                        FAILURES.append("group composer opened but Send control was not found")
+                                elif "Messaging is restricted" in group_after:
+                                    report.append("- Group send test blocked by the actual group's messaging permissions")
+                                else:
+                                    FAILURES.append("group conversation composer was not available for the send test")
                                 report.append("- PASS actual FynxGroupConversationPanel opened; captured group-chat-inside.png")
                             else:
                                 FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
