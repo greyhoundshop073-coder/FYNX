@@ -34,6 +34,14 @@ runtime_navigation = read('scripts/verify_authenticated_runtime_navigation.py')
 chats_panel = read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt')
 groups_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
 
+# Catch certification-script syntax errors before Gradle/emulator work begins.
+try:
+    compile(runtime_navigation, 'scripts/verify_authenticated_runtime_navigation.py', 'exec')
+    runtime_python_syntax_ok = True
+except SyntaxError as error:
+    runtime_python_syntax_ok = False
+    print(f'Runtime certification Python syntax error at line {error.lineno}: {error.msg}')
+
 check('remote media uses the authenticated central downloader', 'FynxBackendClient.downloadToFile' in remote_media and 'MAX_REMOTE_MEDIA_BYTES' in remote_media)
 check('remote media is account scoped', 'FynxAuthStore.accountStorageKey(context)' in remote_media and 'FynxBackendClient.hasAccessToken(context)' in remote_media)
 check('Status timeline uses the shared remote audio renderer', re.search(r'FynxRemoteAudio\s*\(\s*it\s*(?:,|\))', timeline) is not None)
@@ -73,6 +81,9 @@ check('private chat persists restored history on IO only after local restoration
 check('Chat/Groups cold-start routes restore the approved session before deep linking without certifying synthetic group IDs', 'def restore_home_after_restart(name:str)->str:' in runtime_navigation and 'restore_home_after_restart("private-chat-self-fallback-home")' in runtime_navigation and 'restore_home_after_restart("existing-ci-group-open-home")' in runtime_navigation and 'restore_home_after_restart("created-ci-group-open-home")' in runtime_navigation and 'current,error=login()' in runtime_navigation and 'deterministic group deep link rendered a conversation/unavailable state' not in runtime_navigation and 'backend_group_message_exists(group_id,marker_text)' in runtime_navigation)
 check('private-chat identity setup cannot cancel itself or recreate its socket while resolving state', 'LaunchedEffect(chat.username) {' in conversation and 'remember(chat.username) {' in conversation and 'rememberUpdatedState(currentUserId)' in conversation and 'rememberUpdatedState(recipientUserId)' in conversation and 'rememberUpdatedState(resolvedAvatarUri)' in conversation and 'LaunchedEffect(chat.username, currentUserId, recipientUserId, resolvedAvatarUri)' not in conversation and 'remember(chat.username, currentUserId, recipientUserId, resolvedAvatarUri)' not in conversation)
 check('Chat/Groups runtime gate captures complete crash and ANR context', 'def clear_runtime_log():' in runtime_navigation and '"-t","4000"' in runtime_navigation and 'Input dispatching timed out' in runtime_navigation and 'Group unavailable' in runtime_navigation)
+check('Chat/Groups runtime certification script passes Python syntax compilation before emulator use', runtime_python_syntax_ok)
+check('group send certification uses a dedicated CI group, not arbitrary groups or synthetic fallback routes', 'ci_group=next(' in runtime_navigation and 'backend_group_message_exists(group_id,marker_text)' in runtime_navigation and 'deterministic group deep link rendered a conversation/unavailable state' not in runtime_navigation)
+check('private Chat send/receive certification requires an explicitly configured peer account', 'FYNX_E2E_PEER_USERNAME' in runtime_navigation and 'FYNX_E2E_PEER_PASSWORD' in runtime_navigation and 'backend_post_peer_message' in runtime_navigation and 'private Chat end-to-end send/receive was not certified' in runtime_navigation)
 check('Chat list refresh cannot recursively publish another preview update', 'fun refreshChats() {' in chats_panel and 'FynxChatStore.previewUpdates.conflate().collectLatest { refreshChats() }' in chats_panel and 'FynxChatStore.savePreview(context,' not in chats_panel[chats_panel.index('fun refreshChats()'):chats_panel.index('LaunchedEffect(Unit)')])
 check('Chat list history and unread counts are not loaded from disk during composition', 'mutableStateOf(emptyList<ChatPreview>())' in chats_panel and 'mutableStateOf(emptyList<FynxGroup>())' in chats_panel and 'val unread = chat.unreadCount' in chats_panel and 'val unread = FynxChatStore.load(context, chat.username)' not in chats_panel)
 check('Groups list defers the disk-backed group read until after composition', 'var groups by remember { mutableStateOf(emptyList<FynxGroup>()) }' in groups_panel and 'LaunchedEffect(Unit)' in groups_panel and 'groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }' in groups_panel and 'mutableStateOf(FynxGroupsStore.load(context))' not in groups_panel[:groups_panel.index('private fun FynxCreateGroupDialog')])
