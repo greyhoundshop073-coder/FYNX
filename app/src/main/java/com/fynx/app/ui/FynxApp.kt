@@ -406,7 +406,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             // Use one explicit 48dp touch target for the avatar. The nested
                             // IconButton's expanded minimum-touch semantics were visible to
                             // accessibility but did not reliably navigate in emulator taps.
-                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
+                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp), enableImagePreview = false)
                             else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
                             else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
                         }
