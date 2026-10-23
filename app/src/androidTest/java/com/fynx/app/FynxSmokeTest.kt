@@ -26,6 +26,10 @@ class FynxSmokeTest {
 
         launchIntent!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
         device.pressHome()
+        // pressHome() queues a HOME transition. Let that transition settle before
+        // launching FYNX, otherwise HOME can finish opening after our app launch and
+        // steal foreground focus even though MainActivity was successfully started.
+        device.waitForIdle(10_000)
         // Use Instrumentation.startActivitySync just like the deep-link smoke test.
         // A fire-and-forget application-context startActivity() can return while the
         // emulator launcher still owns the foreground, producing a false red result.
