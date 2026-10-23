@@ -519,14 +519,18 @@ fun FynxMarketplaceSellerCenterPanel() {
                         singleLine = true,
                         enabled = !editSaving
                     )
-                    OutlinedTextField(
-                        value = editCondition,
-                        onValueChange = { editCondition = it.take(20).uppercase(Locale.US) },
-                        label = { Text("Condition (NEW, USED, REFURBISHED)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        enabled = !editSaving
-                    )
+                    Text("Condition", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                        listOf("NEW", "USED", "REFURBISHED").forEach { condition ->
+                            FilterChip(
+                                selected = editCondition == condition,
+                                onClick = { editCondition = condition },
+                                enabled = !editSaving,
+                                label = { Text(condition.replaceFirstChar { it.titlecase(Locale.US) }, maxLines = 1)
+                                }
+                            )
+                        }
+                    }
                     OutlinedTextField(
                         value = editLocation,
                         onValueChange = { editLocation = it.take(160) },
