@@ -65,6 +65,10 @@ jobs:
       BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
       FYNX_E2E_USERNAME: ${{ secrets.FYNX_E2E_USERNAME }}
       FYNX_E2E_PASSWORD: ${{ secrets.FYNX_E2E_PASSWORD }}
+      # Dedicated isolated-test peer used only for explicit private Chat send/receive certification.
+      # Never target arbitrary users discovered through username search for test-message delivery.
+      FYNX_E2E_PEER_USERNAME: ${{ secrets.FYNX_E2E_PEER_USERNAME }}
+      FYNX_E2E_PEER_PASSWORD: ${{ secrets.FYNX_E2E_PEER_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
