@@ -11,6 +11,17 @@ seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeller
 app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 saved_products_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSavedMarketplaceProductsPanel.kt").read_text()
 
+import re
+
+EXPECTED_DISCOVERY_CATEGORIES = ["All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other"]
+EXPECTED_SELLER_CATEGORIES = EXPECTED_DISCOVERY_CATEGORIES[1:]
+
+def _extract_string_list(pattern: str, source: str):
+    match = re.search(pattern, source, re.DOTALL)
+    if not match:
+        return None
+    return re.findall(r'"([^"]+)"', match.group(1))
+
 checks = [
     ("seller support keeps a bounded real media limit", "const val MAX_PRODUCT_MEDIA = 12" in support),
     ("seller support accepts image and video media", 'mime.startsWith("image/") || mime.startsWith("video/")' in support),
@@ -25,7 +36,11 @@ checks = [
     ("active seller flow previews selected media", "ImageView" in marketplace and "contextIsVideo" in marketplace),
     ("active seller flow supports media removal", 'media = media.filterNot { it == uri }' in marketplace),
     ("active seller flow publishes the selected media list", "createMarketplaceListing" in marketplace and ", media)" in marketplace),
-    ("seller form and discovery expose the same expanded category set", all(f'"{category}"' in marketplace for category in ("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other")) and all(f'"{category}"' in marketplace for category in ("All", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health")) and '"REFURBISHED" to "Refurbished"' in marketplace),
+    ("seller form and discovery expose the same expanded category set",
+     _extract_string_list(r"val categories = listOf\\(([^)]*)\\)", marketplace) == EXPECTED_DISCOVERY_CATEGORIES
+     and _extract_string_list(r'Text\("Category"[^\\n]*?listOf\\(([^)]*)\\)\\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
+     and _extract_string_list(r'FYNX uses a human-readable area[^\\n]*?listOf\\(([^)]*)\\)\\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
+     and '"REFURBISHED" to "Refurbished"' in marketplace),
     ("seller form shows category-specific product specifications", all(term in marketplace for term in ('"Brand"', '"Model / model number"', '"Size / fit"', '"Dimensions (e.g. 120 × 60 × 75 cm)"', '"Year"', '"Ingredients, skin/hair type, or expiry details"', '"What is included, duration, and service area"'))),
     ("category specifications are included in the saved product description with bounded length", 'append("\\n\\nProduct specifications\\n")' in marketplace and "MAX_DESCRIPTION_LENGTH" in marketplace and "listingDescription" in marketplace),
     ("seller publishes selected condition and composed specifications through the existing listing path", 'title, listingDescription, "", price.toDouble(), currency, category, condition' in marketplace and 'validListing(title, listingDescription' in marketplace),
