@@ -67,6 +67,12 @@ export function payoutSweepIdempotencyKey(kind, operationId, nowMs = Date.now())
   const bucket = Math.floor(Number(nowMs) / 120_000);
   return `${String(kind)}-SWEEP-${String(operationId)}-${bucket}`;
 }
+
+export function payoutVerificationJobIdempotencyKey(operationId, cycle, attempt) {
+  const cleanCycle = String(cycle || 'initial').slice(0, 100);
+  const cleanAttempt = Math.max(0, Math.trunc(Number(attempt) || 0));
+  return `VERIFY-CYCLE-${String(operationId)}-${cleanCycle}-${cleanAttempt}`;
+}
 function transferMatchesOperation(transfer, operation) {
   const expectedAmount = Math.round(Number(operation.amount) * 100);
   const providerAmount = Number(transfer?.amount);
@@ -265,7 +271,11 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
   globalThis.__fynxJobHandlers = globalThis.__fynxJobHandlers || {};
   globalThis.__fynxJobHandlers['marketplace.payout.release'] = async (payload) => {
     await initiatePayout(payload);
-    if (payload?.operationId) await jobs.enqueue('marketplace.payout.verify', { operationId: String(payload.operationId) }, { idempotencyKey: `VERIFY-${String(payload.operationId)}-0`, delayMs: 5_000, maxAttempts: 5 });
+    if (payload?.operationId) {
+      const operationId = String(payload.operationId);
+      const verificationCycle = String(payload?.verificationCycle || 'initial').slice(0, 100);
+      await jobs.enqueue('marketplace.payout.verify', { operationId, attempt: 0, verificationCycle }, { idempotencyKey: payoutVerificationJobIdempotencyKey(operationId, verificationCycle, 0), delayMs: 5_000, maxAttempts: 5 });
+    }
   };
   globalThis.__fynxJobHandlers['marketplace.payout.verify'] = async (payload) => {
     const operationId = String(payload?.operationId || '');
@@ -274,7 +284,8 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
     if (!shouldContinue) return;
     const attempt = Math.max(0, Number(payload?.attempt || 0)) + 1;
     if (attempt > 11) return;
-    await jobs.enqueue('marketplace.payout.verify', { operationId, attempt }, { idempotencyKey: `VERIFY-${operationId}-${attempt}`, delayMs: 10_000, maxAttempts: 3 });
+    const verificationCycle = String(payload?.verificationCycle || 'initial').slice(0, 100);
+    await jobs.enqueue('marketplace.payout.verify', { operationId, attempt, verificationCycle }, { idempotencyKey: payoutVerificationJobIdempotencyKey(operationId, verificationCycle, attempt), delayMs: 10_000, maxAttempts: 3 });
   };
 
   const scan = async () => {
@@ -297,12 +308,14 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
           // A verification chain can exhaust its finite queue attempts while the
           // provider transfer is still pending. Enqueue a fresh bounded sweep
           // after inactivity; the same bucket is idempotent across scan ticks.
-          await jobs.enqueue('marketplace.payout.verify', { operationId, attempt: 0 }, { idempotencyKey: payoutSweepIdempotencyKey('VERIFY', operationId, bucketTime), maxAttempts: 5 });
+          const verificationCycle = payoutSweepIdempotencyKey('VERIFY', operationId, bucketTime);
+          await jobs.enqueue('marketplace.payout.verify', { operationId, attempt: 0, verificationCycle }, { idempotencyKey: verificationCycle, maxAttempts: 5 });
         } else {
           // A previous release job may be completed/dead while the operation
           // remains pending. Time-bucketed keys allow safe re-reconciliation;
           // initiatePayout verifies the deterministic provider reference first.
-          await jobs.enqueue('marketplace.payout.release', { operationId }, { idempotencyKey: payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime), maxAttempts: 5 });
+          const verificationCycle = payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime);
+          await jobs.enqueue('marketplace.payout.release', { operationId, verificationCycle }, { idempotencyKey: verificationCycle, maxAttempts: 5 });
         }
       }
     } catch (error) {
