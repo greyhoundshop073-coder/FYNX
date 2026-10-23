@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +86,9 @@ fun FynxMatureStatusComposerPanel(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    // Keep the caption composer close to the IME by temporarily removing secondary controls.
+    // The parent content column owns imePadding(), so the caption itself must not add it again.
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val activity = remember(view) {
         var current = view.context
         while (current is android.content.ContextWrapper && current !is Activity) current = current.baseContext
@@ -546,7 +550,7 @@ fun FynxMatureStatusComposerPanel(
                         )
                     }
                     // Media creation tools stay hidden until the user explicitly opens them.
-                    if (showMediaTools) {
+                    if (showMediaTools && !imeVisible) {
                         LazyRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(18.dp),
@@ -560,7 +564,7 @@ fun FynxMatureStatusComposerPanel(
                         }
                     }
                     // Media tools are revealed from the photo/add control in the action row.
-                                        if (type == FynxStatusType.VOICE) {
+                                        if (type == FynxStatusType.VOICE && !imeVisible) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                             if (recording) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
