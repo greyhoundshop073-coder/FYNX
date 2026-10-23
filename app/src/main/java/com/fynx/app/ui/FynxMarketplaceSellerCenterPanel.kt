@@ -418,7 +418,24 @@ fun FynxMarketplaceSellerCenterPanel() {
             items(listings, key = { it.id }) { listing ->
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (listing.mediaIds.isNotEmpty()) {
+                                FynxRemoteMedia(
+                                    mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
+                                    type = "auto",
+                                    modifier = Modifier.size(88.dp)
+                                )
+                            } else {
+                                Surface(
+                                    modifier = Modifier.size(88.dp),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Inventory2, contentDescription = "Product image unavailable", modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
                             Column(Modifier.weight(1f)) {
                                 Text(listing.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                 Text(formatSellerMoney(listing.price, listing.currency), color = MaterialTheme.colorScheme.primary)
