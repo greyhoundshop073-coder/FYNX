@@ -172,7 +172,8 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         if (group.payment_reference && group.payment_authorization_url) { await client.query('COMMIT'); return res.status(200).json({ checkoutId: String(group.id), reference: group.payment_reference, authorizationUrl: group.payment_authorization_url, accessCode: group.payment_access_code || null, idempotent: true, amountSubunit: amountSubunit(group.buyer_total, group.currency), currency: String(group.currency).toUpperCase() }); }
         const amount = amountSubunit(group.buyer_total, group.currency);
         if (!amount) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'unsupported marketplace payment currency or amount' }); }
-        const reference = `FYNX-CHECKOUT-${group.id}`;
+        // A provider init can succeed before the following DB commit fails. The URL is not returned until commit, so retry with a fresh provider reference instead of reusing one Paystack has already seen.
+        const reference = `FYNX-CHECKOUT-${crypto.randomUUID()}`;
         const payload = { email, amount: String(amount), currency: String(group.currency).toUpperCase(), reference, metadata: { checkoutGroupId: String(group.id), buyerId: String(group.buyer_id), purpose: 'FYNX_MARKETPLACE_CHECKOUT_GROUP' } };
         if (process.env.PAYSTACK_CALLBACK_URL) payload.callback_url = process.env.PAYSTACK_CALLBACK_URL;
         const data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
