@@ -3,7 +3,7 @@
 # Keep authenticated recovery coverage enabled after detector corrections.
 # Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
-import os, subprocess, time, html, re, json
+import os, subprocess, time, html, re, json, uuid
 import urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -489,6 +489,73 @@ def backend_real_chat_target()->str:
         report.append("- Real chat target discovery unavailable during "+stage+":"+status+" "+type(error).__name__)
     return ""
 
+def backend_login_token(username:str,password:str)->tuple[str,str]:
+    """Authenticate an explicitly configured E2E account to the isolated backend."""
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    body=json.dumps({"username":username,"password":password}).encode("utf-8")
+    request=urllib.request.Request(base+"/api/auth/login",data=body,headers={"Content-Type":"application/json","Accept":"application/json"},method="POST")
+    with urllib.request.urlopen(request,timeout=20) as response:
+        payload=json.loads(response.read().decode("utf-8","replace"))
+    token=str(payload.get("accessToken") or "").strip()
+    if not token:
+        raise ValueError("backend login returned no access token")
+    return base,token
+
+def backend_private_message_exists(peer_username:str,marker_text:str,expected_sender:str)->tuple[bool,str]:
+    """Check exact private-message text and sender through server history, not local cache."""
+    if not USERNAME or not PASSWORD:
+        return False,"primary E2E credentials are unavailable"
+    try:
+        base,token=backend_login_token(USERNAME,PASSWORD)
+        path=urllib.parse.quote(peer_username.removeprefix("@").strip(),safe="")
+        request=urllib.request.Request(
+            base+"/api/messages/"+path,
+            headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-cache"},
+            method="GET",
+        )
+        with urllib.request.urlopen(request,timeout=20) as response:
+            data=json.loads(response.read().decode("utf-8","replace"))
+        expected=expected_sender.removeprefix("@").strip().casefold()
+        for message in data.get("messages",[]):
+            if not isinstance(message,dict) or str(message.get("text") or "")!=marker_text:
+                continue
+            sender=str(message.get("senderUsername") or message.get("sender_username") or "").removeprefix("@").strip().casefold()
+            if sender==expected:
+                return True,"authenticated GET /api/messages/{peer} returned the exact marker from "+expected
+        return False,"authenticated private history did not contain the exact marker from "+expected
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return False,"private history verification failed:"+status+" "+type(error).__name__
+
+def backend_post_peer_message(peer_username:str,peer_password:str,recipient_username:str,marker_text:str)->tuple[bool,str]:
+    """Send one uniquely identified incoming message from the explicitly configured E2E peer."""
+    try:
+        base,token=backend_login_token(peer_username,peer_password)
+        body={
+            "clientMessageId":str(uuid.uuid4()).lower(),
+            "recipientUsername":recipient_username.removeprefix("@").strip(),
+            "text":marker_text,
+            "replyToId":None,
+            "mediaId":None,
+            "mediaType":None,
+            "voiceDurationMs":0,
+        }
+        request=urllib.request.Request(
+            base+"/api/messages",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Authorization":"Bearer "+token,"Content-Type":"application/json","Accept":"application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request,timeout=20) as response:
+            data=json.loads(response.read().decode("utf-8","replace"))
+        message=data.get("message") or {}
+        if str(message.get("text") or "")==marker_text:
+            return True,"peer account inserted exact incoming marker through POST /api/messages"
+        return False,"peer send endpoint returned no matching message"
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return False,"peer send failed:"+status+" "+type(error).__name__
+
 def input_text(value:str):
     safe=value.replace("%","%25").replace(" ","%s")
     return run("adb","shell","input","text",safe)
@@ -904,7 +971,9 @@ if not FAILURES:
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
                 if source.exists(): shutil.copyfile(source,recent); report.append("- PASS explicit Recent Chats screenshot artifact")
                 private_chat_username=first_username_in_xml(after)
-                real_chat_target=backend_real_chat_target()
+                peer_username=os.environ.get("FYNX_E2E_PEER_USERNAME","").strip().removeprefix("@")
+                peer_password=os.environ.get("FYNX_E2E_PEER_PASSWORD","")
+                real_chat_target=peer_username or backend_real_chat_target()
                 conversation_after=""
                 conversation_ui_opened=False
                 if real_chat_target:
@@ -1032,6 +1101,143 @@ if not FAILURES:
                     report.append("- Chat Settings assertion blocked: ConversationPanel did not open; the primary navigation failure is reported above.")
                 report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
                 if crashlog: report.append("- Chat crash-log evidence captured in private-chat-process.log")
+
+                # End-to-end private Chat message delivery requires a dedicated,
+                # explicitly configured peer account. Never send test content to an
+                # arbitrary person discovered by username search.
+                if peer_username and peer_password and conversation_ui_opened:
+                    normalized_self=USERNAME.removeprefix("@").strip().casefold()
+                    normalized_peer=peer_username.casefold()
+                    if not normalized_self or normalized_self==normalized_peer:
+                        FAILURES.append("private Chat E2E peer must be configured and different from the primary E2E account")
+                    else:
+                        restore_home_after_restart("private-chat-send-test-home")
+                        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
+                        peer_chat=wait_for_conversation_ui("private-chat-send-test-open.xml")
+                        if not peer_chat or not find_control(peer_chat,["Message composer","Edit message composer","Chat message composer area","Message..."]):
+                            FAILURES.append("dedicated private Chat peer did not open a usable ConversationPanel for send testing")
+                        else:
+                            def private_marker_state(ui_xml, marker_text):
+                                try:
+                                    root=ET.fromstring(ui_xml)
+                                except ET.ParseError:
+                                    return False,False
+                                edit_nodes=[
+                                    node for node in root.iter("node")
+                                    if "edittext" in (node.attrib.get("class") or "").lower()
+                                    or node.attrib.get("editable","false").lower()=="true"
+                                ]
+                                in_editor=any(marker_text in (node.attrib.get("text") or "") for node in edit_nodes)
+                                in_message=any(
+                                    marker_text in (node.attrib.get("text") or "")
+                                    and node not in edit_nodes
+                                    for node in root.iter("node")
+                                )
+                                return in_message,in_editor
+
+                            def private_enter_marker(marker_text,filename):
+                                current=dump_ui(filename+"-composer.xml")
+                                composer=find_control(current,["Message composer","Edit message composer","Chat message composer area","Message..."])
+                                if not composer:
+                                    FAILURES.append(filename+": private Chat composer was not found")
+                                    return False
+                                _,x,y=composer
+                                run("adb","shell","input","tap",str(x),str(y))
+                                if input_text(marker_text).returncode!=0:
+                                    FAILURES.append(filename+": failed to type unique private Chat marker")
+                                    return False
+                                time.sleep(.4)
+                                typed=dump_ui(filename+"-typed.xml")
+                                _,editing=private_marker_state(typed,marker_text)
+                                if not editing:
+                                    FAILURES.append(filename+": marker was not present in private Chat composer before send")
+                                    return False
+                                return True
+
+                            def private_wait_marker(marker_text,filename):
+                                latest=""
+                                for _ in range(24):
+                                    time.sleep(.5)
+                                    latest=dump_ui(filename+"-result.xml")
+                                    in_message,in_editor=private_marker_state(latest,marker_text)
+                                    if in_message and not in_editor:
+                                        return latest
+                                return ""
+
+                            private_sent=[]
+                            private_keyboard_marker="CI_PRIVATE_KEYBOARD_"+str(time.time_ns())
+                            if private_enter_marker(private_keyboard_marker,"private-chat-keyboard-send"):
+                                run("adb","shell","input","keyevent","66")
+                                sent_ui=private_wait_marker(private_keyboard_marker,"private-chat-keyboard-send")
+                                if sent_ui:
+                                    private_sent.append((private_keyboard_marker,"private Chat keyboard Send"))
+                                    report.append("- PASS private Chat keyboard Send moved unique marker from composer to a visible message")
+                                else:
+                                    FAILURES.append("private Chat keyboard Send did not create a separate visible message")
+
+                            private_button_marker="CI_PRIVATE_BUTTON_"+str(time.time_ns())
+                            restore_home_after_restart("private-chat-button-send-home")
+                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
+                            reopened_peer=wait_for_conversation_ui("private-chat-button-send-open.xml")
+                            if reopened_peer and find_control(reopened_peer,["Message composer","Edit message composer","Chat message composer area","Message..."]):
+                                if private_enter_marker(private_button_marker,"private-chat-composer-button"):
+                                    before_button=dump_ui("private-chat-button-before-tap.xml")
+                                    send_button=find_exact_control(before_button,"Send message") or find_control(before_button,["Send message"])
+                                    if send_button:
+                                        _,x,y=send_button
+                                        run("adb","shell","input","tap",str(x),str(y))
+                                        sent_ui=private_wait_marker(private_button_marker,"private-chat-composer-button")
+                                        if sent_ui:
+                                            private_sent.append((private_button_marker,"private Chat composer button"))
+                                            report.append("- PASS private Chat composer button moved unique marker into a visible message")
+                                        else:
+                                            FAILURES.append("private Chat composer button did not create a separate visible message")
+                                    else:
+                                        FAILURES.append("private Chat composer button was not exposed with the expected Send message accessibility label")
+                            else:
+                                FAILURES.append("private Chat button test could not reopen a usable peer ConversationPanel")
+
+                            for marker_text,method in private_sent:
+                                remote_ok,remote_detail=backend_private_message_exists(peer_username,marker_text,USERNAME)
+                                if remote_ok:
+                                    report.append("- PASS "+method+" exact outgoing message confirmed in authenticated backend history")
+                                else:
+                                    FAILURES.append(method+" UI marker was not confirmed in backend history: "+remote_detail)
+                            if not private_sent:
+                                FAILURES.append("neither private Chat send control produced a verified visible message")
+
+                            # Test incoming delivery using the dedicated peer's credentials;
+                            # then fetch the conversation in the primary user's actual app.
+                            incoming_marker="CI_PRIVATE_INCOMING_"+str(time.time_ns())
+                            peer_send_ok,peer_send_detail=backend_post_peer_message(peer_username,peer_password,USERNAME,incoming_marker)
+                            if not peer_send_ok:
+                                FAILURES.append("incoming private Chat delivery could not be prepared: "+peer_send_detail)
+                            else:
+                                report.append("- PASS "+peer_send_detail)
+                                restore_home_after_restart("private-chat-incoming-home")
+                                run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
+                                incoming_ui=""
+                                for _ in range(24):
+                                    time.sleep(.5)
+                                    incoming_ui=dump_ui("private-chat-incoming-result.xml")
+                                    visible,in_editor=private_marker_state(incoming_ui,incoming_marker)
+                                    if visible and not in_editor:
+                                        break
+                                visible,in_editor=private_marker_state(incoming_ui,incoming_marker)
+                                if visible and not in_editor:
+                                    report.append("- PASS primary app displayed the peer's incoming server message after reopening the conversation")
+                                else:
+                                    FAILURES.append("peer's incoming server message was not displayed as a separate message in the primary user's ConversationPanel")
+                                remote_ok,remote_detail=backend_private_message_exists(peer_username,incoming_marker,peer_username)
+                                if remote_ok:
+                                    report.append("- PASS incoming marker confirmed in server-returned private conversation history")
+                                else:
+                                    FAILURES.append("incoming marker missing from server history: "+remote_detail)
+                else:
+                    reason="FYNX_E2E_PEER_USERNAME/FYNX_E2E_PEER_PASSWORD secrets are required to prove private Chat send/receive without messaging an arbitrary user"
+                    report.append("- BLOCKED private Chat send/receive certification: "+reason)
+                    FAILURES.append("private Chat end-to-end send/receive was not certified: "+reason)
+
                 if private_chat_username:
                     route_username=private_chat_username.removeprefix("@").strip()
                     if route_username:
