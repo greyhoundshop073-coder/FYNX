@@ -469,21 +469,31 @@ def first_username_in_xml(xml_text:str)->str:
     return ""
 
 def local_group_records()->list[dict[str,str]]:
-    """Read locally stored group IDs and names so UI navigation can be tied to the actual selected group."""
+    """Read stored group records from SharedPreferences using XML and JSON parsers."""
     result=run("adb","shell","run-as",PACKAGE,"cat","shared_prefs/fynx_groups_store.xml")
     if result.returncode != 0:
         return []
-    raw=html.unescape(result.stdout or "")
+    try:
+        prefs_root=ET.fromstring(result.stdout or "")
+    except ET.ParseError:
+        return []
     records=[]
-    pattern=re.compile(r'"id":"([^"]+)"\\s*,\\s*"name":"((?:\\\\.|[^"\\\\])*)"')
-    for match in pattern.finditer(raw):
+    for stored_value in prefs_root.iter("string"):
+        if not (stored_value.attrib.get("name") or "").startswith("groups_"):
+            continue
         try:
-            name=json.loads('"' + match.group(2) + '"')
+            group_array=json.loads(stored_value.text or "[]")
         except (json.JSONDecodeError, TypeError):
             continue
-        group_id=match.group(1).strip()
-        if group_id and name and not any(item["id"]==group_id for item in records):
-            records.append({"id":group_id,"name":name})
+        if not isinstance(group_array,list):
+            continue
+        for item in group_array:
+            if not isinstance(item,dict):
+                continue
+            group_id=str(item.get("id") or "").strip()
+            name=str(item.get("name") or "").strip()
+            if group_id and name and not any(existing["id"]==group_id for existing in records):
+                records.append({"id":group_id,"name":name})
     return records
 
 def group_id_from_visible_title(xml_text:str)->str:
