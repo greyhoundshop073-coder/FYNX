@@ -1000,23 +1000,33 @@ if not FAILURES:
                                         else:
                                             FAILURES.append("keyboard Send/Enter did not move the marker out of the editable composer into a separate group message")
 
+                                    # Test the app button independently of the keyboard result.
+                                    # Reopen the group first so a failed keyboard send cannot leave
+                                    # its marker in the composer and contaminate this second test.
                                     app_button_marker = "CI_GROUP_BUTTON_" + str(time.time_ns())
-                                    if sent_markers and enter_marker(app_button_marker, "group-app-send-button"):
-                                        current_ui = dump_ui("group-app-send-button-before-tap.xml")
-                                        app_send_control = find_control(current_ui, ["Record voice message"])
-                                        if app_send_control:
-                                            # In this composer the trailing mic button's onClick sends
-                                            # typed text when the composer is non-empty; it records audio otherwise.
-                                            _, bx, by = app_send_control
-                                            run("adb", "shell", "input", "tap", str(bx), str(by))
-                                            button_ui = wait_for_sent_marker(app_button_marker, "group-app-send-button")
-                                            if button_ui:
-                                                sent_markers.append((app_button_marker, "FYNX composer button"))
-                                                report.append("- PASS FYNX composer button sent the typed marker as a separate visible group message")
-                                            else:
-                                                FAILURES.append("FYNX composer button tap did not clear the composer and show its marker as a separate group message")
+                                    if group_id:
+                                        restore_home_after_restart("group-app-send-reset-home")
+                                        run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://group/" + group_id, PACKAGE)
+                                        button_start_ui = wait_for_group_conversation_ui("group-app-send-reset.xml")
+                                        if find_control(button_start_ui, ["Message...", "Message composer", "Edit message composer", "Chat message composer area"]):
+                                            if enter_marker(app_button_marker, "group-app-send-button"):
+                                                current_ui = dump_ui("group-app-send-button-before-tap.xml")
+                                                app_send_control = find_control(current_ui, ["Record voice message"])
+                                                if app_send_control:
+                                                    # In this composer the trailing mic button's onClick sends
+                                                    # typed text when the composer is non-empty; it records audio otherwise.
+                                                    _, bx, by = app_send_control
+                                                    run("adb", "shell", "input", "tap", str(bx), str(by))
+                                                    button_ui = wait_for_sent_marker(app_button_marker, "group-app-send-button")
+                                                    if button_ui:
+                                                        sent_markers.append((app_button_marker, "FYNX composer button"))
+                                                        report.append("- PASS FYNX composer button sent the typed marker as a separate visible group message")
+                                                    else:
+                                                        FAILURES.append("FYNX composer button tap did not move its marker into a separate visible group message")
+                                                else:
+                                                    FAILURES.append("FYNX composer button test could not find the actual trailing composer button")
                                         else:
-                                            FAILURES.append("FYNX composer button test could not find the actual trailing composer button")
+                                            FAILURES.append("FYNX composer button test could not reopen a usable real group composer")
 
                                     if sent_markers and group_id:
                                         restore_home_after_restart("group-chat-send-persistence-home")
