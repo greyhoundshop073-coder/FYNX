@@ -495,7 +495,7 @@ def login():
     # Debug APKs intentionally expose a passwordless local UI-entry path when no
     # local account is stored. Exercise that explicit affordance rather than
     # incorrectly failing because the Password field is intentionally absent.
-    if find_control(xml,["Saved-device login for this debug APK"]):
+    if (not USERNAME or not PASSWORD) and find_control(xml,["Saved-device login for this debug APK"]):
         LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
         home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
         if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
