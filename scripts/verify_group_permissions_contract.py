@@ -7,6 +7,7 @@ membership_routes = (ROOT / "backend/groupMembershipRoutes.js").read_text(encodi
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
 active = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
 settings = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt").read_text(encoding="utf-8")
+group_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 normalized_group_routes = "".join(group_routes.split())
@@ -31,10 +32,12 @@ checks = {
     "group message sync does not clear a local persistence error immediately after setting it": active.find("if (showError) syncMessage = null") < active.find('FynxChatStore.save(context, "group_$groupId", mergedMessages)') and "Your group messages could not be saved locally. Please try again." in active,
     "group sends distinguish a first insert from an idempotent retry": "ON CONFLICT(id) DO NOTHING RETURNING id" in group_routes and "const created = inserted.rows.length > 0" in group_routes,
     "group message ID collisions cannot return another sender's or another group's message": "m.group_id,m.sender_id" in group_routes and "if(String(row.group_id)!==groupId||String(row.sender_id)!==String(req.user.sub))" in normalized_group_routes and "MESSAGE_ID_CONFLICT" in group_routes,
-    "group retries return the stored message without broadcasting a duplicate realtime event": "if (created) await broadcastGroupMessage(groupId, message)" in group_routes and "res.status(created?201:200).json({message})" in normalized_group_routes,
+    "group retries rebroadcast the canonical message to recover failed realtime delivery": "await broadcastGroupMessage(groupId, message)" in group_routes and "const created = inserted.rows.length > 0" in group_routes and "res.status(created?201:200).json({message})" in normalized_group_routes,
+"group POST retries replay stable IDs after persisted history confirms a possibly committed send": "suspend fun postGroupMessage(): RemoteMessage" in group_client and group_client.count("postGroupMessage()") >= 2 and "if (persistedOnServer == null) throw firstError" in group_client and "throw retryError" in group_client,
     "runtime cert checks persisted group roster and account ADMIN role": "backend_group_access_contract(group_id)" in runtime and '"/api/groups/"+group_path+"/members"' in runtime and 'role!="ADMIN"' in runtime,
     "runtime cert verifies permission changes and restores original CI-group settings": 'probe["inviteLinks"]=not original["inviteLinks"]' in runtime and 'request_json("PATCH","/api/groups/"+group_path+"/permissions",original)' in runtime and "restored_ok=all(restored.get(key)==permissions[key] for key in fields)" in runtime,
     "runtime cert exercises the real group Gallery picker with a generated image fixture": "certify_group_gallery_image(group_id)" in runtime and "/sdcard/Pictures/FYNX_CI_GROUP_ATTACHMENT.png" in runtime and 'tap_control(group_ui,["Add attachment"]' in runtime and 'tap_control(menu,["Gallery"]' in runtime,
+    "runtime group-send markers stay short enough for reliable ADB input while remaining per-run unique": 'keyboard_marker="CI_GROUP_KEYBOARD_"+uuid.uuid4().hex[:5]' in runtime and 'app_button_marker="CI_GROUP_BUTTON_"+uuid.uuid4().hex[:5]' in runtime,
     "runtime cert requires new server-persisted image ID/type and history persistence after reopening": "attachmentMediaId" in runtime and 'attachment_type!="image"' in runtime and "group-gallery-image-reopened.xml" in runtime,
 }
 failed = [name for name, ok in checks.items() if not ok]

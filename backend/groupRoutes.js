@@ -90,7 +90,9 @@ export function registerGroupRoutes({ app, pool: providedPool = null, jwtSecret:
       if (String(row.group_id)!==groupId || String(row.sender_id)!==String(req.user.sub)) return res.status(409).json({error:'message id already used',code:'MESSAGE_ID_CONFLICT'});
       const message = messageJson(row);
       // Retries may receive the already-persisted message, but must not rebroadcast it.
-      if (created) await broadcastGroupMessage(groupId, message);
+      // Re-broadcast the canonical ID on idempotent retries: a previous DB commit may have outlived a failed realtime publish.
+      // Group clients deduplicate by message ID, so retries recover delivery without duplicating message rows.
+      await broadcastGroupMessage(groupId, message);
       return res.status(created ? 201 : 200).json({message});}catch(error){console.error('group message send',error);return res.status(500).json({error:'group message send failed'});}});
 
   const getMessage = async (groupId,messageId,userId) => (await db.query(`SELECT m.*,gm.role FROM fynx_group_messages m JOIN fynx_group_members gm ON gm.group_id=m.group_id AND gm.user_id=$3 WHERE m.id=$1 AND m.group_id=$2 LIMIT 1`,[messageId,groupId,userId])).rows[0] || null;

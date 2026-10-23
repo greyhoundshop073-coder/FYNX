@@ -58,11 +58,14 @@ function fakeResponse() {
 test("group message send is idempotent and refuses message-ID collisions", async () => {
   const pool = new FakeGroupPool();
   const broadcasts = [];
+  let broadcastAttempts = 0;
   const routes = new Map();
   const register = method => (path, ...handlers) => routes.set(method + " " + path, handlers);
   const app = {
     locals: {
       fynxBroadcastGroupMessage: async (groupId, message) => {
+        broadcastAttempts += 1;
+        if (broadcastAttempts === 1) throw new Error("simulated transient realtime outage after DB commit");
         broadcasts.push({ groupId: String(groupId), id: String(message.id) });
       }
     },
@@ -90,18 +93,29 @@ test("group message send is idempotent and refuses message-ID collisions", async
     return res;
   }
 
+  // The first insert commits, then its live publish transiently fails. The route must return
+  // an error so the sender can retry; it must not pretend the failed publish was delivered.
   const first = await send();
-  assert.equal(first.statusCode, 201, "first insert must report created");
-  assert.equal(first.body?.message?.id, "message_ci_001");
-  assert.equal(pool.messages.size, 1);
+  assert.equal(first.statusCode, 500, "failed publish after the DB commit must stay visible to the caller");
+  assert.equal(pool.messages.size, 1, "the first failed publish still owns exactly one persisted row");
+  assert.equal(broadcastAttempts, 1);
+  assert.equal(broadcasts.length, 0);
+
+  // The stable-ID retry must return the canonical persisted row and try live delivery again.
+  const retry = await send();
+  assert.equal(retry.statusCode, 200, "same sender/group/message ID retry must recover as an idempotent success");
+  assert.equal(retry.body?.message?.id, "message_ci_001");
+  assert.equal(retry.body?.message?.text, "stable retry marker");
+  assert.equal(pool.messages.size, 1, "retry must not create a second database row");
+  assert.equal(broadcastAttempts, 2, "retry must attempt realtime delivery again");
   assert.deepEqual(broadcasts, [{ groupId: "group_ci_001", id: "message_ci_001" }]);
 
-  const retry = await send();
-  assert.equal(retry.statusCode, 200, "same sender/group/message ID retry must be an idempotent success");
-  assert.equal(retry.body?.message?.id, first.body.message.id);
-  assert.equal(retry.body?.message?.text, first.body.message.text);
-  assert.equal(pool.messages.size, 1, "retry must not create a second database row");
-  assert.equal(broadcasts.length, 1, "retry must not emit a duplicate realtime event");
+  // At-least-once replays still carry the same ID; clients merge by ID so only one message is shown.
+  const duplicateRetry = await send();
+  assert.equal(duplicateRetry.statusCode, 200);
+  assert.equal(pool.messages.size, 1, "repeated retries must retain one canonical message row");
+  assert.equal(broadcasts.length, 2);
+  assert.deepEqual(broadcasts[0], broadcasts[1], "replayed realtime events must retain the canonical group/message ID");
 
   const crossGroup = await send({ groupId: "group_ci_002" });
   assert.equal(crossGroup.statusCode, 409, "an ID already owned by another group must conflict");

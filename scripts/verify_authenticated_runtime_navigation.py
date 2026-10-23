@@ -1715,7 +1715,7 @@ if not FAILURES:
                             return ""
 
                         sent_markers=[]
-                        keyboard_marker="CI_GROUP_KEYBOARD_"+str(time.time_ns())
+                        keyboard_marker="CI_GROUP_KEYBOARD_"+uuid.uuid4().hex[:5]
                         if enter_marker(keyboard_marker,"group-keyboard-send"):
                             run("adb","shell","input","keyevent","66")
                             keyboard_ui=wait_for_sent_marker(keyboard_marker,"group-keyboard-send")
@@ -1726,7 +1726,7 @@ if not FAILURES:
                                 FAILURES.append("keyboard Send/Enter did not move marker into a separate group message")
 
                         # Exercise the trailing FYNX composer button independently.
-                        app_button_marker="CI_GROUP_BUTTON_"+str(time.time_ns())
+                        app_button_marker="CI_GROUP_BUTTON_"+uuid.uuid4().hex[:5]
                         if group_id:
                             restore_home_after_restart("group-app-send-reset-home")
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
