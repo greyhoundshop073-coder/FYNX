@@ -12,6 +12,8 @@ const checks = [
   ['multi-product checkout route exists', checkout.includes("/api/marketplace/checkout/multi-order")],
   ['multi-product checkout is capped at 20 distinct products', checkout.includes('rawItems.length > 20') && checkout.includes('at most 20 different products')],
   ['duplicate listings are rejected', checkout.includes('DUPLICATE_LISTING')],
+  ['multi-cart quote acquires listing locks in deterministic order', checkout.includes('normalizedItems.sort((a, b) => a.listingId - b.listingId)') && checkout.includes('for (const item of normalizedItems)')],
+  ['multi-cart order creation uses the same deterministic listing lock order', checkout.includes('const sortedItems = [...items].sort((a, b) => a.listingId - b.listingId)') && checkout.includes('for (const item of sortedItems)')],
   ['checkout idempotency serializes same-ID concurrent requests before lookup', checkout.includes('pg_advisory_xact_lock(hashtext(\'fynx-marketplace-checkout:\' || $1::text))') && checkout.includes('FROM marketplace_checkout_groups WHERE id=$1 FOR UPDATE')],
   ['checkout ID reuse by a different buyer returns a conflict', checkout.includes('existing && String(existing.buyer_id) !== String(req.user.sub)') && checkout.includes('code: \'CHECKOUT_ID_REUSE_CONFLICT\'')],
   ['checkout idempotency compares every requested listing, quantity, fulfillment method and delivery address', checkout.includes('const sameRequest = requestedItems.length === existingItems.length') && checkout.includes('order.group_listing_id') && checkout.includes('order.group_quantity') && checkout.includes('sameAddress(order.shipping_address, item.address)') && checkout.includes('requestedBuyerNote')],
