@@ -39,6 +39,59 @@ def wait_for_group_conversation_ui(name:str, timeout:float=12.0)->str:
         time.sleep(.5)
     return latest
 
+def find_exact_control(xml_text:str,label:str):
+    """Find an exact accessible label and its nearest clickable ancestor (never a substring in a subtitle)."""
+    if not xml_text:
+        return None
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)]=parent
+    exact=[]
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user","true").lower()=="false" or not _center(node):
+            continue
+        values=(
+            (node.attrib.get("text") or "").strip(),
+            (node.attrib.get("content-desc") or "").strip(),
+            (node.attrib.get("resource-id") or "").strip(),
+        )
+        if label.casefold() not in {value.casefold() for value in values if value}:
+            continue
+        target=node
+        current=node
+        while current is not None:
+            if current.attrib.get("clickable","false").lower()=="true" and _center(current):
+                target=current
+                break
+            current=parents.get(id(current))
+        exact.append(target)
+    if not exact:
+        return None
+    # Keep the first exact match in document order: it is the first real control,
+    # unlike substring search which can accidentally tap a nearby subtitle.
+    node=exact[0]
+    center=_center(node)
+    if not center:
+        return None
+    values=(node.attrib.get("text") or "",node.attrib.get("content-desc") or "",node.attrib.get("resource-id") or "")
+    return next((value.strip() for value in values if value.strip()),label),center[0],center[1]
+
+def wait_for_controls(name:str, labels:list[str], timeout:float=10.0)->str:
+    """Poll until all required labels appear on the actual current UI."""
+    deadline=time.monotonic()+timeout
+    latest=""
+    while time.monotonic()<deadline:
+        latest=dump_ui(name)
+        if latest and all(find_control(latest,[label]) for label in labels):
+            return latest
+        time.sleep(.5)
+    return latest
+
 def wait_for_conversation_ui(name:str, timeout:float=12.0)->str:
     """Poll the real accessibility tree until ConversationPanel is actually visible."""
     deadline=time.monotonic()+timeout
@@ -988,27 +1041,100 @@ if not FAILURES:
                 reset=restore_home_after_restart("authenticated-home-chat-group-reset") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 if groups_xml:
-                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["Search groups","Your communities in one place","No groups yet"])
+                    # The Chat panel has its own exact "Groups" toggle. Do not let
+                    # substring matching hit the subtitle "...and groups in one place".
+                    section_toggle=find_exact_control(groups_xml,"Groups")
+                    if section_toggle:
+                        _,sx,sy=section_toggle
+                        run("adb","shell","input","tap",str(sx),str(sy))
+                        groups_tab=wait_for_controls(
+                            "chat-groups-tab",
+                            ["Search groups"],
+                            timeout=10.0
+                        )
+                        if "Search groups" not in groups_tab:
+                            FAILURES.append("Chat's exact Groups toggle did not open the embedded Groups list; visible markers: "+visible_marker_summary(groups_tab))
+                            groups_tab=""
+                    else:
+                        groups_tab=""
+                        FAILURES.append("Chat Groups section toggle was not found as an exact accessible label")
                     if groups_tab:
                         clear_runtime_log()
                         group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
                         if not group_after:
-                            create_control=find_control(groups_tab,["New group","Create group"])
-                            if create_control:
-                                _,cx,cy=create_control
-                                run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(.8)
-                                dialog=dump_ui("group-create-dialog.xml")
-                                fields=find_edit_fields(dialog)
-                                if len(fields)>=2:
-                                    run("adb","shell","input","tap",str(fields[0][0]),str(fields[0][1])); input_text("CI Chat Recovery Group")
-                                    run("adb","shell","input","tap",str(fields[1][0]),str(fields[1][1])); input_text("Persistent runtime recovery group")
-                                    dialog=dump_ui("group-create-filled.xml")
-                                    create_btn=find_control(dialog,["Create"])
-                                    if create_btn:
-                                        _,cx,cy=create_btn
-                                        run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(2.0)
-                                        groups_tab=dump_ui("chat-groups-after-ci-create.xml")
-                                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
+                            # The embedded "+ New group" action only changes the
+                            # top-level destination to Groups; it does not open the
+                            # create dialog. The previous test incorrectly treated
+                            # the destination screen's search field as the create form.
+                            new_group_control=find_exact_control(groups_tab,"＋ New group") or find_control(groups_tab,["New group"])
+                            if not new_group_control:
+                                new_group_control=find_exact_control(groups_tab,"Create group")
+                            if new_group_control:
+                                _,cx,cy=new_group_control
+                                run("adb","shell","input","tap",str(cx),str(cy))
+                                groups_screen=wait_for_controls(
+                                    "group-create-destination",
+                                    ["Your communities in one place","Search groups…"],
+                                    timeout=12.0
+                                )
+                                if not groups_screen or not find_control(groups_screen,["Your communities in one place"]):
+                                    FAILURES.append("New group action did not navigate to the actual Groups destination; visible markers: "+visible_marker_summary(groups_screen))
+                                else:
+                                    open_create=find_exact_control(groups_screen,"Create group")
+                                    if not open_create:
+                                        FAILURES.append("Groups destination opened but its exact Create group control was not found; visible markers: "+visible_marker_summary(groups_screen))
+                                    else:
+                                        _,cx,cy=open_create
+                                        run("adb","shell","input","tap",str(cx),str(cy))
+                                        dialog=wait_for_controls(
+                                            "group-create-dialog",
+                                            ["Group name","Description","Create"],
+                                            timeout=10.0
+                                        )
+                                        if not dialog or not find_control(dialog,["Group name"]) or not find_control(dialog,["Description"]):
+                                            FAILURES.append("Create group control did not open the real Create group dialog; visible markers: "+visible_marker_summary(dialog))
+                                        else:
+                                            fields=find_edit_fields(dialog)
+                                            if len(fields)<2:
+                                                FAILURES.append("Create group dialog exposed fewer than two editable fields")
+                                            else:
+                                                run("adb","shell","input","tap",str(fields[0][0]),str(fields[0][1]))
+                                                input_text("CI Chat Recovery Group")
+                                                run("adb","shell","input","keyevent","4")
+                                                time.sleep(.3)
+                                                dialog=dump_ui("group-create-name-filled.xml")
+                                                fields=find_edit_fields(dialog)
+                                                if len(fields)<2:
+                                                    FAILURES.append("Description field disappeared after entering group name")
+                                                else:
+                                                    run("adb","shell","input","tap",str(fields[1][0]),str(fields[1][1]))
+                                                    input_text("Persistent runtime recovery group")
+                                                    run("adb","shell","input","keyevent","4")
+                                                    time.sleep(.4)
+                                                    dialog=dump_ui("group-create-filled.xml")
+                                                    create_btn=find_exact_control(dialog,"Create")
+                                                    if create_btn:
+                                                        _,cx,cy=create_btn
+                                                        run("adb","shell","input","tap",str(cx),str(cy))
+                                                        deadline=time.monotonic()+15.0
+                                                        created_id=""
+                                                        while time.monotonic()<deadline:
+                                                            time.sleep(.5)
+                                                            records=local_group_records()
+                                                            created=next((item for item in records if item["name"].casefold()=="ci chat recovery group"),None)
+                                                            if created:
+                                                                created_id=created["id"]
+                                                                break
+                                                        if not created_id:
+                                                            FAILURES.append("Create group was tapped but no matching CI group appeared in the local account store; remote creation or local persistence failed")
+                                                        else:
+                                                            # Navigate directly to the group we just created. The UI send test is
+                                                            # still gated on the server independently confirming this exact ID.
+                                                            restore_home_after_restart("created-group-reopen-home")
+                                                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+created_id,PACKAGE,timeout=30)
+                                                            group_after=wait_for_group_conversation_ui("group-chat-created-open.xml")
+                                                    else:
+                                                        FAILURES.append("Create group dialog had no exact Create action after entering valid name and description")
                         group_id=group_id_from_visible_title(group_after) if group_after else ""
                         if group_after and not group_id:
                             FAILURES.append("opened group could not be matched to its own local group ID by visible title; refusing to send or certify a different stored group")
