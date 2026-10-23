@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { selectMarketplaceRefundByIdentity } from './marketplaceBatch2FinalHardening.js';
+import { classifyPaystackTransferVerification } from './marketplaceSettlementWorker.js';
 
 const read = (name) => fs.readFileSync(new URL(`./${name}`, import.meta.url), 'utf8');
 const payment = read('marketplaceReputation.js');
@@ -19,6 +20,7 @@ const checks = [
   ['timeout recovery can verify a deterministic payment reference without a saved local reference', finalHardening.includes('recoverPaymentWithoutLocalReference') && finalHardening.includes('FYNX-${order.id}') && finalHardening.includes('batch2-timeout-recovery')],
   ['payout uses a deterministic lowercase provider reference', worker.includes('fynx-payout-${operation.order_id}')],
   ['payout recovery verifies the deterministic transfer before creating a new transfer', worker.includes('verifyTransferByReference(reference)') && worker.includes('recoveryCheckedFirst')],
+  ['payout transfer verification treats only HTTP 404 as not found and binds successful data to the requested reference', worker.includes('response?.status === 404') && worker.includes('classifyPaystackTransferVerification(response, data, cleanReference)') && !worker.includes('response.status === 404 || data?.status === false')],
   ['payout provider amount and currency are validated', worker.includes('transferMatchesOperation') && worker.includes('Paystack payout amount or currency does not match')],
   ['refund webhook amount and currency are validated', webhook.includes('providerAmount !== expectedAmount') && webhook.includes('providerCurrency !== expectedCurrency')],
   ['refund mismatches block protected funds', webhook.includes("status='BLOCKED'") && webhook.includes("status='DISPUTED'")],
@@ -58,5 +60,18 @@ const refundIdentityChecks = [
 const refundIdentityFailures = refundIdentityChecks.filter(([, ok]) => !ok).map(([name]) => name);
 for (const [name, ok] of refundIdentityChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
 if (refundIdentityFailures.length) throw new Error(`Refund identity behavior gate failed: ${refundIdentityFailures.join('; ')}`);
-console.log(`Refund identity behavior gate passed (${refundIdentityChecks.length} cases)`);
-console.log(`Batch 2 financial hardening gate passed (${checks.length} structural checks plus ${refundIdentityChecks.length} refund identity behavior cases)`);
+
+const shouldThrow = (callback) => { try { callback(); return false; } catch { return true; } };
+const transferVerificationChecks = [
+  ['Paystack transfer HTTP 404 is classified as a missing transfer', classifyPaystackTransferVerification({ status: 404, ok: false }, { status: false, message: 'Transfer not found' }, 'fynx-payout-order').found === false],
+  ['Paystack transfer auth failures are not treated as a missing transfer', shouldThrow(() => classifyPaystackTransferVerification({ status: 401, ok: false }, { status: false, message: 'Unauthorized' }, 'fynx-payout-order'))],
+  ['Paystack transfer server errors are not treated as a missing transfer', shouldThrow(() => classifyPaystackTransferVerification({ status: 500, ok: false }, { status: false, message: 'Temporary provider failure' }, 'fynx-payout-order'))],
+  ['successful transfer verification must return the exact requested reference', classifyPaystackTransferVerification({ status: 200, ok: true }, { status: true, data: { reference: 'fynx-payout-order', amount: 10000, currency: 'NGN' } }, 'fynx-payout-order').found === true],
+  ['successful transfer verification rejects a different provider reference', shouldThrow(() => classifyPaystackTransferVerification({ status: 200, ok: true }, { status: true, data: { reference: 'another-transfer', amount: 10000, currency: 'NGN' } }, 'fynx-payout-order'))]
+];
+const transferVerificationFailures = transferVerificationChecks.filter(([, ok]) => !ok).map(([name]) => name);
+for (const [name, ok] of transferVerificationChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
+if (transferVerificationFailures.length) throw new Error(`Payout verification behavior gate failed: ${transferVerificationFailures.join('; ')}`);
+console.log(`Payout verification behavior gate passed (${transferVerificationChecks.length} cases)`);
+console.log(`Batch 2 financial hardening gate passed (${checks.length} structural checks, ${refundIdentityChecks.length} refund identity cases, and ${transferVerificationChecks.length} payout verification cases)`);
+
