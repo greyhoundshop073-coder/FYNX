@@ -46,6 +46,10 @@ fun FynxMarketplaceSellerCenterPanel() {
     var deletingId by remember { mutableStateOf<String?>(null) }
     var editingListing by remember { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
     var editTitle by rememberSaveable { mutableStateOf("") }
+    var editDescription by rememberSaveable { mutableStateOf("") }
+    var editCategory by rememberSaveable { mutableStateOf("") }
+    var editCondition by rememberSaveable { mutableStateOf("NEW") }
+    var editLocation by rememberSaveable { mutableStateOf("") }
     var editPrice by rememberSaveable { mutableStateOf("") }
     var editQuantity by rememberSaveable { mutableStateOf("") }
     var editSaving by remember { mutableStateOf(false) }
@@ -446,6 +450,10 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 IconButton(onClick = {
                                     editingListing = listing
                                     editTitle = listing.title
+                                    editDescription = listing.description
+                                    editCategory = listing.category
+                                    editCondition = listing.condition.uppercase(Locale.US)
+                                    editLocation = listing.location
                                     editPrice = listing.price.toString()
                                     editQuantity = listing.quantity.toString()
                                     editError = null
@@ -481,11 +489,44 @@ fun FynxMarketplaceSellerCenterPanel() {
             title = { Text("Edit listing") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Update the product name, price and available stock. Existing orders and delivery settings are preserved.", style = MaterialTheme.typography.bodySmall)
+                    Text("Update the product details, price and available stock. Existing orders, photos and delivery settings are preserved.", style = MaterialTheme.typography.bodySmall)
                     OutlinedTextField(
                         value = editTitle,
                         onValueChange = { editTitle = it.take(160) },
                         label = { Text("Product name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editDescription,
+                        onValueChange = { editDescription = it.take(4000) },
+                        label = { Text("Product description") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 5,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editCategory,
+                        onValueChange = { editCategory = it.take(40) },
+                        label = { Text("Category") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editCondition,
+                        onValueChange = { editCondition = it.take(20).uppercase(Locale.US) },
+                        label = { Text("Condition (NEW, USED, REFURBISHED)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editLocation,
+                        onValueChange = { editLocation = it.take(160) },
+                        label = { Text("Product location") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         enabled = !editSaving
@@ -513,6 +554,10 @@ fun FynxMarketplaceSellerCenterPanel() {
                 Button(
                     enabled = !editSaving &&
                         editTitle.trim().length >= 2 &&
+                        editDescription.trim().length >= 5 &&
+                        editCategory.trim().isNotBlank() &&
+                        editCondition.trim().uppercase(Locale.US) in setOf("NEW", "USED", "REFURBISHED") &&
+                        editLocation.trim().isNotBlank() &&
                         editPrice.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true &&
                         editQuantity.toIntOrNull()?.let { it >= 0 } == true,
                     onClick = {
@@ -521,11 +566,15 @@ fun FynxMarketplaceSellerCenterPanel() {
                         editSaving = true
                         editError = null
                         scope.launch {
-                            FynxMarketplaceClient.updateListing(context, selectedListing.id, editTitle, price, quantity)
+                            FynxMarketplaceClient.updateListing(context, selectedListing.id, editTitle, editDescription, editCategory, editCondition, editLocation, price, quantity)
                                 .onSuccess {
                                     listings = listings.map { current ->
                                         if (current.id == selectedListing.id) current.copy(
                                             title = editTitle.trim(),
+                                            description = editDescription.trim(),
+                                            category = editCategory.trim(),
+                                            condition = editCondition.trim().uppercase(Locale.US),
+                                            location = editLocation.trim(),
                                             price = price,
                                             quantity = quantity
                                         ) else current
