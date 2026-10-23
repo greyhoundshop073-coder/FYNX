@@ -102,6 +102,14 @@ export function payoutVerificationJobIdempotencyKey(operationId, cycle, attempt)
   const cleanAttempt = Math.max(0, Math.trunc(Number(attempt) || 0));
   return `VERIFY-CYCLE-${String(operationId)}-${cleanCycle}-${cleanAttempt}`;
 }
+export function payoutInitializationOutcomeIsUncertain(response, data) {
+  const status = Number(response?.status);
+  const message = String(data?.message || '').trim().toLowerCase();
+  if (status === 408 || status === 409 || status === 425 || status === 429 || status >= 500) return true;
+  if (!Number.isFinite(status) || status < 100) return true;
+  return /duplicate|reference.{0,20}(already|used|exists)|already.{0,20}reference|timeout|temporar|try again/.test(message)
+    || Boolean(response?.ok && data?.status === true && !data?.data);
+}
 function transferMatchesOperation(transfer, operation) {
   const expectedAmount = Math.round(Number(operation.amount) * 100);
   const providerAmount = Number(transfer?.amount);
@@ -211,13 +219,30 @@ async function initiatePayout(payload) {
         headers: providerHeaders(),
         body: JSON.stringify({ source: 'balance', amount: Math.round(operationAmount * 100), recipient: recipientCode, currency: String(operation.currency).toUpperCase(), reason: `FYNX marketplace payout ${operation.order_id}`, reference })
       }));
+      // The provider can accept a transfer even if the create request returns an
+      // error response. Re-check this operation's unique reference before treating
+      // any rejection as terminal or releasing the escrow back to eligibility.
+      if (!(response.ok && data?.status === true && data?.data)) {
+        const afterCreateCheck = await verifyTransferByReference(reference);
+        if (afterCreateCheck.found) {
+          existingTransfer = afterCreateCheck;
+          response = afterCreateCheck.response;
+          data = afterCreateCheck.data;
+        } else if (payoutInitializationOutcomeIsUncertain(response, data)) {
+          // Leave operation PENDING/escrow RELEASE_PENDING. The job retry and
+          // stale-operation scan will check the same reference again.
+          throw new Error('Paystack payout initialization outcome is unresolved; retry verification before another state change');
+        }
+      }
     }
 
     const providerReference = String(data?.data?.reference || reference);
     const providerStatus = String(data?.data?.status || '').toLowerCase();
     const providerDataMatches = transferMatchesOperation(data?.data, operation);
     const success = response.ok && data?.status === true && providerDataMatches && ['success', 'successful'].includes(providerStatus);
+    const terminalFailure = response.ok && data?.status === true && providerDataMatches && ['failed', 'reversed', 'rejected'].includes(providerStatus);
     const accepted = response.ok && data?.status === true && providerDataMatches && ['pending', 'otp', 'queued', 'processing'].includes(providerStatus);
+    const unresolvedProviderState = response.ok && data?.status === true && providerDataMatches && !success && !terminalFailure;
 
     const finishClient = await pool.connect();
     try {
@@ -229,10 +254,14 @@ async function initiatePayout(payload) {
         await finishClient.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [current.order_id]);
       } else if (success) {
         await markPayoutSucceeded(finishClient, current, providerReference, providerStatus);
-      } else if (accepted) {
-        await finishClient.query(`UPDATE marketplace_financial_operations SET provider_reference=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [providerReference, JSON.stringify({ providerStatus, initiatedAt: new Date().toISOString(), recoveryCheckedFirst: existingTransfer.found }), current.id]);
-      } else {
+      } else if (accepted || unresolvedProviderState) {
+        await finishClient.query(`UPDATE marketplace_financial_operations SET provider_reference=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [providerReference, JSON.stringify({ providerStatus: providerStatus || 'unknown', initiatedAt: new Date().toISOString(), recoveryCheckedFirst: existingTransfer.found }), current.id]);
+      } else if (terminalFailure || (!response.ok && !payoutInitializationOutcomeIsUncertain(response, data))) {
         await markPayoutFailed(finishClient, current, data?.message || `Paystack transfer failed (${response.status})`);
+      } else {
+        // A successful HTTP envelope with a malformed transfer payload is not
+        // proof of failure. Keep the operation and escrow pending for reconciliation.
+        await finishClient.query(`UPDATE marketplace_financial_operations SET metadata=metadata || $1::jsonb,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [JSON.stringify({ providerOutcome: 'unresolved', providerMessage: String(data?.message || 'transfer response lacked a verifiable state').slice(0, 500), lastVerifiedAt: new Date().toISOString() }), current.id]);
       }
       await finishClient.query('COMMIT');
     } catch (error) {
