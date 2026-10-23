@@ -1274,8 +1274,14 @@ if not FAILURES:
                         else:
                             _,sx,sy=section_toggle
                             run("adb","shell","input","tap",str(sx),str(sy))
-                            groups_tab=wait_for_controls("chat-groups-tab",["Search groups"],timeout=10.0)
-                            if not groups_tab or not find_control(groups_tab,["Search groups"]):
+                            # This is ChatsPanel's embedded Groups section, not the
+                            # standalone Groups destination: its real controls are
+                            # "＋ New group" and group rows; "Search groups" exists only
+                            # on the standalone Groups screen opened by that button.
+                            groups_tab=wait_for_controls("chat-groups-tab",["＋ New group"],timeout=10.0)
+                            if (not groups_tab
+                                or not find_control(groups_tab,["＋ New group"])
+                                or find_control(groups_tab,["Search chats"])):
                                 FAILURES.append("Chat's exact Groups toggle did not open the embedded Groups list; visible markers: "+visible_marker_summary(groups_tab))
                             else:
                                 new_group_control=find_exact_control(groups_tab,"＋ New group") or find_control(groups_tab,["New group"])
