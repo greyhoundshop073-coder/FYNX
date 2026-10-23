@@ -109,6 +109,8 @@ checks = [
 
     ("successful listing publish refreshes the seller-owned inventory endpoint rather than public discovery", "myListings(context).getOrThrow().firstOrNull { it.id == id }" in remote_client and "General discovery deliberately excludes the signed-in seller's own products." in remote_client),
 
+    ("seller inventory refresh hides soft-deleted listings after the backend returns inactive history", 'FynxMarketplaceClient.myListings(context)' in seller_center and '.onSuccess { listings = it.filter { listing -> listing.active } }' in seller_center),
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
