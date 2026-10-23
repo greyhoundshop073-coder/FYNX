@@ -685,6 +685,12 @@ if not FAILURES:
                         report.append("- PARTIAL Text Status editor accepts text; Send control was not exposed in hierarchy")
                 else:
                     report.append("- PARTIAL Text composer opened, but its editor was not exposed as an Android EditText")
+                # Typing opens the Android IME and shifts the Compose layout.
+                # Never reuse pre-keyboard coordinates: hide the IME, dump the
+                # current hierarchy, then resolve the styling button afresh.
+                run("adb", "shell", "input", "keyevent", "4")
+                time.sleep(0.6)
+                text_composer_xml = dump_ui("authenticated-status-text-composer-ready-for-styling.xml")
                 style_xml = tap_control(
                     text_composer_xml, ["Text styling", "Text style"], "status-text-styling",
                     ["Done"]
