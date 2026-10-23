@@ -340,11 +340,20 @@ fun FynxMatureStatusComposerPanel(
                             Column(
                                 Modifier
                                     .fillMaxWidth()
-                                    .heightIn(max = 360.dp)
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    .heightIn(min = 280.dp, max = 420.dp)
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 16.dp)
                             ) {
+                                // Keep the controls scrollable, but pin Done outside the
+                                // scroll area so short screens cannot hide the dismiss action.
+                                Column(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
                                 Text(
                                     "Styling & Options",
                                     color = Color.White,
@@ -401,8 +410,9 @@ fun FynxMatureStatusComposerPanel(
                                         Icon(Icons.Default.FormatAlignRight, "Align right", tint = if (alignment == 2) Color.White else Color.White.copy(alpha = .58f))
                                     }
                                 }
+                                }
                                 Row(
-                                    Modifier.fillMaxWidth(),
+                                    Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
                                     horizontalArrangement = Arrangement.End,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
