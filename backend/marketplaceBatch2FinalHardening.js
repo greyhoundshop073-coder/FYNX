@@ -48,6 +48,18 @@ function amountSubunit(amount, currency) {
   return Math.round(value * 100);
 }
 
+export function selectMarketplaceRefundByIdentity(refunds, knownRefundReferences) {
+  if (!Array.isArray(refunds) || !Array.isArray(knownRefundReferences)) return null;
+  const known = new Set(knownRefundReferences
+    .map(value => value === null || value === undefined ? '' : String(value).trim())
+    .filter(Boolean));
+  if (!known.size) return null;
+  const matches = refunds.filter(refund =>
+    known.has(String(refund?.id ?? '').trim())
+    || known.has(String(refund?.refund_reference ?? '').trim()));
+  return matches.length === 1 ? matches[0] : null;
+}
+
 async function insertRecoveryEvent(client, row, action, metadata) {
   await client.query(`
     INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata)
@@ -134,11 +146,8 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
         .map(value => value === null || value === undefined ? '' : String(value).trim())
         .filter(value => value && value !== resolvedReference);
       if (!knownRefundReferences.length) continue;
-      const identityMatches = refunds.filter(refund =>
-        knownRefundReferences.includes(String(refund?.id ?? '').trim())
-        || knownRefundReferences.includes(String(refund?.refund_reference ?? '').trim()));
-      if (identityMatches.length !== 1) continue;
-      const match = identityMatches[0];
+      const match = selectMarketplaceRefundByIdentity(refunds, knownRefundReferences);
+      if (!match) continue;
       const status = String(match.status || '').toLowerCase();
       const providerReference = match.refund_reference || match.id || null;
       const client = await pool.connect();
