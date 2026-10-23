@@ -493,9 +493,11 @@ def login():
     run("adb","shell","input","keyevent","4"); time.sleep(.5)
     xml=dump_ui("authenticated-after-username.xml")
     # Debug APKs intentionally expose a passwordless local UI-entry path when no
-    # local account is stored. Exercise that explicit affordance rather than
-    # incorrectly failing because the Password field is intentionally absent.
-    if (not USERNAME or not PASSWORD) and find_control(xml,["Saved-device login for this debug APK"]):
+    # local account is stored. On a fresh debug emulator, entering a username
+    # reveals this path and hides Password even when CI credentials are present.
+    # Prefer the explicit debug path and label it honestly; do not misreport it
+    # as server authentication or fail on a Password field the UI no longer shows.
+    if find_control(xml,["Saved-device login for this debug APK"]):
         LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
         home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
         if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
