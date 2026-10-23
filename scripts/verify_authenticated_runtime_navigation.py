@@ -940,33 +940,33 @@ if not FAILURES:
                                     run("adb", "shell", "input", "tap", str(mx), str(my))
                                     input_text(marker)
                                     time.sleep(.3)
+                                    # The actual group composer sends through KeyboardActions(onSend);
+                                    # it has no separate Send button. Press the IME Send/Enter key
+                                    # so this certification exercises the same production send path.
                                     before_send = dump_ui("group-chat-before-send.xml")
-                                    send_button = find_control(before_send, ["Send message", "Send"])
-                                    if send_button:
-                                        _, sx, sy = send_button
-                                        run("adb", "shell", "input", "tap", str(sx), str(sy))
-                                        delivered_ui = ""
-                                        for _ in range(12):
-                                            time.sleep(.5)
-                                            delivered_ui = dump_ui("group-chat-send-result.xml")
-                                            if marker in delivered_ui:
-                                                break
+                                    if marker in before_send:
+                                        FAILURES.append("group test marker unexpectedly appeared before the send action")
+                                    run("adb", "shell", "input", "keyevent", "66")
+                                    delivered_ui = ""
+                                    for _ in range(12):
+                                        time.sleep(.5)
+                                        delivered_ui = dump_ui("group-chat-send-result.xml")
                                         if marker in delivered_ui:
-                                            report.append("- PASS group message send reached the visible conversation: " + marker)
-                                            if group_id:
-                                                restore_home_after_restart("group-chat-send-persistence-home")
-                                                run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://group/" + group_id, PACKAGE)
-                                                persisted_ui = wait_for_group_conversation_ui("group-chat-send-persistence.xml")
-                                                if marker in persisted_ui:
-                                                    report.append("- PASS group message persisted after reopening the group")
-                                                else:
-                                                    FAILURES.append("group message was visible after send but did not persist after reopening")
+                                            break
+                                    if marker in delivered_ui:
+                                        report.append("- PASS group message send reached the visible conversation: " + marker)
+                                        if group_id:
+                                            restore_home_after_restart("group-chat-send-persistence-home")
+                                            run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://group/" + group_id, PACKAGE)
+                                            persisted_ui = wait_for_group_conversation_ui("group-chat-send-persistence.xml")
+                                            if marker in persisted_ui:
+                                                report.append("- PASS group message persisted after reopening the group")
                                             else:
-                                                report.append("- Group persistence assertion skipped: could not read the real group ID")
+                                                FAILURES.append("group message was visible after send but did not persist after reopening")
                                         else:
-                                            FAILURES.append("group send was tapped but unique test message did not appear in the conversation")
+                                            FAILURES.append("group message appeared locally but persistence could not be verified because the real group ID was unavailable")
                                     else:
-                                        FAILURES.append("group composer opened but Send control was not found")
+                                        FAILURES.append("group send key was pressed but unique test message did not appear in the conversation")
                                 elif "Messaging is restricted" in group_after:
                                     report.append("- Group send test blocked by the actual group's messaging permissions")
                                 else:
