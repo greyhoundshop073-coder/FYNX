@@ -142,15 +142,37 @@ object FynxMarketplaceClient {
         }
     }
 
-    suspend fun updateListing(context: Context, listingId: String, title: String, price: Double, quantity: Int): Result<Unit> {
+    suspend fun updateListing(
+        context: Context,
+        listingId: String,
+        title: String,
+        description: String,
+        category: String,
+        condition: String,
+        location: String,
+        price: Double,
+        quantity: Int
+    ): Result<Unit> {
         val id = listingId.trim().toLongOrNull()?.takeIf { it > 0 }
             ?: return Result.failure(IllegalArgumentException("Invalid listing id."))
         val cleanTitle = title.trim()
+        val cleanDescription = description.trim()
+        val cleanCategory = category.trim()
+        val cleanCondition = condition.trim().uppercase(Locale.US)
+        val cleanLocation = location.trim()
         if (cleanTitle.length < 2) return Result.failure(IllegalArgumentException("Product name must contain at least 2 characters."))
+        if (cleanDescription.length < 5) return Result.failure(IllegalArgumentException("Product description must contain at least 5 characters."))
+        if (cleanCategory.isBlank()) return Result.failure(IllegalArgumentException("Choose a product category."))
+        if (cleanCondition !in setOf("NEW", "USED", "REFURBISHED")) return Result.failure(IllegalArgumentException("Choose a supported product condition."))
+        if (cleanLocation.isBlank()) return Result.failure(IllegalArgumentException("Product location is required."))
         if (!price.isFinite() || price <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid product price."))
         if (quantity < 0) return Result.failure(IllegalArgumentException("Stock cannot be negative."))
         val payload = JSONObject()
             .put("title", cleanTitle.take(160))
+            .put("description", cleanDescription.take(4000))
+            .put("category", cleanCategory.take(40))
+            .put("condition", cleanCondition)
+            .put("location", cleanLocation.take(160))
             .put("price", price)
             .put("quantity", quantity)
         return FynxBackendClient.postJson(context, "/api/marketplace/listings/$id/update", payload.toString()).map { }
