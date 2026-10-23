@@ -134,7 +134,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const limitPlaceholder = "$" + (params.length - 1);
       const offsetPlaceholder = "$" + params.length;
       const result = await pool.query(`
-        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.created_at,
+        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.created_at,
           (COALESCE((SELECT COUNT(*) FROM marketplace_orders o WHERE o.listing_id=l.id AND o.status IN ('PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED')),0)*8
            + COALESCE((SELECT COUNT(*) FROM fynx_discovery_events e WHERE e.listing_id=l.id AND e.event_type='PRODUCT_CLICK' AND e.created_at>NOW()-INTERVAL '14 days'),0)*2
            + GREATEST(0, 72-EXTRACT(EPOCH FROM (NOW()-l.created_at))/3600.0)) AS discovery_score
@@ -156,7 +156,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const listingId = validListingId(req.params?.id);
       if (!listingId) return res.status(400).json({ error: "invalid listing id" });
       const result = await pool.query(`
-        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.active,l.created_at
+        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.active,l.created_at
         FROM marketplace_listings l
         JOIN users u ON u.id=l.seller_id
         WHERE l.id=$1 AND UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')
