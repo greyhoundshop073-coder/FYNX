@@ -27,7 +27,7 @@ server=read('backend/server.js'); management=read('backend/statusManagementRoute
 visible=read('app/src/main/java/com/fynx/app/ui/FynxVisibleUpdatesPanel.kt'); app=read('app/src/main/java/com/fynx/app/ui/FynxApp.kt')
 client=read('app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt'); foundation=read('app/src/main/java/com/fynx/app/ui/FynxStatusFoundation.kt')
 composer=read('app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt'); mature=read('app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt')
-timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt')
+timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt'); runtime_navigation=read('scripts/verify_authenticated_runtime_navigation.py')
 share=read('app/src/main/java/com/fynx/app/ui/FynxShare.kt'); deeplink=read('app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt'); marketplace=read('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt'); marketplace_detail=read('app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt')
 remote_media=read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt'); camera=read('app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt')
 media_privacy=read('backend/mediaPrivacy.js')
