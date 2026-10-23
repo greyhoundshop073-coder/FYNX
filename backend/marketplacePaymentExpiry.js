@@ -232,6 +232,7 @@ async function verifyProviderCheckoutGroupPayment(group) {
       && String(transaction.reference || '') === String(group.payment_reference)
       && String(transaction.metadata?.checkoutGroupId || transaction.metadata?.checkout_group_id || '') === String(group.id)
       && String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '') === String(group.buyer_id)
+      && transaction.fees !== null && transaction.fees !== undefined
       && Number.isFinite(Number(transaction.fees)) && Number(transaction.fees) >= 0;
     return { configured: true, paid: valid, status, providerFee: valid ? Math.round(Number(transaction.fees)) : 0 };
   } catch {
