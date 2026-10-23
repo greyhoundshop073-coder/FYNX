@@ -9,9 +9,9 @@ const settlement = read('marketplaceSettlement.js');
 const scalability = read('scalability.js');
 const finalHardening = read('marketplaceBatch2FinalHardening.js');
 const checks = [
-  ['payment initialization uses a deterministic order reference', payment.includes('const reference = `FYNX-${existing.id}`')],
+  ['first-time payment initialization keeps its legacy recovery reference and safely falls back to a unique reference after a verified duplicate failure', payment.includes('let reference = `FYNX-${existing.id}`') && payment.includes('FYNX-ORDER-${crypto.randomUUID()}') && payment.includes('duplicateReferenceError')],
   ['payment initialization has a locked database recheck', payment.includes('FOR UPDATE') && payment.includes("status='PAYMENT_PENDING'")],
-  ['payment reference cannot be overwritten by a racing initializer', payment.includes('payment_reference IS NULL')],
+  ['payment reference cannot be overwritten by a racing initializer and stale replacement is reference-bound', payment.includes('payment_reference IS NULL') && payment.includes('payment_reference=$6 AND payment_authorization_url IS NULL')],
   ['existing payment authorization is idempotent', payment.includes('idempotent: true') && payment.includes('payment_authorization_url')],
   ['provider metadata binds initialization to the marketplace order', payment.includes("purpose: 'FYNX_MARKETPLACE_ORDER'") && payment.includes('orderId: String(existing.id)')],
   ['interrupted payment recovery verifies Paystack before retry', expiry.includes('/transaction/verify/')],
