@@ -26,9 +26,13 @@ class FynxSmokeTest {
 
         launchIntent!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
         device.pressHome()
-        context.startActivity(launchIntent)
-        device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 45_000)
-
+        // Use Instrumentation.startActivitySync just like the deep-link smoke test.
+        // A fire-and-forget application-context startActivity() can return while the
+        // emulator launcher still owns the foreground, producing a false red result.
+        instrumentation.startActivitySync(launchIntent)
+        val reachedFynx = device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 45_000)
+        device.waitForIdle(10_000)
+        assertTrue("FYNX launch intent did not reach the foreground package", reachedFynx)
         assertEquals(context.packageName, device.currentPackageName)
         assertTrue("FYNX must expose a non-empty application label", context.applicationInfo.loadLabel(context.packageManager).toString().isNotBlank())
     }
