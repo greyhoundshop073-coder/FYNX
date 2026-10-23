@@ -16,19 +16,55 @@ function amountSubunit(amount, currency) {
   return Math.round(value * 100);
 }
 
+async function findRefundOperation(client, transactionReference, refund) {
+  const schema = (await client.query(`SELECT
+    to_regclass('public.marketplace_checkout_group_items') IS NOT NULL
+      AND to_regclass('public.marketplace_checkout_groups') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='marketplace_checkout_groups' AND column_name='payment_reference') AS available`)).rows[0];
+  const hasCheckoutGroups = Boolean(schema?.available);
+  const groupJoin = hasCheckoutGroups
+    ? 'LEFT JOIN marketplace_checkout_group_items gi ON gi.order_id=o.id LEFT JOIN marketplace_checkout_groups cg ON cg.id=gi.checkout_id'
+    : '';
+  const effectiveReference = hasCheckoutGroups
+    ? "COALESCE(NULLIF(o.payment_reference, ''), NULLIF(cg.payment_reference, ''))"
+    : 'o.payment_reference';
+  const select = `SELECT f.id,f.order_id,f.status,f.amount,f.currency,f.metadata,f.provider_reference,
+      ${effectiveReference} AS resolved_payment_reference,
+      o.payment_reference,o.status AS order_status,o.quantity,o.listing_id
+    FROM marketplace_financial_operations f
+    JOIN marketplace_orders o ON o.id=f.order_id
+    ${groupJoin}`;
+  const identities = [refund?.refund_reference, refund?.id]
+    .map(value => value === null || value === undefined ? '' : String(value).trim())
+    .filter(value => value && value !== transactionReference);
+  if (identities.length) {
+    const exact = await client.query(`${select}
+      WHERE f.operation_type='REFUND'
+        AND ${effectiveReference}=$2
+        AND f.provider_reference=ANY($1::text[])
+      ORDER BY f.created_at DESC LIMIT 2 FOR UPDATE OF f`, [identities, transactionReference]);
+    if (exact.rows.length === 1) return exact.rows[0];
+    if (exact.rows.length > 1) return null;
+  }
+  const candidates = await client.query(`${select}
+    WHERE f.operation_type='REFUND'
+      AND ${effectiveReference}=$1
+      AND f.status IN ('PENDING','FAILED')
+    ORDER BY f.created_at DESC LIMIT 2 FOR UPDATE OF f`, [transactionReference]);
+  // A shared checkout reference may identify several child refunds. Never guess
+  // which child the provider event belongs to when the refund identity is absent.
+  return candidates.rows.length === 1 ? candidates.rows[0] : null;
+}
+
 async function reconcileRefundEvent(client, eventName, refund) {
   const transactionReference = typeof refund?.transaction_reference === 'string' ? refund.transaction_reference.trim() : '';
   if (!transactionReference) return false;
-  const operationResult = await client.query(`
-    SELECT f.id,f.order_id,f.status,f.amount,f.currency,f.metadata,o.payment_reference,o.status AS order_status,o.quantity,o.listing_id
-    FROM marketplace_financial_operations f JOIN marketplace_orders o ON o.id=f.order_id
-    WHERE f.operation_type='REFUND' AND o.payment_reference=$1
-    ORDER BY f.created_at DESC LIMIT 1 FOR UPDATE
-  `, [transactionReference]);
-  const operation = operationResult.rows[0];
-  if (!operation) return false;
   const status = String(refund?.status || '').toLowerCase();
   const providerReference = refund?.refund_reference || refund?.id || null;
+  const operation = await findRefundOperation(client, transactionReference, refund);
+  if (!operation) return false;
+  // A duplicate processed event must not release the same listing reservation twice.
+  if (operation.status === 'SUCCEEDED' && eventName === 'refund.processed') return true;
   const providerAmount = Number(refund?.amount);
   const providerCurrency = String(refund?.currency || '').trim().toUpperCase();
   const expectedAmount = amountSubunit(operation.amount, operation.currency);
@@ -51,7 +87,11 @@ async function reconcileRefundEvent(client, eventName, refund) {
     const caseId = metadata.caseId ? String(metadata.caseId) : null;
     if (caseId) await client.query(`UPDATE marketplace_protection_cases SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status IN ('OPEN','UNDER_REVIEW')`, [caseId]);
     await client.query(`UPDATE marketplace_escrows SET status='REFUNDED',refunded_at=COALESCE(refunded_at,NOW()),updated_at=NOW() WHERE order_id=$1 AND status IN ('REFUND_PENDING','DISPUTED')`, [operation.order_id]);
-    if (Number.isInteger(Number(operation.quantity)) && operation.listing_id) await client.query(`UPDATE marketplace_listings SET reserved_quantity=GREATEST(0,reserved_quantity-$1),updated_at=NOW() WHERE id=$2`, [Number(operation.quantity), operation.listing_id]);
+    const previousOrderStatus = String(operation.metadata?.previousOrderStatus || operation.order_status || '').toUpperCase();
+    const inventoryWasStillReserved = ['PAID', 'SHIPPED', 'DELIVERED', 'INSPECTION'].includes(previousOrderStatus);
+    if (inventoryWasStillReserved && Number.isInteger(Number(operation.quantity)) && operation.listing_id) {
+      await client.query(`UPDATE marketplace_listings SET reserved_quantity=GREATEST(0,reserved_quantity-$1),updated_at=NOW() WHERE id=$2`, [Number(operation.quantity), operation.listing_id]);
+    }
     const escrow = (await client.query('SELECT id,amount,currency FROM marketplace_escrows WHERE order_id=$1', [operation.order_id])).rows[0];
     if (escrow) await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'buyer_refund','REFUND',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, escrow.amount, escrow.currency, `REFUND-${operation.order_id}`, JSON.stringify({ provider: 'paystack', reference: transactionReference, caseId })]);
   } else if (eventName === 'refund.failed') {
