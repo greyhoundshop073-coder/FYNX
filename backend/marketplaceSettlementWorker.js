@@ -51,14 +51,15 @@ async function verifyTransferByReference(reference) {
 }
 
 export function nextPayoutVerificationProgress(metadata = {}) {
-  const priorAttempts = Math.max(0, Number(metadata?.verificationAttempts || 0));
+  const rawAttempts = Number(metadata?.verificationAttempts || 0);
+  const priorAttempts = Number.isFinite(rawAttempts) ? Math.max(0, Math.trunc(rawAttempts)) : 0;
   const nextAttempt = priorAttempts + 1;
   const cycleComplete = nextAttempt >= 12;
   return {
     attempt: nextAttempt,
     shouldContinue: !cycleComplete,
     verificationAttempts: cycleComplete ? 0 : nextAttempt,
-    verificationCycles: Math.max(0, Number(metadata?.verificationCycles || 0)) + (cycleComplete ? 1 : 0)
+    verificationCycles: (Number.isFinite(Number(metadata?.verificationCycles)) ? Math.max(0, Math.trunc(Number(metadata?.verificationCycles))) : 0) + (cycleComplete ? 1 : 0)
   };
 }
 
