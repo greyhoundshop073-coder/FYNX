@@ -121,16 +121,17 @@ test("group message send is idempotent and refuses message-ID collisions", async
   assert.equal(crossGroup.statusCode, 409, "an ID already owned by another group must conflict");
   assert.equal(crossGroup.body?.code, "MESSAGE_ID_CONFLICT");
   assert.equal(pool.messages.size, 1);
-  assert.equal(broadcasts.length, 1);
+  assert.equal(broadcasts.length, 2);
 
   const crossSender = await send({ actorId: "2" });
   assert.equal(crossSender.statusCode, 409, "an ID already owned by another sender must conflict");
   assert.equal(crossSender.body?.code, "MESSAGE_ID_CONFLICT");
   assert.equal(pool.messages.size, 1);
-  assert.equal(broadcasts.length, 1);
-  assert.equal(pool.insertAttempts, 4);
+  assert.equal(broadcasts.length, 2);
+  assert.equal(broadcastAttempts, 3, "ID collisions must be rejected before another realtime broadcast");
+  assert.equal(pool.insertAttempts, 5);
 
-  console.log("PASS first group send inserts and broadcasts once");
-  console.log("PASS duplicate request returns HTTP 200 and canonical message without another row/event");
+  console.log("PASS committed message survives a transient broadcast error; stable-ID retry recovers delivery");
+  console.log("PASS repeated POST retries retain one canonical row and replay the same realtime message ID");
   console.log("PASS same message ID cannot cross group or sender boundaries");
 });
