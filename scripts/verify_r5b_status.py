@@ -74,7 +74,7 @@ require('Status backend accepts music-only Status and migrates type constraint',
 require('Status music migration uses valid PostgreSQL dollar-quote delimiters', 'DO $$ BEGIN' in server and 'END $$;`);' in server and 'DO $ BEGIN' not in server and 'END $;`);' not in server)
 require('Status backend validates published music','fynx_music_catalogue' in server and 'c.active=TRUE' in server and 'music selection is not published in the FYNX catalogue' in server)
 require('Status backend preserves catalogue music duration','musicDurationMs = Math.max(0, Number(music.rows[0].duration_ms) || 0)' in server)
-require('Add Status Music opens catalogue','onMusic = { showStatusMusicPicker = true }' in hub and 'FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)' in hub)
+require('Add Status Music opens catalogue with auth-safe loading states','onMusic = {' in hub and 'showStatusMusicPicker = true' in hub and 'FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)' in hub and 'FynxBackendClient.hasAccessToken(context)' in hub and 'Sign in to FYNX to browse published music.' in hub)
 require('Status creator exposes Take photo, Record video, and Gallery','Text("Take photo"' in hub and 'Text("Record video"' in hub and 'Text("Gallery"' in hub)
 require('Status creator gallery selects both photos and videos','deviceMediaPicker.launch(arrayOf("image/*", "video/*"))' in hub)
 require('Status creator secondary tools are horizontally scrollable','.horizontalScroll(rememberScrollState())' in hub and 'label = "Text"' in hub and 'label = "Voice"' in hub and 'label = "Music"' in hub and 'label = "Layout"' in hub)
