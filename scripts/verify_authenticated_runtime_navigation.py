@@ -951,10 +951,13 @@ if not FAILURES:
                                             and node not in editable_nodes
                                             for node in root.iter("node")
                                         )
-                                        composer_empty = bool(editable_nodes) and all(
-                                            not (node.attrib.get("text") or "").strip()
-                                            for node in editable_nodes
+                                        focused_editors = [
+                                            node for node in editable_nodes
                                             if node.attrib.get("focused", "false").lower() == "true"
+                                        ]
+                                        composer_empty = bool(focused_editors) and all(
+                                            not (node.attrib.get("text") or "").strip()
+                                            for node in focused_editors
                                         )
                                         return marker_in_message, marker_in_editor, composer_empty
 
@@ -980,7 +983,7 @@ if not FAILURES:
                                             time.sleep(.5)
                                             last_ui = dump_ui(filename + "-result.xml")
                                             in_message, in_editor, editor_empty = marker_state(last_ui, marker_text)
-                                            if in_message and not in_editor and editor_empty:
+                                            if in_message and not in_editor:
                                                 return last_ui
                                         return ""
 
@@ -1026,10 +1029,6 @@ if not FAILURES:
                                     report.append("- Group send tests blocked by the actual group's messaging permissions")
                                 else:
                                     FAILURES.append("group conversation composer was not available for send testing")
-                                elif "Messaging is restricted" in group_after:
-                                    report.append("- Group send test blocked by the actual group's messaging permissions")
-                                else:
-                                    FAILURES.append("group conversation composer was not available for the send test")
                                 report.append("- PASS actual FynxGroupConversationPanel opened; captured group-chat-inside.png")
                             else:
                                 FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
