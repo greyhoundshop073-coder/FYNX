@@ -28,6 +28,16 @@ async function paystackJson(url, options = {}) {
   return { response, data };
 }
 
+export function payoutReferenceForOperation(operation) {
+  const orderId = String(operation?.order_id || '');
+  const operationId = String(operation?.id || '');
+  if (!orderId || !operationId) throw new Error('payout operation requires order and operation IDs');
+  // Preserve the original first-attempt reference for in-flight payouts from
+  // older deployments. Each subsequent operation gets a separate provider ref.
+  return String(operation?.idempotency_key || '') === `PAYOUT-${orderId}`
+    ? `fynx-payout-${orderId}`
+    : `fynx-payout-${operationId}`;
+}
 export function classifyPaystackTransferVerification(response, data, expectedReference) {
   // Paystack documents HTTP 404 as transfer not found. Other failed or
   // indeterminate responses must not be interpreted as proof that no transfer
@@ -169,7 +179,7 @@ async function initiatePayout(payload) {
     // If Paystack accepted the previous attempt but FYNX crashed before saving the
     // provider reference, this discovers the existing transfer instead of creating a
     // second transfer. Paystack explicitly recommends retrying with the same reference.
-    const reference = `fynx-payout-${operation.order_id}`;
+    const reference = payoutReferenceForOperation(operation);
     let existingTransfer = await verifyTransferByReference(reference);
     let response;
     let data;
