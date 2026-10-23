@@ -102,6 +102,22 @@ async function refundPaystack(reference, amount, currency) {
   return data;
 }
 
+async function resolveOrderPaymentReference(client, orderId, currentReference) {
+  if (typeof currentReference === 'string' && currentReference.trim()) return currentReference.trim();
+  const schema = (await client.query(`SELECT
+    to_regclass('public.marketplace_checkout_group_items') IS NOT NULL
+      AND to_regclass('public.marketplace_checkout_groups') IS NOT NULL AS available`)).rows[0];
+  if (!schema?.available) return null;
+  const result = await client.query(`SELECT g.payment_reference
+    FROM marketplace_checkout_group_items gi
+    JOIN marketplace_checkout_groups g ON g.id=gi.checkout_id
+    WHERE gi.order_id=$1
+    LIMIT 1`, [orderId]);
+  return typeof result.rows[0]?.payment_reference === 'string' && result.rows[0].payment_reference.trim()
+    ? result.rows[0].payment_reference.trim()
+    : null;
+}
+
 export function registerMarketplaceProtectionResolutionRoutes({ app }) {
   if (!pool) return;
   void ensureProtectionSchema().catch(error => console.error('marketplace protection schema', error));
@@ -155,7 +171,8 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
         if (resolution === 'CANCEL' && (payoutConflict || refundConflict)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'financial operation is active; protection cannot be cancelled while money movement is pending or finalized' }); }
 
         if (resolution === 'BUYER') {
-          if (!row.payment_reference) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'payment reference is required before refund' }); }
+          const paymentReference = await resolveOrderPaymentReference(client, row.order_id, row.payment_reference);
+          if (!paymentReference) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'verified payment reference is required before refund' }); }
           if (!PAYSTACK_SECRET_KEY) { await client.query('ROLLBACK'); return res.status(503).json({ error: 'refund provider is not configured yet' }); }
           const key = `REFUND-${row.order_id}`;
           const existing = (await client.query('SELECT * FROM marketplace_financial_operations WHERE idempotency_key=$1 FOR UPDATE', [key])).rows[0];
@@ -163,8 +180,8 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
           if (existing?.status === 'PENDING') { await client.query('COMMIT'); return res.status(202).json({ ok: true, pending: true, caseId: String(caseId), status: 'REFUND_PENDING', operation: existing }); }
           if (existing?.status === 'FAILED') { await client.query('COMMIT'); return res.status(409).json({ error: 'previous refund attempt failed; provider status must be reconciled before retry', protectionActive: true, caseId: String(caseId), operation: existing }); }
           const operationId = crypto.randomUUID();
-          refundJob = { operationId, orderId: String(row.order_id), caseId: String(caseId), reference: String(row.payment_reference), amount: Number(row.total_amount), currency: String(row.currency) };
-          await client.query(`INSERT INTO marketplace_financial_operations (id,order_id,operation_type,idempotency_key,status,provider,amount,currency,metadata) VALUES ($1,$2,'REFUND',$3,'PENDING','paystack',$4,$5,$6::jsonb)`, [operationId, row.order_id, key, row.total_amount, row.currency, JSON.stringify({ paymentReference: row.payment_reference, caseId: String(caseId), note })]);
+          refundJob = { operationId, orderId: String(row.order_id), caseId: String(caseId), reference: paymentReference, amount: Number(row.total_amount), currency: String(row.currency) };
+          await client.query(`INSERT INTO marketplace_financial_operations (id,order_id,operation_type,idempotency_key,status,provider,amount,currency,metadata) VALUES ($1,$2,'REFUND',$3,'PENDING','paystack',$4,$5,$6::jsonb)`, [operationId, row.order_id, key, row.total_amount, row.currency, JSON.stringify({ paymentReference, caseId: String(caseId), note, previousOrderStatus: row.previous_order_status || row.order_status || null })]);
           await client.query(`UPDATE marketplace_escrows SET status='REFUND_PENDING',updated_at=NOW() WHERE id=$1 AND status IN ('HELD','DISPUTED','RELEASE_ELIGIBLE')`, [row.escrow_id]);
           await client.query(`UPDATE marketplace_protection_cases SET status='UNDER_REVIEW',updated_at=NOW() WHERE id=$1`, [caseId]);
         } else {
