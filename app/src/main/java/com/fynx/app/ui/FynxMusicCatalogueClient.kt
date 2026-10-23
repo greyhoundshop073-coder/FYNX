@@ -1,6 +1,9 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 
 /**
@@ -19,33 +22,51 @@ data class FynxMusicCatalogueTrack(
 )
 
 object FynxMusicCatalogueClient {
-    suspend fun listPublished(context: Context, query: String = ""): Result<List<FynxMusicCatalogueTrack>> = runCatching {
-        val suffix = query.trim().take(80)
-        val path = if (suffix.isBlank()) {
-            "/api/social/music/catalogue"
-        } else {
-            "/api/social/music/catalogue?q=" + java.net.URLEncoder.encode(suffix, "UTF-8")
-        }
-        val raw = FynxBackendClient.get(context, path).getOrThrow()
-        val rows = JSONArray(raw).let { array ->
-            buildList {
-                for (index in 0 until array.length()) {
-                    val row = array.optJSONObject(index) ?: continue
-                    val id = row.optLong("id", 0L)
-                    val mediaId = row.optLong("mediaId", 0L)
-                    if (id < 1L || mediaId < 1L) continue
-                    add(
-                        FynxMusicCatalogueTrack(
-                            id = id,
-                            mediaId = mediaId,
-                            title = row.optString("title").trim().take(120),
-                            artist = row.optString("artist").trim().take(120),
-                            durationMs = row.optLong("durationMs", 0L).coerceAtLeast(0L)
-                        )
-                    )
+    private const val CATALOGUE_TIMEOUT_MS = 15_000L
+
+    suspend fun listPublished(context: Context, query: String = ""): Result<List<FynxMusicCatalogueTrack>> {
+        // A slow/offline backend must not leave the picker spinning forever.
+        // withTimeoutOrNull cancels the underlying request; caller cancellation must
+        // still propagate so a newly typed search is not overwritten by stale work.
+        val tracks = try {
+            withTimeoutOrNull(CATALOGUE_TIMEOUT_MS) {
+                val suffix = query.trim().take(80)
+                val path = if (suffix.isBlank()) {
+                    "/api/social/music/catalogue"
+                } else {
+                    "/api/social/music/catalogue?q=" + java.net.URLEncoder.encode(suffix, "UTF-8")
+                }
+                val raw = FynxBackendClient.get(context, path).getOrThrow()
+                JSONArray(raw).let { array ->
+                    buildList {
+                        for (index in 0 until array.length()) {
+                            val row = array.optJSONObject(index) ?: continue
+                            val id = row.optLong("id", 0L)
+                            val mediaId = row.optLong("mediaId", 0L)
+                            if (id < 1L || mediaId < 1L) continue
+                            add(
+                                FynxMusicCatalogueTrack(
+                                    id = id,
+                                    mediaId = mediaId,
+                                    title = row.optString("title").trim().take(120),
+                                    artist = row.optString("artist").trim().take(120),
+                                    durationMs = row.optLong("durationMs", 0L).coerceAtLeast(0L)
+                                )
+                            )
+                        }
+                    }
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            return Result.failure(error)
         }
-        rows
+
+        return if (tracks != null) {
+            Result.success(tracks)
+        } else {
+            Result.failure(IOException("Music catalogue request timed out. Please try again."))
+        }
     }
 }
