@@ -82,6 +82,7 @@ fun FynxMatureStatusComposerPanel(
     initialMediaUri: Uri? = null,
     initialType: FynxStatusType? = null,
     initialMusic: FynxMusicCatalogueTrack? = null,
+    onChooseMusic: () -> Unit = {},
     onClose: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -569,7 +570,7 @@ fun FynxMatureStatusComposerPanel(
                             item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
                             item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO || type == FynxStatusType.VIDEO, !recording && !publishing) { pickMedia.launch(arrayOf("image/*", "video/*")) } }
                             item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.MusicNote, "Music", type == FynxStatusType.MUSIC, !publishing && !recording && selectedMusic != null) { type = FynxStatusType.MUSIC; mediaUri = null; showColors = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.MusicNote, if (selectedMusic == null) "Add music" else "Change music", selectedMusic != null, !publishing && !recording) { onChooseMusic(); showColors = false; error = null } }
                             item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; mediaUri = null; elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false } }
                         }
                     }
