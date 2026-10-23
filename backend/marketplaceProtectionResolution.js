@@ -106,7 +106,8 @@ async function resolveOrderPaymentReference(client, orderId, currentReference) {
   if (typeof currentReference === 'string' && currentReference.trim()) return currentReference.trim();
   const schema = (await client.query(`SELECT
     to_regclass('public.marketplace_checkout_group_items') IS NOT NULL
-      AND to_regclass('public.marketplace_checkout_groups') IS NOT NULL AS available`)).rows[0];
+      AND to_regclass('public.marketplace_checkout_groups') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='marketplace_checkout_groups' AND column_name='payment_reference') AS available`)).rows[0];
   if (!schema?.available) return null;
   const result = await client.query(`SELECT g.payment_reference
     FROM marketplace_checkout_group_items gi
