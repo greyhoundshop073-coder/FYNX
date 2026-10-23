@@ -4,10 +4,14 @@ const source = fs.readFileSync(new URL('./marketplaceTransactions.js', import.me
 const profileSource = fs.readFileSync(new URL('./profileRoutes.js', import.meta.url), 'utf8');
 const androidReceiptSource = fs.readFileSync(new URL('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceReceipt.kt', import.meta.url), 'utf8');
 const paymentSource = fs.readFileSync(new URL('./marketplaceReputation.js', import.meta.url), 'utf8');
+const webhookSource = fs.readFileSync(new URL('./marketplacePaystackWebhook.js', import.meta.url), 'utf8');
 const settlementSource = fs.readFileSync(new URL('./marketplaceSettlement.js', import.meta.url), 'utf8');
 const androidPanelSource = fs.readFileSync(new URL('../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt', import.meta.url), 'utf8');
 const checks = [
   ['checkout group stores its Paystack reference before marking child payment evidence', paymentSource.includes("ALTER TABLE marketplace_checkout_groups ADD COLUMN IF NOT EXISTS payment_reference TEXT") && paymentSource.includes("SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3") && paymentSource.includes("checkoutGroupId: String(group.id)") && paymentSource.includes("reference, provider: 'paystack'")],
+  ['checkout-group initialization retries get a fresh Paystack reference after an uncommitted provider attempt', paymentSource.includes("const reference = `FYNX-CHECKOUT-${crypto.randomUUID()}`;") && !paymentSource.includes("const reference = `FYNX-CHECKOUT-${group.id}`;") && paymentSource.includes("metadata: { checkoutGroupId: String(group.id)")],
+  ['successful checkout-group initialization retries reuse the persisted authorization instead of creating another charge', paymentSource.includes("if (group.payment_reference && group.payment_authorization_url)") && paymentSource.includes("reference: group.payment_reference, authorizationUrl: group.payment_authorization_url") && paymentSource.includes("idempotent: true")],
+  ['unique checkout-group references keep the UUID contract required by verification and Paystack webhook reconciliation', paymentSource.includes("/^FYNX-CHECKOUT-[0-9a-f-]{36}$/i.test(reference)") && webhookSource.includes("/^FYNX-CHECKOUT-[0-9a-f-]{36}$/i.test(reference)") && paymentSource.includes("checkoutGroupId: String(group.id)")],
   ['aggregate buyer receipt is scoped to the authenticated checkout buyer', source.includes("app.get('/api/marketplace/checkout/:id/receipt', auth") && source.includes("String(group.buyer_id) !== String(req.user.sub)")],
   ['aggregate receipt covers all checkout items and enforces the 20-item cap', source.includes('lines.length > 20') && source.includes('COUNT(DISTINCT gi.order_id)')],
   ['aggregate receipt binds the stored paid checkout and Paystack reference', source.includes("cg.status='PAID'") && source.includes("e.metadata->>'reference'=cg.payment_reference") && source.includes("e.metadata->>'checkoutGroupId'=cg.id::text")],
