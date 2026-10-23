@@ -21,6 +21,7 @@ const checks = [
   ['payout uses a deterministic lowercase provider reference', worker.includes('fynx-payout-${operation.order_id}')],
   ['payout recovery verifies the deterministic transfer before creating a new transfer', worker.includes('verifyTransferByReference(reference)') && worker.includes('recoveryCheckedFirst')],
   ['payout transfer verification treats only HTTP 404 as not found and binds successful data to the requested reference', worker.includes('response?.status === 404') && worker.includes('classifyPaystackTransferVerification(response, data, cleanReference)') && !worker.includes('response.status === 404 || data?.status === false')],
+  ['payout polling stores the canonical transfer reference rather than a transfer code', worker.includes("const providerReference = String(data?.data?.reference || reference);") && !worker.includes('data?.data?.transfer_code || reference')],
   ['payout provider amount and currency are validated', worker.includes('transferMatchesOperation') && worker.includes('Paystack payout amount or currency does not match')],
   ['refund webhook amount and currency are validated', webhook.includes('providerAmount !== expectedAmount') && webhook.includes('providerCurrency !== expectedCurrency')],
   ['refund mismatches block protected funds', webhook.includes("status='BLOCKED'") && webhook.includes("status='DISPUTED'")],
