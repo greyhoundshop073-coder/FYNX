@@ -14,7 +14,7 @@ check("payment reference cannot be overwritten by a racing initializer", "paymen
 check("payment initialization remains idempotent for an existing authorization", "idempotent: true" in payment_route and "payment_authorization_url" in payment_route)
 check("provider metadata binds initialization to the marketplace order", "purpose: 'FYNX_MARKETPLACE_ORDER'" in payment_route and "orderId: String(existing.id)" in payment_route and "buyerId: String(existing.buyer_id)" in payment_route)
 check("duplicate deterministic order references are verified against provider amount, currency, order, and buyer before replacement", "duplicateReferenceError" in payment_route and "verifyOrderPaymentAttempt(reference, existing)" in payment_route and "previous.matches" in payment_route)
-check("only terminally failed provider attempts may retry with a UUID reference", "FYNX-ORDER-\${crypto.randomUUID()}" in payment_route and "!['failed', 'abandoned', 'reversed'].includes(previous.status)" in payment_route)
+check("only terminally failed provider attempts may retry with a UUID reference", 'FYNX-ORDER-${crypto.randomUUID()}' in payment_route and "!['failed', 'abandoned', 'reversed'].includes(previous.status)" in payment_route)
 check("successful or unresolved provider attempts do not trigger a new initialization", "previous order payment appears successful; verify the existing reference before retrying" in payment_route and "no new payment was started" in payment_route)
 
 failed = [name for name, ok in checks if not ok]
