@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 
 const { Client } = pg;
-assert.ok(process.env.DATABASE_URL, "CI PostgreSQL DATABASE_URL is required");
+assert.ok(process.env.PGDATABASE, "CI PostgreSQL connection environment is required");
 const source = await readFile(new URL("./server.js", import.meta.url), "utf8");
 const start = source.indexOf('app.get("/api/media/:id"');
 const marker = source.indexOf("let result = await pool.query(", start);
@@ -12,7 +12,7 @@ const sqlStart = source.indexOf(tick, marker) + 1;
 const sqlEnd = source.indexOf(tick + ", [mediaId, req.user.sub]);", sqlStart);
 assert.ok(start >= 0 && marker >= 0 && sqlEnd > sqlStart, "media authorization SQL extraction failed");
 const sql = source.slice(sqlStart, sqlEnd);
-const db = new Client({ connectionString: process.env.DATABASE_URL });
+const db = new Client();
 await db.connect();
 try {
   await db.query([
