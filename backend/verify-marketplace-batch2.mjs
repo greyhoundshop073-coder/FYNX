@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+import { selectMarketplaceRefundByIdentity, payoutTransferMatchesStoredIdentity, validateUnreferencedOrderPaymentRecovery } from './marketplaceBatch2FinalHardening.js';
 import { selectMarketplaceRefundByIdentity, payoutTransferMatchesStoredIdentity } from './marketplaceBatch2FinalHardening.js';
 import { classifyPaystackTransferVerification, classifyPaystackTransferFetch, payoutInitializationOutcomeIsUncertain, nextPayoutVerificationProgress, payoutSweepIdempotencyKey, payoutVerificationJobIdempotencyKey, payoutReferenceForOperation } from './marketplaceSettlementWorker.js';
 
@@ -18,6 +18,7 @@ const checks = [
   ['existing payment authorization is idempotent', payment.includes('idempotent: true') && payment.includes('payment_authorization_url')],
   ['provider metadata binds initialization to the marketplace order', payment.includes("purpose: 'FYNX_MARKETPLACE_ORDER'") && payment.includes('orderId: String(existing.id)')],
   ['interrupted payment recovery verifies Paystack before retry', expiry.includes('/transaction/verify/')],
+  ['timeout payment recovery requires exact buyer metadata and an explicit nonnegative provider fee', finalHardening.includes('metadataBuyerId === String(order?.buyer_id || \'\')') && finalHardening.includes('fee !== null && fee !== undefined') && finalHardening.includes('validateUnreferencedOrderPaymentRecovery({ response, data, order, reference })')],
   ['timeout recovery can verify a deterministic payment reference without a saved local reference', finalHardening.includes('recoverPaymentWithoutLocalReference') && finalHardening.includes('FYNX-${order.id}') && finalHardening.includes('batch2-timeout-recovery')],
   ['first payout attempts preserve the legacy provider reference while retry operations use their own stable operation ID', worker.includes('payoutReferenceForOperation(operation)') && worker.includes('`fynx-payout-${orderId}`') && worker.includes('`fynx-payout-${operationId}`')],
   ['payout recovery verifies the deterministic transfer before creating a new transfer', worker.includes('verifyTransferByReference(reference)') && worker.includes('recoveryCheckedFirst')],
@@ -73,6 +74,17 @@ const refundIdentityFailures = refundIdentityChecks.filter(([, ok]) => !ok).map(
 for (const [name, ok] of refundIdentityChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
 if (refundIdentityFailures.length) throw new Error(`Refund identity behavior gate failed: ${refundIdentityFailures.join('; ')}`);
 
+const paymentRecoveryChecks = [
+  ['timeout recovery accepts exact order/buyer metadata and an explicit fee', validateUnreferencedOrderPaymentRecovery({ response:{ok:true}, data:{status:true,data:{status:'success',amount:2500,currency:'NGN',reference:'FYNX-o1',fees:100,metadata:{orderId:'o1',buyerId:'b1'}}}, order:{id:'o1',buyer_id:'b1',total_amount:25,currency:'NGN'}, reference:'FYNX-o1' }).valid],
+  ['timeout recovery rejects missing buyer metadata', !validateUnreferencedOrderPaymentRecovery({ response:{ok:true}, data:{status:true,data:{status:'success',amount:2500,currency:'NGN',reference:'FYNX-o1',fees:100,metadata:{orderId:'o1'}}}, order:{id:'o1',buyer_id:'b1',total_amount:25,currency:'NGN'}, reference:'FYNX-o1' }).valid],
+  ['timeout recovery rejects a missing provider fee instead of treating it as zero', !validateUnreferencedOrderPaymentRecovery({ response:{ok:true}, data:{status:true,data:{status:'success',amount:2500,currency:'NGN',reference:'FYNX-o1',metadata:{orderId:'o1',buyerId:'b1'}}}, order:{id:'o1',buyer_id:'b1',total_amount:25,currency:'NGN'}, reference:'FYNX-o1' }).valid],
+  ['timeout recovery rejects wrong buyer metadata', !validateUnreferencedOrderPaymentRecovery({ response:{ok:true}, data:{status:true,data:{status:'success',amount:2500,currency:'NGN',reference:'FYNX-o1',fees:100,metadata:{orderId:'o1',buyerId:'other'}}}, order:{id:'o1',buyer_id:'b1',total_amount:25,currency:'NGN'}, reference:'FYNX-o1' }).valid]
+ ];
+const paymentRecoveryFailures = paymentRecoveryChecks.filter(([,ok])=>!ok).map(([name])=>name);
+for (const [name,ok] of paymentRecoveryChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
+if (paymentRecoveryFailures.length) throw new Error(`Timeout payment recovery identity gate failed: ${paymentRecoveryFailures.join('; ')}`);
+console.log(`Timeout payment recovery identity gate passed (${paymentRecoveryChecks.length} cases)`);
+
 const payoutIdentityChecks = [
   ['post-success payout recognizes its exact canonical transfer reference', payoutTransferMatchesStoredIdentity({ reference: 'fynx-payout-order-1', transfer_code: 'TRF_1' }, 'fynx-payout-order-1')],
   ['post-success payout can recognize a legacy row by its exact transfer code', payoutTransferMatchesStoredIdentity({ reference: 'fynx-payout-order-1', transfer_code: 'TRF_1' }, 'TRF_1')],
@@ -123,5 +135,5 @@ const transferVerificationFailures = transferVerificationChecks.filter(([, ok]) 
 for (const [name, ok] of transferVerificationChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
 if (transferVerificationFailures.length) throw new Error(`Payout verification behavior gate failed: ${transferVerificationFailures.join('; ')}`);
 console.log(`Payout verification behavior gate passed (${transferVerificationChecks.length} cases)`);
-console.log(`Batch 2 financial hardening gate passed (${checks.length} structural checks, ${refundIdentityChecks.length} refund identity cases, ${payoutIdentityChecks.length} post-success payout identity cases, ${transferVerificationChecks.length} payout verification cases, and ${payoutProgressChecks.length} resweep cases)`);
+console.log(`Batch 2 financial hardening gate passed (${checks.length} structural checks, ${refundIdentityChecks.length} refund identity cases, ${paymentRecoveryChecks.length} timeout payment recovery cases, ${payoutIdentityChecks.length} post-success payout identity cases, ${transferVerificationChecks.length} payout verification cases, and ${payoutProgressChecks.length} resweep cases)`);
 
