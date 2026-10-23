@@ -3,7 +3,7 @@
 # Keep authenticated recovery coverage enabled after detector corrections.
 # Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
-import os, subprocess, time, html, re, json, uuid
+import os, subprocess, time, html, re, json, uuid, binascii, struct, zlib
 import urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -758,6 +758,216 @@ def backend_group_access_contract(group_id:str)->tuple[bool,str]:
     except Exception as error:
         status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
         return False,"authenticated group lifecycle/permissions check failed:"+status+" "+type(error).__name__
+
+
+
+def make_ci_attachment_png(path:Path)->None:
+    """Write a tiny valid RGB PNG for the real Android Photo Picker; no user media is read."""
+    width=48
+    height=48
+    rows=[]
+    for y in range(height):
+        row=bytearray([0])
+        for x in range(width):
+            row.extend((24,133,248) if (x//8+y//8)%2==0 else (245,248,252))
+        rows.append(bytes(row))
+    def chunk(kind:bytes,data:bytes)->bytes:
+        return struct.pack(">I",len(data))+kind+data+struct.pack(">I",binascii.crc32(kind+data)&0xffffffff)
+    png=b"\x89PNG\r\n\x1a\n"
+    png+=chunk(b"IHDR",struct.pack(">IIBBBBB",width,height,8,2,0,0,0))
+    png+=chunk(b"IDAT",zlib.compress(b"".join(rows)))
+    png+=chunk(b"IEND",b"")
+    path.write_bytes(png)
+
+def backend_group_message_snapshot(group_id:str)->tuple[dict[str,dict],str]:
+    """Read current group history using the same authenticated server account as the app."""
+    if not USERNAME or not PASSWORD:
+        return {},"FYNX_E2E_USERNAME/FYNX_E2E_PASSWORD are unavailable"
+    try:
+        base,token=backend_login_token(USERNAME,PASSWORD)
+        group_path=urllib.parse.quote(group_id,safe="")
+        request=urllib.request.Request(
+            base+"/api/groups/"+group_path+"/messages?limit=100",
+            headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-cache"},
+            method="GET",
+        )
+        with urllib.request.urlopen(request,timeout=20) as response:
+            data=json.loads(response.read().decode("utf-8","replace"))
+        messages=data.get("messages",[])
+        if not isinstance(messages,list):
+            return {},"server group history response did not contain a message list"
+        result={}
+        for item in messages:
+            if isinstance(item,dict) and str(item.get("id") or "").strip():
+                result[str(item["id"])]=item
+        return result,"authenticated group history returned "+str(len(result))+" distinct message IDs"
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return {},"authenticated group history read failed:"+status+" "+type(error).__name__
+
+def first_gallery_image_control(xml_text:str):
+    """Choose the first actual image tile by accessibility description/bounds, not a guessed tap point."""
+    if not xml_text:
+        return None
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    candidates=[]
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)]=parent
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user","true").lower()=="false":
+            continue
+        description=" ".join((node.attrib.get("text") or "",node.attrib.get("content-desc") or "")).strip().casefold()
+        if not any(word in description for word in ("photo taken","image taken","image/png","fynx_ci_group_attachment","attachment.png")):
+            continue
+        target=node
+        cur=node
+        while cur is not None:
+            if cur.attrib.get("clickable","false").lower()=="true" and _center(cur):
+                target=cur
+                break
+            cur=parents.get(id(cur))
+        center=_center(target)
+        if not center:
+            continue
+        bounds=target.attrib.get("bounds","")
+        try:
+            left_top,right_bottom=bounds.split("][",1)
+            left,top=map(int,left_top.strip("[]").split(","))
+            right,bottom=map(int,right_bottom.strip("[]").split(","))
+        except (ValueError,IndexError):
+            continue
+        width,height=right-left,bottom-top
+        if top<250 or top>2600 or width<100 or height<100 or width>800 or height>900:
+            continue
+        candidates.append((top,left,target,center))
+    if not candidates:
+        return None
+    _,_,target,center=min(candidates,key=lambda item:(item[0],item[1]))
+    values=(target.attrib.get("text") or "",target.attrib.get("content-desc") or "")
+    return (next((v.strip() for v in values if v.strip()),"image tile"),center[0],center[1])
+
+def certify_group_gallery_image(group_id:str)->None:
+    """Send one generated fixture through the actual Group -> attachment menu -> Gallery -> backend path."""
+    group_ui=wait_for_group_conversation_ui("group-gallery-before.xml",timeout=12)
+    if not group_ui or not find_control(group_ui,["Add attachment"]):
+        FAILURES.append("group Gallery attachment test could not establish a real group composer")
+        return
+    before,detail=backend_group_message_snapshot(group_id)
+    if not before and "returned 0 distinct" not in detail:
+        FAILURES.append("group Gallery attachment test could not read baseline backend history: "+detail)
+        return
+
+    fixture=ROOT/"FYNX_CI_GROUP_ATTACHMENT.png"
+    try:
+        make_ci_attachment_png(fixture)
+    except Exception as error:
+        FAILURES.append("group Gallery fixture generation failed: "+type(error).__name__)
+        return
+    target="/sdcard/Pictures/FYNX_CI_GROUP_ATTACHMENT.png"
+    mkdir=run("adb","shell","mkdir","-p","/sdcard/Pictures")
+    pushed=run("adb","push",str(fixture),target,timeout=30)
+    if mkdir.returncode!=0 or pushed.returncode!=0:
+        FAILURES.append("group Gallery fixture could not be copied to Android shared Pictures storage")
+        return
+    scanned=run("adb","shell","am","broadcast","-a","android.intent.action.MEDIA_SCANNER_SCAN_FILE","-d","file:///sdcard/Pictures/FYNX_CI_GROUP_ATTACHMENT.png")
+    if scanned.returncode!=0:
+        FAILURES.append("Android MediaStore did not accept the CI Gallery fixture scan request")
+        return
+    time.sleep(1.5)
+
+    menu=tap_control(group_ui,["Add attachment"],"group-gallery-attachment-menu",["Gallery","Files"])
+    if not menu:
+        return
+    picker=tap_control(menu,["Gallery"],"group-gallery-picker",["Photos","Albums","Browse","Images"])
+    if not picker:
+        return
+
+    # Prefer Android's visible Browse route so the test can select the exact fixture by file name.
+    browse=find_control(picker,["Browse"])
+    selected=False
+    if browse:
+        browse_ui=tap_control(picker,["Browse"],"group-gallery-browse",["Recent","Images","Downloads","Pictures","FYNX_CI_GROUP_ATTACHMENT.png"])
+        if browse_ui:
+            file_ui=""
+            deadline=time.monotonic()+12
+            while time.monotonic()<deadline:
+                file_ui=dump_ui("group-gallery-fixture-file.xml")
+                if find_control(file_ui,["FYNX_CI_GROUP_ATTACHMENT.png"]):
+                    break
+                time.sleep(.5)
+            file_control=find_control(file_ui,["FYNX_CI_GROUP_ATTACHMENT.png"])
+            if file_control:
+                _,fx,fy=file_control
+                run("adb","shell","input","tap",str(fx),str(fy))
+                selected=True
+
+    # On emulator versions where Browse is not exposed, choose the accessible image tile itself.
+    if not selected:
+        latest=dump_ui("group-gallery-photo-grid.xml")
+        tile=first_gallery_image_control(latest or picker)
+        if tile:
+            _,ix,iy=tile
+            run("adb","shell","input","tap",str(ix),str(iy))
+            selected=True
+    if not selected:
+        screenshot("group-gallery-photo-selection-failed.png")
+        FAILURES.append("Android Gallery opened but the generated CI image could not be selected through an accessible photo/file control; visible markers: "+visible_marker_summary(picker))
+        return
+
+    # Selection must travel through the live app callback; only backend persistence can make this pass.
+    after={}
+    deadline=time.monotonic()+60
+    while time.monotonic()<deadline:
+        time.sleep(1)
+        latest,read_detail=backend_group_message_snapshot(group_id)
+        if latest:
+            new_attachments=[
+                item for message_id,item in latest.items()
+                if message_id not in before and item.get("attachmentMediaId") is not None
+                and str(item.get("senderUsername") or "").removeprefix("@").strip().casefold()==USERNAME.removeprefix("@").strip().casefold()
+            ]
+            if new_attachments:
+                after=latest
+                break
+    screenshot("group-gallery-image-sent.png")
+    visible=dump_ui("group-gallery-image-sent.xml")
+    alive,crashlog=capture_runtime_log("group-gallery-image-process.log")
+    new_attachments=[
+        item for message_id,item in after.items()
+        if message_id not in before and item.get("attachmentMediaId") is not None
+        and str(item.get("senderUsername") or "").removeprefix("@").strip().casefold()==USERNAME.removeprefix("@").strip().casefold()
+    ]
+    if not new_attachments:
+        FAILURES.append("Gallery selection returned to FYNX but no new sender-owned image attachment appeared in backend group history")
+        return
+    message=new_attachments[-1]
+    attachment_type=str(message.get("attachmentType") or "").lower()
+    attachment_id=str(message.get("attachmentMediaId") or "")
+    if not attachment_id or attachment_type!="image":
+        FAILURES.append("Gallery message reached backend but its media ID/type did not verify as an image attachment")
+        return
+    if not alive or not visible:
+        FAILURES.append("Gallery image send caused the group UI/process to become unavailable")
+        return
+    report.append("- PASS actual Group attachment menu -> Android Gallery -> image selected; authenticated backend returned a new persisted image attachment ID "+attachment_id)
+    if crashlog:
+        report.append("- Group Gallery send crash-log evidence captured; process remained alive")
+
+    # A fresh server read after an app restart proves persistence of the attachment reference.
+    restore_home_after_restart("group-gallery-image-reopen-home")
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
+    reopened=wait_for_group_conversation_ui("group-gallery-image-reopened.xml",timeout=15)
+    persisted, persistence_detail=backend_group_message_snapshot(group_id)
+    stored=persisted.get(str(message.get("id") or ""))
+    if not reopened or not stored or str(stored.get("attachmentMediaId") or "")!=attachment_id or str(stored.get("attachmentType") or "").lower()!="image":
+        FAILURES.append("Gallery image attachment reference did not remain in authenticated backend history after reopening the same group: "+persistence_detail)
+    else:
+        report.append("- PASS Gallery image attachment ID/type remained in server history after app force-stop/relaunch and reopening the same group")
 
 
 def exercise_notification_route(route:str, name:str)->bool:
@@ -1566,6 +1776,7 @@ if not FAILURES:
                                     FAILURES.append(method+" marker missing from server-returned group history after restart: "+remote_detail)
 
                         if sent_markers and group_id:
+                            certify_group_gallery_image(group_id)
                             exercise_notification_route("fynx://group/"+group_id,"group-chat")
 
         else: FAILURES.append("authenticated Home -> "+name)
