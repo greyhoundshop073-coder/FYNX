@@ -699,6 +699,48 @@ if not FAILURES:
                     screenshot("authenticated-status-text-styling.png")
                     report.append("- PASS Text styling panel opens and exposes Done")
                     text_composer_xml = tap_control(style_xml, ["Done"], "status-text-styling-done")
+                    # Verify optional music can be attached from the existing text
+                    # draft, without replacing the draft with a music-only Status.
+                    media_tools_xml = tap_control(
+                        text_composer_xml, ["Add photo or media"], "status-text-open-media-tools",
+                        ["Add music", "Change music"]
+                    )
+                    if media_tools_xml and find_control(media_tools_xml, ["Add music", "Change music"]):
+                        attach_music_xml = tap_control(
+                            media_tools_xml, ["Add music", "Change music"], "status-text-add-music",
+                            ["FYNX Music", "Search music"]
+                        )
+                        if attach_music_xml:
+                            attach_terminal_markers = [
+                                "No FYNX music is published yet.",
+                                "Sign in to FYNX to browse published music.",
+                                "Music catalogue couldn't be loaded",
+                                "Music catalogue took too long",
+                                "Add",
+                            ]
+                            attach_deadline = time.monotonic() + 18.0
+                            while time.monotonic() < attach_deadline and not any(
+                                find_control(attach_music_xml, [marker])
+                                for marker in attach_terminal_markers
+                            ):
+                                time.sleep(0.5)
+                                attach_music_xml = dump_ui("authenticated-status-text-music-picker-state.xml")
+                            screenshot("authenticated-status-text-music-picker.png")
+                            if any(find_control(attach_music_xml, [marker]) for marker in attach_terminal_markers):
+                                report.append("- PASS Text composer can open the catalogue to attach optional music")
+                            else:
+                                FAILURES.append("Text composer music picker never reached a terminal state")
+                            run("adb", "shell", "input", "keyevent", "4")
+                            time.sleep(0.6)
+                            draft_after_music_xml = dump_ui("authenticated-status-text-draft-after-music-picker.xml")
+                            if find_control(draft_after_music_xml, ["FYNX runtime text Status check"]) and find_control(draft_after_music_xml, ["Send"]):
+                                report.append("- PASS Closing music picker preserves the existing text draft")
+                            else:
+                                FAILURES.append("Opening/closing the music picker did not preserve the existing text draft")
+                        else:
+                            FAILURES.append("Text composer Add music action did not open the catalogue")
+                    else:
+                        FAILURES.append("Text composer does not expose Add music/Change music from media tools")
                 else:
                     report.append("- PARTIAL Text styling panel could not be verified in this runtime")
             else:
