@@ -291,13 +291,25 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 160) : "";
       const price = Number(req.body?.price);
       const quantity = Number(req.body?.quantity);
+      const descriptionInput = typeof req.body?.description === "string" ? req.body.description.trim().slice(0, 4000) : null;
+      const categoryInput = typeof req.body?.category === "string" ? req.body.category.trim().slice(0, 40) : null;
+      const conditionInput = typeof req.body?.condition === "string" ? req.body.condition.trim().toUpperCase() : null;
+      const locationInput = typeof req.body?.location === "string" ? req.body.location.trim().slice(0, 160) : null;
       if (title.length < 2 || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0) return res.status(400).json({ error: "valid product name, price and quantity are required" });
 
       await client.query("BEGIN");
-      const existing = (await client.query("SELECT id, seller_id, price FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
+      const existing = (await client.query("SELECT id, seller_id, price, description, category, condition, location FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
       if (!existing) { await client.query("ROLLBACK"); return res.status(404).json({ error: "listing not found" }); }
+      const description = descriptionInput ?? String(existing.description || "");
+      const category = categoryInput ?? String(existing.category || "");
+      const condition = conditionInput ?? String(existing.condition || "NEW").toUpperCase();
+      const location = locationInput ?? String(existing.location || "");
+      if (description.length < 5 || !category || !["NEW", "USED", "REFURBISHED"].includes(condition) || !location) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "valid product description, category, condition and location are required" });
+      }
       const oldPrice = Number(existing.price);
-      const updated = (await client.query("UPDATE marketplace_listings SET title = $1, price = $2, quantity = $3, updated_at = NOW() WHERE id = $4 AND seller_id = $5 RETURNING id, title, price, quantity", [title, price, quantity, id, req.user.sub])).rows[0];
+      const updated = (await client.query("UPDATE marketplace_listings SET title = $1, price = $2, quantity = $3, description = $4, category = $5, condition = $6, location = $7, updated_at = NOW() WHERE id = $8 AND seller_id = $9 RETURNING id, title, price, quantity, description, category, condition, location", [title, price, quantity, description, category, condition, location, id, req.user.sub])).rows[0];
       const priceChanged = oldPrice !== Number(updated.price);
       const watchers = priceChanged ? (await client.query("SELECT w.user_id FROM marketplace_price_watches w WHERE w.listing_id = $1 AND w.user_id <> $2", [id, req.user.sub])).rows : [];
       await client.query("COMMIT");
@@ -316,7 +328,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           });
         }
       }
-      return res.json({ listing: { id: String(updated.id), title: updated.title, price: Number(updated.price), quantity: Number(updated.quantity) }, priceChanged, notifiedWatchers: watchers.length });
+      return res.json({ listing: { id: String(updated.id), title: updated.title, price: Number(updated.price), quantity: Number(updated.quantity), description: updated.description, category: updated.category, condition: updated.condition, location: updated.location }, priceChanged, notifiedWatchers: watchers.length });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       console.error("marketplace listing update", error);
