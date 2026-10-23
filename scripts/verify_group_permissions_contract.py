@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,6 +10,7 @@ settings = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt"
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 normalized_group_routes = "".join(group_routes.split())
+ast.parse(runtime, filename="scripts/verify_authenticated_runtime_navigation.py")
 
 checks = {
     "server blocks text sends when group send_messages is disabled": "GROUP_SEND_MESSAGES_DISABLED" in group_routes and "if(!canManageMembers(actor.role)&&text&&!groupSettings.send_messages)" in normalized_group_routes,
@@ -32,6 +34,8 @@ checks = {
     "group retries return the stored message without broadcasting a duplicate realtime event": "if (created) await broadcastGroupMessage(groupId, message)" in group_routes and "res.status(created?201:200).json({message})" in normalized_group_routes,
     "runtime cert checks persisted group roster and account ADMIN role": "backend_group_access_contract(group_id)" in runtime and '"/api/groups/"+group_path+"/members"' in runtime and 'role!="ADMIN"' in runtime,
     "runtime cert verifies permission changes and restores original CI-group settings": 'probe["inviteLinks"]=not original["inviteLinks"]' in runtime and 'request_json("PATCH","/api/groups/"+group_path+"/permissions",original)' in runtime and "restored_ok=all(restored.get(key)==permissions[key] for key in fields)" in runtime,
+    "runtime cert exercises the real group Gallery picker with a generated image fixture": "certify_group_gallery_image(group_id)" in runtime and "/sdcard/Pictures/FYNX_CI_GROUP_ATTACHMENT.png" in runtime and 'tap_control(group_ui,["Add attachment"]' in runtime and 'tap_control(menu,["Gallery"]' in runtime,
+    "runtime cert requires new server-persisted image ID/type and history persistence after reopening": "attachmentMediaId" in runtime and 'attachment_type!="image"' in runtime and "group-gallery-image-reopened.xml" in runtime,
 }
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
