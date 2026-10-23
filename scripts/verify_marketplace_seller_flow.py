@@ -15,6 +15,7 @@ marketplace_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceC
 order_lifecycle = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text()
 discovery_routes = (ROOT / "backend/discoveryRoutes.js").read_text()
 social_routes = (ROOT / "backend/socialRoutes.js").read_text()
+marketplace_checkout_route = (ROOT / "backend/marketplaceCheckout.js").read_text()
 
 import re
 
@@ -52,6 +53,7 @@ checks = [
     ("category specifications are included in the saved product description with bounded length", 'append("\\n\\nProduct specifications\\n")' in marketplace and "MAX_DESCRIPTION_LENGTH" in marketplace and "listingDescription" in marketplace),
     ("seller publishes selected condition and composed specifications through the existing listing path", 'title, listingDescription, "", price.toDouble(), currency, category, condition' in marketplace and 'validListing(title, listingDescription' in marketplace),
     ("active marketplace remains backend listing driven", "FynxRemoteSocialClient.listings" in marketplace),
+    ("Marketplace discovery includes the signed-in seller own active products while the detail UI disables self-purchase and backend checkout rejects it", 'const params = []' in discovery_routes and 'l.seller_id<>$1' not in discovery_routes and 'canPurchase = !isOwnListing' in marketplace and 'Buyers can see it in Marketplace, but you cannot buy your own product.' in marketplace and 'enabled = canPurchase && l.quantity > 0' in marketplace and "you cannot purchase your own listing" in marketplace_checkout_route),
     ("product details show the real media carousel", "items(l.mediaIds.take(12))" in marketplace),
     ("product details show seller and fulfillment information", 'Text("Seller:' in marketplace and 'Text("Location:' in marketplace and "deliveryAvailable" in marketplace and "pickupAvailable" in marketplace),
     ("active Marketplace exposes the visible Message seller action wired to the real chat deep link", 'Text("Message seller")' in detail_components and "onContact = { contactSeller(listing.sellerUsername, listing.id) }" in marketplace and "FynxDeepLinkParser.chatAppLink" in marketplace and "Intent.ACTION_VIEW" in marketplace),
