@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { selectMarketplaceRefundByIdentity } from './marketplaceBatch2FinalHardening.js';
-import { classifyPaystackTransferVerification } from './marketplaceSettlementWorker.js';
+import { classifyPaystackTransferVerification, nextPayoutVerificationProgress, payoutSweepIdempotencyKey } from './marketplaceSettlementWorker.js';
 
 const read = (name) => fs.readFileSync(new URL(`./${name}`, import.meta.url), 'utf8');
 const payment = read('marketplaceReputation.js');
@@ -22,6 +22,8 @@ const checks = [
   ['payout recovery verifies the deterministic transfer before creating a new transfer', worker.includes('verifyTransferByReference(reference)') && worker.includes('recoveryCheckedFirst')],
   ['payout transfer verification treats only HTTP 404 as not found and binds successful data to the requested reference', worker.includes('response?.status === 404') && worker.includes('classifyPaystackTransferVerification(response, data, cleanReference)') && !worker.includes('response.status === 404 || data?.status === false')],
   ['payout polling stores the canonical transfer reference rather than a transfer code', worker.includes("const providerReference = String(data?.data?.reference || reference);") && !worker.includes('data?.data?.transfer_code || reference')],
+  ['payout scanner creates idempotent time-bucketed sweeps for stale pending payout operations', worker.includes("fo.updated_at <= NOW() - INTERVAL '2 minutes'") && worker.includes("payoutSweepIdempotencyKey('VERIFY', operationId, bucketTime)") && worker.includes("payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime)")],
+  ['verification scan resets the bounded attempt counter after a cycle while recording completed cycles', worker.includes('verificationAttempts: progress.verificationAttempts') && worker.includes('verificationCycles: progress.verificationCycles') && worker.includes('return progress.shouldContinue')],
   ['payout provider amount and currency are validated', worker.includes('transferMatchesOperation') && worker.includes('Paystack payout amount or currency does not match')],
   ['refund webhook amount and currency are validated', webhook.includes('providerAmount !== expectedAmount') && webhook.includes('providerCurrency !== expectedCurrency')],
   ['refund mismatches block protected funds', webhook.includes("status='BLOCKED'") && webhook.includes("status='DISPUTED'")],
@@ -63,6 +65,18 @@ for (const [name, ok] of refundIdentityChecks) console.log(`${ok ? 'PASS' : 'FAI
 if (refundIdentityFailures.length) throw new Error(`Refund identity behavior gate failed: ${refundIdentityFailures.join('; ')}`);
 
 const shouldThrow = (callback) => { try { callback(); return false; } catch { return true; } };
+const payoutProgressChecks = [
+  ['payout verification attempts continue within a cycle before the cap', nextPayoutVerificationProgress({ verificationAttempts: 10, verificationCycles: 2 }).shouldContinue === true && nextPayoutVerificationProgress({ verificationAttempts: 10, verificationCycles: 2 }).verificationAttempts === 11],
+  ['the twelfth pending verification closes a cycle and resets attempts for future sweeps', (() => { const p = nextPayoutVerificationProgress({ verificationAttempts: 11, verificationCycles: 2 }); return p.shouldContinue === false && p.verificationAttempts === 0 && p.verificationCycles === 3; })()],
+  ['a subsequent payout sweep starts a new verification cycle', (() => { const p = nextPayoutVerificationProgress({ verificationAttempts: 0, verificationCycles: 3 }); return p.shouldContinue === true && p.verificationAttempts === 1 && p.verificationCycles === 3; })()],
+  ['stale payout sweeps are idempotent within a two-minute time bucket', payoutSweepIdempotencyKey('VERIFY', 'operation-1', 240000) === payoutSweepIdempotencyKey('VERIFY', 'operation-1', 299999)],
+  ['stale payout sweeps get a fresh idempotency key in the next bucket', payoutSweepIdempotencyKey('VERIFY', 'operation-1', 240000) !== payoutSweepIdempotencyKey('VERIFY', 'operation-1', 360000)],
+  ['release sweeps have distinct idempotency keys from verify sweeps', payoutSweepIdempotencyKey('RELEASE', 'operation-1', 240000) !== payoutSweepIdempotencyKey('VERIFY', 'operation-1', 240000)]
+];
+const payoutProgressFailures = payoutProgressChecks.filter(([, ok]) => !ok).map(([name]) => name);
+for (const [name, ok] of payoutProgressChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
+if (payoutProgressFailures.length) throw new Error(`Payout resweep progress gate failed: ${payoutProgressFailures.join('; ')}`);
+console.log(`Payout resweep progress gate passed (${payoutProgressChecks.length} cases)`);
 const transferVerificationChecks = [
   ['Paystack transfer HTTP 404 is classified as a missing transfer', classifyPaystackTransferVerification({ status: 404, ok: false }, { status: false, message: 'Transfer not found' }, 'fynx-payout-order').found === false],
   ['Paystack transfer auth failures are not treated as a missing transfer', shouldThrow(() => classifyPaystackTransferVerification({ status: 401, ok: false }, { status: false, message: 'Unauthorized' }, 'fynx-payout-order'))],
@@ -74,5 +88,5 @@ const transferVerificationFailures = transferVerificationChecks.filter(([, ok]) 
 for (const [name, ok] of transferVerificationChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
 if (transferVerificationFailures.length) throw new Error(`Payout verification behavior gate failed: ${transferVerificationFailures.join('; ')}`);
 console.log(`Payout verification behavior gate passed (${transferVerificationChecks.length} cases)`);
-console.log(`Batch 2 financial hardening gate passed (${checks.length} structural checks, ${refundIdentityChecks.length} refund identity cases, and ${transferVerificationChecks.length} payout verification cases)`);
+console.log(`Batch 2 financial hardening gate passed (${checks.length} structural checks, ${refundIdentityChecks.length} refund identity cases, ${transferVerificationChecks.length} payout verification cases, and ${payoutProgressChecks.length} resweep cases)`);
 
