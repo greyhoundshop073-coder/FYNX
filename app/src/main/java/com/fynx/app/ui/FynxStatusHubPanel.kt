@@ -81,6 +81,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
     var statusMusicError by remember { mutableStateOf<String?>(null) }
     var statusMusicRetryKey by remember { mutableIntStateOf(0) }
     var statusMusicPreviewId by remember { mutableStateOf<Long?>(null) }
+    var musicPickerReturnsToComposer by remember { mutableStateOf(false) }
 
     fun openCapturedStatus(uri: Uri, type: String) {
         selectedInitialMedia = FynxRecentMedia(uri = uri, isVideo = type == "video", dateAddedSeconds = System.currentTimeMillis() / 1000L)
@@ -138,7 +139,13 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                     initialMediaUri = selectedInitialMedia?.uri,
                     initialType = selectedInitialMedia?.let { if (it.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO } ?: selectedInitialType,
                     initialMusic = selectedStatusMusic,
-                    onClose = { selectedInitialMedia = null; selectedInitialType = null; selectedStatusMusic = null; composing = false; if (startWithCreator) onExitCreator() }
+                    onChooseMusic = {
+                        musicPickerReturnsToComposer = true
+                        statusMusicError = null
+                        statusMusicCatalogue = emptyList()
+                        showStatusMusicPicker = true
+                    },
+                    onClose = { selectedInitialMedia = null; selectedInitialType = null; selectedStatusMusic = null; composing = false; musicPickerReturnsToComposer = false; if (startWithCreator) onExitCreator() }
                 )
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { if (startWithCreator) onExitCreator() else addStatusOpen = false },
@@ -159,6 +166,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                     onText = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.TEXT; composing = true; addStatusOpen = false },
                     onVoice = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.VOICE; composing = true; addStatusOpen = false },
                     onMusic = {
+                        musicPickerReturnsToComposer = false
                         statusMusicError = null
                         statusMusicCatalogue = emptyList()
                         showStatusMusicPicker = true
@@ -246,13 +254,18 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                                                 }
                                                 Button(onClick = {
                                                     selectedStatusMusic = track
-                                                    selectedInitialType = FynxStatusType.MUSIC
-                                                    selectedInitialMedia = null
                                                     statusMusicPreviewId = null
                                                     showStatusMusicPicker = false
                                                     statusMusicSearch = ""
-                                                    addStatusOpen = false
-                                                    composing = true
+                                                    if (musicPickerReturnsToComposer) {
+                                                        // Keep the existing text draft mounted; attach the chosen track to it.
+                                                        musicPickerReturnsToComposer = false
+                                                    } else {
+                                                        selectedInitialType = FynxStatusType.MUSIC
+                                                        selectedInitialMedia = null
+                                                        addStatusOpen = false
+                                                        composing = true
+                                                    }
                                                 }) { Text("Add") }
                                             }
                                         }
