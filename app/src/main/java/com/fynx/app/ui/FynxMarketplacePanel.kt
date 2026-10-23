@@ -789,8 +789,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     selected?.let { listing ->
         val sellerKey = listing.sellerUsername.removePrefix("@").trim().lowercase()
+        val viewerUsername = currentUsername.removePrefix("@").trim()
+        val isOwnListing = viewerUsername.isNotBlank() && listing.sellerUsername.removePrefix("@").trim().equals(viewerUsername, ignoreCase = true)
         MarketplaceDetails(
             l = listing,
+            canPurchase = !isOwnListing,
             sellerReputation = sellerReputations[sellerKey],
             onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null },
             onContact = { contactSeller(listing.sellerUsername, listing.id) },
@@ -1029,6 +1032,7 @@ private fun RemoteMarketMedia(context: android.content.Context, mediaId: String,
 @Composable
 private fun MarketplaceDetails(
     l: FynxRemoteSocialClient.MarketplaceListing,
+    canPurchase: Boolean = true,
     sellerReputation: FynxMarketplaceClient.SellerReputation?,
     onProfile: () -> Unit,
     onContact: () -> Unit,
@@ -1052,8 +1056,12 @@ private fun MarketplaceDetails(
             listing = l,
             onMessageSeller = onContact,
             onBuyNow = onBuyNow,
-            onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }
+            onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) },
+            canPurchase = canPurchase
         )
+        if (!canPurchase) {
+            Text("This is your listing. Buyers can see it in Marketplace, but you cannot buy your own product.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
         // Put seller and fulfillment facts immediately after the price summary,
         // before the long description, matching the product-detail hierarchy.
         Surface(
@@ -1137,10 +1145,10 @@ private fun MarketplaceDetails(
             onOpenAssistant = { listingId -> onOpenAssistant(listingId) }
         )
     } }, confirmButton = {
-        Button(onClick = onAddToCart, enabled = l.quantity > 0, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onAddToCart, enabled = canPurchase && l.quantity > 0, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Add to cart")
+            Text(if (!canPurchase) "Your listing" else if (l.quantity > 0) "Add to cart" else "Out of stock")
         }
     }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
 }
