@@ -39,9 +39,7 @@ export function payoutReferenceForOperation(operation) {
     : `fynx-payout-${operationId}`;
 }
 export function classifyPaystackTransferVerification(response, data, expectedReference) {
-  // Paystack documents HTTP 404 as transfer not found. Other failed or
-  // indeterminate responses must not be interpreted as proof that no transfer
-  // exists, or a transient/auth error could trigger another payout attempt.
+  // Verify Transfer is keyed by reference; only HTTP 404 means it was not found.
   if (response?.status === 404) return { found: false, response, data };
   if (response?.ok && data?.status === true && data?.data) {
     if (String(data.data.reference || '') !== String(expectedReference || '')) {
@@ -52,12 +50,31 @@ export function classifyPaystackTransferVerification(response, data, expectedRef
   throw new Error(data?.message || 'Paystack transfer verification failed (' + String(response?.status ?? 'unknown') + ')');
 }
 
+export function classifyPaystackTransferFetch(response, data, expectedIdentifier) {
+  // Legacy FYNX releases accidentally persisted transfer_code as provider_reference.
+  // Fetch Transfer accepts an ID or code, so recovery may resolve that exact code
+  // to the canonical reference without treating a different transfer as a match.
+  if (response?.status === 404) return { found: false, response, data };
+  if (response?.ok && data?.status === true && data?.data) {
+    const transfer = data.data;
+    const matchesReference = String(transfer.reference || '') === String(expectedIdentifier || '');
+    const matchesCode = String(transfer.transfer_code || '') === String(expectedIdentifier || '');
+    if (!matchesReference && !matchesCode) throw new Error('Paystack transfer fetch returned a different transfer ID or code');
+    return { found: true, response, data };
+  }
+  throw new Error(data?.message || 'Paystack transfer fetch failed (' + String(response?.status ?? 'unknown') + ')');
+}
+
 async function verifyTransferByReference(reference) {
   const cleanReference = String(reference || '').trim();
   if (!cleanReference) return { found: false };
-  const url = 'https://api.paystack.co/transfer/verify/' + encodeURIComponent(cleanReference);
-  const { response, data } = await paystackJson(url, { headers: providerHeaders() });
-  return classifyPaystackTransferVerification(response, data, cleanReference);
+  const verifyUrl = 'https://api.paystack.co/transfer/verify/' + encodeURIComponent(cleanReference);
+  const verified = classifyPaystackTransferVerification(...await paystackJson(verifyUrl, { headers: providerHeaders() }), cleanReference);
+  if (verified.found) return verified;
+  // Migrate old rows which incorrectly stored Paystack's transfer_code in the
+  // provider_reference column. The second lookup still checks exact identifier.
+  const fetchUrl = 'https://api.paystack.co/transfer/' + encodeURIComponent(cleanReference);
+  return classifyPaystackTransferFetch(...await paystackJson(fetchUrl, { headers: providerHeaders() }), cleanReference);
 }
 
 export function nextPayoutVerificationProgress(metadata = {}) {
@@ -239,13 +256,19 @@ async function verifyPayout(payload) {
   try {
     const operation = (await client.query(`SELECT * FROM marketplace_financial_operations WHERE id=$1`, [operationId])).rows[0];
     if (!operation || operation.status !== 'PENDING' || !operation.provider_reference) return false;
-    const { response, data } = await paystackJson(`https://api.paystack.co/transfer/verify/${encodeURIComponent(operation.provider_reference)}`, { headers: providerHeaders() });
-    const verification = classifyPaystackTransferVerification(response, data, operation.provider_reference);
+    const verification = await verifyTransferByReference(operation.provider_reference);
     const verifiedTransfer = verification.found ? verification.data.data : null;
     const providerStatus = String(verifiedTransfer?.status || '').toLowerCase();
     await client.query('BEGIN');
     const current = (await client.query(`SELECT * FROM marketplace_financial_operations WHERE id=$1 FOR UPDATE`, [operation.id])).rows[0];
     if (!current || current.status !== 'PENDING') { await client.query('COMMIT'); return false; }
+    if (verification.found) {
+      const canonicalReference = String(verifiedTransfer?.reference || '').trim();
+      if (canonicalReference && canonicalReference !== String(current.provider_reference || '')) {
+        await client.query(`UPDATE marketplace_financial_operations SET provider_reference=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [canonicalReference, JSON.stringify({ legacyTransferCode: String(current.provider_reference || ''), providerReferenceRecovered: true }), current.id]);
+        current.provider_reference = canonicalReference;
+      }
+    }
     if (verification.found && !transferMatchesOperation(verifiedTransfer, current)) {
       await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, ['Paystack verified payout amount or currency does not match the protected operation', current.id]);
       await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [current.order_id]);
