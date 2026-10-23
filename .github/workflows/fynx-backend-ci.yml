@@ -24,6 +24,26 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: fynx_media_test
+          POSTGRES_USER: fynx_test
+          POSTGRES_PASSWORD: fynx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fynx_test -d fynx_media_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: fynx_test
+      PGPASSWORD: fynx_test
+      PGDATABASE: fynx_media_test
     defaults:
       run:
         working-directory: backend
@@ -104,7 +124,9 @@ jobs:
             node --check "$file"
           done
       - name: Verify Marketplace media authorization contract
-        run: node verify-media-route.mjs
+        run: |
+          node verify-media-route.mjs
+          node test-media-route-db.mjs
 
       - name: Run Chat end-to-end integration gate
         working-directory: .
