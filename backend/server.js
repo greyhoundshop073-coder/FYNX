@@ -516,11 +516,13 @@ app.get("/api/media/:id", auth, async (req, res) => {
             WHERE ml.active = TRUE
               AND EXISTS (
                 SELECT 1
-                FROM regexp_split_to_table(
-                  regexp_replace(CAST(ml.media_ids AS TEXT), '[^0-9]+', ',', 'g'),
-                  ','
-                ) listing_media_id
-                WHERE listing_media_id = CAST(mm.id AS TEXT)
+                FROM jsonb_array_elements_text(
+                  CASE
+                    WHEN jsonb_typeof(ml.media_ids) = 'array' THEN ml.media_ids
+                    ELSE '[]'::jsonb
+                  END
+                ) AS listing_media(media_id)
+                WHERE listing_media.media_id = CAST(mm.id AS TEXT)
               )
               AND NOT EXISTS (
                 SELECT 1 FROM blocks b
