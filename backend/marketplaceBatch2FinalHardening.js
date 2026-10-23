@@ -94,23 +94,51 @@ async function recoverPaymentWithoutLocalReference({ logger = console } = {}) {
 
 async function reconcilePendingRefunds({ logger = console } = {}) {
   if (!pool || !process.env.PAYSTACK_SECRET_KEY) return 0;
-  const rows = await pool.query(`SELECT f.id,f.order_id,f.amount,f.currency,f.status AS operation_status,f.provider_reference,f.metadata,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.payment_reference,o.quantity,o.listing_id FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.operation_type='REFUND' AND f.status='PENDING' AND e.status='REFUND_PENDING' ORDER BY f.updated_at ASC LIMIT 25`);
+  const checkoutGroupSchema = (await pool.query(`SELECT
+    to_regclass('public.marketplace_checkout_group_items') IS NOT NULL
+      AND to_regclass('public.marketplace_checkout_groups') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='marketplace_checkout_groups' AND column_name='payment_reference') AS available`)).rows[0];
+  const hasCheckoutGroups = Boolean(checkoutGroupSchema?.available);
+  const groupPaymentReference = hasCheckoutGroups
+    ? `(SELECT NULLIF(cg.payment_reference, '') FROM marketplace_checkout_group_items gi JOIN marketplace_checkout_groups cg ON cg.id=gi.checkout_id WHERE gi.order_id=o.id LIMIT 1)`
+    : 'NULL::text';
+  const rows = await pool.query(`SELECT f.id,f.order_id,f.amount,f.currency,f.status AS operation_status,f.provider_reference,f.metadata,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.payment_reference,o.quantity,o.listing_id,
+      COALESCE(NULLIF(o.payment_reference, ''), ${groupPaymentReference}) AS resolved_payment_reference
+    FROM marketplace_financial_operations f
+    JOIN marketplace_escrows e ON e.order_id=f.order_id
+    JOIN marketplace_orders o ON o.id=f.order_id
+    WHERE f.operation_type='REFUND' AND f.status='PENDING' AND e.status='REFUND_PENDING'
+    ORDER BY f.updated_at ASC LIMIT 25`);
   let repaired = 0;
   for (const row of rows.rows) {
-    if (!row.payment_reference) continue;
+    const resolvedReference = String(row.resolved_payment_reference || '').trim();
+    if (!resolvedReference) continue;
     try {
-      const transactionResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(row.payment_reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
+      const transactionResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(resolvedReference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const transactionData = await transactionResponse.json().catch(() => ({}));
-      const transactionId = Number(transactionData?.data?.id);
-      if (!transactionResponse.ok || transactionData?.status !== true || !Number.isSafeInteger(transactionId) || transactionId <= 0) continue;
+      const transaction = transactionData?.data || {};
+      const transactionId = Number(transaction.id);
+      if (!transactionResponse.ok || transactionData?.status !== true
+        || !Number.isSafeInteger(transactionId) || transactionId <= 0
+        || String(transaction.reference || '') !== resolvedReference
+        || String(transaction.currency || '').toUpperCase() !== String(row.currency || '').toUpperCase()) continue;
       const response = await fetch(`https://api.paystack.co/refund?transaction=${encodeURIComponent(transactionId)}&perPage=50`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.status !== true) continue;
       const refunds = Array.isArray(data.data) ? data.data : data.data ? [data.data] : [];
-      const expectedAmount = amountSubunit(row.amount, row.currency);
-      const expectedCurrency = String(row.currency || '').toUpperCase();
-      const match = refunds.find(refund => Number(refund?.amount) === expectedAmount && String(refund?.currency || '').toUpperCase() === expectedCurrency);
-      if (!match) continue;
+
+      // Reconciliation must bind one local refund operation to one provider refund
+      // identifier. Amount/currency alone are not unique when several child orders
+      // share one checkout-group transaction (or several refunds have equal amounts).
+      const knownRefundReferences = [row.provider_reference, row.metadata?.refundReference, row.metadata?.providerRefundId]
+        .map(value => value === null || value === undefined ? '' : String(value).trim())
+        .filter(value => value && value !== resolvedReference);
+      if (!knownRefundReferences.length) continue;
+      const identityMatches = refunds.filter(refund =>
+        knownRefundReferences.includes(String(refund?.id ?? '').trim())
+        || knownRefundReferences.includes(String(refund?.refund_reference ?? '').trim()));
+      if (identityMatches.length !== 1) continue;
+      const match = identityMatches[0];
       const status = String(match.status || '').toLowerCase();
       const providerReference = match.refund_reference || match.id || null;
       const client = await pool.connect();
@@ -118,8 +146,16 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
         await client.query('BEGIN');
         const locked = (await client.query(`SELECT f.*,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.quantity,o.listing_id,o.payment_reference FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.id=$1 FOR UPDATE`, [row.id])).rows[0];
         if (!locked || locked.status !== 'PENDING' || locked.escrow_status !== 'REFUND_PENDING') { await client.query('COMMIT'); continue; }
-        const metadata = { ...(locked.metadata || {}), refundRecoveryStatus: status, refundReference: providerReference ? String(providerReference) : null, providerAmount: Number(match.amount), providerCurrency: String(match.currency || '').toUpperCase(), providerTransactionId: transactionId, source: 'batch2-refund-reconciliation' };
-        if (Number(locked.amount) !== Number(locked.escrow_amount) || String(locked.currency).toUpperCase() !== String(locked.escrow_currency).toUpperCase()) {
+        const metadata = { ...(locked.metadata || {}), paymentReference: resolvedReference, refundRecoveryStatus: status, refundReference: providerReference ? String(providerReference) : null, providerAmount: Number(match.amount), providerCurrency: String(match.currency || '').toUpperCase(), providerTransactionId: transactionId, source: 'batch2-refund-reconciliation' };
+        const expectedRefundAmount = amountSubunit(locked.amount, locked.currency);
+        const actualRefundAmount = Number(match.amount);
+        const actualRefundCurrency = String(match.currency || '').toUpperCase();
+        const expectedRefundCurrency = String(locked.currency || '').toUpperCase();
+        if (expectedRefundAmount === null || actualRefundAmount !== expectedRefundAmount || actualRefundCurrency !== expectedRefundCurrency) {
+          await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['Paystack refund identifier matched but provider amount or currency does not match this refund operation', JSON.stringify(metadata), locked.id]);
+          await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='REFUND_PENDING'`, [locked.escrow_id]);
+          await insertRecoveryEvent(client, locked, 'REFUND_RECOVERY_BLOCKED', { reason: 'provider_refund_amount_or_currency_mismatch', expectedRefundAmount, actualRefundAmount, expectedRefundCurrency, actualRefundCurrency, providerReference: providerReference ? String(providerReference) : null });
+        } else if (Number(locked.amount) !== Number(locked.escrow_amount) || String(locked.currency).toUpperCase() !== String(locked.escrow_currency).toUpperCase()) {
           await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['refund recovery amount or currency does not reconcile with the protected escrow', JSON.stringify(metadata), locked.id]);
           await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='REFUND_PENDING'`, [locked.escrow_id]);
           await insertRecoveryEvent(client, locked, 'REFUND_RECOVERY_BLOCKED', { reason: 'refund_amount_or_currency_mismatch' });
