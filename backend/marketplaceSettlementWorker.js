@@ -50,6 +50,22 @@ async function verifyTransferByReference(reference) {
   return classifyPaystackTransferVerification(response, data, cleanReference);
 }
 
+export function nextPayoutVerificationProgress(metadata = {}) {
+  const priorAttempts = Math.max(0, Number(metadata?.verificationAttempts || 0));
+  const nextAttempt = priorAttempts + 1;
+  const cycleComplete = nextAttempt >= 12;
+  return {
+    attempt: nextAttempt,
+    shouldContinue: !cycleComplete,
+    verificationAttempts: cycleComplete ? 0 : nextAttempt,
+    verificationCycles: Math.max(0, Number(metadata?.verificationCycles || 0)) + (cycleComplete ? 1 : 0)
+  };
+}
+
+export function payoutSweepIdempotencyKey(kind, operationId, nowMs = Date.now()) {
+  const bucket = Math.floor(Number(nowMs) / 120_000);
+  return `${String(kind)}-SWEEP-${String(operationId)}-${bucket}`;
+}
 function transferMatchesOperation(transfer, operation) {
   const expectedAmount = Math.round(Number(operation.amount) * 100);
   const providerAmount = Number(transfer?.amount);
@@ -228,10 +244,10 @@ async function verifyPayout(payload) {
       return false;
     }
     if (response.ok && data?.status === true) {
-      const attempts = Number(current.metadata?.verificationAttempts || 0) + 1;
-      await client.query(`UPDATE marketplace_financial_operations SET metadata=metadata || $1::jsonb,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [JSON.stringify({ providerStatus, verificationAttempts: attempts, lastVerifiedAt: new Date().toISOString() }), current.id]);
+      const progress = nextPayoutVerificationProgress(current.metadata || {});
+      await client.query(`UPDATE marketplace_financial_operations SET metadata=metadata || $1::jsonb,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [JSON.stringify({ providerStatus, verificationAttempts: progress.verificationAttempts, verificationCycles: progress.verificationCycles, lastVerifiedAt: new Date().toISOString() }), current.id]);
       await client.query('COMMIT');
-      return attempts < 12;
+      return progress.shouldContinue;
     }
     await client.query('COMMIT');
     return true;
@@ -264,16 +280,29 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
     if (!pool) return;
     try {
       const pending = await pool.query(`
-        SELECT fo.id
+        SELECT fo.id,fo.provider_reference,fo.updated_at
         FROM marketplace_financial_operations fo
         JOIN marketplace_escrows e ON e.order_id=fo.order_id
         WHERE fo.operation_type='PAYOUT_RELEASE'
           AND fo.status='PENDING'
           AND e.status='RELEASE_PENDING'
-        ORDER BY fo.created_at ASC
+          AND fo.updated_at <= NOW() - INTERVAL '2 minutes'
+        ORDER BY fo.updated_at ASC
         LIMIT 20`);
+      const bucketTime = Date.now();
       for (const row of pending.rows) {
-        await jobs.enqueue('marketplace.payout.release', { operationId: String(row.id) }, { idempotencyKey: `RELEASE-${String(row.id)}`, maxAttempts: 5 });
+        const operationId = String(row.id);
+        if (row.provider_reference) {
+          // A verification chain can exhaust its finite queue attempts while the
+          // provider transfer is still pending. Enqueue a fresh bounded sweep
+          // after inactivity; the same bucket is idempotent across scan ticks.
+          await jobs.enqueue('marketplace.payout.verify', { operationId, attempt: 0 }, { idempotencyKey: payoutSweepIdempotencyKey('VERIFY', operationId, bucketTime), maxAttempts: 5 });
+        } else {
+          // A previous release job may be completed/dead while the operation
+          // remains pending. Time-bucketed keys allow safe re-reconciliation;
+          // initiatePayout verifies the deterministic provider reference first.
+          await jobs.enqueue('marketplace.payout.release', { operationId }, { idempotencyKey: payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime), maxAttempts: 5 });
+        }
       }
     } catch (error) {
       logger.error('[fynx-marketplace] payout reconciliation failed', error?.message || error);
