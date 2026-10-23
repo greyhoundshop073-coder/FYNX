@@ -720,13 +720,33 @@ if not FAILURES:
             if status_add_music_xml and find_control(status_add_music_xml, ["Music"]):
                 music_catalogue_xml = tap_control(
                     status_add_music_xml, ["Music"], "status-music-catalogue",
-                    ["Search music", "Song or artist", "No FYNX music is published yet.", "Add"]
+                    ["FYNX Music", "Search music"]
                 )
                 if music_catalogue_xml:
+                    # Wait for a real terminal state, not just the search field
+                    # which exists while the backend request is still loading.
+                    terminal_music_markers = [
+                        "No FYNX music is published yet.",
+                        "Sign in to FYNX to browse published music.",
+                        "Music catalogue couldn't be loaded",
+                        "Music catalogue took too long",
+                        "Add",
+                    ]
+                    music_deadline = time.monotonic() + 18.0
+                    while time.monotonic() < music_deadline and not any(
+                        find_control(music_catalogue_xml, [marker])
+                        for marker in terminal_music_markers
+                    ):
+                        time.sleep(0.5)
+                        music_catalogue_xml = dump_ui("authenticated-status-music-catalogue-state.xml")
                     screenshot("authenticated-status-music-catalogue.png")
                     report.append("- PASS Add status -> Music opens the real music catalogue/search UI")
-                    if find_control(music_catalogue_xml, ["No FYNX music is published yet."]):
+                    if find_control(music_catalogue_xml, ["Sign in to FYNX to browse published music."]):
+                        report.append("- PASS Music picker exits loading and correctly explains that catalogue access needs a server-authenticated FYNX session")
+                    elif find_control(music_catalogue_xml, ["No FYNX music is published yet."]):
                         report.append("- BLOCKED Music track selection/publish: catalogue reports no published FYNX music")
+                    elif find_control(music_catalogue_xml, ["Music catalogue couldn't be loaded", "Music catalogue took too long"]):
+                        report.append("- PARTIAL Music catalogue request ended with a visible retryable error instead of an endless loading spinner")
                     elif find_control(music_catalogue_xml, ["Add"]):
                         add_music_xml = tap_control(
                             music_catalogue_xml, ["Add"], "status-music-select",
@@ -739,7 +759,7 @@ if not FAILURES:
                             else:
                                 report.append("- PARTIAL a catalogue track was selected, but Music composer Send was not exposed")
                     else:
-                        report.append("- PARTIAL Music catalogue opened but exposed neither a published track nor the explicit empty state")
+                        FAILURES.append("Music catalogue did not reach a track, explicit empty state, sign-in explanation, or retryable error within 18 seconds")
                 else:
                     FAILURES.append("Status Music choice did not open the music catalogue")
             else:
