@@ -184,6 +184,13 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
         await client.query('BEGIN');
         const locked = (await client.query(`SELECT f.*,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.completed_at,o.quantity,o.listing_id,o.payment_reference FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.id=$1 FOR UPDATE`, [row.id])).rows[0];
         if (!locked || locked.status !== 'PENDING' || locked.escrow_status !== 'REFUND_PENDING') { await client.query('COMMIT'); continue; }
+        // Revalidate the exact provider refund identity after taking the row lock.
+        // The operation's reference/metadata may have changed since the initial read.
+        const lockedRefundReferences = [locked.provider_reference, locked.metadata?.refundReference, locked.metadata?.providerRefundId]
+          .map(value => value === null || value === undefined ? '' : String(value).trim())
+          .filter(value => value && value !== resolvedReference);
+        const lockedMatch = selectMarketplaceRefundByIdentity(refunds, lockedRefundReferences);
+        if (!lockedMatch || lockedMatch !== match) { await client.query('COMMIT'); continue; }
         const metadata = { ...(locked.metadata || {}), paymentReference: resolvedReference, refundRecoveryStatus: status, refundReference: providerReference ? String(providerReference) : null, providerAmount: Number(match.amount), providerCurrency: String(match.currency || '').toUpperCase(), providerTransactionId: transactionId, source: 'batch2-refund-reconciliation' };
         const expectedRefundAmount = amountSubunit(locked.amount, locked.currency);
         const actualRefundAmount = Number(match.amount);
