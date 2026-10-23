@@ -550,11 +550,12 @@ fun FynxMarketplaceSellerCenterPanel() {
                     OutlinedTextField(
                         value = editQuantity,
                         onValueChange = { editQuantity = it.filter(Char::isDigit).take(9) },
-                        label = { Text("Available stock (0 = out of stock)") },
+                        label = { Text("Total stock (0 = out of stock)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         enabled = !editSaving
                     )
+                    Text("Stock cannot be reduced below items already reserved by active orders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     editError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
