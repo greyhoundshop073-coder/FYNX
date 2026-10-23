@@ -931,42 +931,101 @@ if not FAILURES:
                         if group_after:
                             if find_control(group_after,["Message composer","Edit message composer","Chat message composer area","Messaging is restricted"]):
                                 screenshot("group-chat-inside.png")
-                                # Exercise the actual group send path, not only screen navigation.
-                                # This runs against the configured isolated E2E backend account.
-                                marker = "CI_GROUP_SEND_" + str(int(time.time()))
+                                # Verify both production send controls independently.
+                                # A marker remaining in the editable composer is NOT delivery proof.
                                 composer = find_control(group_after, ["Message...", "Message composer", "Edit message composer", "Chat message composer area"])
                                 if composer and "Messaging is restricted" not in group_after:
-                                    _, mx, my = composer
-                                    run("adb", "shell", "input", "tap", str(mx), str(my))
-                                    input_text(marker)
-                                    time.sleep(.3)
-                                    # The actual group composer sends through KeyboardActions(onSend);
-                                    # it has no separate Send button. Press the IME Send/Enter key
-                                    # so this certification exercises the same production send path.
-                                    before_send = dump_ui("group-chat-before-send.xml")
-                                    if marker in before_send:
-                                        FAILURES.append("group test marker unexpectedly appeared before the send action")
-                                    run("adb", "shell", "input", "keyevent", "66")
-                                    delivered_ui = ""
-                                    for _ in range(12):
-                                        time.sleep(.5)
-                                        delivered_ui = dump_ui("group-chat-send-result.xml")
-                                        if marker in delivered_ui:
-                                            break
-                                    if marker in delivered_ui:
-                                        report.append("- PASS group message send reached the visible conversation: " + marker)
-                                        if group_id:
-                                            restore_home_after_restart("group-chat-send-persistence-home")
-                                            run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://group/" + group_id, PACKAGE)
-                                            persisted_ui = wait_for_group_conversation_ui("group-chat-send-persistence.xml")
-                                            if marker in persisted_ui:
-                                                report.append("- PASS group message persisted after reopening the group")
-                                            else:
-                                                FAILURES.append("group message was visible after send but did not persist after reopening")
+                                    def marker_state(ui_xml, marker_text):
+                                        try:
+                                            root = ET.fromstring(ui_xml)
+                                        except ET.ParseError:
+                                            return False, False, False
+                                        editable_nodes = [
+                                            node for node in root.iter("node")
+                                            if "edittext" in (node.attrib.get("class") or "").lower()
+                                            or node.attrib.get("editable", "false").lower() == "true"
+                                        ]
+                                        marker_in_editor = any(marker_text in (node.attrib.get("text") or "") for node in editable_nodes)
+                                        marker_in_message = any(
+                                            marker_text in (node.attrib.get("text") or "")
+                                            and node not in editable_nodes
+                                            for node in root.iter("node")
+                                        )
+                                        composer_empty = bool(editable_nodes) and all(
+                                            not (node.attrib.get("text") or "").strip()
+                                            for node in editable_nodes
+                                            if node.attrib.get("focused", "false").lower() == "true"
+                                        )
+                                        return marker_in_message, marker_in_editor, composer_empty
+
+                                    def enter_marker(marker_text, filename):
+                                        current = dump_ui(filename + "-composer.xml")
+                                        active_composer = find_control(current, ["Message...", "Message composer", "Edit message composer", "Chat message composer area"])
+                                        if not active_composer:
+                                            return False
+                                        _, tx, ty = active_composer
+                                        run("adb", "shell", "input", "tap", str(tx), str(ty))
+                                        input_text(marker_text)
+                                        time.sleep(.4)
+                                        typed_ui = dump_ui(filename + "-typed.xml")
+                                        _, still_editing, _ = marker_state(typed_ui, marker_text)
+                                        if not still_editing:
+                                            FAILURES.append(filename + ": test marker was not confirmed inside the editable composer before sending")
+                                            return False
+                                        return True
+
+                                    def wait_for_sent_marker(marker_text, filename):
+                                        last_ui = ""
+                                        for _ in range(16):
+                                            time.sleep(.5)
+                                            last_ui = dump_ui(filename + "-result.xml")
+                                            in_message, in_editor, editor_empty = marker_state(last_ui, marker_text)
+                                            if in_message and not in_editor and editor_empty:
+                                                return last_ui
+                                        return ""
+
+                                    keyboard_marker = "CI_GROUP_KEYBOARD_" + str(int(time.time()))
+                                    if enter_marker(keyboard_marker, "group-keyboard-send"):
+                                        run("adb", "shell", "input", "keyevent", "66")
+                                        keyboard_ui = wait_for_sent_marker(keyboard_marker, "group-keyboard-send")
+                                        if keyboard_ui:
+                                            report.append("- PASS keyboard Send/Enter moved the unique marker from the editable composer into a visible group message")
                                         else:
-                                            FAILURES.append("group message appeared locally but persistence could not be verified because the real group ID was unavailable")
+                                            FAILURES.append("keyboard Send/Enter did not clear the composer and show the unique marker as a separate group message")
+
+                                    app_button_marker = "CI_GROUP_BUTTON_" + str(int(time.time()) + 1)
+                                    if enter_marker(app_button_marker, "group-app-send-button"):
+                                        current_ui = dump_ui("group-app-send-button-before-tap.xml")
+                                        app_send_control = find_control(current_ui, ["Record voice message"])
+                                        if app_send_control:
+                                            # In this composer the trailing mic button's onClick sends
+                                            # typed text when the composer is non-empty; it records audio otherwise.
+                                            _, bx, by = app_send_control
+                                            run("adb", "shell", "input", "tap", str(bx), str(by))
+                                            button_ui = wait_for_sent_marker(app_button_marker, "group-app-send-button")
+                                            if button_ui:
+                                                report.append("- PASS FYNX composer button sent the typed marker as a separate visible group message")
+                                            else:
+                                                FAILURES.append("FYNX composer button tap did not clear the composer and show its marker as a separate group message")
+                                        else:
+                                            FAILURES.append("FYNX composer button test could not find the actual trailing composer button")
+
+                                    if group_id:
+                                        restore_home_after_restart("group-chat-send-persistence-home")
+                                        run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://group/" + group_id, PACKAGE)
+                                        persisted_ui = wait_for_group_conversation_ui("group-chat-send-persistence.xml")
+                                        for persisted_marker, method in ((keyboard_marker, "keyboard Send/Enter"), (app_button_marker, "FYNX composer button")):
+                                            in_message, in_editor, _ = marker_state(persisted_ui, persisted_marker)
+                                            if in_message and not in_editor:
+                                                report.append("- PASS " + method + " message remained visible after reopening the same group")
+                                            else:
+                                                FAILURES.append(method + " message did not persist as a separate group message after reopening")
                                     else:
-                                        FAILURES.append("group send key was pressed but unique test message did not appear in the conversation")
+                                        FAILURES.append("send tests ran without a readable real group ID; server persistence could not be verified")
+                                elif "Messaging is restricted" in group_after:
+                                    report.append("- Group send tests blocked by the actual group's messaging permissions")
+                                else:
+                                    FAILURES.append("group conversation composer was not available for send testing")
                                 elif "Messaging is restricted" in group_after:
                                     report.append("- Group send test blocked by the actual group's messaging permissions")
                                 else:
