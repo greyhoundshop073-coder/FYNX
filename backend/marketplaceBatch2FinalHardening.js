@@ -48,6 +48,43 @@ function amountSubunit(amount, currency) {
   return Math.round(value * 100);
 }
 
+export function validateUnreferencedOrderPaymentRecovery({ response, data, order, reference }) {
+  const transaction = data?.data || {};
+  const expectedAmount = amountSubunit(order?.total_amount, order?.currency);
+  const status = String(transaction.status || '').trim().toLowerCase();
+  const metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || '');
+  const metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '');
+  const fee = transaction.fees;
+  const numericFee = Number(fee);
+  const hasValidProviderFee = fee !== null && fee !== undefined && Number.isFinite(numericFee) && numericFee >= 0;
+  const valid = Boolean(response?.ok && data?.status === true && status === 'success'
+    && expectedAmount !== null
+    && Number(transaction.amount) === expectedAmount
+    && String(transaction.currency || '').trim().toUpperCase() === String(order?.currency || '').trim().toUpperCase()
+    && String(transaction.reference || '') === String(reference || '')
+    && metadataOrderId === String(order?.id || '')
+    && metadataBuyerId === String(order?.buyer_id || '')
+    && hasValidProviderFee);
+  return { valid, transaction, providerFee: hasValidProviderFee ? Math.round((numericFee / 100) * 100) / 100 : 0 };
+}
+export function payoutTransferMatchesStoredIdentity(transfer, storedIdentifier) {
+  const expected = String(storedIdentifier || '').trim();
+  if (!expected) return false;
+  return String(transfer?.reference || '').trim() === expected
+    || String(transfer?.transfer_code || '').trim() === expected;
+}
+export function selectMarketplaceRefundByIdentity(refunds, knownRefundReferences) {
+  if (!Array.isArray(refunds) || !Array.isArray(knownRefundReferences)) return null;
+  const known = new Set(knownRefundReferences
+    .map(value => value === null || value === undefined ? '' : String(value).trim())
+    .filter(Boolean));
+  if (!known.size) return null;
+  const matches = refunds.filter(refund =>
+    known.has(String(refund?.id ?? '').trim())
+    || known.has(String(refund?.refund_reference ?? '').trim()));
+  return matches.length === 1 ? matches[0] : null;
+}
+
 async function insertRecoveryEvent(client, row, action, metadata) {
   await client.query(`
     INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata)
@@ -62,17 +99,20 @@ async function insertRecoveryEvent(client, row, action, metadata) {
 
 async function recoverPaymentWithoutLocalReference({ logger = console } = {}) {
   if (!pool || !process.env.PAYSTACK_SECRET_KEY) return 0;
-  const rows = await pool.query(`SELECT id,buyer_id,total_amount,currency,status,payment_reference,updated_at FROM marketplace_orders WHERE status='PAYMENT_PENDING' AND payment_reference IS NULL AND updated_at <= NOW() - ($1::text || ' minutes')::interval ORDER BY updated_at ASC LIMIT 25`, [RECOVERY_AGE_MINUTES]);
+  const rows = await pool.query(`SELECT o.id,o.buyer_id,o.total_amount,o.currency,o.status,o.payment_reference,o.updated_at FROM marketplace_orders o WHERE o.status='PAYMENT_PENDING' AND o.payment_reference IS NULL AND o.updated_at <= NOW() - ($1::text || ' minutes')::interval AND NOT EXISTS (SELECT 1 FROM marketplace_order_events ev WHERE ev.order_id=o.id AND ev.event_type='PAYMENT_RECOVERY_CHECKED' AND ev.created_at > NOW() - INTERVAL '2 minutes') ORDER BY o.updated_at ASC LIMIT 25`, [RECOVERY_AGE_MINUTES]);
   let recovered = 0;
   for (const order of rows.rows) {
     const reference = `FYNX-${order.id}`;
     try {
+      // Record an attempt before the external call; unresolved/invalid provider
+      // responses then rotate out of this bounded scan for two minutes.
+      await pool.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'PAYMENT_RECOVERY_CHECKED','PAYMENT_PENDING','PAYMENT_PENDING',$3::jsonb)`, [order.id, order.buyer_id, JSON.stringify({ reference, provider: 'paystack', action: 'verification_attempt_started' })]);
       const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const data = await response.json().catch(() => ({}));
-      const transaction = data?.data || {};
-      const valid = response.ok && data?.status === true && String(transaction.status || '').toLowerCase() === 'success' && amountSubunit(order.total_amount, order.currency) === Number(transaction.amount) && String(transaction.currency || '').toUpperCase() === String(order.currency || '').toUpperCase() && String(transaction.reference || '') === reference && String(transaction.metadata?.orderId || transaction.metadata?.order_id || '') === String(order.id);
-      if (!valid) continue;
-      const providerFee = Number.isFinite(Number(transaction.fees)) && Number(transaction.fees) >= 0 ? Math.round((Number(transaction.fees) / 100) * 100) / 100 : 0;
+      const paymentVerification = validateUnreferencedOrderPaymentRecovery({ response, data, order, reference });
+      const transaction = paymentVerification.transaction;
+      if (!paymentVerification.valid) continue;
+      const providerFee = paymentVerification.providerFee;
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -94,32 +134,76 @@ async function recoverPaymentWithoutLocalReference({ logger = console } = {}) {
 
 async function reconcilePendingRefunds({ logger = console } = {}) {
   if (!pool || !process.env.PAYSTACK_SECRET_KEY) return 0;
-  const rows = await pool.query(`SELECT f.id,f.order_id,f.amount,f.currency,f.status AS operation_status,f.provider_reference,f.metadata,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.payment_reference,o.quantity,o.listing_id FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.operation_type='REFUND' AND f.status='PENDING' AND e.status='REFUND_PENDING' ORDER BY f.updated_at ASC LIMIT 25`);
+  const checkoutGroupSchema = (await pool.query(`SELECT
+    to_regclass('public.marketplace_checkout_group_items') IS NOT NULL
+      AND to_regclass('public.marketplace_checkout_groups') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='marketplace_checkout_groups' AND column_name='payment_reference') AS available`)).rows[0];
+  const hasCheckoutGroups = Boolean(checkoutGroupSchema?.available);
+  const groupPaymentReference = hasCheckoutGroups
+    ? `(SELECT NULLIF(cg.payment_reference, '') FROM marketplace_checkout_group_items gi JOIN marketplace_checkout_groups cg ON cg.id=gi.checkout_id WHERE gi.order_id=o.id LIMIT 1)`
+    : 'NULL::text';
+  const rows = await pool.query(`SELECT f.id,f.order_id,f.amount,f.currency,f.status AS operation_status,f.provider_reference,f.metadata,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.payment_reference,o.quantity,o.listing_id,
+      COALESCE(NULLIF(o.payment_reference, ''), ${groupPaymentReference}) AS resolved_payment_reference
+    FROM marketplace_financial_operations f
+    JOIN marketplace_escrows e ON e.order_id=f.order_id
+    JOIN marketplace_orders o ON o.id=f.order_id
+    WHERE f.operation_type='REFUND' AND f.status='PENDING' AND e.status='REFUND_PENDING'
+    ORDER BY f.metadata->>'lastProviderReconciledAt' ASC NULLS FIRST, f.updated_at ASC LIMIT 25`);
   let repaired = 0;
   for (const row of rows.rows) {
-    if (!row.payment_reference) continue;
+    const resolvedReference = String(row.resolved_payment_reference || '').trim();
     try {
-      const transactionResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(row.payment_reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
+      // Advance the bounded scan even when the payment reference is missing or
+      // Paystack is temporarily unavailable, so old rows cannot starve later refunds.
+      const reconciliationAttemptedAt = new Date().toISOString();
+      await pool.query(`UPDATE marketplace_financial_operations SET metadata=COALESCE(metadata,'{}'::jsonb) || $1::jsonb WHERE id=$2 AND operation_type='REFUND' AND status='PENDING' AND provider_reference IS NOT DISTINCT FROM $3`, [JSON.stringify({ lastProviderReconciledAt: reconciliationAttemptedAt }), row.id, row.provider_reference]);
+      if (!resolvedReference) continue;
+      const transactionResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(resolvedReference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const transactionData = await transactionResponse.json().catch(() => ({}));
-      const transactionId = Number(transactionData?.data?.id);
-      if (!transactionResponse.ok || transactionData?.status !== true || !Number.isSafeInteger(transactionId) || transactionId <= 0) continue;
+      const transaction = transactionData?.data || {};
+      const transactionId = Number(transaction.id);
+      if (!transactionResponse.ok || transactionData?.status !== true
+        || !Number.isSafeInteger(transactionId) || transactionId <= 0
+        || String(transaction.reference || '') !== resolvedReference
+        || String(transaction.currency || '').toUpperCase() !== String(row.currency || '').toUpperCase()) continue;
       const response = await fetch(`https://api.paystack.co/refund?transaction=${encodeURIComponent(transactionId)}&perPage=50`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.status !== true) continue;
       const refunds = Array.isArray(data.data) ? data.data : data.data ? [data.data] : [];
-      const expectedAmount = amountSubunit(row.amount, row.currency);
-      const expectedCurrency = String(row.currency || '').toUpperCase();
-      const match = refunds.find(refund => Number(refund?.amount) === expectedAmount && String(refund?.currency || '').toUpperCase() === expectedCurrency);
+
+      // Reconciliation must bind one local refund operation to one provider refund
+      // identifier. Amount/currency alone are not unique when several child orders
+      // share one checkout-group transaction (or several refunds have equal amounts).
+      const knownRefundReferences = [row.provider_reference, row.metadata?.refundReference, row.metadata?.providerRefundId]
+        .map(value => value === null || value === undefined ? '' : String(value).trim())
+        .filter(value => value && value !== resolvedReference);
+      if (!knownRefundReferences.length) continue;
+      const match = selectMarketplaceRefundByIdentity(refunds, knownRefundReferences);
       if (!match) continue;
       const status = String(match.status || '').toLowerCase();
       const providerReference = match.refund_reference || match.id || null;
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const locked = (await client.query(`SELECT f.*,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.quantity,o.listing_id,o.payment_reference FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.id=$1 FOR UPDATE`, [row.id])).rows[0];
+        const locked = (await client.query(`SELECT f.*,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.completed_at,o.quantity,o.listing_id,o.payment_reference FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.id=$1 FOR UPDATE`, [row.id])).rows[0];
         if (!locked || locked.status !== 'PENDING' || locked.escrow_status !== 'REFUND_PENDING') { await client.query('COMMIT'); continue; }
-        const metadata = { ...(locked.metadata || {}), refundRecoveryStatus: status, refundReference: providerReference ? String(providerReference) : null, providerAmount: Number(match.amount), providerCurrency: String(match.currency || '').toUpperCase(), providerTransactionId: transactionId, source: 'batch2-refund-reconciliation' };
-        if (Number(locked.amount) !== Number(locked.escrow_amount) || String(locked.currency).toUpperCase() !== String(locked.escrow_currency).toUpperCase()) {
+        // Revalidate the exact provider refund identity after taking the row lock.
+        // The operation's reference/metadata may have changed since the initial read.
+        const lockedRefundReferences = [locked.provider_reference, locked.metadata?.refundReference, locked.metadata?.providerRefundId]
+          .map(value => value === null || value === undefined ? '' : String(value).trim())
+          .filter(value => value && value !== resolvedReference);
+        const lockedMatch = selectMarketplaceRefundByIdentity(refunds, lockedRefundReferences);
+        if (!lockedMatch || lockedMatch !== match) { await client.query('COMMIT'); continue; }
+        const metadata = { ...(locked.metadata || {}), paymentReference: resolvedReference, refundRecoveryStatus: status, refundReference: providerReference ? String(providerReference) : null, providerAmount: Number(match.amount), providerCurrency: String(match.currency || '').toUpperCase(), providerTransactionId: transactionId, source: 'batch2-refund-reconciliation' };
+        const expectedRefundAmount = amountSubunit(locked.amount, locked.currency);
+        const actualRefundAmount = Number(match.amount);
+        const actualRefundCurrency = String(match.currency || '').toUpperCase();
+        const expectedRefundCurrency = String(locked.currency || '').toUpperCase();
+        if (expectedRefundAmount === null || actualRefundAmount !== expectedRefundAmount || actualRefundCurrency !== expectedRefundCurrency) {
+          await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['Paystack refund identifier matched but provider amount or currency does not match this refund operation', JSON.stringify(metadata), locked.id]);
+          await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='REFUND_PENDING'`, [locked.escrow_id]);
+          await insertRecoveryEvent(client, locked, 'REFUND_RECOVERY_BLOCKED', { reason: 'provider_refund_amount_or_currency_mismatch', expectedRefundAmount, actualRefundAmount, expectedRefundCurrency, actualRefundCurrency, providerReference: providerReference ? String(providerReference) : null });
+        } else if (Number(locked.amount) !== Number(locked.escrow_amount) || String(locked.currency).toUpperCase() !== String(locked.escrow_currency).toUpperCase()) {
           await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['refund recovery amount or currency does not reconcile with the protected escrow', JSON.stringify(metadata), locked.id]);
           await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='REFUND_PENDING'`, [locked.escrow_id]);
           await insertRecoveryEvent(client, locked, 'REFUND_RECOVERY_BLOCKED', { reason: 'refund_amount_or_currency_mismatch' });
@@ -129,7 +213,8 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
           const caseId = locked.metadata?.caseId ? String(locked.metadata.caseId) : null;
           if (caseId) await client.query(`UPDATE marketplace_protection_cases SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status IN ('OPEN','UNDER_REVIEW')`, [caseId]);
           await client.query(`UPDATE marketplace_escrows SET status='REFUNDED',refunded_at=COALESCE(refunded_at,NOW()),updated_at=NOW() WHERE id=$1 AND status='REFUND_PENDING'`, [locked.escrow_id]);
-          if (Number.isInteger(Number(locked.quantity)) && locked.listing_id) await client.query(`UPDATE marketplace_listings SET reserved_quantity=GREATEST(0,reserved_quantity-$1),updated_at=NOW() WHERE id=$2`, [Number(locked.quantity), locked.listing_id]);
+          // Completion already consumes the reservation and decrements stock. A later refund must not decrement reserved_quantity a second time and free another buyer's reservation.
+          if (!locked.completed_at && locked.order_status !== 'COMPLETED' && Number.isInteger(Number(locked.quantity)) && locked.listing_id) await client.query(`UPDATE marketplace_listings SET reserved_quantity=GREATEST(0,reserved_quantity-$1),updated_at=NOW() WHERE id=$2`, [Number(locked.quantity), locked.listing_id]);
           await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'buyer_refund','REFUND',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [locked.escrow_id, locked.order_id, locked.escrow_amount, locked.escrow_currency, `REFUND-${locked.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: providerReference ? String(providerReference) : null, source: 'batch2-refund-reconciliation' })]);
           await insertRecoveryEvent(client, locked, 'REFUND_RECOVERY_RECONCILED', { providerReference: providerReference ? String(providerReference) : null, amount: Number(locked.amount), currency: String(locked.currency).toUpperCase() });
           repaired += 1;
@@ -176,16 +261,23 @@ async function reconcilePostSuccessPayoutReversals({ logger = console } = {}) {
       AND f.status='SUCCEEDED'
       AND e.status='RELEASED'
       AND f.provider_reference IS NOT NULL
-    ORDER BY f.updated_at ASC
+    ORDER BY f.metadata->>'lastProviderReconciledAt' ASC NULLS FIRST, f.updated_at ASC
     LIMIT 25
   `);
   let repaired = 0;
   for (const row of rows.rows) {
     try {
+      // Mark the attempt before calling Paystack so transient errors and mismatched
+      // provider responses also rotate out of this limited scan window. Otherwise
+      // the same first 25 successful payouts could starve all later reversals.
+      const reconciliationAttemptedAt = new Date().toISOString();
+      await pool.query(`UPDATE marketplace_financial_operations SET metadata=COALESCE(metadata,'{}'::jsonb) || $1::jsonb WHERE id=$2 AND status='SUCCEEDED' AND provider_reference=$3`, [JSON.stringify({ lastProviderReconciledAt: reconciliationAttemptedAt }), row.id, row.provider_reference]);
       const response = await fetch(`https://api.paystack.co/transfer/verify/${encodeURIComponent(row.provider_reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.status !== true || !data?.data) continue;
       const transfer = data.data;
+      if (!payoutTransferMatchesStoredIdentity(transfer, row.provider_reference)) continue;
+      const returnedReference = String(transfer.reference || '').trim();
       const providerStatus = String(transfer.status || '').toLowerCase();
       const expectedAmount = amountSubunit(row.amount, row.currency);
       const providerAmount = Number(transfer.amount);
@@ -204,6 +296,14 @@ async function reconcilePostSuccessPayoutReversals({ logger = console } = {}) {
           WHERE f.id=$1 FOR UPDATE
         `, [row.id])).rows[0];
         if (!locked || locked.operation_status !== 'SUCCEEDED' || locked.escrow_status !== 'RELEASED') { await client.query('COMMIT'); continue; }
+        if (!payoutTransferMatchesStoredIdentity(transfer, locked.provider_reference)) { await client.query('COMMIT'); continue; }
+        const legacyTransferCode = String(transfer.transfer_code || '').trim();
+        if (returnedReference && legacyTransferCode === String(locked.provider_reference || '').trim() && returnedReference !== String(locked.provider_reference || '').trim()) {
+          const recoveredMetadata = { ...(locked.metadata || {}), legacyTransferCode, providerReferenceRecovered: true, source: 'batch2-post-success-payout-recovery' };
+          await client.query(`UPDATE marketplace_financial_operations SET provider_reference=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='SUCCEEDED' AND provider_reference=$4`, [returnedReference, JSON.stringify(recoveredMetadata), locked.id, locked.provider_reference]);
+          locked.provider_reference = returnedReference;
+          locked.metadata = recoveredMetadata;
+        }
         if (expectedAmount === null || providerAmount !== expectedAmount || providerCurrency !== expectedCurrency) {
           await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='SUCCEEDED'`, ['post-success payout provider amount or currency no longer matches the protected operation', JSON.stringify({ ...(locked.metadata || {}), providerStatus, providerAmount, expectedAmount, providerCurrency, expectedCurrency, source: 'batch2-post-success-payout-recovery' }), locked.id]);
           await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='RELEASED'`, [locked.escrow_id]);
