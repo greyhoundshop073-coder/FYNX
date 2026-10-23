@@ -15,7 +15,7 @@ const checks = [
   ['pending payout recovery scan retries stale operations with bucketed jobs and separate verify/release paths', worker.includes("fo.operation_type='PAYOUT_RELEASE'") && worker.includes("fo.status='PENDING'") && worker.includes("fo.updated_at <= NOW() - INTERVAL '2 minutes'") && worker.includes("payoutSweepIdempotencyKey('VERIFY', operationId, bucketTime)") && worker.includes("payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime)")],
   ['verify deterministic transfer before create', worker.includes('verifyTransferByReference(reference)') && worker.includes('recoveryCheckedFirst')],
   ['provider transfer verification', worker.includes('/transfer/verify/')],
-  ['provider amount/currency payout validation', worker.includes('transferMatchesOperation(data?.data, operation)') && worker.includes('Paystack payout amount or currency does not match')],
+  ['provider reference/amount/currency payout validation', worker.includes('transferMatchesOperation(data?.data, operation, reference)') && worker.includes('providerReference === String(expectedReference).trim()') && worker.includes('Paystack payout reference, amount, or currency does not match')],
   ['idempotent payout ledger', worker.includes('PAYOUT-RELEASE-${operation.order_id}') && worker.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['payout amount reconciles seller net plus marketplace fee', worker.includes('operationAmount + marketplaceFee') && worker.includes('Math.round((operationAmount + marketplaceFee) * 100) / 100 !== escrowAmount')],
   ['payout currency matches escrow', worker.includes("String(operation.currency).toUpperCase() !== String(escrow.currency).toUpperCase()")],
