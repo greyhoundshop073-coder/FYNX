@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { selectMarketplaceRefundByIdentity } from './marketplaceBatch2FinalHardening.js';
 
 const read = (name) => fs.readFileSync(new URL(`./${name}`, import.meta.url), 'utf8');
 const payment = read('marketplaceReputation.js');
@@ -30,8 +31,8 @@ const checks = [
   ['refund needs-attention remains pending instead of being treated as final failure', finalHardening.includes("status === 'needs-attention'") && finalHardening.includes('REFUND_NEEDS_ATTENTION') && !finalHardening.includes("['failed', 'needs-attention'].includes(status)" )],
   ['pending refund recovery resolves checkout-group child orders to the parent Paystack reference when needed', finalHardening.includes('marketplace_checkout_group_items') && finalHardening.includes('marketplace_checkout_groups') && finalHardening.includes('resolved_payment_reference') && finalHardening.includes("COALESCE(NULLIF(o.payment_reference, '')")],
   ['pending refund recovery verifies the provider transaction matches the resolved payment reference and currency', finalHardening.includes("String(transaction.reference || '') !== resolvedReference") && finalHardening.includes("String(transaction.currency || '').toUpperCase() !== String(row.currency || '').toUpperCase()")],
-  ['pending refund recovery matches by exact provider refund ID or refund reference, not amount/currency alone', finalHardening.includes('knownRefundReferences.includes(String(refund?.id ??') && finalHardening.includes('knownRefundReferences.includes(String(refund?.refund_reference ??') && !finalHardening.includes('refunds.find(refund => Number(refund?.amount) === expectedAmount')],
-  ['ambiguous or unidentifiable refunds are left pending instead of being assigned to an arbitrary child order', finalHardening.includes('if (identityMatches.length !== 1) continue;') && finalHardening.includes('if (!knownRefundReferences.length) continue;')],
+  ['pending refund recovery delegates to an exact provider refund ID/reference matcher, not amount/currency alone', finalHardening.includes('selectMarketplaceRefundByIdentity(refunds, knownRefundReferences)') && finalHardening.includes('known.has(String(refund?.id ??') && finalHardening.includes('known.has(String(refund?.refund_reference ??') && !finalHardening.includes('refunds.find(refund => Number(refund?.amount) === expectedAmount')],
+  ['ambiguous or unidentifiable refunds are left pending instead of being assigned to an arbitrary child order', finalHardening.includes('if (!match) continue;') && finalHardening.includes('if (!knownRefundReferences.length) continue;') && finalHardening.includes('return matches.length === 1 ? matches[0] : null;')],
   ['exactly identified refund with mismatched provider amount/currency is blocked and its escrow disputed', finalHardening.includes('provider_refund_amount_or_currency_mismatch') && finalHardening.includes("status='BLOCKED'") && finalHardening.includes("status='DISPUTED'")],
   ['refund recovery does not decrement reserved inventory again after order completion consumed it', finalHardening.includes('o.completed_at,o.quantity,o.listing_id,o.payment_reference') && finalHardening.includes("if (!locked.completed_at && locked.order_status !== 'COMPLETED'")],
   ['refund recovery revalidates amount and currency against escrow', finalHardening.includes('refund recovery amount or currency does not reconcile with the protected escrow')],
@@ -44,4 +45,18 @@ const checks = [
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
 for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
 if (failed.length) throw new Error(`Batch 2 financial hardening gate failed: ${failed.join('; ')}`);
-console.log(`Batch 2 financial hardening gate passed (${checks.length} checks)`);
+
+const refundA = { id: 747680, refund_reference: 'RRN-ALPHA', amount: 10000, currency: 'NGN' };
+const refundB = { id: 747681, refund_reference: 'RRN-BETA', amount: 10000, currency: 'NGN' };
+const refundIdentityChecks = [
+  ['refund recovery chooses the exact provider refund ID even when another refund has the same amount and currency', selectMarketplaceRefundByIdentity([refundA, refundB], ['747681']) === refundB],
+  ['refund recovery can match an exact refund reference', selectMarketplaceRefundByIdentity([refundA, refundB], ['RRN-ALPHA']) === refundA],
+  ['refund recovery refuses amount-only guessing when the operation has no refund identity', selectMarketplaceRefundByIdentity([refundA, refundB], []) === null],
+  ['refund recovery refuses ambiguous duplicate provider identities', selectMarketplaceRefundByIdentity([refundA, { ...refundA }], ['747680']) === null],
+  ['refund recovery never treats a transaction reference as a refund identifier when no refund matches it', selectMarketplaceRefundByIdentity([refundA, refundB], ['FYNX-CHECKOUT-transaction']) === null]
+];
+const refundIdentityFailures = refundIdentityChecks.filter(([, ok]) => !ok).map(([name]) => name);
+for (const [name, ok] of refundIdentityChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
+if (refundIdentityFailures.length) throw new Error(`Refund identity behavior gate failed: ${refundIdentityFailures.join('; ')}`);
+console.log(`Refund identity behavior gate passed (${refundIdentityChecks.length} cases)`);
+console.log(`Batch 2 financial hardening gate passed (${checks.length} structural checks plus ${refundIdentityChecks.length} refund identity behavior cases)`);
