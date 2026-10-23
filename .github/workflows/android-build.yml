@@ -28,6 +28,7 @@ on:
       - "gradlew.bat"
       - "scripts/**"
       - "docs/**"
+      - ".github/workflows/**"
       - ".maestro/**"
       - "visual-baselines/**"
   workflow_dispatch:
