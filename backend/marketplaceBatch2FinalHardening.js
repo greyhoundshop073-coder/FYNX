@@ -145,12 +145,16 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
     JOIN marketplace_escrows e ON e.order_id=f.order_id
     JOIN marketplace_orders o ON o.id=f.order_id
     WHERE f.operation_type='REFUND' AND f.status='PENDING' AND e.status='REFUND_PENDING'
-    ORDER BY f.updated_at ASC LIMIT 25`);
+    ORDER BY f.metadata->>'lastProviderReconciledAt' ASC NULLS FIRST, f.updated_at ASC LIMIT 25`);
   let repaired = 0;
   for (const row of rows.rows) {
     const resolvedReference = String(row.resolved_payment_reference || '').trim();
-    if (!resolvedReference) continue;
     try {
+      // Advance the bounded scan even when the payment reference is missing or
+      // Paystack is temporarily unavailable, so old rows cannot starve later refunds.
+      const reconciliationAttemptedAt = new Date().toISOString();
+      await pool.query(`UPDATE marketplace_financial_operations SET metadata=COALESCE(metadata,'{}'::jsonb) || $1::jsonb WHERE id=$2 AND operation_type='REFUND' AND status='PENDING' AND provider_reference IS NOT DISTINCT FROM $3`, [JSON.stringify({ lastProviderReconciledAt: reconciliationAttemptedAt }), row.id, row.provider_reference]);
+      if (!resolvedReference) continue;
       const transactionResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(resolvedReference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const transactionData = await transactionResponse.json().catch(() => ({}));
       const transaction = transactionData?.data || {};
