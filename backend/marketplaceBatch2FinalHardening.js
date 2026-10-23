@@ -144,7 +144,7 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const locked = (await client.query(`SELECT f.*,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.quantity,o.listing_id,o.payment_reference FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.id=$1 FOR UPDATE`, [row.id])).rows[0];
+        const locked = (await client.query(`SELECT f.*,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.completed_at,o.quantity,o.listing_id,o.payment_reference FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.id=$1 FOR UPDATE`, [row.id])).rows[0];
         if (!locked || locked.status !== 'PENDING' || locked.escrow_status !== 'REFUND_PENDING') { await client.query('COMMIT'); continue; }
         const metadata = { ...(locked.metadata || {}), paymentReference: resolvedReference, refundRecoveryStatus: status, refundReference: providerReference ? String(providerReference) : null, providerAmount: Number(match.amount), providerCurrency: String(match.currency || '').toUpperCase(), providerTransactionId: transactionId, source: 'batch2-refund-reconciliation' };
         const expectedRefundAmount = amountSubunit(locked.amount, locked.currency);
@@ -165,7 +165,8 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
           const caseId = locked.metadata?.caseId ? String(locked.metadata.caseId) : null;
           if (caseId) await client.query(`UPDATE marketplace_protection_cases SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status IN ('OPEN','UNDER_REVIEW')`, [caseId]);
           await client.query(`UPDATE marketplace_escrows SET status='REFUNDED',refunded_at=COALESCE(refunded_at,NOW()),updated_at=NOW() WHERE id=$1 AND status='REFUND_PENDING'`, [locked.escrow_id]);
-          if (Number.isInteger(Number(locked.quantity)) && locked.listing_id) await client.query(`UPDATE marketplace_listings SET reserved_quantity=GREATEST(0,reserved_quantity-$1),updated_at=NOW() WHERE id=$2`, [Number(locked.quantity), locked.listing_id]);
+          // Completion already consumes the reservation and decrements stock. A later refund must not decrement reserved_quantity a second time and free another buyer's reservation.
+          if (!locked.completed_at && locked.order_status !== 'COMPLETED' && Number.isInteger(Number(locked.quantity)) && locked.listing_id) await client.query(`UPDATE marketplace_listings SET reserved_quantity=GREATEST(0,reserved_quantity-$1),updated_at=NOW() WHERE id=$2`, [Number(locked.quantity), locked.listing_id]);
           await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'buyer_refund','REFUND',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [locked.escrow_id, locked.order_id, locked.escrow_amount, locked.escrow_currency, `REFUND-${locked.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: providerReference ? String(providerReference) : null, source: 'batch2-refund-reconciliation' })]);
           await insertRecoveryEvent(client, locked, 'REFUND_RECOVERY_RECONCILED', { providerReference: providerReference ? String(providerReference) : null, amount: Number(locked.amount), currency: String(locked.currency).toUpperCase() });
           repaired += 1;
