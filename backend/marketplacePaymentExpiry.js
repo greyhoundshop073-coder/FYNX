@@ -35,8 +35,10 @@ async function verifyProviderPayment(order) {
     const transaction = data?.data || {};
     const expectedAmount = amountSubunit(order.total_amount, order.currency);
     const metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || '');
+    const metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '');
     const providerFee = Number(transaction.fees);
-    const validProviderFee = Number.isFinite(providerFee) && providerFee >= 0 ? Math.round((providerFee / 100) * 100) / 100 : 0;
+    const hasValidProviderFee = transaction.fees !== null && transaction.fees !== undefined && Number.isFinite(providerFee) && providerFee >= 0;
+    const validProviderFee = hasValidProviderFee ? Math.round((providerFee / 100) * 100) / 100 : 0;
     const status = String(transaction.status || '').toLowerCase();
     const valid = response.ok && data?.status === true
       && status === 'success'
@@ -44,7 +46,9 @@ async function verifyProviderPayment(order) {
       && Number(transaction.amount) === expectedAmount
       && String(transaction.currency || '').toUpperCase() === String(order.currency || '').toUpperCase()
       && String(transaction.reference || '') === String(order.payment_reference)
-      && metadataOrderId === String(order.id);
+      && metadataOrderId === String(order.id)
+      && metadataBuyerId === String(order.buyer_id)
+      && hasValidProviderFee;
     return { configured: true, paid: valid, status, providerFee: validProviderFee };
   } catch {
     return { configured: true, paid: false, providerUnavailable: true };
