@@ -110,12 +110,14 @@ export function payoutInitializationOutcomeIsUncertain(response, data) {
   return /duplicate|reference.{0,20}(already|used|exists)|already.{0,20}reference|timeout|temporar|try again/.test(message)
     || Boolean(response?.ok && data?.status === true && !data?.data);
 }
-function transferMatchesOperation(transfer, operation) {
+export function transferMatchesOperation(transfer, operation, expectedReference = payoutReferenceForOperation(operation)) {
   const expectedAmount = Math.round(Number(operation.amount) * 100);
   const providerAmount = Number(transfer?.amount);
   const expectedCurrency = String(operation.currency || '').toUpperCase();
   const providerCurrency = String(transfer?.currency || '').toUpperCase();
-  return Number.isFinite(expectedAmount) && expectedAmount > 0 && providerAmount === expectedAmount && providerCurrency === expectedCurrency;
+  const providerReference = String(transfer?.reference || '').trim();
+  const referenceMatches = Boolean(String(expectedReference || '').trim()) && providerReference === String(expectedReference).trim();
+  return referenceMatches && Number.isFinite(expectedAmount) && expectedAmount > 0 && providerAmount === expectedAmount && providerCurrency === expectedCurrency;
 }
 
 async function markPayoutFailed(client, operation, reason) {
@@ -238,7 +240,7 @@ async function initiatePayout(payload) {
 
     const providerReference = String(data?.data?.reference || reference);
     const providerStatus = String(data?.data?.status || '').toLowerCase();
-    const providerDataMatches = transferMatchesOperation(data?.data, operation);
+    const providerDataMatches = transferMatchesOperation(data?.data, operation, reference);
     const success = response.ok && data?.status === true && providerDataMatches && ['success', 'successful'].includes(providerStatus);
     const terminalFailure = response.ok && data?.status === true && providerDataMatches && ['failed', 'reversed', 'rejected'].includes(providerStatus);
     const accepted = response.ok && data?.status === true && providerDataMatches && ['pending', 'otp', 'queued', 'processing'].includes(providerStatus);
@@ -250,7 +252,7 @@ async function initiatePayout(payload) {
       const current = (await finishClient.query(`SELECT * FROM marketplace_financial_operations WHERE id=$1 FOR UPDATE`, [operation.id])).rows[0];
       if (!current || current.status !== 'PENDING') { await finishClient.query('COMMIT'); return; }
       if (!providerDataMatches && response.ok && data?.status === true) {
-        await finishClient.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['Paystack payout amount or currency does not match the protected operation', JSON.stringify({ providerReference, providerStatus, providerAmount: data?.data?.amount ?? null, providerCurrency: data?.data?.currency ?? null }), current.id]);
+        await finishClient.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['Paystack payout reference, amount, or currency does not match the protected operation', JSON.stringify({ providerReference, providerStatus, providerAmount: data?.data?.amount ?? null, providerCurrency: data?.data?.currency ?? null }), current.id]);
         await finishClient.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [current.order_id]);
       } else if (success) {
         await markPayoutSucceeded(finishClient, current, providerReference, providerStatus);
