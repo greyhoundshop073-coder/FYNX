@@ -683,6 +683,83 @@ def backend_group_message_exists(group_id:str, marker_text:str)->tuple[bool,str]
             status=" HTTP "+str(code)
         return False,"backend history verification failed:"+status+" "+type(error).__name__
 
+
+def backend_group_access_contract(group_id:str)->tuple[bool,str]:
+    """Verify persisted CI-group membership and safely round-trip one admin permission."""
+    if not USERNAME or not PASSWORD:
+        return False,"primary E2E credentials are unavailable"
+    try:
+        base,token=backend_login_token(USERNAME,PASSWORD)
+        group_path=urllib.parse.quote(group_id,safe="")
+        headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-cache"}
+
+        def request_json(method:str,path:str,body=None)->dict:
+            data=json.dumps(body).encode("utf-8") if body is not None else None
+            request=urllib.request.Request(
+                base+path,
+                data=data,
+                headers={**headers,**({"Content-Type":"application/json"} if data is not None else {})},
+                method=method,
+            )
+            with urllib.request.urlopen(request,timeout=20) as response:
+                return json.loads(response.read().decode("utf-8","replace"))
+
+        members=request_json("GET","/api/groups/"+group_path+"/members").get("members",[])
+        self_name=USERNAME.removeprefix("@").strip().casefold()
+        own=next((m for m in members if isinstance(m,dict) and
+                  str(m.get("username") or "").removeprefix("@").strip().casefold()==self_name),None)
+        if not own:
+            return False,"server group roster did not contain the authenticated E2E account"
+        role=str(own.get("role") or "").upper()
+        if role!="ADMIN":
+            return False,"dedicated CI group did not preserve owner ADMIN role (server reported "+(role or "missing role")+")"
+
+        permission_root=request_json("GET","/api/groups/"+group_path+"/permissions")
+        permissions=permission_root.get("permissions")
+        fields=("send_messages","send_media","add_members","invite_links","approve_new_members","disappearing_seconds")
+        bool_fields=("send_messages","send_media","add_members","invite_links","approve_new_members")
+        if not isinstance(permissions,dict) or any(key not in permissions for key in fields):
+            return False,"server permissions response omitted required fields"
+        if any(not isinstance(permissions.get(key),bool) for key in bool_fields) or not isinstance(permissions.get("disappearing_seconds"),int):
+            return False,"server permissions response returned malformed field types"
+
+        names={"send_messages":"sendMessages","send_media":"sendMedia","add_members":"addMembers",
+               "invite_links":"inviteLinks","approve_new_members":"approveNewMembers",
+               "disappearing_seconds":"disappearingSeconds"}
+        original={names[key]:permissions[key] for key in fields}
+        probe=dict(original)
+        probe["inviteLinks"]=not original["inviteLinks"]
+        changed_ok=False
+        changed_error=""
+        try:
+            changed=request_json("PATCH","/api/groups/"+group_path+"/permissions",probe).get("permissions",{})
+            changed_ok=changed.get("invite_links") is probe["inviteLinks"]
+            if not changed_ok:
+                changed_error="server did not persist the temporary invite-link permission toggle"
+        except Exception as error:
+            changed_error="permission toggle failed:"+str(getattr(error,"code",""))+" "+type(error).__name__
+
+        restored_ok=False
+        restored_error=""
+        try:
+            request_json("PATCH","/api/groups/"+group_path+"/permissions",original)
+            restored=request_json("GET","/api/groups/"+group_path+"/permissions").get("permissions",{})
+            restored_ok=all(restored.get(key)==permissions[key] for key in fields)
+            if not restored_ok:
+                restored_error="original permission values did not match after restoration"
+        except Exception as error:
+            restored_error="permission restoration failed:"+str(getattr(error,"code",""))+" "+type(error).__name__
+
+        if not changed_ok:
+            return False,changed_error or "permission mutation was not verified"
+        if not restored_ok:
+            return False,restored_error or "original group settings were not restored"
+        return True,"authenticated group roster confirmed E2E account ADMIN membership; permission toggle persisted and original settings were restored"
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return False,"authenticated group lifecycle/permissions check failed:"+status+" "+type(error).__name__
+
+
 def exercise_notification_route(route:str, name:str)->bool:
     if not route: return False
     run("adb","shell","am","force-stop",PACKAGE)
@@ -1357,6 +1434,12 @@ if not FAILURES:
                     if group_after and (not resolved_group_id or resolved_group_id!=group_id):
                         FAILURES.append("opened CI group could not be matched to the same persisted group ID; refusing to certify a different group")
                         group_id=""
+                    if group_id:
+                        access_ok,access_detail=backend_group_access_contract(group_id)
+                        if access_ok:
+                            report.append("- PASS "+access_detail)
+                        else:
+                            FAILURES.append("dedicated CI group backend lifecycle/permissions verification failed: "+access_detail)
                     alive, crashlog=capture_runtime_log("group-chat-process.log")
                     screenshot("group-chat-after-open.png")
                     report.append("- CI group process after open: "+("ALIVE" if alive else "NOT RUNNING"))
