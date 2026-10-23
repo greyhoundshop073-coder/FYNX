@@ -16,8 +16,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -529,24 +527,10 @@ fun FynxMatureStatusComposerPanel(
                         }
                     }
                     if (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri != null) {
-                        val captionBringIntoView = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
                         OutlinedTextField(
                             value = text,
                             onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp)
-                                .bringIntoViewRequester(captionBringIntoView)
-                                .onFocusEvent { focusState ->
-                                    if (focusState.isFocused) {
-                                        scope.launch {
-                                            // The caption sits in the bottom action stack. Ask the
-                                            // IME-aware parent to reveal it after the keyboard opens.
-                                            delay(150)
-                                            captionBringIntoView.bringIntoView()
-                                        }
-                                    }
-                                },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                             singleLine = true,
                             placeholder = { Text("Add a caption…", color = Color.White.copy(alpha = .72f)) },
                             textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
