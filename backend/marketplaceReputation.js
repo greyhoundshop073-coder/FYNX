@@ -181,7 +181,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
       } catch (error) {
         const duplicateReferenceError = error?.code === 'PAYSTACK_REQUEST_FAILED'
-          && /(duplicate|reference.*already|already.*reference|already\\s+used|used\\s+before)/i.test(String(error.message || ''));
+          && /(duplicate|reference.*already|already.*reference|already\s+used|used\\s+before)/i.test(String(error.message || ''));
         if (!duplicateReferenceError || staleReferenceToReplace) throw error;
         let previous;
         try {
