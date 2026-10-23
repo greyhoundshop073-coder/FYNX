@@ -4,6 +4,7 @@ const read = (name) => fs.readFileSync(new URL(name, import.meta.url), 'utf8');
 const worker = read('./marketplaceSettlementWorker.js');
 const webhook = read('./marketplacePaystackWebhook.js');
 const settlement = read('./marketplaceSettlement.js');
+const payoutRetry = read('./marketplacePayoutRetry.js');
 const checkout = read('./marketplaceCheckout.js');
 const checkoutOrder = read('./marketplaceCheckoutOrder.js');
 
@@ -32,7 +33,7 @@ const checks = [
   ['protected order stores the normalized listing currency', checkoutOrder.includes('const currency = normalizeCurrency(listing.currency)') && checkoutOrder.includes('currency,product_snapshot') && checkoutOrder.includes('currency })')],
   ['protected escrow is created from the order currency', settlement.includes('NEW.total_amount,NEW.currency')],
   ['payout account currency is matched to the order currency', read('./marketplacePayoutRetry.js').includes('payoutAccount.currency') && read('./marketplacePayoutRetry.js').includes('order.currency')],
-  ['failed payout retry requires a failed latest attempt and eligible escrow', settlement.includes("WHERE order_id=$1 AND operation_type='PAYOUT_RELEASE' ORDER BY created_at DESC LIMIT 1 FOR UPDATE") && settlement.includes("existing && existing.status !== 'FAILED'") && settlement.includes("existing && escrow.status !== 'RELEASE_ELIGIBLE'") && settlement.includes('PAYOUT-${order.id}-RETRY-${operationId}')]
+  ['dedicated failed payout retry endpoint requires release-eligible escrow and a previously failed attempt', payoutRetry.includes("app.post('/api/marketplace/settlement/retry/:id'") && payoutRetry.includes("escrow.status !== 'RELEASE_ELIGIBLE'") && payoutRetry.includes("status='FAILED'") && payoutRetry.includes('PAYOUT-RETRY-${failed.id}')],
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
