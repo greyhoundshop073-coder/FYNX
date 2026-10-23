@@ -296,12 +296,17 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (title.length < 2 || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0) return res.status(400).json({ error: "valid product name, price and quantity are required" });
 
       await client.query("BEGIN");
-      const existing = (await client.query("SELECT id, seller_id, price, description, category, condition, location FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
+      const existing = (await client.query("SELECT id, seller_id, price, description, category, condition, location, reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
       if (!existing) { await client.query("ROLLBACK"); return res.status(404).json({ error: "listing not found" }); }
       const description = descriptionInput ?? String(existing.description || "");
       const category = categoryInput ?? String(existing.category || "");
       const condition = conditionInput ?? String(existing.condition || "NEW").toUpperCase();
       const location = locationInput ?? String(existing.location || "");
+      const reservedQuantity = Math.max(0, Number(existing.reserved_quantity) || 0);
+      if (quantity < reservedQuantity) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: `Total stock cannot be lower than ${reservedQuantity} item(s) already reserved by active orders.` });
+      }
       if (description.length < 5 || !category || !["NEW", "USED", "REFURBISHED"].includes(condition) || !location) {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "valid product description, category, condition and location are required" });
