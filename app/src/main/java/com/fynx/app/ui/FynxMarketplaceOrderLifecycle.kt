@@ -56,6 +56,8 @@ fun FynxMarketplaceOrderLifecycle(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var deliveryDetails by remember(order.id) { mutableStateOf<JSONObject?>(null) }
+    var deliveryDetailsLoading by remember(order.id) { mutableStateOf(false) }
+    var deliveryDetailsError by remember(order.id) { mutableStateOf<String?>(null) }
     var handoverPhotoMediaId by remember(order.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val photoEvidencePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
@@ -82,18 +84,26 @@ fun FynxMarketplaceOrderLifecycle(
         }
     }
 
-    LaunchedEffect(order.id) {
-        FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
-            .onSuccess { raw ->
-                val response = JSONObject(raw)
-                deliveryDetails = response.optJSONObject("assignment")
-                val evidence = response.optJSONArray("evidence")
-                handoverPhotoMediaId = if (evidence == null) null else (0 until evidence.length())
-                    .mapNotNull { evidence.optJSONObject(it) }
-                    .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
-                    ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
-            }
+    fun loadDeliveryDetails() {
+        scope.launch {
+            deliveryDetailsLoading = true
+            deliveryDetailsError = null
+            FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
+                .onSuccess { raw ->
+                    val response = JSONObject(raw)
+                    deliveryDetails = response.optJSONObject("assignment")
+                    val evidence = response.optJSONArray("evidence")
+                    handoverPhotoMediaId = if (evidence == null) null else (0 until evidence.length())
+                        .mapNotNull { evidence.optJSONObject(it) }
+                        .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
+                        ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
+                }
+                .onFailure { deliveryDetailsError = it.message ?: "Delivery and driver details could not load." }
+            deliveryDetailsLoading = false
+        }
     }
+
+    LaunchedEffect(order.id) { loadDeliveryDetails() }
 
     if (showFulfillment) {
         MarketplaceFulfillmentDialog(
@@ -170,6 +180,15 @@ fun FynxMarketplaceOrderLifecycle(
                     Text("${order.currency} ${"%.2f".format(order.totalAmount)}")
                     Text("Fulfillment: ${order.fulfillmentMethod.ifBlank { "Not selected" }}")
                     order.trackingReference?.takeIf { it.isNotBlank() }?.let { Text("Tracking: $it") }
+                    if (deliveryDetailsLoading) {
+                        Text("Loading delivery and driver details…", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                    }
+                    deliveryDetailsError?.let { detailError ->
+                        Text(detailError, color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                        TextButton(onClick = { loadDeliveryDetails() }, enabled = !deliveryDetailsLoading) {
+                            Text("Retry delivery details")
+                        }
+                    }
                     deliveryDetails?.let { details ->
                         Text("Delivery information", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
                         Text("Driver type: ${if (details.optString("driverType") == "SELLER_LOCAL") "Local phone driver" else "FYNX driver"}")
