@@ -28,13 +28,26 @@ async function paystackJson(url, options = {}) {
   return { response, data };
 }
 
+export function classifyPaystackTransferVerification(response, data, expectedReference) {
+  // Paystack documents HTTP 404 as transfer not found. Other failed or
+  // indeterminate responses must not be interpreted as proof that no transfer
+  // exists, or a transient/auth error could trigger another payout attempt.
+  if (response?.status === 404) return { found: false, response, data };
+  if (response?.ok && data?.status === true && data?.data) {
+    if (String(data.data.reference || '') !== String(expectedReference || '')) {
+      throw new Error('Paystack transfer verification returned a different reference');
+    }
+    return { found: true, response, data };
+  }
+  throw new Error(data?.message || 'Paystack transfer verification failed (' + String(response?.status ?? 'unknown') + ')');
+}
+
 async function verifyTransferByReference(reference) {
   const cleanReference = String(reference || '').trim();
   if (!cleanReference) return { found: false };
-  const { response, data } = await paystackJson(`https://api.paystack.co/transfer/verify/${encodeURIComponent(cleanReference)}`, { headers: providerHeaders() });
-  if (response.ok && data?.status === true && data?.data) return { found: true, response, data };
-  if (response.status === 404 || data?.status === false) return { found: false, response, data };
-  throw new Error(data?.message || `Paystack transfer verification failed (${response.status})`);
+  const url = 'https://api.paystack.co/transfer/verify/' + encodeURIComponent(cleanReference);
+  const { response, data } = await paystackJson(url, { headers: providerHeaders() });
+  return classifyPaystackTransferVerification(response, data, cleanReference);
 }
 
 function transferMatchesOperation(transfer, operation) {
