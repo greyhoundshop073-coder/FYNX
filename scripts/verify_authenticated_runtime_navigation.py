@@ -632,61 +632,72 @@ if not FAILURES:
         if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
         else: FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
-    # The debug saved-device entry is intentionally a local UI-only route, not
-    # server authentication. Do not cold-start it: that returns to Sign In and
-    # makes unrelated navigation checks fail for the wrong reason. Certify the
-    # Status create affordance on the same live Home session instead.
-    if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
-        home_xml = ""
-        for _ in range(4):
-            home_xml = dump_ui("authenticated-status-home.xml")
-            if (find_control(home_xml, ["Open FYNX camera"])
-                    and find_control(home_xml, ["Chat"])
-                    and find_control(home_xml, ["Friends"])):
-                break
-            run("adb", "shell", "input", "keyevent", "4")
-            time.sleep(0.8)
+    # Exercise Status creation on the current Home session in both supported
+    # runtime modes. Do not alter or re-enter the login flow: the debug-only
+    # saved-device path is deliberately local UI entry, not server auth.
+    home_xml = ""
+    for _ in range(4):
+        home_xml = dump_ui("authenticated-status-home.xml")
         if (find_control(home_xml, ["Open FYNX camera"])
                 and find_control(home_xml, ["Chat"])
                 and find_control(home_xml, ["Friends"])):
-            screenshot("authenticated-status-home.png")
-            status_add_xml = tap_control(
-                home_xml, ["Create your status"], "status-create",
-                ["Add status", "Voice", "Text"]
+            break
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.8)
+    if (find_control(home_xml, ["Open FYNX camera"])
+            and find_control(home_xml, ["Chat"])
+            and find_control(home_xml, ["Friends"])):
+        screenshot("authenticated-status-home.png")
+        status_add_xml = tap_control(
+            home_xml, ["Create your status"], "status-create",
+            ["Add status", "Voice", "Text"]
+        )
+        if status_add_xml and find_control(status_add_xml, ["Voice"]) and find_control(status_add_xml, ["Text"]):
+            screenshot("authenticated-status-create.png")
+            report.append("- PASS Home own-Status + button opens the real Add status panel")
+            report.append("- PASS Add status panel exposes both Voice and Text creation choices")
+            voice_composer_xml = tap_control(
+                status_add_xml, ["Voice"], "status-voice-composer",
+                ["Tap Voice to start recording", "Voice Status ready", "Stop"]
             )
-            if status_add_xml and find_control(status_add_xml, ["Voice"]) and find_control(status_add_xml, ["Text"]):
-                report.append("- PASS Home own-Status + button opens the real Add status panel")
-                report.append("- PASS Add status panel exposes both Voice and Text creation choices")
-                voice_composer_xml = tap_control(
-                    status_add_xml, ["Voice"], "status-voice-composer",
-                    ["Tap Voice to start recording", "Voice Status ready", "Stop"]
-                )
-                if voice_composer_xml and (
-                    find_control(voice_composer_xml, ["Tap Voice to start recording"])
-                    or find_control(voice_composer_xml, ["Voice Status ready"])
-                    or find_control(voice_composer_xml, ["Stop"])
-                ):
-                    screenshot("authenticated-status-voice-composer.png")
-                    report.append("- PASS selecting Voice opens the actual Status composer in Voice mode")
-                else:
-                    FAILURES.append("Status Add status -> Voice composer")
+            if voice_composer_xml and (
+                find_control(voice_composer_xml, ["Tap Voice to start recording"])
+                or find_control(voice_composer_xml, ["Voice Status ready"])
+                or find_control(voice_composer_xml, ["Stop"])
+            ):
+                screenshot("authenticated-status-voice-composer.png")
+                report.append("- PASS selecting Voice opens the actual Status composer in Voice mode")
             else:
-                FAILURES.append("Home own-Status + button did not open Add status with both Voice and Text choices")
+                FAILURES.append("Status Add status -> Voice composer")
         else:
-            FAILURES.append("could not return to Home through in-app Back navigation for Status runtime check")
-        report += ["", "## Captured Status surfaces",
-                   "- authenticated-status-home.png", "- authenticated-status-create.png",
-                   "- authenticated-status-voice-composer.png",
-                   "", "Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only saved-device UI entry, which explicitly does not certify server authentication."]
-        report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
-        if FAILURES:
-            report += ["", "Failures:"] + ["- " + item for item in FAILURES]
-        (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
-        print("\n".join(report))
-        raise SystemExit(1 if FAILURES else 0)
+            FAILURES.append("Home own-Status + button did not open Add status with both Voice and Text choices")
+    else:
+        FAILURES.append("could not return to Home through in-app Back navigation for Status runtime check")
 
-    run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
+    # Return to Home using in-app Back so later Stories and navigation checks
+    # can continue in the same session. This deliberately avoids force-stopping
+    # the debug-only UI session and does not change authentication behaviour.
+    for _ in range(4):
+        home_xml = dump_ui("authenticated-status-return-home.xml")
+        if (find_control(home_xml, ["Open FYNX camera"])
+                and find_control(home_xml, ["Chat"])
+                and find_control(home_xml, ["Friends"])):
+            break
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.8)
+    if not (find_control(home_xml, ["Open FYNX camera"])
+            and find_control(home_xml, ["Chat"])
+            and find_control(home_xml, ["Friends"])):
+        FAILURES.append("Status runtime checks did not return to Home for remaining navigation checks")
+    report += ["", "## Captured Status surfaces",
+               "- authenticated-status-home.png",
+               "- authenticated-status-create.png",
+               "- authenticated-status-voice-composer.png"]
+    if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
+        run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
+        xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
+    else:
+        xml=dump_ui("authenticated-home-camera-reset.xml") or home_xml
 
     for name,labels,expected in (
         ("chat",["Chat"],["Messages and groups in one place"]),
