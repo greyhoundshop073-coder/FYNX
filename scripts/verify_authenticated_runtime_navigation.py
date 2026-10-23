@@ -468,12 +468,81 @@ def first_username_in_xml(xml_text:str)->str:
             return value
     return ""
 
-def first_local_group_id()->str:
+def local_group_records()->list[dict[str,str]]:
+    """Read locally stored group IDs and names so UI navigation can be tied to the actual selected group."""
     result=run("adb","shell","run-as",PACKAGE,"cat","shared_prefs/fynx_groups_store.xml")
-    if result.returncode != 0: return ""
+    if result.returncode != 0:
+        return []
     raw=html.unescape(result.stdout or "")
-    match=re.search(r'"id":"([^"]+)"', raw)
-    return match.group(1) if match else ""
+    records=[]
+    pattern=re.compile(r'"id":"([^"]+)"\\s*,\\s*"name":"((?:\\\\.|[^"\\\\])*)"')
+    for match in pattern.finditer(raw):
+        try:
+            name=json.loads('"' + match.group(2) + '"')
+        except (json.JSONDecodeError, TypeError):
+            continue
+        group_id=match.group(1).strip()
+        if group_id and name and not any(item["id"]==group_id for item in records):
+            records.append({"id":group_id,"name":name})
+    return records
+
+def group_id_from_visible_title(xml_text:str)->str:
+    """Resolve the ID by matching the opened conversation's visible title, never the first stored record."""
+    if not xml_text:
+        return ""
+    visible_values=[]
+    for node in nodes(xml_text):
+        if node.attrib.get("visible-to-user","true").lower()=="false":
+            continue
+        visible_values.extend((
+            (node.attrib.get("text") or "").strip(),
+            (node.attrib.get("content-desc") or "").strip()
+        ))
+    normalized=[value.casefold() for value in visible_values if value]
+    records=sorted(local_group_records(),key=lambda item:len(item["name"]),reverse=True)
+    for record in records:
+        group_name=record["name"].strip().casefold()
+        if group_name and any(value==group_name or group_name in value for value in normalized):
+            return record["id"]
+    return ""
+
+def backend_group_message_exists(group_id:str, marker_text:str)->tuple[bool,str]:
+    """Confirm a UI-sent message through an authenticated read of the isolated test backend."""
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    if not USERNAME or not PASSWORD:
+        return False,"FYNX_E2E_USERNAME/FYNX_E2E_PASSWORD are unavailable"
+    try:
+        login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
+        login_req=urllib.request.Request(
+            base+"/api/auth/login",
+            data=login_body,
+            headers={"Content-Type":"application/json","Accept":"application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(login_req,timeout=20) as response:
+            login_data=json.loads(response.read().decode("utf-8","replace"))
+        token=str(login_data.get("accessToken") or "").strip()
+        if not token:
+            return False,"backend login returned no access token"
+        group_path=urllib.parse.quote(group_id,safe="")
+        url=base+"/api/groups/"+group_path+"/messages?limit=100"
+        request=urllib.request.Request(
+            url,
+            headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-cache"},
+            method="GET",
+        )
+        with urllib.request.urlopen(request,timeout=20) as response:
+            data=json.loads(response.read().decode("utf-8","replace"))
+        messages=data.get("messages",[])
+        if any(str(message.get("text") or "")==marker_text for message in messages if isinstance(message,dict)):
+            return True,"authenticated GET /api/groups/{id}/messages returned the exact marker"
+        return False,"authenticated backend history was reachable but did not contain the exact marker (returned "+str(len(messages))+" messages)"
+    except Exception as error:
+        status=""
+        code=getattr(error,"code",None)
+        if code is not None:
+            status=" HTTP "+str(code)
+        return False,"backend history verification failed:"+status+" "+type(error).__name__
 
 def exercise_notification_route(route:str, name:str)->bool:
     if not route: return False
@@ -923,7 +992,9 @@ if not FAILURES:
                                         run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(2.0)
                                         groups_tab=dump_ui("chat-groups-after-ci-create.xml")
                                         group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
-                        group_id=first_local_group_id()
+                        group_id=group_id_from_visible_title(group_after) if group_after else ""
+                        if group_after and not group_id:
+                            FAILURES.append("opened group could not be matched to its own local group ID by visible title; refusing to send or certify a different stored group")
                         alive, crashlog = capture_runtime_log("group-chat-process.log")
                         screenshot("group-chat-after-open.png")
                         report.append("- Group process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
@@ -1028,6 +1099,15 @@ if not FAILURES:
                                         else:
                                             FAILURES.append("FYNX composer button test could not reopen a usable real group composer")
 
+                                    # A message rendered by the optimistic/local cache is not backend-delivery proof.
+                                    # Independently read the isolated test backend using the real test account.
+                                    for remote_marker, remote_method in sent_markers:
+                                        remote_ok, remote_detail = backend_group_message_exists(group_id, remote_marker)
+                                        if remote_ok:
+                                            report.append("- PASS " + remote_method + " exact marker confirmed by authenticated backend message-history GET")
+                                        else:
+                                            FAILURES.append(remote_method + " was visible in UI but was not confirmed by the authenticated backend: " + remote_detail)
+
                                     if sent_markers and group_id:
                                         restore_home_after_restart("group-chat-send-persistence-home")
                                         run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://group/" + group_id, PACKAGE)
@@ -1035,9 +1115,14 @@ if not FAILURES:
                                         for persisted_marker, method in sent_markers:
                                             in_message, in_editor, _ = marker_state(persisted_ui, persisted_marker)
                                             if in_message and not in_editor:
-                                                report.append("- PASS " + method + " message remained visible after process restart and reopening the same group")
+                                                report.append("- PASS " + method + " marker remained visible in the app after a force-stop/relaunch and reopening the same group (UI visibility only)")
                                             else:
-                                                FAILURES.append(method + " message did not persist as a separate group message after process restart and reopening")
+                                                FAILURES.append(method + " message was not visible in the app after force-stop/relaunch and reopening the same group")
+                                            remote_after_restart, remote_detail = backend_group_message_exists(group_id, persisted_marker)
+                                            if remote_after_restart:
+                                                report.append("- PASS " + method + " exact marker still exists in server-returned group history after app restart")
+                                            else:
+                                                FAILURES.append(method + " marker missing from server-returned group history after app restart: " + remote_detail)
                                 elif "Messaging is restricted" in group_after:
                                     report.append("- Group send tests blocked by the actual group's messaging permissions")
                                 else:
@@ -1068,9 +1153,10 @@ if not FAILURES:
                                 or "Group unavailable" in group_destination
                             )
                             if fake_group_ui_ready and alive:
-                                report.append("- PASS deterministic Group ConversationPanel rendered a stable conversation or explicit missing-group state; captured group-chat-inside.png")
+                                report.append("- DIAGNOSTIC ONLY: deterministic group deep link rendered a conversation/unavailable state; it does not count as a real group or backend send test")
+                                FAILURES.append("a real persisted group conversation could not be opened; deterministic ci-runtime-group fallback is diagnostic only and cannot make Chat/Groups certification GREEN")
                             else:
-                                FAILURES.append("deterministic Group ConversationPanel did not open or left the app process unhealthy")
+                                FAILURES.append("deterministic Group ConversationPanel diagnostic did not open or left the app process unhealthy")
                         if group_after and not group_id:
                             report.append("- PASS group notification-route test skipped because the real group ID could not be read from the authenticated app store; no test data was fabricated")
                     else:
