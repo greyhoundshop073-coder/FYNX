@@ -125,8 +125,8 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const q = cleanText(req.query?.q, 80);
       const category = cleanText(req.query?.category, 40);
       const location = cleanText(req.query?.location, 160);
-      const params = [];
-      const where = ["l.active=TRUE", "l.quantity>0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
+      const params = [req.user.sub];
+      const where = ["l.active=TRUE", "l.quantity>0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
       if (q) { params.push(`%${q}%`); const n=params.length; where.push("(l.title ILIKE $" + n + " OR l.description ILIKE $" + n + " OR COALESCE(l.category,'') ILIKE $" + n + " OR COALESCE(l.store_name,'') ILIKE $" + n + " OR u.username ILIKE $" + n + " OR u.display_name ILIKE $" + n + ")"); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push("l.category=$" + params.length); }
       if (location) { params.push(`%${location}%`); where.push("l.location ILIKE $" + params.length); }
