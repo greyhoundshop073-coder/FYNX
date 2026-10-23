@@ -11,6 +11,7 @@ seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeller
 app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 saved_products_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSavedMarketplaceProductsPanel.kt").read_text()
 remote_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()
+order_lifecycle = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text()
 discovery_routes = (ROOT / "backend/discoveryRoutes.js").read_text()
 social_routes = (ROOT / "backend/socialRoutes.js").read_text()
 
@@ -109,6 +110,7 @@ checks = [
     ("successful listing publish refreshes the seller-owned inventory endpoint rather than public discovery", "myListings(context).getOrThrow().firstOrNull { it.id == id }" in remote_client and "General discovery deliberately excludes the signed-in seller's own products." in remote_client),
     ("seller inventory refresh hides soft-deleted listings after the backend returns inactive history", 'FynxMarketplaceClient.myListings(context)' in seller_center and '.onSuccess { listings = it.filter { listing -> listing.active } }' in seller_center),
     ("My Shop distinguishes an inventory load failure from a genuinely empty inventory and offers retry", 'listings.isEmpty() && error != null' in seller_center and 'Text("Retry loading listings")' in seller_center),
+    ("buyer order delivery detail failures offer an explicit retry", 'deliveryDetailsError?.let' in order_lifecycle and 'Text("Retry delivery details")' in order_lifecycle and '.onFailure { deliveryDetailsError' in order_lifecycle),
     ("fallback Marketplace search matches shop name, location and category", all(term in social_routes for term in ("COALESCE(l.store_name", "COALESCE(l.location", "COALESCE(l.category")) and "COALESCE(l.store_name" in discovery_routes),
 ]
 
