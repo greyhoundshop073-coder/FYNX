@@ -78,6 +78,8 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
     var statusMusicSearch by remember { mutableStateOf("") }
     var statusMusicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
     var statusMusicLoading by remember { mutableStateOf(false) }
+    var statusMusicError by remember { mutableStateOf<String?>(null) }
+    var statusMusicRetryKey by remember { mutableIntStateOf(0) }
     var statusMusicPreviewId by remember { mutableStateOf<Long?>(null) }
 
     fun openCapturedStatus(uri: Uri, type: String) {
@@ -89,13 +91,37 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
         composing = true
     }
 
-    LaunchedEffect(showStatusMusicPicker, statusMusicSearch) {
+    LaunchedEffect(showStatusMusicPicker, statusMusicSearch, statusMusicRetryKey) {
         if (showStatusMusicPicker) {
             statusMusicLoading = true
-            FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)
-                .onSuccess { statusMusicCatalogue = it }
-                .onFailure { cameraError = it.message ?: "Music catalogue could not be loaded." }
-            statusMusicLoading = false
+            statusMusicError = null
+            // Debounce typed searches so each character does not issue a backend request.
+            kotlinx.coroutines.delay(300)
+            if (!FynxBackendClient.hasAccessToken(context)) {
+                // The music endpoint is intentionally server-authenticated. Do not
+                // pretend an unauthenticated debug UI session has an empty catalogue.
+                statusMusicCatalogue = emptyList()
+                statusMusicError = "Sign in to FYNX to browse published music."
+                statusMusicLoading = false
+            } else {
+                val result = FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)
+                result.onSuccess { tracks ->
+                    statusMusicCatalogue = tracks
+                    statusMusicError = null
+                }.onFailure { error ->
+                    statusMusicCatalogue = emptyList()
+                    val message = error.message.orEmpty()
+                    statusMusicError = when {
+                        message.contains("session expired", ignoreCase = true) ||
+                            message.contains("unauthorized", ignoreCase = true) ->
+                            "Sign in to FYNX to browse published music."
+                        message.contains("timed out", ignoreCase = true) ->
+                            "Music catalogue took too long to respond. Please retry."
+                        else -> "Music catalogue couldn't be loaded. Check your connection and retry."
+                    }
+                }
+                statusMusicLoading = false
+            }
         }
     }
 
@@ -132,7 +158,11 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                     },
                     onText = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.TEXT; composing = true; addStatusOpen = false },
                     onVoice = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.VOICE; composing = true; addStatusOpen = false },
-                    onMusic = { showStatusMusicPicker = true },
+                    onMusic = {
+                        statusMusicError = null
+                        statusMusicCatalogue = emptyList()
+                        showStatusMusicPicker = true
+                    },
                     onMediaSelected = { media ->
                         selectedInitialMedia = media
                         selectedInitialType = if (media.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO
@@ -177,7 +207,25 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 if (statusMusicLoading) {
-                                    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                                    Column(
+                                        Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        CircularProgressIndicator()
+                                        Text("Loading published music...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                } else if (statusMusicError != null) {
+                                    Column(
+                                        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(statusMusicError.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        if (statusMusicError != "Sign in to FYNX to browse published music.") {
+                                            TextButton(onClick = { statusMusicRetryKey++ }) { Text("Retry") }
+                                        }
+                                    }
                                 } else if (statusMusicCatalogue.isEmpty()) {
                                     Text("No FYNX music is published yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 } else {
