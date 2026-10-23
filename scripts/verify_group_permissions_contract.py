@@ -6,6 +6,7 @@ membership_routes = (ROOT / "backend/groupMembershipRoutes.js").read_text(encodi
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
 active = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
 settings = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt").read_text(encoding="utf-8")
+runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 normalized_group_routes = "".join(group_routes.split())
 
@@ -29,6 +30,8 @@ checks = {
     "group sends distinguish a first insert from an idempotent retry": "ON CONFLICT(id) DO NOTHING RETURNING id" in group_routes and "const created = inserted.rows.length > 0" in group_routes,
     "group message ID collisions cannot return another sender's or another group's message": "m.group_id,m.sender_id" in group_routes and "if(String(row.group_id)!==groupId||String(row.sender_id)!==String(req.user.sub))" in normalized_group_routes and "MESSAGE_ID_CONFLICT" in group_routes,
     "group retries return the stored message without broadcasting a duplicate realtime event": "if (created) await broadcastGroupMessage(groupId, message)" in group_routes and "res.status(created?201:200).json({message})" in normalized_group_routes,
+    "runtime cert checks persisted group roster and account ADMIN role": "backend_group_access_contract(group_id)" in runtime and '"/api/groups/"+group_path+"/members"' in runtime and 'role!="ADMIN"' in runtime,
+    "runtime cert verifies permission changes and restores original CI-group settings": 'probe["inviteLinks"]=not original["inviteLinks"]' in runtime and 'request_json("PATCH","/api/groups/"+group_path+"/permissions",original)' in runtime and "restored_ok=all(restored.get(key)==permissions[key] for key in fields)" in runtime,
 }
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
