@@ -170,7 +170,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const where = ["l.active = TRUE", "l.quantity > 0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
       // Storefront queries include the requested seller; general discovery hides own listings.
       if (!seller) where.push("l.seller_id <> $1");
-      if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
+      if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE ${params.length} OR l.description ILIKE ${params.length} OR COALESCE(l.store_name, '') ILIKE ${params.length} OR COALESCE(l.location, '') ILIKE ${params.length} OR COALESCE(l.category, '') ILIKE ${params.length} OR u.username ILIKE ${params.length} OR u.display_name ILIKE ${params.length})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
       const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, l.store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 100`, params);
