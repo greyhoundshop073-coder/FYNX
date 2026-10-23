@@ -195,6 +195,8 @@ DIAGNOSTIC_MARKERS = (
     "New post", "What's on your mind?", "Photo", "Video/Camera",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
+    "＋ New group", "＋ Create group", "Create group", "No groups yet",
+    "Search groups", "Search groups…", "Message not sent yet",
     "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
