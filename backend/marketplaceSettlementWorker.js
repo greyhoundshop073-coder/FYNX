@@ -161,7 +161,7 @@ async function initiatePayout(payload) {
       }));
     }
 
-    const providerReference = String(data?.data?.reference || data?.data?.transfer_code || reference);
+    const providerReference = String(data?.data?.reference || reference);
     const providerStatus = String(data?.data?.status || '').toLowerCase();
     const providerDataMatches = transferMatchesOperation(data?.data, operation);
     const success = response.ok && data?.status === true && providerDataMatches && ['success', 'successful'].includes(providerStatus);
