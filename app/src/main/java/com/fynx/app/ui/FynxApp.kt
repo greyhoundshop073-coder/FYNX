@@ -410,32 +410,19 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
                             else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
                         }
-                        // Keep the 3-dot control beside the avatar, not on top of it.
-                        // Material IconButton expands to a 48dp touch target even when its
-                        // visual icon is smaller; overlaying it makes the profile target
-                        // unclickable on real devices and in accessibility/UI automation.
-                        Box(
-                            Modifier
-                                .size(28.dp)
-                                .shadow(2.dp, CircleShape)
-                                .semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
-                                .clickable { profileAvatarMenuOpen = true },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Surface(
-                                modifier = Modifier.fillMaxSize(),
-                                shape = CircleShape,
-                                color = Color(0xFF1877F2),
-                                contentColor = Color.White
+                        // Restore the original compact three-dot menu control; keep its
+                        // existing menu actions and avoid changing the avatar navigation.
+                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            IconButton(
+                                onClick = { profileAvatarMenuOpen = true },
+                                modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.MoreHoriz,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = Color.White
-                                    )
-                                }
+                                Icon(
+                                    Icons.Default.MoreHoriz,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
                             }
                             DropdownMenu(
                                 expanded = profileAvatarMenuOpen,
