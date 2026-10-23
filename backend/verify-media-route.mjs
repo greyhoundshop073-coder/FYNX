@@ -28,6 +28,7 @@ assert.match(sql, /FROM\s+statuses/i, "status media must retain audience checks"
 assert.match(sql, /FROM\s+marketplace_listings/i, "active Marketplace listing media must be retrievable by authenticated viewers");
 assert.match(sql, /ml\.active\s*=\s*TRUE/i, "only active Marketplace listings may expose listing media");
 assert.match(sql, /ml\.seller_id/i, "Marketplace listing media privacy must be tied to the listing seller");
+assert.match(sql, /mm\\.owner_id\\s*=\\s*ml\\.seller_id/i, "listing media must be owned by the listing seller to prevent exposing another account’s private media");
 assert.match(sql, /jsonb_array_elements_text\(/i, "listing media IDs must be read from the JSONB array without string-regex parsing");
 assert.match(sql, /AS\s+listing_media\(media_id\)/i, "JSONB listing media set-returning function must expose a scalar media_id column");
 assert.match(sql, /listing_media\.media_id\s*=\s*CAST\(mm\.id\s+AS\s+TEXT\)/i, "listing media authorization must compare the scalar JSONB media ID to the requested media record");
