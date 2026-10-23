@@ -1040,104 +1040,115 @@ if not FAILURES:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
                 reset=restore_home_after_restart("authenticated-home-chat-group-reset") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
+                group_after=""
+                group_id=""
                 if groups_xml:
-                    # The Chat panel has its own exact "Groups" toggle. Do not let
-                    # substring matching hit the subtitle "...and groups in one place".
-                    section_toggle=find_exact_control(groups_xml,"Groups")
-                    if section_toggle:
-                        _,sx,sy=section_toggle
-                        run("adb","shell","input","tap",str(sx),str(sy))
-                        groups_tab=wait_for_controls(
-                            "chat-groups-tab",
-                            ["Search groups"],
-                            timeout=10.0
-                        )
-                        if "Search groups" not in groups_tab:
-                            FAILURES.append("Chat's exact Groups toggle did not open the embedded Groups list; visible markers: "+visible_marker_summary(groups_tab))
-                            groups_tab=""
+                    # Never send CI markers into an arbitrary user's group. Reuse
+                    # only the dedicated CI-owned group, or create one through the
+                    # actual app's Groups destination and Create group dialog.
+                    stored_groups=local_group_records()
+                    ci_group=next(
+                        (item for item in reversed(stored_groups)
+                         if item["name"].casefold().startswith("ci chat recovery group")),
+                        None
+                    )
+                    if ci_group:
+                        group_id=ci_group["id"]
+                        restore_home_after_restart("existing-ci-group-open-home")
+                        opened=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
+                        group_after=wait_for_group_conversation_ui("existing-ci-group-open.xml")
+                        if opened.returncode!=0 or not group_after or "Group unavailable" in group_after:
+                            FAILURES.append("stored CI group could not be reopened as a real group conversation; refusing to send into any other group")
+                            group_after=""
                     else:
-                        groups_tab=""
-                        FAILURES.append("Chat Groups section toggle was not found as an exact accessible label")
-                    if groups_tab:
-                        clear_runtime_log()
-                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
-                        if not group_after:
-                            # The embedded "+ New group" action only changes the
-                            # top-level destination to Groups; it does not open the
-                            # create dialog. The previous test incorrectly treated
-                            # the destination screen's search field as the create form.
-                            new_group_control=find_exact_control(groups_tab,"＋ New group") or find_control(groups_tab,["New group"])
-                            if not new_group_control:
-                                new_group_control=find_exact_control(groups_tab,"Create group")
-                            if new_group_control:
-                                _,cx,cy=new_group_control
-                                run("adb","shell","input","tap",str(cx),str(cy))
-                                groups_screen=wait_for_controls(
-                                    "group-create-destination",
-                                    ["Your communities in one place","Search groups…"],
-                                    timeout=12.0
-                                )
-                                if not groups_screen or not find_control(groups_screen,["Your communities in one place"]):
-                                    FAILURES.append("New group action did not navigate to the actual Groups destination; visible markers: "+visible_marker_summary(groups_screen))
+                        section_toggle=find_exact_control(groups_xml,"Groups")
+                        if not section_toggle:
+                            FAILURES.append("Chat Groups section toggle was not found as an exact accessible label; visible markers: "+visible_marker_summary(groups_xml))
+                        else:
+                            _,sx,sy=section_toggle
+                            run("adb","shell","input","tap",str(sx),str(sy))
+                            groups_tab=wait_for_controls("chat-groups-tab",["Search groups"],timeout=10.0)
+                            if not groups_tab or not find_control(groups_tab,["Search groups"]):
+                                FAILURES.append("Chat's exact Groups toggle did not open the embedded Groups list; visible markers: "+visible_marker_summary(groups_tab))
+                            else:
+                                new_group_control=find_exact_control(groups_tab,"＋ New group") or find_control(groups_tab,["New group"])
+                                if not new_group_control:
+                                    FAILURES.append("embedded Groups list has no New group action; visible markers: "+visible_marker_summary(groups_tab))
                                 else:
-                                    open_create=find_exact_control(groups_screen,"Create group")
-                                    if not open_create:
-                                        FAILURES.append("Groups destination opened but its exact Create group control was not found; visible markers: "+visible_marker_summary(groups_screen))
+                                    _,cx,cy=new_group_control
+                                    run("adb","shell","input","tap",str(cx),str(cy))
+                                    groups_screen=wait_for_controls(
+                                        "group-create-destination",
+                                        ["Your communities in one place","Search groups…"],
+                                        timeout=12.0
+                                    )
+                                    if not groups_screen or not find_control(groups_screen,["Your communities in one place"]):
+                                        FAILURES.append("New group action did not navigate to the actual Groups destination; visible markers: "+visible_marker_summary(groups_screen))
                                     else:
-                                        _,cx,cy=open_create
-                                        run("adb","shell","input","tap",str(cx),str(cy))
-                                        dialog=wait_for_controls(
-                                            "group-create-dialog",
-                                            ["Group name","Description","Create"],
-                                            timeout=10.0
-                                        )
-                                        if not dialog or not find_control(dialog,["Group name"]) or not find_control(dialog,["Description"]):
-                                            FAILURES.append("Create group control did not open the real Create group dialog; visible markers: "+visible_marker_summary(dialog))
+                                        open_create=find_exact_control(groups_screen,"Create group")
+                                        if not open_create:
+                                            FAILURES.append("Groups destination opened but its exact Create group control was not found; visible markers: "+visible_marker_summary(groups_screen))
                                         else:
-                                            fields=find_edit_fields(dialog)
-                                            if len(fields)<2:
-                                                FAILURES.append("Create group dialog exposed fewer than two editable fields")
+                                            _,cx,cy=open_create
+                                            run("adb","shell","input","tap",str(cx),str(cy))
+                                            dialog=wait_for_controls("group-create-dialog",["Group name","Description","Create"],timeout=10.0)
+                                            if not dialog or not find_control(dialog,["Group name"]) or not find_control(dialog,["Description"]):
+                                                FAILURES.append("Create group control did not open the real Create group dialog; visible markers: "+visible_marker_summary(dialog))
                                             else:
-                                                run("adb","shell","input","tap",str(fields[0][0]),str(fields[0][1]))
-                                                input_text("CI Chat Recovery Group")
-                                                run("adb","shell","input","keyevent","4")
-                                                time.sleep(.3)
-                                                dialog=dump_ui("group-create-name-filled.xml")
                                                 fields=find_edit_fields(dialog)
                                                 if len(fields)<2:
-                                                    FAILURES.append("Description field disappeared after entering group name")
+                                                    FAILURES.append("Create group dialog exposed fewer than two editable fields")
                                                 else:
-                                                    run("adb","shell","input","tap",str(fields[1][0]),str(fields[1][1]))
-                                                    input_text("Persistent runtime recovery group")
+                                                    run("adb","shell","input","tap",str(fields[0][0]),str(fields[0][1]))
+                                                    input_text("CI Chat Recovery Group")
                                                     run("adb","shell","input","keyevent","4")
-                                                    time.sleep(.4)
-                                                    dialog=dump_ui("group-create-filled.xml")
-                                                    create_btn=find_exact_control(dialog,"Create")
-                                                    if create_btn:
-                                                        _,cx,cy=create_btn
-                                                        run("adb","shell","input","tap",str(cx),str(cy))
-                                                        deadline=time.monotonic()+15.0
-                                                        created_id=""
-                                                        while time.monotonic()<deadline:
-                                                            time.sleep(.5)
-                                                            records=local_group_records()
-                                                            created=next((item for item in records if item["name"].casefold()=="ci chat recovery group"),None)
-                                                            if created:
-                                                                created_id=created["id"]
-                                                                break
-                                                        if not created_id:
-                                                            FAILURES.append("Create group was tapped but no matching CI group appeared in the local account store; remote creation or local persistence failed")
-                                                        else:
-                                                            # Navigate directly to the group we just created. The UI send test is
-                                                            # still gated on the server independently confirming this exact ID.
-                                                            restore_home_after_restart("created-group-reopen-home")
-                                                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+created_id,PACKAGE,timeout=30)
-                                                            group_after=wait_for_group_conversation_ui("group-chat-created-open.xml")
+                                                    time.sleep(.3)
+                                                    dialog=dump_ui("group-create-name-filled.xml")
+                                                    fields=find_edit_fields(dialog)
+                                                    if len(fields)<2:
+                                                        FAILURES.append("Description field disappeared after entering group name")
                                                     else:
-                                                        FAILURES.append("Create group dialog had no exact Create action after entering valid name and description")
-                        group_id=group_id_from_visible_title(group_after) if group_after else ""
-                        if group_after and not group_id:
-                            FAILURES.append("opened group could not be matched to its own local group ID by visible title; refusing to send or certify a different stored group")
+                                                        run("adb","shell","input","tap",str(fields[1][0]),str(fields[1][1]))
+                                                        input_text("Isolated Chat and Groups runtime certification")
+                                                        run("adb","shell","input","keyevent","4")
+                                                        time.sleep(.4)
+                                                        dialog=dump_ui("group-create-filled.xml")
+                                                        create_btn=find_exact_control(dialog,"Create")
+                                                        if not create_btn:
+                                                            FAILURES.append("Create group dialog had no exact Create action after entering valid name and description")
+                                                        else:
+                                                            _,cx,cy=create_btn
+                                                            run("adb","shell","input","tap",str(cx),str(cy))
+                                                            deadline=time.monotonic()+15.0
+                                                            created=None
+                                                            while time.monotonic()<deadline:
+                                                                time.sleep(.5)
+                                                                records=local_group_records()
+                                                                created=next(
+                                                                    (item for item in reversed(records)
+                                                                     if item["name"].casefold()=="ci chat recovery group"),
+                                                                    None
+                                                                )
+                                                                if created:
+                                                                    break
+                                                            if not created:
+                                                                FAILURES.append("Create group was tapped but no CI group appeared in this account's local store; remote creation or local persistence failed")
+                                                            else:
+                                                                group_id=created["id"]
+                                                                restore_home_after_restart("created-ci-group-open-home")
+                                                                opened=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
+                                                                group_after=wait_for_group_conversation_ui("created-ci-group-open.xml")
+                                                                if opened.returncode!=0 or not group_after or "Group unavailable" in group_after:
+                                                                    FAILURES.append("newly created CI group could not be reopened as a real conversation; backend membership or navigation is broken")
+                                                                    group_after=""
+                    resolved_group_id=group_id_from_visible_title(group_after) if group_after else ""
+                    if group_after and (not resolved_group_id or resolved_group_id != group_id):
+                        FAILURES.append("opened CI group could not be matched to the same persisted group ID; refusing to certify a different group")
+                        group_id=""
+                    if not group_after:
+                        FAILURES.append("real CI-owned group conversation could not be established; synthetic group deep links and unrelated groups cannot make this certification GREEN")
+                else:
+                    FAILURES.append("authenticated Chat surface was unavailable before the isolated CI group test")
                         alive, crashlog = capture_runtime_log("group-chat-process.log")
                         screenshot("group-chat-after-open.png")
                         report.append("- Group process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
