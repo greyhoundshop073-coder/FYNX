@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { selectMarketplaceRefundByIdentity } from './marketplaceBatch2FinalHardening.js';
+import { selectMarketplaceRefundByIdentity, payoutTransferMatchesStoredIdentity } from './marketplaceBatch2FinalHardening.js';
 import { classifyPaystackTransferVerification, classifyPaystackTransferFetch, payoutInitializationOutcomeIsUncertain, nextPayoutVerificationProgress, payoutSweepIdempotencyKey, payoutVerificationJobIdempotencyKey, payoutReferenceForOperation } from './marketplaceSettlementWorker.js';
 
 const read = (name) => fs.readFileSync(new URL(`./${name}`, import.meta.url), 'utf8');
@@ -50,6 +50,7 @@ const checks = [
   ['refund recovery revalidates amount and currency against escrow', finalHardening.includes('refund recovery amount or currency does not reconcile with the protected escrow')],
   ['refund recovery mismatch freezes the escrow', finalHardening.includes("SET status='DISPUTED'") && finalHardening.includes('REFUND_RECOVERY_BLOCKED')],
   ['post-success payout reversal is detected and re-protected', finalHardening.includes('reconcilePostSuccessPayoutReversals') && finalHardening.includes("providerStatus === 'reversed'") && finalHardening.includes('PAYOUT_REVERSAL_RECONCILED')],
+  ['post-success payout reversal recovery binds the returned reference or exact legacy transfer code before checking amount/status', finalHardening.includes('payoutTransferMatchesStoredIdentity(transfer, row.provider_reference)') && finalHardening.includes('payoutTransferMatchesStoredIdentity(transfer, locked.provider_reference)') && finalHardening.includes('providerReferenceRecovered: true') && finalHardening.includes('AND provider_reference=$4')],
   ['post-success payout reversal blocks the financial operation and disputes escrow', finalHardening.includes("status='BLOCKED'") && finalHardening.includes("status='DISPUTED'") && finalHardening.includes('reprotected_escrow_and_blocked_payout')],
   ['financial recovery writes explicit order audit events', finalHardening.includes('PAYOUT_RECOVERY_RECONCILED') && finalHardening.includes('REFUND_RECOVERY_RECONCILED')],
   ['recovery audit events are idempotently guarded', finalHardening.includes('NOT EXISTS') && finalHardening.includes("metadata->>'operationId'")]
@@ -70,6 +71,17 @@ const refundIdentityChecks = [
 const refundIdentityFailures = refundIdentityChecks.filter(([, ok]) => !ok).map(([name]) => name);
 for (const [name, ok] of refundIdentityChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
 if (refundIdentityFailures.length) throw new Error(`Refund identity behavior gate failed: ${refundIdentityFailures.join('; ')}`);
+
+const payoutIdentityChecks = [
+  ['post-success payout recognizes its exact canonical transfer reference', payoutTransferMatchesStoredIdentity({ reference: 'fynx-payout-order-1', transfer_code: 'TRF_1' }, 'fynx-payout-order-1')],
+  ['post-success payout can recognize a legacy row by its exact transfer code', payoutTransferMatchesStoredIdentity({ reference: 'fynx-payout-order-1', transfer_code: 'TRF_1' }, 'TRF_1')],
+  ['post-success payout rejects a response with neither the stored reference nor stored transfer code', !payoutTransferMatchesStoredIdentity({ reference: 'different-ref', transfer_code: 'TRF_OTHER' }, 'fynx-payout-order-1')],
+  ['empty stored payout identity never matches a provider transfer', !payoutTransferMatchesStoredIdentity({ reference: 'fynx-payout-order-1', transfer_code: 'TRF_1' }, '')]
+ ];
+const payoutIdentityFailures = payoutIdentityChecks.filter(([, ok]) => !ok).map(([name]) => name);
+for (const [name, ok] of payoutIdentityChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
+if (payoutIdentityFailures.length) throw new Error(`Post-success payout identity behavior gate failed: ${payoutIdentityFailures.join('; ')}`);
+console.log(`Post-success payout identity behavior gate passed (${payoutIdentityChecks.length} cases)`);
 
 const shouldThrow = (callback) => { try { callback(); return false; } catch { return true; } };
 const payoutProgressChecks = [
@@ -110,5 +122,5 @@ const transferVerificationFailures = transferVerificationChecks.filter(([, ok]) 
 for (const [name, ok] of transferVerificationChecks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
 if (transferVerificationFailures.length) throw new Error(`Payout verification behavior gate failed: ${transferVerificationFailures.join('; ')}`);
 console.log(`Payout verification behavior gate passed (${transferVerificationChecks.length} cases)`);
-console.log(`Batch 2 financial hardening gate passed (${checks.length} structural checks, ${refundIdentityChecks.length} refund identity cases, ${transferVerificationChecks.length} payout verification cases, and ${payoutProgressChecks.length} resweep cases)`);
+console.log(`Batch 2 financial hardening gate passed (${checks.length} structural checks, ${refundIdentityChecks.length} refund identity cases, ${payoutIdentityChecks.length} post-success payout identity cases, ${transferVerificationChecks.length} payout verification cases, and ${payoutProgressChecks.length} resweep cases)`);
 
