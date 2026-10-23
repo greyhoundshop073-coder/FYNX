@@ -659,43 +659,93 @@ if not FAILURES:
             screenshot("authenticated-status-create.png")
             report.append("- PASS Home own-Status + button opens the real Add status panel")
             report.append("- PASS Add status panel exposes both Voice and Text creation choices")
-            voice_composer_xml = tap_control(
-                status_add_xml, ["Voice"], "status-voice-composer",
-                ["Start recording", "Press the microphone to record", "Voice Status ready"]
+            # This run focuses on previously unverified Text and Music journeys.
+            # Voice has already been captured in a prior artifact; do not repeat it.
+            text_composer_xml = tap_control(
+                status_add_xml, ["Text"], "status-text-composer",
+                ["Type a Status", "Text styling", "Send"]
             )
-            if voice_composer_xml and (
-                find_control(voice_composer_xml, ["Start recording"])
-                or find_control(voice_composer_xml, ["Press the microphone to record"])
-                or find_control(voice_composer_xml, ["Voice Status ready"])
+            if text_composer_xml and (
+                find_control(text_composer_xml, ["Type a Status"])
+                or find_control(text_composer_xml, ["Text styling"])
             ):
-                screenshot("authenticated-status-voice-composer.png")
-                report.append("- PASS selecting Voice opens the actual Status composer in Voice mode")
-            else:
-                FAILURES.append("Status Add status -> Voice composer")
-            if voice_composer_xml:
-                voice_recording_xml = tap_control(
-                    voice_composer_xml, ["Start recording"], "status-voice-recording",
-                    ["Stop"]
-                )
-                if voice_recording_xml:
-                    time.sleep(1.2)
-                    voice_ready_xml = tap_control(
-                        voice_recording_xml, ["Stop"], "status-voice-recording-stop",
-                        ["Add a caption"]
-                    )
-                    if voice_ready_xml:
-                        caption_xml = tap_control(
-                            voice_ready_xml, ["Add a caption"], "status-voice-caption-keyboard",
-                            ["Add a caption"]
-                        )
-                        if caption_xml and find_edit_fields(caption_xml):
-                            screenshot("authenticated-status-voice-caption-keyboard.png")
-                            report.append("- PASS Voice recording can be stopped and opens an editable caption field")
-                            report.append("- Captured authenticated-status-voice-caption-keyboard.png for visual keyboard/field-position review")
-                        else:
-                            FAILURES.append("Voice caption field was not editable after recording")
+                screenshot("authenticated-status-text-composer.png")
+                report.append("- PASS Add status -> Text opens the actual Status text composer")
+                fields = find_edit_fields(text_composer_xml)
+                if fields:
+                    tx, ty = fields[0]
+                    run("adb", "shell", "input", "tap", str(tx), str(ty))
+                    input_text("FYNX runtime text Status check")
+                    time.sleep(0.7)
+                    text_filled_xml = dump_ui("authenticated-status-text-filled.xml")
+                    screenshot("authenticated-status-text-filled.png")
+                    if find_control(text_filled_xml, ["Send"]):
+                        report.append("- PASS Text Status editor accepts text and exposes Send")
                     else:
-                        FAILURES.append("Voice recording did not transition to the caption-ready state")
+                        report.append("- PARTIAL Text Status editor accepts text; Send control was not exposed in hierarchy")
+                else:
+                    report.append("- PARTIAL Text composer opened, but its editor was not exposed as an Android EditText")
+                style_xml = tap_control(
+                    text_composer_xml, ["Text styling", "Text style"], "status-text-styling",
+                    ["Done"]
+                )
+                if style_xml and find_control(style_xml, ["Done"]):
+                    screenshot("authenticated-status-text-styling.png")
+                    report.append("- PASS Text styling panel opens and exposes Done")
+                    text_composer_xml = tap_control(style_xml, ["Done"], "status-text-styling-done")
+                else:
+                    report.append("- PARTIAL Text styling panel could not be verified in this runtime")
+            else:
+                FAILURES.append("Status Add status -> Text composer did not expose expected editor controls")
+
+            # Return to Home/Add status for Music without restarting or touching login.
+            for _ in range(4):
+                home_xml = dump_ui("authenticated-status-text-return.xml")
+                if find_control(home_xml, ["Create your status"]):
+                    break
+                run("adb", "shell", "input", "keyevent", "4")
+                time.sleep(0.7)
+            status_add_music_xml = ""
+            if find_control(home_xml, ["Create your status"]):
+                status_add_music_xml = tap_control(
+                    home_xml, ["Create your status"], "status-music-create",
+                    ["Add status", "Music", "Text"]
+                )
+            if status_add_music_xml and find_control(status_add_music_xml, ["Music"]):
+                music_catalogue_xml = tap_control(
+                    status_add_music_xml, ["Music"], "status-music-catalogue",
+                    ["Search music", "Song or artist", "No FYNX music is published yet.", "Add"]
+                )
+                if music_catalogue_xml:
+                    screenshot("authenticated-status-music-catalogue.png")
+                    report.append("- PASS Add status -> Music opens the real music catalogue/search UI")
+                    if find_control(music_catalogue_xml, ["No FYNX music is published yet."]):
+                        report.append("- BLOCKED Music track selection/publish: catalogue reports no published FYNX music")
+                    elif find_control(music_catalogue_xml, ["Add"]):
+                        add_music_xml = tap_control(
+                            music_catalogue_xml, ["Add"], "status-music-select",
+                            ["Send", "Choose a song"]
+                        )
+                        if add_music_xml:
+                            screenshot("authenticated-status-music-composer.png")
+                            if find_control(add_music_xml, ["Send"]):
+                                report.append("- PASS selecting a catalogue track opens Music Status composer with Send")
+                            else:
+                                report.append("- PARTIAL a catalogue track was selected, but Music composer Send was not exposed")
+                    else:
+                        report.append("- PARTIAL Music catalogue opened but exposed neither a published track nor the explicit empty state")
+                else:
+                    FAILURES.append("Status Music choice did not open the music catalogue")
+            else:
+                FAILURES.append("Could not reopen Add status to test the Music creation path")
+
+            # Do not publish dummy content from a debug-only local UI session.
+            # This path is not server-authenticated, so backend persistence,
+            # own-Status refresh, viewer playback, and reactions are not certifiable here.
+            if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+                report.append("- SKIP actual Status publish/retrieve/viewer/reactions: runtime session is debug-only and not server-authenticated; no dummy Status was submitted")
+            else:
+                report.append("- NOTE actual publish/retrieve/viewer checks require an authenticated test account and are not inferred from composer UI alone")
         else:
             FAILURES.append("Home own-Status + button did not open Add status with both Voice and Text choices")
     else:
@@ -719,8 +769,11 @@ if not FAILURES:
     report += ["", "## Captured Status surfaces",
                "- authenticated-status-home.png",
                "- authenticated-status-create.png",
-               "- authenticated-status-voice-composer.png",
-               "- authenticated-status-voice-caption-keyboard.png"]
+               "- authenticated-status-text-composer.png",
+               "- authenticated-status-text-filled.png",
+               "- authenticated-status-text-styling.png",
+               "- authenticated-status-music-catalogue.png",
+               "- authenticated-status-music-composer.png"]
     if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
         # This APK's saved-device path deliberately provides local UI access,
         # not a server-authenticated session. Certify the Status journey above,
