@@ -69,12 +69,14 @@ async function verifyTransferByReference(reference) {
   const cleanReference = String(reference || '').trim();
   if (!cleanReference) return { found: false };
   const verifyUrl = 'https://api.paystack.co/transfer/verify/' + encodeURIComponent(cleanReference);
-  const verified = classifyPaystackTransferVerification(...await paystackJson(verifyUrl, { headers: providerHeaders() }), cleanReference);
+  const verifyResult = await paystackJson(verifyUrl, { headers: providerHeaders() });
+  const verified = classifyPaystackTransferVerification(verifyResult.response, verifyResult.data, cleanReference);
   if (verified.found) return verified;
   // Migrate old rows which incorrectly stored Paystack's transfer_code in the
   // provider_reference column. The second lookup still checks exact identifier.
   const fetchUrl = 'https://api.paystack.co/transfer/' + encodeURIComponent(cleanReference);
-  return classifyPaystackTransferFetch(...await paystackJson(fetchUrl, { headers: providerHeaders() }), cleanReference);
+  const fetchResult = await paystackJson(fetchUrl, { headers: providerHeaders() });
+  return classifyPaystackTransferFetch(fetchResult.response, fetchResult.data, cleanReference);
 }
 
 export function nextPayoutVerificationProgress(metadata = {}) {
