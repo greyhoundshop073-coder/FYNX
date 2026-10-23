@@ -444,7 +444,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             Column(Modifier.weight(1f)) {
                                 Text(listing.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                 Text(formatSellerMoney(listing.price, listing.currency), color = MaterialTheme.colorScheme.primary)
-                                Text("${listing.quantity} in stock • ${listing.category} • ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${listing.quantity} total stock • ${listing.category} • ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (deletingId == listing.id) CircularProgressIndicator(Modifier.size(24.dp))
                             else Row {
