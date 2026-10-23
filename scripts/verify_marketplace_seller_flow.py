@@ -107,6 +107,8 @@ checks = [
     ("Marketplace Orders shortcut fetches independently and shows loading/error states", "fun reloadOrders()" in marketplace and "ordersLoading" in marketplace and "ordersError" in marketplace and "Loading your orders…" in marketplace and "Orders could not load." in marketplace and "onOrders = { showOrders = true; reloadOrders() }" in marketplace),
 ]
 
+    ("successful listing publish refreshes the seller-owned inventory endpoint rather than public discovery", "myListings(context).getOrThrow().firstOrNull { it.id == id }" in remote_client and "General discovery deliberately excludes the signed-in seller's own products." in remote_client),
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
