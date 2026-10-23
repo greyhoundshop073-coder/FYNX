@@ -140,7 +140,7 @@ fun FynxMarketplaceSellerCenterPanel() {
             loading = true
             error = null
             FynxMarketplaceClient.myListings(context)
-                .onSuccess { listings = it }
+                .onSuccess { listings = it.filter { listing -> listing.active } }
                 .onFailure { error = it.message ?: "Could not load your listings." }
             shopLoading = true
             shopError = null
