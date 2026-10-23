@@ -117,6 +117,7 @@ require('mature media picker rejects unsupported MIME types without replacing cu
 require('legacy Photo picker validates image MIME before changing draft','if (mime.startsWith("image/"))' in composer and 'Choose an image file for Photo Status.' in composer)
 require('legacy Video picker validates video MIME before changing draft','if (mime.startsWith("video/"))' in composer and 'Choose a video file for Video Status.' in composer)
 require('mature Voice mode','FynxStatusType.VOICE' in mature and 'beginMatureVoiceRecording' in mature and 'stopMatureVoiceRecording' in mature)
+require('Voice composer has an explicit start-recording action','Text("Start recording")' in mature and 'contentDescription = "Start voice recording"' in mature and 'micPermission.launch(Manifest.permission.RECORD_AUDIO)' in mature)
 require('mature audience control','FynxStatusAudience.EVERYONE' in mature and 'FynxStatusAudience.FRIENDS' in mature and 'FynxStatusAudience.ONLY_ME' in mature)
 require('mature visible Send action','Icons.Default.Send' in mature and 'Text(if (publishing) "Sending…" else "Send")' in mature)
 require('mature Send is not a field trailing action','trailingIcon' not in mature)
