@@ -577,7 +577,8 @@ def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[st
 report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
-        "This journey uses a real FYNX account supplied through GitHub Actions secrets.",
+        "This verifier uses real FYNX account credentials when FYNX_E2E_USERNAME and FYNX_E2E_PASSWORD are configured.",
+        "If credentials are absent, any debug-only local UI journey is explicitly labelled as not server-authenticated.",
         "No fabricated users, posts, messages, listings or application records are created.",
         "Credentials are never written to the APK or repository."]
 
