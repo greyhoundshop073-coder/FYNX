@@ -34,6 +34,7 @@ const checks = [
   ['protected escrow is created from the order currency', settlement.includes('NEW.total_amount,NEW.currency')],
   ['payout account currency is matched to the order currency', read('./marketplacePayoutRetry.js').includes('payoutAccount.currency') && read('./marketplacePayoutRetry.js').includes('order.currency')],
   ['dedicated failed payout retry endpoint requires release-eligible escrow and a previously failed attempt', payoutRetry.includes("app.post('/api/marketplace/settlement/retry/:id'") && payoutRetry.includes("escrow.status !== 'RELEASE_ELIGIBLE'") && payoutRetry.includes("status='FAILED'") && payoutRetry.includes('PAYOUT-RETRY-${failed.id}')],
+  ['failed payout retry requires a completed order and matching escrow currency', payoutRetry.includes("order.status !== 'COMPLETED'") && payoutRetry.includes('order and escrow currency do not match') && payoutRetry.includes('sellerNetAmount + marketplaceFee')],
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
