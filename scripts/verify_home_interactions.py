@@ -168,19 +168,18 @@ if "Modifier.size(48.dp).clickable" not in normalized_profile_region:
     raise SystemExit("HOME INTERACTIONS RED: profile avatar must own a standalone 48dp clickable touch target")
 if 'contentAlignment = Alignment.Center' not in profile_touch_region:
     raise SystemExit("HOME INTERACTIONS RED: profile avatar touch target must preserve centered avatar content")
-# Start at the three-dot control's Box: its accessibility label is later in
-# the modifier chain, just like the avatar label, so slicing from the label
-# misses the size modifier and can produce a false failure.
+# Verify the restored original three-dot IconButton as a separate sibling
+# control. Do not impose the newer blue 28dp redesign on the Home UI.
 profile_menu_box_index = app_source.rfind("Box(", 0, profile_menu_index)
 if profile_menu_box_index < 0:
-    raise SystemExit("HOME INTERACTIONS RED: profile menu Box is missing")
-next_menu_control_index = app_source.find('contentDescription = "Open FYNX profile"', profile_menu_index)
+    raise SystemExit("HOME INTERACTIONS RED: profile menu container is missing")
 menu_region_end = app_source.find("DropdownMenu(", profile_menu_index)
 if menu_region_end < 0:
     raise SystemExit("HOME INTERACTIONS RED: profile menu dropdown is missing")
 normalized_menu_region = normalize_source(app_source[profile_menu_box_index:menu_region_end])
-if "Modifier.size(28.dp)" not in normalized_menu_region or '.clickable { profileAvatarMenuOpen = true }' not in normalized_menu_region:
-    raise SystemExit("HOME INTERACTIONS RED: three-dot menu must remain a separate compact clickable sibling")
+if "IconButton(" not in normalized_menu_region or "Modifier.size(44.dp)" not in normalized_menu_region or "onClick = { profileAvatarMenuOpen = true }" not in normalized_menu_region:
+    raise SystemExit("HOME INTERACTIONS RED: restored profile three-dot IconButton must remain clickable")
+
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
 require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
 require(app_source, '"Contacts" -> "Chats"', "Contacts back returns to Chats")
