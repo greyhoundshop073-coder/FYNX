@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { selectMarketplaceRefundByIdentity, payoutTransferMatchesStoredIdentity, validateUnreferencedOrderPaymentRecovery } from './marketplaceBatch2FinalHardening.js';
-import { classifyPaystackTransferVerification, classifyPaystackTransferFetch, payoutInitializationOutcomeIsUncertain, nextPayoutVerificationProgress, payoutSweepIdempotencyKey, payoutVerificationJobIdempotencyKey, payoutReferenceForOperation } from './marketplaceSettlementWorker.js';
+import { classifyPaystackTransferVerification, classifyPaystackTransferFetch, payoutInitializationOutcomeIsUncertain, nextPayoutVerificationProgress, payoutSweepIdempotencyKey, payoutVerificationJobIdempotencyKey, payoutReferenceForOperation, transferMatchesOperation } from './marketplaceSettlementWorker.js';
 
 const read = (name) => fs.readFileSync(new URL(`./${name}`, import.meta.url), 'utf8');
 const payment = read('marketplaceReputation.js');
@@ -33,7 +33,7 @@ const checks = [
   ['payout scanner creates idempotent time-bucketed sweeps for stale pending payout operations', worker.includes("fo.updated_at <= NOW() - INTERVAL '2 minutes'") && worker.includes("payoutSweepIdempotencyKey('VERIFY', operationId, bucketTime)") && worker.includes("payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime)")],
   ['verification scan resets the bounded attempt counter after a cycle while recording completed cycles', worker.includes('verificationAttempts: progress.verificationAttempts') && worker.includes('verificationCycles: progress.verificationCycles') && worker.includes('return progress.shouldContinue')],
   ['every payout verification cycle uses unique chained job keys so completed prior jobs cannot block later sweeps', worker.includes('payoutVerificationJobIdempotencyKey(operationId, verificationCycle, attempt)') && worker.includes('payoutVerificationJobIdempotencyKey(operationId, verificationCycle, 0)') && worker.includes('verificationCycle }, { idempotencyKey: verificationCycle')],
-  ['payout provider amount and currency are validated', worker.includes('transferMatchesOperation') && worker.includes('Paystack payout amount or currency does not match')],
+  ['payout creation binds the exact requested provider reference plus amount and currency', worker.includes('transferMatchesOperation(data?.data, operation, reference)') && worker.includes('providerReference === String(expectedReference).trim()') && worker.includes('payout reference, amount, or currency')],
   ['refund webhook amount and currency are validated', webhook.includes('providerAmount !== expectedAmount') && webhook.includes('providerCurrency !== expectedCurrency')],
   ['refund mismatches block protected funds', webhook.includes("status='BLOCKED'") && webhook.includes("status='DISPUTED'")],
   ['payment webhook is bound to the marketplace order', webhook.includes('metadataOrderId') && webhook.includes('payment_reference')],
@@ -128,6 +128,9 @@ const transferVerificationChecks = [
   ['legacy transfer-code recovery rejects an unrelated transfer identity', shouldThrow(() => classifyPaystackTransferFetch({ status: 200, ok: true }, { status: true, data: { reference: 'other-ref', transfer_code: 'TRF_other-code', amount: 10000, currency: 'NGN' } }, 'TRF_legacy-code'))],
   ['fetching legacy transfer code returns not-found only on HTTP 404', classifyPaystackTransferFetch({ status: 404, ok: false }, { status: false, message: 'Transfer not found' }, 'TRF_legacy-code').found === false],
   ['legacy transfer-code recovery retries indeterminate provider failures', shouldThrow(() => classifyPaystackTransferFetch({ status: 503, ok: false }, { status: false, message: 'Provider unavailable' }, 'TRF_legacy-code'))],
+  ['payout settlement accepts an exact provider reference with matching amount and currency', transferMatchesOperation({ reference: 'ref-1', amount: 2500, currency: 'NGN' }, { id: 'op-1', order_id: 'order-1', amount: 25, currency: 'NGN' }, 'ref-1')],
+  ['payout settlement rejects a different provider reference even when amount and currency match', !transferMatchesOperation({ reference: 'ref-other', amount: 2500, currency: 'NGN' }, { id: 'op-1', order_id: 'order-1', amount: 25, currency: 'NGN' }, 'ref-1')],
+  ['payout settlement rejects a missing provider reference', !transferMatchesOperation({ amount: 2500, currency: 'NGN' }, { id: 'op-1', order_id: 'order-1', amount: 25, currency: 'NGN' }, 'ref-1')],
   ['payout initialization 5xx is ambiguous and must be verified again', payoutInitializationOutcomeIsUncertain({ status: 500, ok: false }, { status: false, message: 'Internal server error' })],
   ['payout initialization 429 is ambiguous and must be verified again', payoutInitializationOutcomeIsUncertain({ status: 429, ok: false }, { status: false, message: 'Rate limited' })],
   ['duplicate-reference response stays unresolved rather than making a new payout attempt', payoutInitializationOutcomeIsUncertain({ status: 400, ok: false }, { status: false, message: 'Duplicate reference already used' })],
