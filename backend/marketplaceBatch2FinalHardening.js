@@ -48,6 +48,12 @@ function amountSubunit(amount, currency) {
   return Math.round(value * 100);
 }
 
+export function payoutTransferMatchesStoredIdentity(transfer, storedIdentifier) {
+  const expected = String(storedIdentifier || '').trim();
+  if (!expected) return false;
+  return String(transfer?.reference || '').trim() === expected
+    || String(transfer?.transfer_code || '').trim() === expected;
+}
 export function selectMarketplaceRefundByIdentity(refunds, knownRefundReferences) {
   if (!Array.isArray(refunds) || !Array.isArray(knownRefundReferences)) return null;
   const known = new Set(knownRefundReferences
@@ -232,6 +238,8 @@ async function reconcilePostSuccessPayoutReversals({ logger = console } = {}) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.status !== true || !data?.data) continue;
       const transfer = data.data;
+      if (!payoutTransferMatchesStoredIdentity(transfer, row.provider_reference)) continue;
+      const returnedReference = String(transfer.reference || '').trim();
       const providerStatus = String(transfer.status || '').toLowerCase();
       const expectedAmount = amountSubunit(row.amount, row.currency);
       const providerAmount = Number(transfer.amount);
@@ -250,6 +258,14 @@ async function reconcilePostSuccessPayoutReversals({ logger = console } = {}) {
           WHERE f.id=$1 FOR UPDATE
         `, [row.id])).rows[0];
         if (!locked || locked.operation_status !== 'SUCCEEDED' || locked.escrow_status !== 'RELEASED') { await client.query('COMMIT'); continue; }
+        if (!payoutTransferMatchesStoredIdentity(transfer, locked.provider_reference)) { await client.query('COMMIT'); continue; }
+        const legacyTransferCode = String(transfer.transfer_code || '').trim();
+        if (returnedReference && legacyTransferCode === String(locked.provider_reference || '').trim() && returnedReference !== String(locked.provider_reference || '').trim()) {
+          const recoveredMetadata = { ...(locked.metadata || {}), legacyTransferCode, providerReferenceRecovered: true, source: 'batch2-post-success-payout-recovery' };
+          await client.query(`UPDATE marketplace_financial_operations SET provider_reference=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='SUCCEEDED' AND provider_reference=$4`, [returnedReference, JSON.stringify(recoveredMetadata), locked.id, locked.provider_reference]);
+          locked.provider_reference = returnedReference;
+          locked.metadata = recoveredMetadata;
+        }
         if (expectedAmount === null || providerAmount !== expectedAmount || providerCurrency !== expectedCurrency) {
           await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='SUCCEEDED'`, ['post-success payout provider amount or currency no longer matches the protected operation', JSON.stringify({ ...(locked.metadata || {}), providerStatus, providerAmount, expectedAmount, providerCurrency, expectedCurrency, source: 'batch2-post-success-payout-recovery' }), locked.id]);
           await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='RELEASED'`, [locked.escrow_id]);
