@@ -170,6 +170,56 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         if (!group) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'checkout group not found' }); }
         if (group.status !== 'PAYMENT_PENDING') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group is not awaiting payment' }); }
         if (group.payment_reference && group.payment_authorization_url) { await client.query('COMMIT'); return res.status(200).json({ checkoutId: String(group.id), reference: group.payment_reference, authorizationUrl: group.payment_authorization_url, accessCode: group.payment_access_code || null, idempotent: true, amountSubunit: amountSubunit(group.buyer_total, group.currency), currency: String(group.currency).toUpperCase() }); }
+
+        // Recover legacy/interrupted rows which have a provider reference but no
+        // durable authorization URL. Never overwrite a reference until Paystack
+        // confirms that exact attempt failed terminally; a successful, pending,
+        // unknown, or mismatched attempt must keep its reference.
+        let staleReferenceToReplace = null;
+        if (group.payment_reference && !group.payment_authorization_url) {
+          let previous;
+          try {
+            previous = await paystackRequest(`/transaction/verify/${encodeURIComponent(group.payment_reference)}`);
+          } catch (error) {
+            await client.query('ROLLBACK');
+            if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
+            return res.status(409).json({
+              error: 'previous checkout payment attempt could not be verified safely; no new payment was started',
+              reference: String(group.payment_reference)
+            });
+          }
+          const previousTransaction = previous.data || {};
+          const previousStatus = String(previousTransaction.status || '').trim().toLowerCase();
+          const previousAmount = amountSubunit(group.buyer_total, group.currency);
+          const previousCurrency = String(previousTransaction.currency || '').trim().toUpperCase();
+          const previousCheckoutId = String(previousTransaction.metadata?.checkoutGroupId || previousTransaction.metadata?.checkout_group_id || '');
+          const previousBuyerId = String(previousTransaction.metadata?.buyerId || previousTransaction.metadata?.buyer_id || '');
+          const previousAttemptMatches = String(previousTransaction.reference || '') === String(group.payment_reference)
+            && previousAmount !== null
+            && Number(previousTransaction.amount) === previousAmount
+            && previousCurrency === String(group.currency).toUpperCase()
+            && previousCheckoutId === String(group.id)
+            && previousBuyerId === String(group.buyer_id);
+          if (!previousAttemptMatches) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({
+              error: 'previous checkout payment attempt does not match this checkout; no new payment was started',
+              reference: String(group.payment_reference)
+            });
+          }
+          if (!['failed', 'abandoned', 'reversed'].includes(previousStatus)) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({
+              error: previousStatus === 'success'
+                ? 'previous checkout payment appears successful; verify the existing reference before retrying'
+                : 'previous checkout payment is not confirmed failed; retry after the provider reaches a terminal state',
+              reference: String(group.payment_reference),
+              providerStatus: previousStatus || 'unknown'
+            });
+          }
+          staleReferenceToReplace = String(group.payment_reference);
+        }
+
         const amount = amountSubunit(group.buyer_total, group.currency);
         if (!amount) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'unsupported marketplace payment currency or amount' }); }
         // A provider init can succeed before the following DB commit fails. The URL is not returned until commit, so retry with a fresh provider reference instead of reusing one Paystack has already seen.
@@ -180,7 +230,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         const providerReference = String(data.data?.reference || '').trim(), providerAmount = Number(data.data?.amount), providerCurrency = String(data.data?.currency || '').trim().toUpperCase();
         const authorizationUrl = data.data?.authorization_url || '', accessCode = data.data?.access_code || null;
         if (!authorizationUrl || providerReference !== reference || providerAmount !== amount || providerCurrency !== String(group.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(502).json({ error: 'payment provider returned data that does not match the checkout group' }); }
-        const updated = await client.query(`UPDATE marketplace_checkout_groups SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3,updated_at=NOW() WHERE id=$4 AND buyer_id=$5 AND status='PAYMENT_PENDING' AND payment_reference IS NULL RETURNING id`, [reference, authorizationUrl, accessCode, checkoutId, req.user.sub]);
+        const updated = await client.query(`UPDATE marketplace_checkout_groups SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3,updated_at=NOW() WHERE id=$4 AND buyer_id=$5 AND status='PAYMENT_PENDING' AND (payment_reference IS NULL OR ($6::text IS NOT NULL AND payment_reference=$6 AND payment_authorization_url IS NULL)) RETURNING id`, [reference, authorizationUrl, accessCode, checkoutId, req.user.sub, staleReferenceToReplace]);
         if (!updated.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group payment initialization could not be committed; retry' }); }
         await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) SELECT order_id,$1,'PAYMENT_INITIALIZED','PAYMENT_PENDING','PAYMENT_PENDING',$2::jsonb FROM marketplace_checkout_group_items WHERE checkout_id=$3`, [req.user.sub, JSON.stringify({ reference, provider: 'paystack', amount, currency: String(group.currency).toUpperCase(), checkoutGroupId: String(group.id) }), checkoutId]);
         await client.query('COMMIT');
