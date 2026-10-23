@@ -108,6 +108,7 @@ checks = [
     ("Marketplace Orders shortcut fetches independently and shows loading/error states", "fun reloadOrders()" in marketplace and "ordersLoading" in marketplace and "ordersError" in marketplace and "Loading your orders…" in marketplace and "Orders could not load." in marketplace and "onOrders = { showOrders = true; reloadOrders() }" in marketplace),
     ("successful listing publish refreshes the seller-owned inventory endpoint rather than public discovery", "myListings(context).getOrThrow().firstOrNull { it.id == id }" in remote_client and "General discovery deliberately excludes the signed-in seller's own products." in remote_client),
     ("seller inventory refresh hides soft-deleted listings after the backend returns inactive history", 'FynxMarketplaceClient.myListings(context)' in seller_center and '.onSuccess { listings = it.filter { listing -> listing.active } }' in seller_center),
+    ("My Shop distinguishes an inventory load failure from a genuinely empty inventory and offers retry", 'listings.isEmpty() && error != null' in seller_center and 'Text("Retry loading listings")' in seller_center),
     ("fallback Marketplace search matches shop name, location and category", all(term in social_routes for term in ("COALESCE(l.store_name", "COALESCE(l.location", "COALESCE(l.category")) and "COALESCE(l.store_name" in discovery_routes),
 ]
 
