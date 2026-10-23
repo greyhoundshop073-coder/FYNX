@@ -156,6 +156,9 @@ if profile_button_index < 0 or profile_menu_index < 0 or profile_menu_index <= p
 header_start = app_source.find('topBar = {')
 if header_start < 0 or 'Modifier.weight(1f)' in app_source[header_start:profile_button_index]:
     raise SystemExit("HOME INTERACTIONS RED: Home header must not wrap the profile controls in a weighted Row that can compress and overlap touch targets")
+header_layout_before_avatar = app_source[header_start:profile_button_index]
+if header_layout_before_avatar.count("Row(") != 1:
+    raise SystemExit("HOME INTERACTIONS RED: Home profile controls must be direct children of the header Row, not nested in a competing weighted Row")
 if 'Modifier.weight(1f)' not in app_source[profile_menu_index:app_source.find('Row(verticalAlignment = Alignment.CenterVertically)', profile_menu_index)]:
     raise SystemExit("HOME INTERACTIONS RED: Home brand label must occupy remaining header width after the profile controls")
 profile_touch_region = app_source[profile_button_index:profile_menu_index]
