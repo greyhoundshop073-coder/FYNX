@@ -669,6 +669,30 @@ if not FAILURES:
                 report.append("- PASS selecting Voice opens the actual Status composer in Voice mode")
             else:
                 FAILURES.append("Status Add status -> Voice composer")
+            if voice_composer_xml:
+                voice_recording_xml = tap_control(
+                    voice_composer_xml, ["Start recording"], "status-voice-recording",
+                    ["Stop"]
+                )
+                if voice_recording_xml:
+                    time.sleep(1.2)
+                    voice_ready_xml = tap_control(
+                        voice_recording_xml, ["Stop"], "status-voice-recording-stop",
+                        ["Add a caption"]
+                    )
+                    if voice_ready_xml:
+                        caption_xml = tap_control(
+                            voice_ready_xml, ["Add a caption"], "status-voice-caption-keyboard",
+                            ["Add a caption"]
+                        )
+                        if caption_xml and find_edit_fields(caption_xml):
+                            screenshot("authenticated-status-voice-caption-keyboard.png")
+                            report.append("- PASS Voice recording can be stopped and opens an editable caption field")
+                            report.append("- Captured authenticated-status-voice-caption-keyboard.png for visual keyboard/field-position review")
+                        else:
+                            FAILURES.append("Voice caption field was not editable after recording")
+                    else:
+                        FAILURES.append("Voice recording did not transition to the caption-ready state")
         else:
             FAILURES.append("Home own-Status + button did not open Add status with both Voice and Text choices")
     else:
@@ -692,7 +716,8 @@ if not FAILURES:
     report += ["", "## Captured Status surfaces",
                "- authenticated-status-home.png",
                "- authenticated-status-create.png",
-               "- authenticated-status-voice-composer.png"]
+               "- authenticated-status-voice-composer.png",
+               "- authenticated-status-voice-caption-keyboard.png"]
     if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
         run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
         xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
