@@ -99,11 +99,14 @@ async function insertRecoveryEvent(client, row, action, metadata) {
 
 async function recoverPaymentWithoutLocalReference({ logger = console } = {}) {
   if (!pool || !process.env.PAYSTACK_SECRET_KEY) return 0;
-  const rows = await pool.query(`SELECT id,buyer_id,total_amount,currency,status,payment_reference,updated_at FROM marketplace_orders WHERE status='PAYMENT_PENDING' AND payment_reference IS NULL AND updated_at <= NOW() - ($1::text || ' minutes')::interval ORDER BY updated_at ASC LIMIT 25`, [RECOVERY_AGE_MINUTES]);
+  const rows = await pool.query(`SELECT o.id,o.buyer_id,o.total_amount,o.currency,o.status,o.payment_reference,o.updated_at FROM marketplace_orders o WHERE o.status='PAYMENT_PENDING' AND o.payment_reference IS NULL AND o.updated_at <= NOW() - ($1::text || ' minutes')::interval AND NOT EXISTS (SELECT 1 FROM marketplace_order_events ev WHERE ev.order_id=o.id AND ev.event_type='PAYMENT_RECOVERY_CHECKED' AND ev.created_at > NOW() - INTERVAL '2 minutes') ORDER BY o.updated_at ASC LIMIT 25`, [RECOVERY_AGE_MINUTES]);
   let recovered = 0;
   for (const order of rows.rows) {
     const reference = `FYNX-${order.id}`;
     try {
+      // Record an attempt before the external call; unresolved/invalid provider
+      // responses then rotate out of this bounded scan for two minutes.
+      await pool.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'PAYMENT_RECOVERY_CHECKED','PAYMENT_PENDING','PAYMENT_PENDING',$3::jsonb)`, [order.id, order.buyer_id, JSON.stringify({ reference, provider: 'paystack', action: 'verification_attempt_started' })]);
       const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const data = await response.json().catch(() => ({}));
       const paymentVerification = validateUnreferencedOrderPaymentRecovery({ response, data, order, reference });
