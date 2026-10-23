@@ -103,6 +103,9 @@ jobs:
             [ -f "$file" ] || continue
             node --check "$file"
           done
+      - name: Verify Marketplace media authorization contract
+        run: node verify-media-route.mjs
+
       - name: Run Chat end-to-end integration gate
         working-directory: .
         run: python3 scripts/verify_chat_end_to_end.py
