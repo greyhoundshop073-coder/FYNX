@@ -591,7 +591,7 @@ private fun FynxStatusStoryViewer(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
-                                    StatusAvatar(status.ownerUsername, status.ownerDisplayName, status = status)
+                                    StatusAvatar(status.ownerUsername, status.ownerDisplayName, status = status, unseen = false)
                                     Text("Voice status", color = Color.White, style = MaterialTheme.typography.titleMedium)
                                     FynxRemoteAudio(it, Modifier.fillMaxWidth())
                                 }
@@ -638,7 +638,8 @@ private fun FynxStatusStoryViewer(
                             status.ownerUsername,
                             status.ownerDisplayName,
                             modifier = Modifier.size(38.dp),
-                            status = status
+                            status = status,
+                            unseen = false
                         )
                         Spacer(Modifier.width(9.dp))
                         Column(Modifier.weight(1f)) {
