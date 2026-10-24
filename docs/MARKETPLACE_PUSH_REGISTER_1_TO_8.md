@@ -206,3 +206,14 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 **Verification:** CI for the pushed exact head must confirm Backend CI is green. The known Home interaction and Chat/Groups Android blockers remain outside this workstream; this PR stays unmerged until the required integration checks are green.
 
 **Register numbering note:** The merged discovery fix PR #316 also used the label “Push 43”, while PR #348 labels its payment work “Pushes 43–61”. Those historical labels overlap; reconcile the global numbering before treating them as one continuous sequence.
+
+
+### Push 23 — Register the Paystack webhook and preserve its signed request bytes
+
+**Root cause:** The Paystack webhook module defined its route, but the live backend entrypoint did not import or register it. In addition, the Express JSON parser did not preserve the raw request body, while the handler requires those exact bytes to validate `x-paystack-signature`. Consequently the refund/transfer webhook handler could not be relied on to receive signed events.
+
+**Change:** The backend now registers the Marketplace Paystack webhook with the active database pool. The JSON parser captures a byte-for-byte copy only for `/api/marketplace/payments/paystack/webhook`, before JSON parsing, so HMAC verification can run without changing normal API body handling.
+
+**Regression guard:** The refund/dispute verifier now checks both server registration and raw-body preservation alongside refund identity/ambiguity safety.
+
+**Verification:** Exact-head Backend CI must pass before this PR can be considered integration-ready. No unrelated Home, Status, Profile/Avatar, or Chat/Groups files were touched.
