@@ -1096,7 +1096,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = {
                             if (text.isNotBlank() && !sending && selectedGroup != null) {
-                                val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                                val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyToId)
                                 messages = messages + optimistic
                                 FynxChatStore.save(context, "group_$groupId", messages)
                                 text = ""; replyToId = null; sending = true
@@ -1129,7 +1129,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 when {
                                     voiceRecording -> finishGroupVoiceRecording()
                                     text.isNotBlank() && !sending && selectedGroup != null -> {
-                                        val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                                        val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyToId)
                                         messages = messages + optimistic
                                         FynxChatStore.save(context, "group_$groupId", messages)
                                         text = ""; replyToId = null; sending = true
