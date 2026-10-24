@@ -339,6 +339,44 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } finally { client.release(); }
   });
 
+  app.post("/api/marketplace/listings/:id/reactivate", auth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+    const client = await pool.connect();
+    try {
+      await ensureMarketplaceSchema();
+      await client.query("BEGIN");
+      const existing = (await client.query(
+        "SELECT id, seller_id, quantity, reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE",
+        [id, req.user.sub]
+      )).rows[0];
+      if (!existing) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "listing not found" });
+      }
+      const quantity = Number(existing.quantity);
+      const reservedQuantity = Math.max(0, Number(existing.reserved_quantity) || 0);
+      const availableQuantity = quantity - reservedQuantity;
+      if (!Number.isInteger(quantity) || quantity < 0 || !Number.isFinite(availableQuantity) || availableQuantity < 1) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "add at least one unreserved unit before republishing this listing",
+          availableQuantity: Math.max(0, Number.isFinite(availableQuantity) ? availableQuantity : 0)
+        });
+      }
+      const updated = (await client.query(
+        "UPDATE marketplace_listings SET active = TRUE, updated_at = NOW() WHERE id = $1 AND seller_id = $2 RETURNING id, active",
+        [id, req.user.sub]
+      )).rows[0];
+      await client.query("COMMIT");
+      return res.json({ ok: true, listingId: String(updated.id), active: Boolean(updated.active), availableQuantity });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("reactivate marketplace listing", error);
+      return res.status(500).json({ error: "listing could not be republished" });
+    } finally { client.release(); }
+  });
+
   app.delete("/api/marketplace/listings/:id", auth, async (req, res) => {
     try {
       await ensureMarketplaceSchema();
