@@ -49,7 +49,60 @@ object FynxGroupRemoteClient {
             }
         }.distinctBy { it.id }
     }
-    suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = runCatching { val chatKey="group_$groupId";val persisted=FynxChatStore.load(context,chatKey).firstOrNull{it.id==message.id};var mediaId:String?=message.mediaId?:persisted?.mediaId?:message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true};var mediaType=message.attachmentType?:persisted?.attachmentType;if(mediaId==null&&message.attachmentUri!=null){val uri=Uri.parse(message.attachmentUri!!);val mime=groupAttachmentMimeType(context,uri,mediaType);val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow();mediaId=uploaded.id;mediaType=mediaType?:mime.substringBefore('/');val saved=FynxChatStore.load(context,chatKey);if(saved.any{it.id==message.id})FynxChatStore.save(context,chatKey,saved.map{if(it.id==message.id)it.copy(mediaId=mediaId,attachmentType=mediaType)else it})};val body=JSONObject().apply{put("id",message.id);put("text",message.text);if(mediaId!=null)put("attachmentMediaId",mediaId);if(mediaType!=null)put("attachmentType",mediaType);if(message.replyToId!=null)put("replyToId",message.replyToId)};val result=runCatching{val o=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow()).getJSONObject("message");toRemoteMessage(o)};result.getOrElse{error->loadMessages(context,groupId).getOrNull()?.firstOrNull{it.id==message.id}?.let{return@getOrElse it};throw error} }
+    suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = runCatching {
+        val chatKey = "group_$groupId"
+        val persisted = FynxChatStore.load(context, chatKey).firstOrNull { it.id == message.id }
+        var mediaId: String? = message.mediaId ?: persisted?.mediaId
+            ?: message.attachmentUri?.substringAfterLast('/')?.takeIf { it.all(Char::isDigit) == true }
+        var mediaType = message.attachmentType ?: persisted?.attachmentType
+
+        // Upload once and cache the remote media ID before any retry of the message POST.
+        // Both POST attempts retain the same message ID and attachment media ID.
+        if (mediaId == null && message.attachmentUri != null) {
+            val uri = Uri.parse(message.attachmentUri!!)
+            val mime = groupAttachmentMimeType(context, uri, mediaType)
+            val uploaded = FynxProductionMessaging.uploadMedia(context, uri, mime).getOrThrow()
+            mediaId = uploaded.id
+            mediaType = mediaType ?: mime.substringBefore('/')
+            val saved = FynxChatStore.load(context, chatKey)
+            if (saved.any { it.id == message.id }) {
+                FynxChatStore.save(context, chatKey, saved.map {
+                    if (it.id == message.id) it.copy(mediaId = mediaId, attachmentType = mediaType) else it
+                })
+            }
+        }
+
+        val body = JSONObject().apply {
+            put("id", message.id)
+            put("text", message.text)
+            if (mediaId != null) put("attachmentMediaId", mediaId)
+            if (mediaType != null) put("attachmentType", mediaType)
+            if (message.replyToId != null) put("replyToId", message.replyToId)
+        }
+
+        suspend fun postGroupMessage(): RemoteMessage {
+            val response = FynxBackendClient.postJson(
+                context, "/api/groups/$groupId/messages", body.toString()
+            ).getOrThrow()
+            return toRemoteMessage(JSONObject(response).getJSONObject("message"))
+        }
+
+        val firstResult = runCatching { postGroupMessage() }
+        firstResult.getOrElse { firstError ->
+            // A response can be lost after the server commits. Only replay the stable ID when
+            // authenticated history confirms that this message is already persisted.
+            val persistedOnServer = loadMessages(context, groupId).getOrNull()
+                ?.firstOrNull { it.id == message.id }
+            if (persistedOnServer == null) throw firstError
+
+            // Idempotent backend replay re-broadcasts the canonical ID, recovering a transient
+            // realtime publish failure. A second error remains visible as retryable failure.
+            runCatching { postGroupMessage() }.getOrElse { retryError ->
+                if (retryError !== firstError) retryError.addSuppressed(firstError)
+                throw retryError
+            }
+        }
+    }
     suspend fun editMessage(context:Context,groupId:String,messageId:String,text:String):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","edit");put("text",text)})
     suspend fun reactToMessage(context:Context,groupId:String,messageId:String,reaction:String?):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","reaction");if(reaction!=null)put("reaction",reaction)})
     suspend fun setPinned(context:Context,groupId:String,messageId:String,pinned:Boolean):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","pin");put("pinned",pinned)})

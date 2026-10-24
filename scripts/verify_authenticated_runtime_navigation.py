@@ -3,7 +3,7 @@
 # Keep authenticated recovery coverage enabled after detector corrections.
 # Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
-import os, subprocess, time, html, re, json
+import os, subprocess, time, html, re, json, uuid, binascii, struct, zlib
 import urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -35,6 +35,59 @@ def wait_for_group_conversation_ui(name:str, timeout:float=12.0)->str:
             or "No messages here yet" in latest
             or "Group unavailable" in latest
         ):
+            return latest
+        time.sleep(.5)
+    return latest
+
+def find_exact_control(xml_text:str,label:str):
+    """Find an exact accessible label and its nearest clickable ancestor (never a substring in a subtitle)."""
+    if not xml_text:
+        return None
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)]=parent
+    exact=[]
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user","true").lower()=="false" or not _center(node):
+            continue
+        values=(
+            (node.attrib.get("text") or "").strip(),
+            (node.attrib.get("content-desc") or "").strip(),
+            (node.attrib.get("resource-id") or "").strip(),
+        )
+        if label.casefold() not in {value.casefold() for value in values if value}:
+            continue
+        target=node
+        current=node
+        while current is not None:
+            if current.attrib.get("clickable","false").lower()=="true" and _center(current):
+                target=current
+                break
+            current=parents.get(id(current))
+        exact.append(target)
+    if not exact:
+        return None
+    # Keep the first exact match in document order: it is the first real control,
+    # unlike substring search which can accidentally tap a nearby subtitle.
+    node=exact[0]
+    center=_center(node)
+    if not center:
+        return None
+    values=(node.attrib.get("text") or "",node.attrib.get("content-desc") or "",node.attrib.get("resource-id") or "")
+    return next((value.strip() for value in values if value.strip()),label),center[0],center[1]
+
+def wait_for_controls(name:str, labels:list[str], timeout:float=10.0)->str:
+    """Poll until all required labels appear on the actual current UI."""
+    deadline=time.monotonic()+timeout
+    latest=""
+    while time.monotonic()<deadline:
+        latest=dump_ui(name)
+        if latest and all(find_control(latest,[label]) for label in labels):
             return latest
         time.sleep(.5)
     return latest
@@ -142,6 +195,8 @@ DIAGNOSTIC_MARKERS = (
     "New post", "What's on your mind?", "Photo", "Video/Camera",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
+    "＋ New group", "＋ Create group", "Create group", "No groups yet",
+    "Search groups", "Search groups…", "Message not sent yet",
     "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
@@ -391,6 +446,7 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
     base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    stage="backend login"
     try:
         login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
         login_req=urllib.request.Request(
@@ -408,11 +464,16 @@ def backend_real_chat_target()->str:
         queries=[]
         prefix=self_name[:2]
         if len(prefix)>=2: queries.append(prefix)
-        queries.extend(["a","e","i","o","u","n","m"])
+        # /api/users/search rejects one-character queries with HTTP 400. These
+        # two-character fallbacks let discovery continue instead of aborting on "a".
+        queries.extend(["an","el","jo","ma","ch","fn","te","ri","sa"])
         seen=set()
         for query in queries:
-            if query in seen: continue
+            query=query.strip()
+            if len(query)<2 or len(query)>32 or query in seen:
+                continue
             seen.add(query)
+            stage="authenticated user search"
             url=base+"/api/users/search?"+urllib.parse.urlencode({"q":query,"mode":"username"})
             request=urllib.request.Request(
                 url,
@@ -426,8 +487,76 @@ def backend_real_chat_target()->str:
                 if username and username.lower()!=self_name:
                     return username
     except Exception as error:
-        report.append("- Real chat target discovery unavailable: "+type(error).__name__)
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        report.append("- Real chat target discovery unavailable during "+stage+":"+status+" "+type(error).__name__)
     return ""
+
+def backend_login_token(username:str,password:str)->tuple[str,str]:
+    """Authenticate an explicitly configured E2E account to the isolated backend."""
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    body=json.dumps({"username":username,"password":password}).encode("utf-8")
+    request=urllib.request.Request(base+"/api/auth/login",data=body,headers={"Content-Type":"application/json","Accept":"application/json"},method="POST")
+    with urllib.request.urlopen(request,timeout=20) as response:
+        payload=json.loads(response.read().decode("utf-8","replace"))
+    token=str(payload.get("accessToken") or "").strip()
+    if not token:
+        raise ValueError("backend login returned no access token")
+    return base,token
+
+def backend_private_message_exists(peer_username:str,marker_text:str,expected_sender:str)->tuple[bool,str]:
+    """Check exact private-message text and sender through server history, not local cache."""
+    if not USERNAME or not PASSWORD:
+        return False,"primary E2E credentials are unavailable"
+    try:
+        base,token=backend_login_token(USERNAME,PASSWORD)
+        path=urllib.parse.quote(peer_username.removeprefix("@").strip(),safe="")
+        request=urllib.request.Request(
+            base+"/api/messages/"+path,
+            headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-cache"},
+            method="GET",
+        )
+        with urllib.request.urlopen(request,timeout=20) as response:
+            data=json.loads(response.read().decode("utf-8","replace"))
+        expected=expected_sender.removeprefix("@").strip().casefold()
+        for message in data.get("messages",[]):
+            if not isinstance(message,dict) or str(message.get("text") or "")!=marker_text:
+                continue
+            sender=str(message.get("senderUsername") or message.get("sender_username") or "").removeprefix("@").strip().casefold()
+            if sender==expected:
+                return True,"authenticated GET /api/messages/{peer} returned the exact marker from "+expected
+        return False,"authenticated private history did not contain the exact marker from "+expected
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return False,"private history verification failed:"+status+" "+type(error).__name__
+
+def backend_post_peer_message(peer_username:str,peer_password:str,recipient_username:str,marker_text:str)->tuple[bool,str]:
+    """Send one uniquely identified incoming message from the explicitly configured E2E peer."""
+    try:
+        base,token=backend_login_token(peer_username,peer_password)
+        body={
+            "clientMessageId":str(uuid.uuid4()).lower(),
+            "recipientUsername":recipient_username.removeprefix("@").strip(),
+            "text":marker_text,
+            "replyToId":None,
+            "mediaId":None,
+            "mediaType":None,
+            "voiceDurationMs":0,
+        }
+        request=urllib.request.Request(
+            base+"/api/messages",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Authorization":"Bearer "+token,"Content-Type":"application/json","Accept":"application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request,timeout=20) as response:
+            data=json.loads(response.read().decode("utf-8","replace"))
+        message=data.get("message") or {}
+        if str(message.get("text") or "")==marker_text:
+            return True,"peer account inserted exact incoming marker through POST /api/messages"
+        return False,"peer send endpoint returned no matching message"
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return False,"peer send failed:"+status+" "+type(error).__name__
 
 def input_text(value:str):
     safe=value.replace("%","%25").replace(" ","%s")
@@ -468,12 +597,378 @@ def first_username_in_xml(xml_text:str)->str:
             return value
     return ""
 
-def first_local_group_id()->str:
+def local_group_records()->list[dict[str,str]]:
+    """Read stored group records from SharedPreferences using XML and JSON parsers."""
     result=run("adb","shell","run-as",PACKAGE,"cat","shared_prefs/fynx_groups_store.xml")
-    if result.returncode != 0: return ""
-    raw=html.unescape(result.stdout or "")
-    match=re.search(r'"id":"([^"]+)"', raw)
-    return match.group(1) if match else ""
+    if result.returncode != 0:
+        return []
+    try:
+        prefs_root=ET.fromstring(result.stdout or "")
+    except ET.ParseError:
+        return []
+    records=[]
+    for stored_value in prefs_root.iter("string"):
+        if not (stored_value.attrib.get("name") or "").startswith("groups_"):
+            continue
+        try:
+            group_array=json.loads(stored_value.text or "[]")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(group_array,list):
+            continue
+        for item in group_array:
+            if not isinstance(item,dict):
+                continue
+            group_id=str(item.get("id") or "").strip()
+            name=str(item.get("name") or "").strip()
+            if group_id and name and not any(existing["id"]==group_id for existing in records):
+                records.append({"id":group_id,"name":name})
+    return records
+
+def group_id_from_visible_title(xml_text:str)->str:
+    """Resolve the ID by matching the opened conversation's visible title, never the first stored record."""
+    if not xml_text:
+        return ""
+    visible_values=[]
+    for node in nodes(xml_text):
+        if node.attrib.get("visible-to-user","true").lower()=="false":
+            continue
+        visible_values.extend((
+            (node.attrib.get("text") or "").strip(),
+            (node.attrib.get("content-desc") or "").strip()
+        ))
+    normalized=[value.casefold() for value in visible_values if value]
+    records=sorted(local_group_records(),key=lambda item:len(item["name"]),reverse=True)
+    for record in records:
+        group_name=record["name"].strip().casefold()
+        if group_name and any(value==group_name or group_name in value for value in normalized):
+            return record["id"]
+    return ""
+
+def backend_group_message_exists(group_id:str, marker_text:str)->tuple[bool,str]:
+    """Confirm a UI-sent message through an authenticated read of the isolated test backend."""
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    if not USERNAME or not PASSWORD:
+        return False,"FYNX_E2E_USERNAME/FYNX_E2E_PASSWORD are unavailable"
+    try:
+        login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
+        login_req=urllib.request.Request(
+            base+"/api/auth/login",
+            data=login_body,
+            headers={"Content-Type":"application/json","Accept":"application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(login_req,timeout=20) as response:
+            login_data=json.loads(response.read().decode("utf-8","replace"))
+        token=str(login_data.get("accessToken") or "").strip()
+        if not token:
+            return False,"backend login returned no access token"
+        group_path=urllib.parse.quote(group_id,safe="")
+        url=base+"/api/groups/"+group_path+"/messages?limit=100"
+        request=urllib.request.Request(
+            url,
+            headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-cache"},
+            method="GET",
+        )
+        with urllib.request.urlopen(request,timeout=20) as response:
+            data=json.loads(response.read().decode("utf-8","replace"))
+        messages=data.get("messages",[])
+        if any(str(message.get("text") or "")==marker_text for message in messages if isinstance(message,dict)):
+            return True,"authenticated GET /api/groups/{id}/messages returned the exact marker"
+        return False,"authenticated backend history was reachable but did not contain the exact marker (returned "+str(len(messages))+" messages)"
+    except Exception as error:
+        status=""
+        code=getattr(error,"code",None)
+        if code is not None:
+            status=" HTTP "+str(code)
+        return False,"backend history verification failed:"+status+" "+type(error).__name__
+
+
+def backend_group_access_contract(group_id:str)->tuple[bool,str]:
+    """Verify persisted CI-group membership and safely round-trip one admin permission."""
+    if not USERNAME or not PASSWORD:
+        return False,"primary E2E credentials are unavailable"
+    try:
+        base,token=backend_login_token(USERNAME,PASSWORD)
+        group_path=urllib.parse.quote(group_id,safe="")
+        headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-cache"}
+
+        def request_json(method:str,path:str,body=None)->dict:
+            data=json.dumps(body).encode("utf-8") if body is not None else None
+            request=urllib.request.Request(
+                base+path,
+                data=data,
+                headers={**headers,**({"Content-Type":"application/json"} if data is not None else {})},
+                method=method,
+            )
+            with urllib.request.urlopen(request,timeout=20) as response:
+                return json.loads(response.read().decode("utf-8","replace"))
+
+        members=request_json("GET","/api/groups/"+group_path+"/members").get("members",[])
+        self_name=USERNAME.removeprefix("@").strip().casefold()
+        own=next((m for m in members if isinstance(m,dict) and
+                  str(m.get("username") or "").removeprefix("@").strip().casefold()==self_name),None)
+        if not own:
+            return False,"server group roster did not contain the authenticated E2E account"
+        role=str(own.get("role") or "").upper()
+        if role!="ADMIN":
+            return False,"dedicated CI group did not preserve owner ADMIN role (server reported "+(role or "missing role")+")"
+
+        permission_root=request_json("GET","/api/groups/"+group_path+"/permissions")
+        permissions=permission_root.get("permissions")
+        fields=("send_messages","send_media","add_members","invite_links","approve_new_members","disappearing_seconds")
+        bool_fields=("send_messages","send_media","add_members","invite_links","approve_new_members")
+        if not isinstance(permissions,dict) or any(key not in permissions for key in fields):
+            return False,"server permissions response omitted required fields"
+        if any(not isinstance(permissions.get(key),bool) for key in bool_fields) or not isinstance(permissions.get("disappearing_seconds"),int):
+            return False,"server permissions response returned malformed field types"
+
+        names={"send_messages":"sendMessages","send_media":"sendMedia","add_members":"addMembers",
+               "invite_links":"inviteLinks","approve_new_members":"approveNewMembers",
+               "disappearing_seconds":"disappearingSeconds"}
+        original={names[key]:permissions[key] for key in fields}
+        probe=dict(original)
+        probe["inviteLinks"]=not original["inviteLinks"]
+        changed_ok=False
+        changed_error=""
+        try:
+            changed=request_json("PATCH","/api/groups/"+group_path+"/permissions",probe).get("permissions",{})
+            changed_ok=changed.get("invite_links") is probe["inviteLinks"]
+            if not changed_ok:
+                changed_error="server did not persist the temporary invite-link permission toggle"
+        except Exception as error:
+            changed_error="permission toggle failed:"+str(getattr(error,"code",""))+" "+type(error).__name__
+
+        restored_ok=False
+        restored_error=""
+        try:
+            request_json("PATCH","/api/groups/"+group_path+"/permissions",original)
+            restored=request_json("GET","/api/groups/"+group_path+"/permissions").get("permissions",{})
+            restored_ok=all(restored.get(key)==permissions[key] for key in fields)
+            if not restored_ok:
+                restored_error="original permission values did not match after restoration"
+        except Exception as error:
+            restored_error="permission restoration failed:"+str(getattr(error,"code",""))+" "+type(error).__name__
+
+        if not changed_ok:
+            return False,changed_error or "permission mutation was not verified"
+        if not restored_ok:
+            return False,restored_error or "original group settings were not restored"
+        return True,"authenticated group roster confirmed E2E account ADMIN membership; permission toggle persisted and original settings were restored"
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return False,"authenticated group lifecycle/permissions check failed:"+status+" "+type(error).__name__
+
+
+
+def make_ci_attachment_png(path:Path)->None:
+    """Write a tiny valid RGB PNG for the real Android Photo Picker; no user media is read."""
+    width=48
+    height=48
+    rows=[]
+    for y in range(height):
+        row=bytearray([0])
+        for x in range(width):
+            row.extend((24,133,248) if (x//8+y//8)%2==0 else (245,248,252))
+        rows.append(bytes(row))
+    def chunk(kind:bytes,data:bytes)->bytes:
+        return struct.pack(">I",len(data))+kind+data+struct.pack(">I",binascii.crc32(kind+data)&0xffffffff)
+    png=b"\x89PNG\r\n\x1a\n"
+    png+=chunk(b"IHDR",struct.pack(">IIBBBBB",width,height,8,2,0,0,0))
+    png+=chunk(b"IDAT",zlib.compress(b"".join(rows)))
+    png+=chunk(b"IEND",b"")
+    path.write_bytes(png)
+
+def backend_group_message_snapshot(group_id:str)->tuple[dict[str,dict],str]:
+    """Read current group history using the same authenticated server account as the app."""
+    if not USERNAME or not PASSWORD:
+        return {},"FYNX_E2E_USERNAME/FYNX_E2E_PASSWORD are unavailable"
+    try:
+        base,token=backend_login_token(USERNAME,PASSWORD)
+        group_path=urllib.parse.quote(group_id,safe="")
+        request=urllib.request.Request(
+            base+"/api/groups/"+group_path+"/messages?limit=100",
+            headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-cache"},
+            method="GET",
+        )
+        with urllib.request.urlopen(request,timeout=20) as response:
+            data=json.loads(response.read().decode("utf-8","replace"))
+        messages=data.get("messages",[])
+        if not isinstance(messages,list):
+            return {},"server group history response did not contain a message list"
+        result={}
+        for item in messages:
+            if isinstance(item,dict) and str(item.get("id") or "").strip():
+                result[str(item["id"])]=item
+        return result,"authenticated group history returned "+str(len(result))+" distinct message IDs"
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return {},"authenticated group history read failed:"+status+" "+type(error).__name__
+
+def first_gallery_image_control(xml_text:str):
+    """Choose the first actual image tile by accessibility description/bounds, not a guessed tap point."""
+    if not xml_text:
+        return None
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    candidates=[]
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)]=parent
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user","true").lower()=="false":
+            continue
+        description=" ".join((node.attrib.get("text") or "",node.attrib.get("content-desc") or "")).strip().casefold()
+        if not any(word in description for word in ("photo taken","image taken","image/png","fynx_ci_group_attachment","attachment.png")):
+            continue
+        target=node
+        cur=node
+        while cur is not None:
+            if cur.attrib.get("clickable","false").lower()=="true" and _center(cur):
+                target=cur
+                break
+            cur=parents.get(id(cur))
+        center=_center(target)
+        if not center:
+            continue
+        bounds=target.attrib.get("bounds","")
+        try:
+            left_top,right_bottom=bounds.split("][",1)
+            left,top=map(int,left_top.strip("[]").split(","))
+            right,bottom=map(int,right_bottom.strip("[]").split(","))
+        except (ValueError,IndexError):
+            continue
+        width,height=right-left,bottom-top
+        if top<250 or top>2600 or width<100 or height<100 or width>800 or height>900:
+            continue
+        candidates.append((top,left,target,center))
+    if not candidates:
+        return None
+    _,_,target,center=min(candidates,key=lambda item:(item[0],item[1]))
+    values=(target.attrib.get("text") or "",target.attrib.get("content-desc") or "")
+    return (next((v.strip() for v in values if v.strip()),"image tile"),center[0],center[1])
+
+def certify_group_gallery_image(group_id:str)->None:
+    """Send one generated fixture through the actual Group -> attachment menu -> Gallery -> backend path."""
+    group_ui=wait_for_group_conversation_ui("group-gallery-before.xml",timeout=12)
+    if not group_ui or not find_control(group_ui,["Add attachment"]):
+        FAILURES.append("group Gallery attachment test could not establish a real group composer")
+        return
+    before,detail=backend_group_message_snapshot(group_id)
+    if not before and "returned 0 distinct" not in detail:
+        FAILURES.append("group Gallery attachment test could not read baseline backend history: "+detail)
+        return
+
+    fixture=ROOT/"FYNX_CI_GROUP_ATTACHMENT.png"
+    try:
+        make_ci_attachment_png(fixture)
+    except Exception as error:
+        FAILURES.append("group Gallery fixture generation failed: "+type(error).__name__)
+        return
+    target="/sdcard/Pictures/FYNX_CI_GROUP_ATTACHMENT.png"
+    mkdir=run("adb","shell","mkdir","-p","/sdcard/Pictures")
+    pushed=run("adb","push",str(fixture),target,timeout=30)
+    if mkdir.returncode!=0 or pushed.returncode!=0:
+        FAILURES.append("group Gallery fixture could not be copied to Android shared Pictures storage")
+        return
+    scanned=run("adb","shell","am","broadcast","-a","android.intent.action.MEDIA_SCANNER_SCAN_FILE","-d","file:///sdcard/Pictures/FYNX_CI_GROUP_ATTACHMENT.png")
+    if scanned.returncode!=0:
+        FAILURES.append("Android MediaStore did not accept the CI Gallery fixture scan request")
+        return
+    time.sleep(1.5)
+
+    menu=tap_control(group_ui,["Add attachment"],"group-gallery-attachment-menu",["Gallery","Files"])
+    if not menu:
+        return
+    picker=tap_control(menu,["Gallery"],"group-gallery-picker",["Photos","Albums","Browse","Images"])
+    if not picker:
+        return
+
+    # Prefer Android's visible Browse route so the test can select the exact fixture by file name.
+    browse=find_control(picker,["Browse"])
+    selected=False
+    if browse:
+        browse_ui=tap_control(picker,["Browse"],"group-gallery-browse",["Recent","Images","Downloads","Pictures","FYNX_CI_GROUP_ATTACHMENT.png"])
+        if browse_ui:
+            file_ui=""
+            deadline=time.monotonic()+12
+            while time.monotonic()<deadline:
+                file_ui=dump_ui("group-gallery-fixture-file.xml")
+                if find_control(file_ui,["FYNX_CI_GROUP_ATTACHMENT.png"]):
+                    break
+                time.sleep(.5)
+            file_control=find_control(file_ui,["FYNX_CI_GROUP_ATTACHMENT.png"])
+            if file_control:
+                _,fx,fy=file_control
+                run("adb","shell","input","tap",str(fx),str(fy))
+                selected=True
+
+    # On emulator versions where Browse is not exposed, choose the accessible image tile itself.
+    if not selected:
+        latest=dump_ui("group-gallery-photo-grid.xml")
+        tile=first_gallery_image_control(latest or picker)
+        if tile:
+            _,ix,iy=tile
+            run("adb","shell","input","tap",str(ix),str(iy))
+            selected=True
+    if not selected:
+        screenshot("group-gallery-photo-selection-failed.png")
+        FAILURES.append("Android Gallery opened but the generated CI image could not be selected through an accessible photo/file control; visible markers: "+visible_marker_summary(picker))
+        return
+
+    # Selection must travel through the live app callback; only backend persistence can make this pass.
+    after={}
+    deadline=time.monotonic()+60
+    while time.monotonic()<deadline:
+        time.sleep(1)
+        latest,read_detail=backend_group_message_snapshot(group_id)
+        if latest:
+            new_attachments=[
+                item for message_id,item in latest.items()
+                if message_id not in before and item.get("attachmentMediaId") is not None
+                and str(item.get("senderUsername") or "").removeprefix("@").strip().casefold()==USERNAME.removeprefix("@").strip().casefold()
+            ]
+            if new_attachments:
+                after=latest
+                break
+    screenshot("group-gallery-image-sent.png")
+    visible=dump_ui("group-gallery-image-sent.xml")
+    alive,crashlog=capture_runtime_log("group-gallery-image-process.log")
+    new_attachments=[
+        item for message_id,item in after.items()
+        if message_id not in before and item.get("attachmentMediaId") is not None
+        and str(item.get("senderUsername") or "").removeprefix("@").strip().casefold()==USERNAME.removeprefix("@").strip().casefold()
+    ]
+    if not new_attachments:
+        FAILURES.append("Gallery selection returned to FYNX but no new sender-owned image attachment appeared in backend group history")
+        return
+    message=new_attachments[-1]
+    attachment_type=str(message.get("attachmentType") or "").lower()
+    attachment_id=str(message.get("attachmentMediaId") or "")
+    if not attachment_id or attachment_type!="image":
+        FAILURES.append("Gallery message reached backend but its media ID/type did not verify as an image attachment")
+        return
+    if not alive or not visible:
+        FAILURES.append("Gallery image send caused the group UI/process to become unavailable")
+        return
+    report.append("- PASS actual Group attachment menu -> Android Gallery -> image selected; authenticated backend returned a new persisted image attachment ID "+attachment_id)
+    if crashlog:
+        report.append("- Group Gallery send crash-log evidence captured; process remained alive")
+
+    # A fresh server read after an app restart proves persistence of the attachment reference.
+    restore_home_after_restart("group-gallery-image-reopen-home")
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
+    reopened=wait_for_group_conversation_ui("group-gallery-image-reopened.xml",timeout=15)
+    persisted, persistence_detail=backend_group_message_snapshot(group_id)
+    stored=persisted.get(str(message.get("id") or ""))
+    if not reopened or not stored or str(stored.get("attachmentMediaId") or "")!=attachment_id or str(stored.get("attachmentType") or "").lower()!="image":
+        FAILURES.append("Gallery image attachment reference did not remain in authenticated backend history after reopening the same group: "+persistence_detail)
+    else:
+        report.append("- PASS Gallery image attachment ID/type remained in server history after app force-stop/relaunch and reopening the same group")
+
 
 def exercise_notification_route(route:str, name:str)->bool:
     if not route: return False
@@ -628,7 +1123,8 @@ report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
         "This journey uses a real FYNX account supplied through GitHub Actions secrets.",
-        "No fabricated users, posts, messages, listings or application records are created.",
+        "No fabricated users, posts, messages or listings are created.",
+        "If the test account has no group, the journey creates one dedicated CI Chat Recovery Group only on the configured isolated testing backend so the real Groups screen can be exercised.",
         "Credentials are never written to the APK or repository."]
 
 if not USERNAME or not PASSWORD:
@@ -764,7 +1260,9 @@ if not FAILURES:
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
                 if source.exists(): shutil.copyfile(source,recent); report.append("- PASS explicit Recent Chats screenshot artifact")
                 private_chat_username=first_username_in_xml(after)
-                real_chat_target=backend_real_chat_target()
+                peer_username=os.environ.get("FYNX_E2E_PEER_USERNAME","").strip().removeprefix("@")
+                peer_password=os.environ.get("FYNX_E2E_PEER_PASSWORD","")
+                real_chat_target=peer_username or backend_real_chat_target()
                 conversation_after=""
                 conversation_ui_opened=False
                 if real_chat_target:
@@ -892,6 +1390,143 @@ if not FAILURES:
                     report.append("- Chat Settings assertion blocked: ConversationPanel did not open; the primary navigation failure is reported above.")
                 report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
                 if crashlog: report.append("- Chat crash-log evidence captured in private-chat-process.log")
+
+                # End-to-end private Chat message delivery requires a dedicated,
+                # explicitly configured peer account. Never send test content to an
+                # arbitrary person discovered by username search.
+                if peer_username and peer_password and conversation_ui_opened:
+                    normalized_self=USERNAME.removeprefix("@").strip().casefold()
+                    normalized_peer=peer_username.casefold()
+                    if not normalized_self or normalized_self==normalized_peer:
+                        FAILURES.append("private Chat E2E peer must be configured and different from the primary E2E account")
+                    else:
+                        restore_home_after_restart("private-chat-send-test-home")
+                        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
+                        peer_chat=wait_for_conversation_ui("private-chat-send-test-open.xml")
+                        if not peer_chat or not find_control(peer_chat,["Message composer","Edit message composer","Chat message composer area","Message..."]):
+                            FAILURES.append("dedicated private Chat peer did not open a usable ConversationPanel for send testing")
+                        else:
+                            def private_marker_state(ui_xml, marker_text):
+                                try:
+                                    root=ET.fromstring(ui_xml)
+                                except ET.ParseError:
+                                    return False,False
+                                edit_nodes=[
+                                    node for node in root.iter("node")
+                                    if "edittext" in (node.attrib.get("class") or "").lower()
+                                    or node.attrib.get("editable","false").lower()=="true"
+                                ]
+                                in_editor=any(marker_text in (node.attrib.get("text") or "") for node in edit_nodes)
+                                in_message=any(
+                                    marker_text in (node.attrib.get("text") or "")
+                                    and node not in edit_nodes
+                                    for node in root.iter("node")
+                                )
+                                return in_message,in_editor
+
+                            def private_enter_marker(marker_text,filename):
+                                current=dump_ui(filename+"-composer.xml")
+                                composer=find_control(current,["Message composer","Edit message composer","Chat message composer area","Message..."])
+                                if not composer:
+                                    FAILURES.append(filename+": private Chat composer was not found")
+                                    return False
+                                _,x,y=composer
+                                run("adb","shell","input","tap",str(x),str(y))
+                                if input_text(marker_text).returncode!=0:
+                                    FAILURES.append(filename+": failed to type unique private Chat marker")
+                                    return False
+                                time.sleep(.4)
+                                typed=dump_ui(filename+"-typed.xml")
+                                _,editing=private_marker_state(typed,marker_text)
+                                if not editing:
+                                    FAILURES.append(filename+": marker was not present in private Chat composer before send")
+                                    return False
+                                return True
+
+                            def private_wait_marker(marker_text,filename):
+                                latest=""
+                                for _ in range(24):
+                                    time.sleep(.5)
+                                    latest=dump_ui(filename+"-result.xml")
+                                    in_message,in_editor=private_marker_state(latest,marker_text)
+                                    if in_message and not in_editor:
+                                        return latest
+                                return ""
+
+                            private_sent=[]
+                            private_keyboard_marker="CI_PRIVATE_KEYBOARD_"+str(time.time_ns())
+                            if private_enter_marker(private_keyboard_marker,"private-chat-keyboard-send"):
+                                run("adb","shell","input","keyevent","66")
+                                sent_ui=private_wait_marker(private_keyboard_marker,"private-chat-keyboard-send")
+                                if sent_ui:
+                                    private_sent.append((private_keyboard_marker,"private Chat keyboard Send"))
+                                    report.append("- PASS private Chat keyboard Send moved unique marker from composer to a visible message")
+                                else:
+                                    FAILURES.append("private Chat keyboard Send did not create a separate visible message")
+
+                            private_button_marker="CI_PRIVATE_BUTTON_"+str(time.time_ns())
+                            restore_home_after_restart("private-chat-button-send-home")
+                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
+                            reopened_peer=wait_for_conversation_ui("private-chat-button-send-open.xml")
+                            if reopened_peer and find_control(reopened_peer,["Message composer","Edit message composer","Chat message composer area","Message..."]):
+                                if private_enter_marker(private_button_marker,"private-chat-composer-button"):
+                                    before_button=dump_ui("private-chat-button-before-tap.xml")
+                                    send_button=find_exact_control(before_button,"Send message") or find_control(before_button,["Send message"])
+                                    if send_button:
+                                        _,x,y=send_button
+                                        run("adb","shell","input","tap",str(x),str(y))
+                                        sent_ui=private_wait_marker(private_button_marker,"private-chat-composer-button")
+                                        if sent_ui:
+                                            private_sent.append((private_button_marker,"private Chat composer button"))
+                                            report.append("- PASS private Chat composer button moved unique marker into a visible message")
+                                        else:
+                                            FAILURES.append("private Chat composer button did not create a separate visible message")
+                                    else:
+                                        FAILURES.append("private Chat composer button was not exposed with the expected Send message accessibility label")
+                            else:
+                                FAILURES.append("private Chat button test could not reopen a usable peer ConversationPanel")
+
+                            for marker_text,method in private_sent:
+                                remote_ok,remote_detail=backend_private_message_exists(peer_username,marker_text,USERNAME)
+                                if remote_ok:
+                                    report.append("- PASS "+method+" exact outgoing message confirmed in authenticated backend history")
+                                else:
+                                    FAILURES.append(method+" UI marker was not confirmed in backend history: "+remote_detail)
+                            if not private_sent:
+                                FAILURES.append("neither private Chat send control produced a verified visible message")
+
+                            # Test incoming delivery using the dedicated peer's credentials;
+                            # then fetch the conversation in the primary user's actual app.
+                            incoming_marker="CI_PRIVATE_INCOMING_"+str(time.time_ns())
+                            peer_send_ok,peer_send_detail=backend_post_peer_message(peer_username,peer_password,USERNAME,incoming_marker)
+                            if not peer_send_ok:
+                                FAILURES.append("incoming private Chat delivery could not be prepared: "+peer_send_detail)
+                            else:
+                                report.append("- PASS "+peer_send_detail)
+                                restore_home_after_restart("private-chat-incoming-home")
+                                run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
+                                incoming_ui=""
+                                for _ in range(24):
+                                    time.sleep(.5)
+                                    incoming_ui=dump_ui("private-chat-incoming-result.xml")
+                                    visible,in_editor=private_marker_state(incoming_ui,incoming_marker)
+                                    if visible and not in_editor:
+                                        break
+                                visible,in_editor=private_marker_state(incoming_ui,incoming_marker)
+                                if visible and not in_editor:
+                                    report.append("- PASS primary app displayed the peer's incoming server message after reopening the conversation")
+                                else:
+                                    FAILURES.append("peer's incoming server message was not displayed as a separate message in the primary user's ConversationPanel")
+                                remote_ok,remote_detail=backend_private_message_exists(peer_username,incoming_marker,peer_username)
+                                if remote_ok:
+                                    report.append("- PASS incoming marker confirmed in server-returned private conversation history")
+                                else:
+                                    FAILURES.append("incoming marker missing from server history: "+remote_detail)
+                else:
+                    reason="FYNX_E2E_PEER_USERNAME/FYNX_E2E_PEER_PASSWORD secrets are required to prove private Chat send/receive without messaging an arbitrary user"
+                    report.append("- BLOCKED private Chat send/receive certification: "+reason)
+                    FAILURES.append("private Chat end-to-end send/receive was not certified: "+reason)
+
                 if private_chat_username:
                     route_username=private_chat_username.removeprefix("@").strip()
                     if route_username:
@@ -900,71 +1535,250 @@ if not FAILURES:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
                 reset=restore_home_after_restart("authenticated-home-chat-group-reset") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
-                if groups_xml:
-                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
-                    if groups_tab:
-                        clear_runtime_log()
-                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
-                        if not group_after:
-                            create_control=find_control(groups_tab,["New group","Create group"])
-                            if create_control:
-                                _,cx,cy=create_control
-                                run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(.8)
-                                dialog=dump_ui("group-create-dialog.xml")
-                                fields=find_edit_fields(dialog)
-                                if len(fields)>=2:
-                                    run("adb","shell","input","tap",str(fields[0][0]),str(fields[0][1])); input_text("CI Chat Recovery Group")
-                                    run("adb","shell","input","tap",str(fields[1][0]),str(fields[1][1])); input_text("Persistent runtime recovery group")
-                                    dialog=dump_ui("group-create-filled.xml")
-                                    create_btn=find_control(dialog,["Create"])
-                                    if create_btn:
-                                        _,cx,cy=create_btn
-                                        run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(2.0)
-                                        groups_tab=dump_ui("chat-groups-after-ci-create.xml")
-                                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
-                        group_id=first_local_group_id()
-                        alive, crashlog = capture_runtime_log("group-chat-process.log")
-                        screenshot("group-chat-after-open.png")
-                        report.append("- Group process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
-                        if crashlog: report.append("- Group crash-log evidence captured in group-chat-process.log")
-                        if group_after:
-                            if find_control(group_after,["Message composer","Edit message composer","Chat message composer area","Messaging is restricted"]):
-                                screenshot("group-chat-inside.png")
-                                report.append("- PASS actual FynxGroupConversationPanel opened; captured group-chat-inside.png")
-                            else:
-                                FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
-                            if group_id:
-                                exercise_notification_route("fynx://group/" + group_id, "group-chat")
-                        if not group_after:
-                            # The authenticated CI account may have no persisted group.
-                            # Exercise the actual production Group ConversationPanel route
-                            # with a deterministic destination ID so the screen itself is
-                            # still certified rather than silently skipped.
-                            # Keep the debug-only session alive before exercising the
-                            # production Group ConversationPanel route.
-                            restore_home_after_restart("group-chat-self-fallback-home")
-                            clear_runtime_log()
-                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/ci-runtime-group",PACKAGE)
-                            time.sleep(.5)
-                            group_destination=wait_for_group_conversation_ui("group-chat-inside.xml")
-                            screenshot("group-chat-inside.png")
-                            alive,crashlog=capture_runtime_log("group-chat-inside-process.log")
-                            fake_group_ui_ready = bool(group_destination) and (
-                                "Message..." in group_destination
-                                or "Messaging is restricted" in group_destination
-                                or "No messages here yet" in group_destination
-                                or "Group unavailable" in group_destination
-                            )
-                            if fake_group_ui_ready and alive:
-                                report.append("- PASS deterministic Group ConversationPanel rendered a stable conversation or explicit missing-group state; captured group-chat-inside.png")
-                            else:
-                                FAILURES.append("deterministic Group ConversationPanel did not open or left the app process unhealthy")
-                        if group_after and not group_id:
-                            report.append("- PASS group notification-route test skipped because the real group ID could not be read from the authenticated app store; no test data was fabricated")
-                    else:
-                        report.append("- PASS group-chat entry test skipped because the Groups tab was not available in the authenticated chat surface")
+                group_after=""
+                group_id=""
+                if not groups_xml:
+                    FAILURES.append("authenticated Chat surface was unavailable before isolated group certification")
                 else:
-                    FAILURES.append("group-chat entry certification blocked because the authenticated Chat surface was unavailable after Home reset")
+                    # Never send CI markers into an arbitrary user's group. Reuse only
+                    # this account's dedicated CI group, or create it through the app UI.
+                    stored_groups=local_group_records()
+                    ci_group=next(
+                        (item for item in reversed(stored_groups)
+                         if item["name"].casefold().startswith("ci chat recovery group")),
+                        None
+                    )
+                    if ci_group:
+                        group_id=ci_group["id"]
+                        restore_home_after_restart("existing-ci-group-open-home")
+                        opened=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
+                        group_after=wait_for_group_conversation_ui("existing-ci-group-open.xml")
+                        if opened.returncode!=0 or not group_after or "Group unavailable" in group_after:
+                            FAILURES.append("stored CI group could not be reopened as a real group conversation; refusing to send into any other group")
+                            group_after=""
+                    else:
+                        section_toggle=find_exact_control(groups_xml,"Groups")
+                        if not section_toggle:
+                            FAILURES.append("Chat Groups section toggle was not found as an exact accessible label; visible markers: "+visible_marker_summary(groups_xml))
+                        else:
+                            _,sx,sy=section_toggle
+                            run("adb","shell","input","tap",str(sx),str(sy))
+                            # This is ChatsPanel's embedded Groups section, not the
+                            # standalone Groups destination: its real controls are
+                            # "＋ New group" and group rows; "Search groups" exists only
+                            # on the standalone Groups screen opened by that button.
+                            groups_tab=wait_for_controls("chat-groups-tab",["＋ New group"],timeout=10.0)
+                            if (not groups_tab
+                                or not find_control(groups_tab,["＋ New group"])
+                                or find_control(groups_tab,["Search chats"])):
+                                FAILURES.append("Chat's exact Groups toggle did not open the embedded Groups list; visible markers: "+visible_marker_summary(groups_tab))
+                            else:
+                                new_group_control=find_exact_control(groups_tab,"＋ New group") or find_control(groups_tab,["New group"])
+                                if not new_group_control:
+                                    FAILURES.append("embedded Groups list has no New group action; visible markers: "+visible_marker_summary(groups_tab))
+                                else:
+                                    _,cx,cy=new_group_control
+                                    run("adb","shell","input","tap",str(cx),str(cy))
+                                    groups_screen=wait_for_controls("group-create-destination",["Your communities in one place","Search groups…"],timeout=12.0)
+                                    if not groups_screen or not find_control(groups_screen,["Your communities in one place"]):
+                                        FAILURES.append("New group action did not navigate to the actual Groups destination; visible markers: "+visible_marker_summary(groups_screen))
+                                    else:
+                                        open_create=find_exact_control(groups_screen,"Create group")
+                                        if not open_create:
+                                            FAILURES.append("Groups destination opened but its exact Create group control was not found; visible markers: "+visible_marker_summary(groups_screen))
+                                        else:
+                                            _,cx,cy=open_create
+                                            run("adb","shell","input","tap",str(cx),str(cy))
+                                            dialog=wait_for_controls("group-create-dialog",["Group name","Description","Create"],timeout=10.0)
+                                            if not dialog or not find_control(dialog,["Group name"]) or not find_control(dialog,["Description"]):
+                                                FAILURES.append("Create group control did not open the real Create group dialog; visible markers: "+visible_marker_summary(dialog))
+                                            else:
+                                                fields=find_edit_fields(dialog)
+                                                if len(fields)<2:
+                                                    FAILURES.append("Create group dialog exposed fewer than two editable fields")
+                                                else:
+                                                    run("adb","shell","input","tap",str(fields[0][0]),str(fields[0][1]))
+                                                    input_text("CI Chat Recovery Group")
+                                                    run("adb","shell","input","keyevent","4")
+                                                    time.sleep(.3)
+                                                    dialog=dump_ui("group-create-name-filled.xml")
+                                                    fields=find_edit_fields(dialog)
+                                                    if len(fields)<2:
+                                                        FAILURES.append("Description field disappeared after entering group name")
+                                                    else:
+                                                        run("adb","shell","input","tap",str(fields[1][0]),str(fields[1][1]))
+                                                        input_text("Isolated Chat and Groups runtime certification")
+                                                        run("adb","shell","input","keyevent","4")
+                                                        time.sleep(.4)
+                                                        dialog=dump_ui("group-create-filled.xml")
+                                                        create_btn=find_exact_control(dialog,"Create")
+                                                        if not create_btn:
+                                                            FAILURES.append("Create group dialog had no exact Create action after entering valid name and description")
+                                                        else:
+                                                            _,cx,cy=create_btn
+                                                            run("adb","shell","input","tap",str(cx),str(cy))
+                                                            deadline=time.monotonic()+15.0
+                                                            created=None
+                                                            while time.monotonic()<deadline:
+                                                                time.sleep(.5)
+                                                                records=local_group_records()
+                                                                created=next(
+                                                                    (item for item in reversed(records)
+                                                                     if item["name"].casefold()=="ci chat recovery group"),
+                                                                    None
+                                                                )
+                                                                if created:
+                                                                    break
+                                                            if not created:
+                                                                FAILURES.append("Create group was tapped but no CI group appeared in this account's local store; remote creation or local persistence failed")
+                                                            else:
+                                                                group_id=created["id"]
+                                                                restore_home_after_restart("created-ci-group-open-home")
+                                                                opened=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
+                                                                group_after=wait_for_group_conversation_ui("created-ci-group-open.xml")
+                                                                if opened.returncode!=0 or not group_after or "Group unavailable" in group_after:
+                                                                    FAILURES.append("newly created CI group could not be reopened as a real conversation; backend membership or navigation is broken")
+                                                                    group_after=""
+
+                    resolved_group_id=group_id_from_visible_title(group_after) if group_after else ""
+                    if group_after and (not resolved_group_id or resolved_group_id!=group_id):
+                        FAILURES.append("opened CI group could not be matched to the same persisted group ID; refusing to certify a different group")
+                        group_id=""
+                    if group_id:
+                        access_ok,access_detail=backend_group_access_contract(group_id)
+                        if access_ok:
+                            report.append("- PASS "+access_detail)
+                        else:
+                            FAILURES.append("dedicated CI group backend lifecycle/permissions verification failed: "+access_detail)
+                    alive, crashlog=capture_runtime_log("group-chat-process.log")
+                    screenshot("group-chat-after-open.png")
+                    report.append("- CI group process after open: "+("ALIVE" if alive else "NOT RUNNING"))
+                    if crashlog:
+                        report.append("- CI group crash-log evidence captured in group-chat-process.log")
+
+                    if not group_after or not group_id:
+                        FAILURES.append("real CI-owned group conversation could not be established; synthetic group routes and unrelated groups cannot make certification GREEN")
+                    elif find_control(group_after,["Messaging is restricted"]):
+                        FAILURES.append("dedicated CI group has messaging restricted; message-send certification cannot pass")
+                    elif not find_control(group_after,["Message...","Message composer","Edit message composer","Chat message composer area"]):
+                        FAILURES.append("dedicated CI group conversation opened without a usable message composer; visible markers: "+visible_marker_summary(group_after))
+                    else:
+                        screenshot("group-chat-inside.png")
+
+                        def marker_state(ui_xml, marker_text):
+                            try:
+                                root=ET.fromstring(ui_xml)
+                            except ET.ParseError:
+                                return False,False,False
+                            editable_nodes=[
+                                node for node in root.iter("node")
+                                if "edittext" in (node.attrib.get("class") or "").lower()
+                                or node.attrib.get("editable","false").lower()=="true"
+                            ]
+                            marker_in_editor=any(marker_text in (node.attrib.get("text") or "") for node in editable_nodes)
+                            marker_in_message=any(
+                                marker_text in (node.attrib.get("text") or "") and node not in editable_nodes
+                                for node in root.iter("node")
+                            )
+                            focused_editors=[node for node in editable_nodes if node.attrib.get("focused","false").lower()=="true"]
+                            composer_empty=bool(focused_editors) and all(not (node.attrib.get("text") or "").strip() for node in focused_editors)
+                            return marker_in_message,marker_in_editor,composer_empty
+
+                        def enter_marker(marker_text, filename):
+                            current=dump_ui(filename+"-composer.xml")
+                            active_composer=find_control(current,["Message...","Message composer","Edit message composer","Chat message composer area"])
+                            if not active_composer:
+                                FAILURES.append(filename+": usable composer control was not found")
+                                return False
+                            _,tx,ty=active_composer
+                            run("adb","shell","input","tap",str(tx),str(ty))
+                            typed=input_text(marker_text)
+                            if typed.returncode!=0:
+                                FAILURES.append(filename+": adb could not enter the marker")
+                                return False
+                            time.sleep(.4)
+                            typed_ui=dump_ui(filename+"-typed.xml")
+                            _,still_editing,_=marker_state(typed_ui,marker_text)
+                            if not still_editing:
+                                FAILURES.append(filename+": marker was not confirmed inside the editable composer before send")
+                                return False
+                            return True
+
+                        def wait_for_sent_marker(marker_text, filename):
+                            latest=""
+                            for _ in range(20):
+                                time.sleep(.5)
+                                latest=dump_ui(filename+"-result.xml")
+                                in_message,in_editor,_=marker_state(latest,marker_text)
+                                if in_message and not in_editor:
+                                    return latest
+                            return ""
+
+                        sent_markers=[]
+                        keyboard_marker="CI_GROUP_KEYBOARD_"+uuid.uuid4().hex[:5]
+                        if enter_marker(keyboard_marker,"group-keyboard-send"):
+                            run("adb","shell","input","keyevent","66")
+                            keyboard_ui=wait_for_sent_marker(keyboard_marker,"group-keyboard-send")
+                            if keyboard_ui:
+                                sent_markers.append((keyboard_marker,"keyboard Send/Enter"))
+                                report.append("- PASS keyboard Send/Enter moved unique marker from composer into a separate visible group message")
+                            else:
+                                FAILURES.append("keyboard Send/Enter did not move marker into a separate group message")
+
+                        # Exercise the trailing FYNX composer button independently.
+                        app_button_marker="CI_GROUP_BUTTON_"+uuid.uuid4().hex[:5]
+                        if group_id:
+                            restore_home_after_restart("group-app-send-reset-home")
+                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
+                            button_start_ui=wait_for_group_conversation_ui("group-app-send-reset.xml")
+                            if find_control(button_start_ui,["Message...","Message composer","Edit message composer","Chat message composer area"]):
+                                if enter_marker(app_button_marker,"group-app-send-button"):
+                                    current_ui=dump_ui("group-app-send-button-before-tap.xml")
+                                    app_send_control=find_control(current_ui,["Send message"])
+                                    if app_send_control:
+                                        _,bx,by=app_send_control
+                                        run("adb","shell","input","tap",str(bx),str(by))
+                                        button_ui=wait_for_sent_marker(app_button_marker,"group-app-send-button")
+                                        if button_ui:
+                                            sent_markers.append((app_button_marker,"FYNX composer button"))
+                                            report.append("- PASS FYNX composer button sent typed marker as separate visible group message")
+                                        else:
+                                            FAILURES.append("FYNX composer button did not move marker into separate visible group message")
+                                    else:
+                                        FAILURES.append("FYNX composer button did not expose the Send message accessibility action for non-empty text")
+                            else:
+                                FAILURES.append("FYNX composer button test could not reopen a usable CI group composer")
+
+                        for marker_text, method in sent_markers:
+                            remote_ok, remote_detail=backend_group_message_exists(group_id,marker_text)
+                            if remote_ok:
+                                report.append("- PASS "+method+" exact marker confirmed by authenticated backend message-history GET")
+                            else:
+                                FAILURES.append(method+" was visible in UI but not confirmed by authenticated backend: "+remote_detail)
+
+                        if not sent_markers:
+                            FAILURES.append("neither group send control produced a verified visible message")
+
+                        if sent_markers:
+                            restore_home_after_restart("group-chat-send-persistence-home")
+                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
+                            persisted_ui=wait_for_group_conversation_ui("group-chat-send-persistence.xml")
+                            for persisted_marker,method in sent_markers:
+                                in_message,in_editor,_=marker_state(persisted_ui,persisted_marker)
+                                if in_message and not in_editor:
+                                    report.append("- PASS "+method+" marker remained visible after force-stop/relaunch and reopening the same CI group (UI visibility only)")
+                                else:
+                                    FAILURES.append(method+" marker was not visible after force-stop/relaunch and reopening the CI group")
+                                remote_after_restart,remote_detail=backend_group_message_exists(group_id,persisted_marker)
+                                if remote_after_restart:
+                                    report.append("- PASS "+method+" exact marker remained in server-returned group history after app restart")
+                                else:
+                                    FAILURES.append(method+" marker missing from server-returned group history after restart: "+remote_detail)
+
+                        if sent_markers and group_id:
+                            certify_group_gallery_image(group_id)
+                            exercise_notification_route("fynx://group/"+group_id,"group-chat")
+
         else: FAILURES.append("authenticated Home -> "+name)
         xml=restore_home_after_restart("authenticated-home-reset") or xml
 

@@ -765,6 +765,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         permissionLoadError?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         syncMessage?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         val unsentCount = messages.count { it.fromMe && !it.delivered }
+        val retryablePendingMessages = messages.filter { failedMessage ->
+            failedMessage.fromMe && !failedMessage.delivered && (
+                if (failedMessage.attachmentUri != null || failedMessage.attachmentType in setOf("image", "video", "video_note", "audio", "document")) {
+                    canSendMedia
+                } else {
+                    canSendMessages
+                }
+            )
+        }
         if (unsentCount > 0) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -773,11 +782,19 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
-                TextButton(enabled = !sending, onClick = {
-                    if (!sending) {
+                TextButton(enabled = !sending && retryablePendingMessages.isNotEmpty(), onClick = {
+                    if (!sending && retryablePendingMessages.isNotEmpty()) {
                         sending = true
                         scope.launch {
-                            val pendingMessages = messages.filter { it.fromMe && !it.delivered }
+                            val pendingMessages = messages.filter { failedMessage ->
+                                failedMessage.fromMe && !failedMessage.delivered && (
+                                    if (failedMessage.attachmentUri != null || failedMessage.attachmentType in setOf("image", "video", "video_note", "audio", "document")) {
+                                        canSendMedia
+                                    } else {
+                                        canSendMessages
+                                    }
+                                )
+                            }
                             var failedCount = 0
                             var lastError: String? = null
                             for (failedMessage in pendingMessages) {
@@ -1138,7 +1155,20 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(if (voiceRecording) Icons.Default.Stop else Icons.Default.Mic, if (voiceRecording) "Stop recording and send" else "Record voice message", modifier = Modifier.size(23.dp), tint = Color.White)
+                            Icon(
+                                imageVector = when {
+                                    voiceRecording -> Icons.Default.Stop
+                                    text.isNotBlank() -> Icons.Default.Send
+                                    else -> Icons.Default.Mic
+                                },
+                                contentDescription = when {
+                                    voiceRecording -> "Stop recording and send"
+                                    text.isNotBlank() -> "Send message"
+                                    else -> "Record voice message"
+                                },
+                                modifier = Modifier.size(23.dp),
+                                tint = Color.White
+                            )
                         }
                     }
                 }
@@ -1177,7 +1207,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             }
         }, onMedia = { uri, type ->
-            if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = "Message not sent yet. It is saved for retry; check your connection." } } }
+            // Route dialog media through the same staging, pending-state, and retry-safe path as composer attachments.
+            sendGroupAttachment(uri, type)
         }, onStoryShare = {
             if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onSuccess { sent -> messages = messages.map { if (it.id == sent.id) FynxGroupRemoteClient.toChatMessage(sent, currentUsername, FynxBackendClient.baseUrl(context)) else it }; FynxChatStore.save(context, "group_$groupId", messages) }.onFailure { syncMessage = "Story not sent yet. Your share is saved; check your connection and retry." } } }
         }, openContentInitially = showPollsDirectly)
