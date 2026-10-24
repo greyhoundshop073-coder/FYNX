@@ -11,6 +11,7 @@ const protection = read('./marketplaceProtection.js');
 const settlement = read('./marketplaceSettlement.js');
 const worker = read('./marketplaceSettlementWorker.js');
 const panel = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt');
+const paymentUi = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt');
 const lifecycle = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt');
 const seller = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt');
 
@@ -36,6 +37,7 @@ const checks = [
   ['payout worker keeps operation idempotent', worker.includes("status !== 'PENDING'") && worker.includes("FOR UPDATE")],
   ['buyer UI performs server quote before multi-order creation', panel.includes("requestMultiQuote") && panel.includes("createMultiOrder")],
   ['buyer UI verifies the payment before treating checkout as paid', panel.includes("initializeMarketplaceCheckoutGroupPayment") && panel.includes("verifyMarketplaceCheckoutGroupPayment") && panel.includes("onPaid()")],
+  ['unconfigured Paystack explains that no charge started and preserves cart retry', paymentUi.includes('marketplace payments are not configured yet') && paymentUi.includes('No payment was started, and your cart is unchanged') && panel.includes('marketplacePaymentFailureMessage(it)') && panel.includes('onPaid()')],
   ['buyer lifecycle remains server-authoritative', lifecycle.includes("FynxRemoteSocialClient") && !/UPDATE\s+marketplace_orders|INSERT\s+INTO\s+marketplace_orders/i.test(lifecycle)],
   ['seller lifecycle remains server-authoritative', seller.includes("FynxBackendClient") && !/UPDATE\s+marketplace_orders|INSERT\s+INTO\s+marketplace_orders/i.test(seller)]
 ];
