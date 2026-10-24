@@ -94,15 +94,19 @@ fun FynxVisibleUpdatesPanel(
 
     fun refreshStatuses() {
         scope.launch(Dispatchers.IO) {
-            val latest = FynxStatusClient.list(context).getOrDefault(emptyList())
+            val latest = FynxStatusClient.list(context).getOrNull()
             val following = FynxProfileRemoteClient.following(context)
                 .getOrDefault(emptyList())
                 .map { it.username.removePrefix("@").trim().lowercase() }
                 .toSet()
             withContext(Dispatchers.Main) {
                 followingUsernames = following
-                statuses = latest
-                resolveOwnerPhotos(latest)
+                // A timeout or temporary offline response must not erase a previously
+                // loaded Status row; the next lifecycle refresh can retry normally.
+                if (latest != null) {
+                    statuses = latest
+                    resolveOwnerPhotos(latest)
+                }
             }
         }
     }
@@ -124,6 +128,10 @@ fun FynxVisibleUpdatesPanel(
         .mapNotNull { (_, list) -> list.maxByOrNull { it.createdAtMillis }?.let { latest -> latest to list.size } }
     val own = grouped.firstOrNull {
         it.first.ownerUsername.removePrefix("@").trim().equals(current, ignoreCase = true)
+    }
+    val ownHasUnseen = activeStatuses.any {
+        it.ownerUsername.removePrefix("@").trim().equals(current, ignoreCase = true) &&
+            it.id !in viewedStatusIds
     }
 
     Column(
@@ -153,7 +161,7 @@ fun FynxVisibleUpdatesPanel(
                             own?.first,
                             currentUsername.ifBlank { "You" },
                             "Your status",
-                            false,
+                            ownHasUnseen,
                             if (own != null) { { onOpenStatusOwner(current) } } else { onCreateStatus },
                             own?.second ?: 0,
                             ownerPhotoIds[current],
@@ -227,7 +235,7 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
                 Box(
                     Modifier.size(70.dp)
                         .background(if (status?.type == FynxStatusType.TEXT) Color(status.textStyle.backgroundColor) else FynxDesign.SurfaceRaised, CircleShape)
-                        .border(3.dp, if (active) Brush.sweepGradient(listOf(Color(0xFFFF3D8D), Color(0xFFFF9F1C), Color(0xFFB44CFF), Color(0xFF22C55E), Color(0xFF20C8E8), Color(0xFFFF3D8D))) else Brush.sweepGradient(listOf(FynxDesign.Outline, FynxDesign.Outline)), CircleShape)
+                        .border(3.dp, if (active) fynxStatusRingBrush() else Brush.sweepGradient(listOf(FynxDesign.Outline, FynxDesign.Outline)), CircleShape)
                         .clip(CircleShape),
                     contentAlignment = Alignment.Center
                 ) {

@@ -129,6 +129,13 @@ fun FynxStatusTimelinePanel(
     }
 
     val visibleStatuses = statuses.filterNot(FynxStatus::isExpired)
+    val viewedStatusIds = FynxStatusClient.viewedStatusIds(context)
+    fun ownerHasUnseen(ownerUsername: String): Boolean {
+        val normalized = normalizedOwner(ownerUsername)
+        return visibleStatuses.any {
+            normalizedOwner(it.ownerUsername) == normalized && it.id !in viewedStatusIds
+        }
+    }
     val latestByOwner = visibleStatuses.groupBy { normalizedOwner(it.ownerUsername) }
         .mapNotNull { (_, values) -> values.maxByOrNull { it.createdAtMillis } }
         .sortedByDescending { it.createdAtMillis }
@@ -177,7 +184,8 @@ fun FynxStatusTimelinePanel(
                     status = myStatus,
                     isMe = true,
                     onClick = { if (myStatus != null) selected = myStatus else onCreateClick() },
-                    showAdd = true
+                    showAdd = true,
+                    unseen = myStatus != null && ownerHasUnseen(username)
                 )
             }
             item {
@@ -201,7 +209,8 @@ fun FynxStatusTimelinePanel(
                         ownerDisplayName = status.ownerDisplayName.ifBlank { status.ownerUsername },
                         status = status,
                         isMe = false,
-                        onClick = { selected = status }
+                        onClick = { selected = status },
+                        unseen = ownerHasUnseen(status.ownerUsername)
                     )
                     HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
                 }
@@ -244,7 +253,8 @@ private fun StatusAvatar(
     ownerDisplayName: String,
     showAdd: Boolean = false,
     status: FynxStatus? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    unseen: Boolean = true
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val cachedPhotoId = remember(ownerUsername) {
@@ -283,7 +293,17 @@ private fun StatusAvatar(
     // empty; the shared resolver can hydrate, invalidate, and clear that avatar.
     val avatarOwnerUsername = status?.ownerUsername ?: ownerUsername
     Box(modifier.size(58.dp)) {
-        Box(Modifier.fillMaxSize().border(2.dp, androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color(0xFFFF3D8D), Color(0xFFFF9F1C), Color(0xFFB44CFF), Color(0xFF22C55E), Color(0xFF20C8E8), Color(0xFFFF3D8D))), CircleShape).padding(3.dp)) {
+        Box(
+            Modifier.fillMaxSize()
+                .border(
+                    3.dp,
+                    if (unseen) fynxStatusRingBrush() else androidx.compose.ui.graphics.Brush.sweepGradient(
+                        listOf(FynxDesign.Outline, FynxDesign.Outline)
+                    ),
+                    CircleShape
+                )
+                .padding(3.dp)
+        ) {
             FynxRemoteProfileAvatar(
                 avatarId,
                 ownerDisplayName,
@@ -348,10 +368,11 @@ private fun StatusHomeRow(
     status: FynxStatus?,
     isMe: Boolean,
     onClick: () -> Unit,
-    showAdd: Boolean = false
+    showAdd: Boolean = false,
+    unseen: Boolean = false
 ) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-        StatusAvatar(ownerUsername, ownerDisplayName, showAdd, status)
+        StatusAvatar(ownerUsername, ownerDisplayName, showAdd, status, unseen = unseen)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(if (isMe) "My status" else ownerDisplayName, fontWeight = FontWeight.SemiBold, maxLines = 1)

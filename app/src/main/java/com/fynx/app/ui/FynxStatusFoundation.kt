@@ -2,6 +2,8 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -41,6 +43,15 @@ const val FYNX_STATUS_EXPIRY_MS = 24L * 60L * 60L * 1000L
 const val FYNX_STATUS_MAX_TEXT_LENGTH = 700
 const val FYNX_STATUS_MAX_VIDEO_DURATION_MS = 90_000L
 const val FYNX_STATUS_MAX_VOICE_DURATION_MS = 30_000L
+
+/** Shared pink/green ring used by Status and Stories across Home and the Status hub. */
+fun fynxStatusRingBrush(): Brush = Brush.sweepGradient(
+    listOf(
+        Color(0xFFFF3D8D),
+        Color(0xFF22C55E),
+        Color(0xFFFF3D8D)
+    )
+)
 
 object FynxStatusStore {
     private const val PREFS = "fynx_status_foundation"
