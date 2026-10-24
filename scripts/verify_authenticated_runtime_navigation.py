@@ -599,20 +599,25 @@ def backend_prepare_isolated_private_chat_privacy(peer_username:str,peer_passwor
         return False,"isolated test privacy setup failed:"+status+" "+type(error).__name__
 
 def restore_runtime_private_chat_privacy()->list[str]:
-    """Restore only privacy settings changed by this isolated private-chat test."""
+    """Restore only privacy settings changed by this isolated private-chat test; retain failures for atexit retry."""
     failures=[]
     pending=list(reversed(RUNTIME_PRIVACY_RESTORES))
-    RUNTIME_PRIVACY_RESTORES.clear()
+    remaining=[]
     for username,password,expected_base,old_visibility in pending:
         try:
             base,token=backend_login_token(username,password)
             if base!=expected_base or not _is_isolated_runtime_backend(base):
                 failures.append("private Chat test privacy restore refused because the isolated testing host changed")
+                remaining.append((username,password,expected_base,old_visibility))
                 continue
             _runtime_privacy_request(base,token,"PATCH",{"settings":{"messages_visibility":old_visibility}})
         except Exception as error:
             status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
             failures.append("private Chat test could not restore a prior messages visibility setting:"+status+" "+type(error).__name__)
+            remaining.append((username,password,expected_base,old_visibility))
+    # Keep unsuccessful restores in original order so the explicit final cleanup and
+    # atexit fallback can retry rather than silently abandoning changed test settings.
+    RUNTIME_PRIVACY_RESTORES[:] = list(reversed(remaining))
     return failures
 
 atexit.register(restore_runtime_private_chat_privacy)

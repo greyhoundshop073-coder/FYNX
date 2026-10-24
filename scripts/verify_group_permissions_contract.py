@@ -44,7 +44,7 @@ checks.update({
     "member dialog adds through the server membership endpoint": "FynxGroupRemoteClient.addMember(context, group.id, clean)" in active,
     "member dialog removes through the server-authorized DELETE endpoint": "FynxGroupRemoteClient.removeMember(context, group.id, member.username)" in active and "app.delete('/api/groups/:groupId/members/:username'" in membership_routes,
     "member role changes use dedicated server endpoints": "FynxGroupRemoteClient.promoteMember(context, group.id, member.username)" in active and "FynxGroupRemoteClient.demoteMember(context, group.id, member.username)" in active,
-    "only admins can change member roles in UI and server": "if (isAdmin && !isOwner && !isSelf && member.role != FynxGroupRole.ADMIN && serverConnected)" in active and "if(!isAdmin(actor?.role))" in membership_routes,
+    "only admins can change member roles in UI and server": "if (isAdmin && !isOwner && !isSelf && member.role != FynxGroupRole.ADMIN && serverConnected)" in active and membership_routes.count("if (!isAdmin(actor?.role))") >= 3,
     "member dialog refreshes authoritative server roster": "FynxGroupRemoteClient.loadMembers(context, group.id)" in active and "suspend fun loadMembers(context:Context,groupId:String)" in group_client,
     "member dialog does not overwrite member changes by full group sync": 'if (showMembers) FynxGroupMembersDialog' in active and 'currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated)' not in active,
 })

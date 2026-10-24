@@ -1421,7 +1421,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                         }
                         if (canManage && !isOwner) {
                             TextButton(
-                                enabled = !refreshing && busyMember == null && serverConnected,
+                                enabled = !refreshing && busyMember == null,
                                 onClick = {
                                     val action = if (blocked) FynxGroupMemberAction.UNBLOCK else FynxGroupMemberAction.BLOCK
                                     val nextState = FynxGroupsBatch3.applyAction(management.value.state, member.username, action)
