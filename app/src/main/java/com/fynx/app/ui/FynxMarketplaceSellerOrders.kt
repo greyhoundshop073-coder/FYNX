@@ -500,6 +500,15 @@ fun FynxMarketplaceDriverAssignmentsDialog(context: Context, onDismiss: () -> Un
     var busyOrderId by remember { mutableStateOf<String?>(null) }
     var recipientNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var deliveryNotes by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var deliveryPhotoUris by remember { mutableStateOf<Map<String, Uri>>(emptyMap()) }
+    var deliveryPhotoPickerOrderId by remember { mutableStateOf<String?>(null) }
+    val deliveryPhotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+        val orderId = deliveryPhotoPickerOrderId
+        if (uri != null && orderId != null) {
+            deliveryPhotoUris = deliveryPhotoUris + (orderId to uri)
+        }
+        deliveryPhotoPickerOrderId = null
+    }
     val scope = rememberCoroutineScope()
 
     fun loadAssignments() {
@@ -569,19 +578,57 @@ fun FynxMarketplaceDriverAssignmentsDialog(context: Context, onDismiss: () -> Un
                                             minLines = 2,
                                             modifier = Modifier.fillMaxWidth()
                                         )
+                                        OutlinedButton(
+                                            enabled = !loading && busyOrderId == null,
+                                            onClick = {
+                                                deliveryPhotoPickerOrderId = assignment.orderId
+                                                deliveryPhotoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(if (deliveryPhotoUris.containsKey(assignment.orderId)) "Change delivery photo (optional)" else "Add delivery photo (optional)")
+                                        }
+                                        if (deliveryPhotoUris.containsKey(assignment.orderId)) {
+                                            Text("A delivery photo will upload securely when you record delivery.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            TextButton(
+                                                enabled = busyOrderId == null,
+                                                onClick = { deliveryPhotoUris = deliveryPhotoUris - assignment.orderId }
+                                            ) { Text("Remove photo") }
+                                        }
                                         Button(
-                                            enabled = !loading && busyOrderId == null && !recipientNames[assignment.orderId].isNullOrBlank() && !deliveryNotes[assignment.orderId].isNullOrBlank(),
+                                            enabled = !loading && busyOrderId == null && !recipientNames[assignment.orderId].isNullOrBlank() && (!deliveryNotes[assignment.orderId].isNullOrBlank() || deliveryPhotoUris.containsKey(assignment.orderId)),
                                             onClick = {
                                                 busyOrderId = assignment.orderId
                                                 error = null
                                                 scope.launch {
+                                                    var photoReference = ""
+                                                    val photoUri = deliveryPhotoUris[assignment.orderId]
+                                                    if (photoUri != null) {
+                                                        val uploaded = FynxProductionMessaging.uploadMedia(context, photoUri)
+                                                        if (uploaded.isFailure) {
+                                                            error = uploaded.exceptionOrNull()?.message ?: "Delivery photo upload failed."
+                                                            busyOrderId = null
+                                                            return@launch
+                                                        }
+                                                        val media = uploaded.getOrThrow()
+                                                        val allowedImageTypes = setOf("image/jpeg", "image/png", "image/webp", "image/gif")
+                                                        if (media.mimeType.trim().lowercase(Locale.ROOT) !in allowedImageTypes) {
+                                                            error = "Choose a JPEG, PNG, WebP or GIF delivery photo."
+                                                            busyOrderId = null
+                                                            return@launch
+                                                        }
+                                                        photoReference = media.id
+                                                    }
                                                     FynxRemoteSocialClient.recordMarketplaceDriverDelivery(
                                                         context,
                                                         assignment.orderId,
                                                         recipientNames[assignment.orderId].orEmpty(),
-                                                        deliveryNotes[assignment.orderId].orEmpty()
-                                                    ).onSuccess { refreshKey++ }
-                                                        .onFailure { error = it.message ?: "Delivery evidence could not be recorded." }
+                                                        deliveryNotes[assignment.orderId].orEmpty(),
+                                                        photoReference
+                                                    ).onSuccess {
+                                                        deliveryPhotoUris = deliveryPhotoUris - assignment.orderId
+                                                        refreshKey++
+                                                    }.onFailure { error = it.message ?: "Delivery evidence could not be recorded." }
                                                     busyOrderId = null
                                                 }
                                             }
