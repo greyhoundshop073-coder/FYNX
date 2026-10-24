@@ -202,7 +202,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     val provisionalChat = ChatPreview(
                         name = normalized,
                         username = "@$normalized",
-                        lastMessage = "Start a conversation",
+                        lastMessage = "",
                         time = "Now"
                     )
                     openGroup = null
@@ -229,12 +229,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         ChatPreview(
                             name = user.displayName.ifBlank { normalized },
                             username = user.username.removePrefix("@").let { "@$it" },
-                            lastMessage = "Start a conversation",
+                            lastMessage = "",
                             time = "Now",
                             avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
                         )
                     } ?: selfUsername?.takeIf { isSelfTarget }?.let {
-                        ChatPreview(name = it, username = "@$it", lastMessage = "Start a conversation", time = "Now")
+                        ChatPreview(name = it, username = "@$it", lastMessage = "", time = "Now")
                     }
                     if (resolvedChat != null) {
                         openChat = resolvedChat
@@ -342,7 +342,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             val local = withContext(Dispatchers.IO) {
                 FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) }
             }
-            val chat = local ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX user" }, normalized, "Start a conversation", "Now")
+            val chat = local ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX user" }, normalized, "", "Now")
             withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, chat) }
             openChat = chat
             profileUser = null
@@ -614,9 +614,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         ) {
                             mainNav.forEach { item ->
                                 NavigationBarItem(
-                                    modifier = Modifier.height(64.dp).semantics(mergeDescendants = true) {
-                                        contentDescription = item.label
-                                    },
+                                    // Preserve the Chat tab's native selection/click semantics.
+                                    // Merging its subtree made accessibility clients see the label
+                                    // without the NavigationBarItem action.
+                                    modifier = Modifier.height(64.dp).then(
+                                        if (item.key == "Chats") Modifier
+                                        else Modifier.semantics(mergeDescendants = true) {
+                                            contentDescription = item.label
+                                        }
+                                    ),
                                     selected = selected == item.key,
                                     onClick = { notificationPreferencesOnly = false; selected = item.key },
                                     icon = {
@@ -679,7 +685,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     val normalized = username.removePrefix("@").trim()
                     if (normalized.isNotBlank()) {
                         // Render immediately; do not parse persisted chat history on the UI thread.
-                        val initialChat = ChatPreview(normalized, "@" + normalized, "Start a conversation", "Now")
+                        val initialChat = ChatPreview(normalized, "@" + normalized, "", "Now")
                         openChatMarketplaceListingId = null
                         openChat = initialChat
                         scope.launch {
@@ -732,7 +738,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             ChatPreview(
                                 name = user.displayName.ifBlank { normalized },
                                 username = "@${user.username.removePrefix("@")}",
-                                lastMessage = "Start a conversation",
+                                lastMessage = "",
                                 time = "Now",
                                 avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
                             )
@@ -771,23 +777,45 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         is FynxDeepLinkDestination.Chat -> {
                             val normalized = destination.username.removePrefix("@").trim()
                             if (normalized.isNotBlank()) {
+                                // Show the destination immediately; remote lookup must not leave a
+                                // notification tap stranded on the inbox while the network waits.
+                                val provisional = ChatPreview(
+                                    name = normalized,
+                                    username = "@$normalized",
+                                    lastMessage = "",
+                                    time = "Now"
+                                )
+                                openGroup = null
+                                profileUser = null
+                                openChatMarketplaceListingId = destination.marketplaceListingId
+                                openChat = provisional
                                 scope.launch {
                                     val local = withContext(Dispatchers.IO) {
                                         FynxChatStore.loadPreviews(context).firstOrNull {
                                             it.username.removePrefix("@").equals(normalized, true)
                                         }
                                     }
-                                    val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
+                                    val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized)
+                                        .getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                                    else null
                                     val resolvedChat = local ?: remote?.let { user ->
-                                        ChatPreview(name = user.displayName.ifBlank { normalized }, username = "@" + user.username.removePrefix("@"), lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.let { "/api/media/" + it })
+                                        ChatPreview(
+                                            name = user.displayName.ifBlank { normalized },
+                                            username = "@" + user.username.removePrefix("@"),
+                                            lastMessage = "",
+                                            time = "Now",
+                                            avatarUri = user.profilePhotoMediaId?.let { "/api/media/" + it }
+                                        )
                                     }
-                                    openChat = resolvedChat
-                                    if (resolvedChat != null) withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, resolvedChat) }
+                                    if (resolvedChat != null) {
+                                        withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, resolvedChat) }
+                                        if (openChat?.username.equals(provisional.username, true)) openChat = resolvedChat
+                                    }
                                 }
                             }
                         }
                         is FynxDeepLinkDestination.Call -> { callTarget = destination.username; callVideo = destination.video; selected = "Calls" }
-                        is FynxDeepLinkDestination.Group -> openGroup = destination.id
+                        is FynxDeepLinkDestination.Group -> { openChat = null; profileUser = null; openChatMarketplaceListingId = null; openGroup = destination.id }
                         is FynxDeepLinkDestination.Post -> { postOpenId = destination.postId; postOpenCommentId = destination.commentId; selected = "Home" }
                         is FynxDeepLinkDestination.Status -> { statusOpenId = destination.statusId; statusOpenOwner = null; selected = "Stories" }
                         is FynxDeepLinkDestination.Marketplace -> { marketplaceListingId = destination.listingId; selected = "Marketplace" }
