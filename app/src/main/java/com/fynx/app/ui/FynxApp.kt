@@ -625,7 +625,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 // Do not add a second global side gutter here: it was shrinking every
                 // screen and making phone controls/composers unnecessarily cramped.
                 .padding(vertical = 6.dp)
-                .then(if (selected == "Home") Modifier else Modifier.navigationBarsPadding())
+                .then(if (selected == "Home" || selected == "Stories") Modifier else Modifier.navigationBarsPadding())
             Box(screenContentModifier) {
                 AnimatedContent(
                     targetState = selected,
