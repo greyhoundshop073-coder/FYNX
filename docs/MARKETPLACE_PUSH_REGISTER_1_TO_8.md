@@ -193,3 +193,16 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 
 **Verification:** Pending CI for this exact head. The Android integration build remains blocked by the untouched `FynxApp.kt:394,408` compile errors and the pre-Gradle Home avatar touch-target gate. No files from Home, Chat/Groups, Status, Profile, or Avatar were edited.
 
+
+
+### Push 22 — Fail closed for ambiguous shared-reference refund webhooks
+
+**Root cause:** Refund webhook recovery counted only `PENDING` and `FAILED` operations for a checkout-group payment reference. If one child refund had already succeeded and another child refund was still pending, a replay without an exact provider refund identity could hide the succeeded operation and be incorrectly assigned to the other child order.
+
+**Change:** The fallback lookup now counts all refund operations sharing the resolved payment reference before selecting a child; zero or multiple candidates fail closed. Exact provider refund identities remain usable only when they identify one eligible operation. A `SUCCEEDED` refund is treated as terminal: duplicate `refund.processed` events are no-ops, and stale pending/failed events cannot rewrite its protection or escrow state.
+
+**Regression guard:** The refund/dispute verifier now asserts the fallback candidate query does not pre-filter completed refunds and that terminal refund events are handled monotonically.
+
+**Verification:** CI for the pushed exact head must confirm Backend CI is green. The known Home interaction and Chat/Groups Android blockers remain outside this workstream; this PR stays unmerged until the required integration checks are green.
+
+**Register numbering note:** The merged discovery fix PR #316 also used the label “Push 43”, while PR #348 labels its payment work “Pushes 43–61”. Those historical labels overlap; reconcile the global numbering before treating them as one continuous sequence.
