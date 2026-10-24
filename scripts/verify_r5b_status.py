@@ -220,8 +220,9 @@ require('Marketplace product detail share button reaches the real listing share 
 
 status_screen_insets = app[app.index('val screenContentModifier'):app.index('Box(screenContentModifier)')] if 'val screenContentModifier' in app and 'Box(screenContentModifier)' in app else ''
 require(
-    'Status immersive surface reaches behind system navigation inset',
+    'Status immersive surface reaches behind system navigation inset without outer padding',
     '.then(if (selected == "Home" || selected == "Stories") Modifier else Modifier.navigationBarsPadding())' in status_screen_insets
+    and '.padding(vertical = if (selected == "Stories") 0.dp else 6.dp)' in status_screen_insets
 )
 
 require('status editor resizes above the keyboard using IME insets','BoxWithConstraints(Modifier.fillMaxSize().imePadding().background(Color(background))' in mature)
