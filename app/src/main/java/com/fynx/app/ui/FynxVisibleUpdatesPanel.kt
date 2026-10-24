@@ -114,8 +114,7 @@ fun FynxVisibleUpdatesPanel(
     LaunchedEffect(currentUsername, homeRefreshKey) { refreshStatuses() }
 
     val current = currentUsername.removePrefix("@").trim().lowercase()
-    val activeStatuses = statuses
-        .filter { it.expiresAtMillis <= 0L || it.expiresAtMillis > System.currentTimeMillis() }
+    val activeStatuses = statuses.filterNot(FynxStatus::isExpired)
     val viewedStatusIds = FynxStatusClient.viewedStatusIds(context)
     val unseenOwners = activeStatuses
         .groupBy { it.ownerUsername.removePrefix("@").trim().lowercase() }
