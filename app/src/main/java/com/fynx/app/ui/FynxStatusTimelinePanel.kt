@@ -73,6 +73,17 @@ fun FynxStatusTimelinePanel(
     val scope = rememberCoroutineScope()
     fun normalizedOwner(value: String): String = value.removePrefix("@").trim().lowercase()
 
+    // A Status bubble represents an owner's stack, not only their newest update.
+    // Start with the earliest unseen update so opening a bubble doesn't skip older
+    // unseen content simply because the row itself is keyed by the latest update.
+    fun firstUnseenStatusForOwner(ownerUsername: String, fallback: FynxStatus): FynxStatus {
+        val viewedIds = FynxStatusClient.viewedStatusIds(context)
+        val ownerStatuses = statuses.filterNot(FynxStatus::isExpired)
+            .filter { normalizedOwner(it.ownerUsername) == normalizedOwner(ownerUsername) }
+            .sortedBy { it.createdAtMillis }
+        return ownerStatuses.firstOrNull { it.id !in viewedIds } ?: ownerStatuses.lastOrNull() ?: fallback
+    }
+
     LaunchedEffect(username) {
         if (username.isNotBlank()) {
             FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
@@ -107,7 +118,10 @@ fun FynxStatusTimelinePanel(
         val targetStatus = openStatusId?.trim()?.takeIf { it.isNotBlank() }?.let { id ->
             statuses.firstOrNull { it.id == id && !it.isExpired() }
         } ?: openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }?.let { target ->
-            statuses.filterNot(FynxStatus::isExpired).filter { normalizedOwner(it.ownerUsername) == normalizedOwner(target) }.maxByOrNull { it.createdAtMillis }
+            statuses.filterNot(FynxStatus::isExpired)
+                .filter { normalizedOwner(it.ownerUsername) == normalizedOwner(target) }
+                .maxByOrNull { it.createdAtMillis }
+                ?.let { firstUnseenStatusForOwner(target, it) }
         }
         if (targetStatus != null) {
             selected = targetStatus
@@ -183,7 +197,7 @@ fun FynxStatusTimelinePanel(
                     ownerDisplayName = viewerDisplayName,
                     status = myStatus,
                     isMe = true,
-                    onClick = { if (myStatus != null) selected = myStatus else onCreateClick() },
+                    onClick = { if (myStatus != null) selected = firstUnseenStatusForOwner(username, myStatus) else onCreateClick() },
                     showAdd = true,
                     unseen = myStatus != null && ownerHasUnseen(username),
                     onAddClick = onCreateClick
@@ -210,7 +224,7 @@ fun FynxStatusTimelinePanel(
                         ownerDisplayName = status.ownerDisplayName.ifBlank { status.ownerUsername },
                         status = status,
                         isMe = false,
-                        onClick = { selected = status },
+                        onClick = { selected = firstUnseenStatusForOwner(status.ownerUsername, status) },
                         unseen = ownerHasUnseen(status.ownerUsername)
                     )
                     HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
