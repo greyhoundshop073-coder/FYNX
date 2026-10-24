@@ -285,3 +285,14 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 **Regression guard:** `backend/verify-marketplace-reconciliation.mjs` verifies the specific reason filter, eligibility locks/guards, refund predicate and guarded `BLOCKED → PENDING` transition.
 
 **Verification:** Exact-head Backend CI is queued for PR #348. PR #347 Android Build remains blocked by the unrelated Home interactions gate; no files outside Marketplace scope were changed. No live payout, deployment, or device test is claimed.
+
+
+### Push 30 — Validate delivery-proof photos before recording them
+
+**Root cause:** The assigned FYNX driver delivery endpoint accepted any string as `photoReference` and persisted it as `PHOTO_REFERENCE` evidence without confirming that the reference was a real uploaded image owned by that driver. Because order participants can retrieve evidence media by reference, a forged or unrelated media ID could be attached to a delivery record.
+
+**Change:** Delivery photo references must now be numeric uploaded-media IDs. After confirming the signed-in user is the assigned, currently approved FYNX driver and the order is eligible for delivery confirmation, the backend verifies the media row belongs to that driver and has an allowed image MIME type (JPEG, PNG, WebP, or GIF). Only the canonical media ID is stored. Invalid, missing, foreign-owned, or non-image media is rejected before the delivery timestamp/evidence is written. Delivery notes without a photo remain supported.
+
+**Regression guard:** `backend/verify-marketplace-fulfillment.mjs` asserts numeric ID validation, owner-scoped media lookup, allowed image MIME checking, and canonical photo evidence insertion.
+
+**Verification:** Exact-head Backend CI is required. No deployment or device test is claimed.
