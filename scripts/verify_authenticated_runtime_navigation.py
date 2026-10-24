@@ -14,7 +14,7 @@ USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
-RUNTIME_PRIVACY_RESTORES=[]
+RUNTIME_FOLLOW_RESTORES=[]
 LOGIN_MODE="server credential login"
 
 def run(*args:str, timeout:int=30):
@@ -571,56 +571,90 @@ def _runtime_privacy_request(base:str,token:str,method:str,payload:dict|None=Non
         raw=response.read().decode("utf-8","replace")
     return json.loads(raw) if raw.strip() else {}
 
-def backend_prepare_isolated_private_chat_privacy(peer_username:str,peer_password:str)->tuple[bool,str]:
-    """Temporarily allow the primary and run-scoped peer to message only on the isolated test backend."""
+def _runtime_social_request(base:str,token:str,method:str,path:str)->dict:
+    headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-store"}
+    data=b"{}" if method=="POST" else None
+    if data is not None:
+        headers["Content-Type"]="application/json"
+    request=urllib.request.Request(base+path,data=data,headers=headers,method=method)
+    with urllib.request.urlopen(request,timeout=20) as response:
+        raw=response.read().decode("utf-8","replace")
+    return json.loads(raw) if raw.strip() else {}
+
+def _following_names(base:str,token:str,target_username:str)->tuple[bool,set[str]]:
+    payload=_runtime_social_request(base,token,"GET","/api/social/me/following")
+    users=payload.get("users") if isinstance(payload,dict) else None
+    if not isinstance(users,list):
+        raise ValueError("following endpoint did not return a users list")
+    names={str(item.get("username") or "").removeprefix("@").strip().casefold()
+           for item in users if isinstance(item,dict)}
+    target=target_username.removeprefix("@").strip().casefold()
+    if target not in names and len(users)>=100:
+        raise ValueError("following list reached its 100-user limit; refusing to guess whether a prior follow exists")
+    return target in names,names
+
+def backend_prepare_isolated_private_chat_relationship(peer_username:str,peer_password:str)->tuple[bool,str]:
+    """Establish reciprocal follows for the dedicated test pair without weakening either account's privacy setting."""
     if not USERNAME or not PASSWORD or not peer_username or not peer_password:
         return False,"primary and dedicated peer credentials are required"
     try:
         base_primary,token_primary=backend_login_token(USERNAME,PASSWORD)
         base_peer,token_peer=backend_login_token(peer_username,peer_password)
         if base_primary!=base_peer or not _is_isolated_runtime_backend(base_primary):
-            return False,"temporary message privacy change refused: host is not the isolated Railway testing service"
-        for username,password,token in (
-            (USERNAME,PASSWORD,token_primary),
-            (peer_username,peer_password,token_peer),
-        ):
-            current=_runtime_privacy_request(base_primary,token,"GET")
-            settings=current.get("settings") if isinstance(current,dict) else {}
-            old=str((settings or {}).get("messages_visibility") or "My friends")
-            if old not in {"Everyone","My friends","Nobody"}:
-                return False,"backend returned an unrecognized messages visibility value"
-            if old!="Everyone":
-                # Record cleanup before PATCH so a lost response cannot strand a changed setting.
-                RUNTIME_PRIVACY_RESTORES.append((username,password,base_primary,old))
-                _runtime_privacy_request(base_primary,token,"PATCH",{"settings":{"messages_visibility":"Everyone"}})
-        return True,"temporary messages visibility enabled for the CI account and run-scoped peer on isolated testing backend"
+            return False,"test relationship setup refused: host is not the isolated Railway testing service"
+        primary_name=USERNAME.removeprefix("@").strip()
+        peer_name=peer_username.removeprefix("@").strip()
+        if primary_name.casefold()==peer_name.casefold():
+            return False,"primary account and dedicated peer must be different accounts"
+        for token in (token_primary,token_peer):
+            privacy=_runtime_privacy_request(base_primary,token,"GET")
+            settings=privacy.get("settings") if isinstance(privacy,dict) else {}
+            visibility=str((settings or {}).get("messages_visibility") or "My friends")
+            if visibility not in {"Everyone","My friends","Nobody"}:
+                return False,"backend returned an unrecognized messaging visibility setting"
+            if visibility=="Nobody":
+                return False,"private Chat E2E is correctly blocked by a test account set to Nobody; privacy was not changed"
+        primary_follows_peer,_=_following_names(base_primary,token_primary,peer_name)
+        peer_follows_primary,_=_following_names(base_peer,token_peer,primary_name)
+        if not primary_follows_peer:
+            # Record cleanup before POST so a lost HTTP response does not leak a test follow.
+            RUNTIME_FOLLOW_RESTORES.append((USERNAME,PASSWORD,base_primary,peer_name))
+            _runtime_social_request(base_primary,token_primary,"POST","/api/social/follow/"+urllib.parse.quote(peer_name,safe=""))
+        if not peer_follows_primary:
+            RUNTIME_FOLLOW_RESTORES.append((peer_username,peer_password,base_peer,primary_name))
+            _runtime_social_request(base_peer,token_peer,"POST","/api/social/follow/"+urllib.parse.quote(primary_name,safe=""))
+        # Confirm both directions on the server, rather than assuming POST responses imply mutual follow state.
+        primary_after,_=_following_names(base_primary,token_primary,peer_name)
+        peer_after,_=_following_names(base_peer,token_peer,primary_name)
+        if not primary_after or not peer_after:
+            return False,"server did not confirm the test pair's reciprocal follow relationship"
+        return True,"reciprocal follow established for the isolated CI account and dedicated peer; messaging privacy settings were left unchanged"
     except Exception as error:
         status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
-        return False,"isolated test privacy setup failed:"+status+" "+type(error).__name__
+        return False,"isolated private-chat relationship setup failed:"+status+" "+type(error).__name__
 
-def restore_runtime_private_chat_privacy()->list[str]:
-    """Restore only privacy settings changed by this isolated private-chat test; retain failures for atexit retry."""
+def restore_runtime_private_chat_relationships()->list[str]:
+    """Remove only reciprocal follow edges created by this isolated private-chat test."""
     failures=[]
-    pending=list(reversed(RUNTIME_PRIVACY_RESTORES))
+    pending=list(reversed(RUNTIME_FOLLOW_RESTORES))
     remaining=[]
-    for username,password,expected_base,old_visibility in pending:
+    for follower_username,password,expected_base,target_username in pending:
         try:
-            base,token=backend_login_token(username,password)
+            base,token=backend_login_token(follower_username,password)
             if base!=expected_base or not _is_isolated_runtime_backend(base):
-                failures.append("private Chat test privacy restore refused because the isolated testing host changed")
-                remaining.append((username,password,expected_base,old_visibility))
+                failures.append("private Chat test follow cleanup refused because the isolated testing host changed")
+                remaining.append((follower_username,password,expected_base,target_username))
                 continue
-            _runtime_privacy_request(base,token,"PATCH",{"settings":{"messages_visibility":old_visibility}})
+            _runtime_social_request(base,token,"DELETE","/api/social/follow/"+urllib.parse.quote(target_username,safe=""))
         except Exception as error:
             status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
-            failures.append("private Chat test could not restore a prior messages visibility setting:"+status+" "+type(error).__name__)
-            remaining.append((username,password,expected_base,old_visibility))
-    # Keep unsuccessful restores in original order so the explicit final cleanup and
-    # atexit fallback can retry rather than silently abandoning changed test settings.
-    RUNTIME_PRIVACY_RESTORES[:] = list(reversed(remaining))
+            failures.append("private Chat test could not clean up a test-created follow:"+status+" "+type(error).__name__)
+            remaining.append((follower_username,password,expected_base,target_username))
+    RUNTIME_FOLLOW_RESTORES[:] = list(reversed(remaining))
     return failures
 
-atexit.register(restore_runtime_private_chat_privacy)
+atexit.register(restore_runtime_private_chat_relationships)
+
 
 def backend_private_message_exists(peer_username:str,marker_text:str,expected_sender:str)->tuple[bool,str]:
     """Check exact private-message text and sender through server history, not local cache."""
@@ -1676,11 +1710,11 @@ if not FAILURES:
                     if not normalized_self or normalized_self==normalized_peer:
                         FAILURES.append("private Chat E2E peer must be configured and different from the primary E2E account")
                     else:
-                        privacy_ready,privacy_detail=backend_prepare_isolated_private_chat_privacy(peer_username,peer_password)
-                        if privacy_ready:
-                            report.append("- PASS "+privacy_detail)
+                        relationship_ready,relationship_detail=backend_prepare_isolated_private_chat_relationship(peer_username,peer_password)
+                        if relationship_ready:
+                            report.append("- PASS "+relationship_detail)
                         else:
-                            FAILURES.append("private Chat E2E could not safely establish temporary test-only messaging privacy: "+privacy_detail)
+                            FAILURES.append("private Chat E2E could not safely establish the test-only reciprocal follow relationship: "+relationship_detail)
                         restore_home_after_restart("private-chat-send-test-home")
                         run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
                         peer_chat=wait_for_conversation_ui("private-chat-send-test-open.xml")
@@ -2192,8 +2226,8 @@ if marketplace_xml:
 else:
     FAILURES.append("authenticated Home -> Marketplace")
     
-for privacy_restore_error in restore_runtime_private_chat_privacy():
-    FAILURES.append(privacy_restore_error)
+for relationship_cleanup_error in restore_runtime_private_chat_relationships():
+    FAILURES.append(relationship_cleanup_error)
 
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
