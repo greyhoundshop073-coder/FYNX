@@ -5,7 +5,8 @@ checks = []
 def check(name, ok): checks.append((name, bool(ok)))
 required_steps = ["Verify Large Badge #2","Verify Large Badge #3","Verify Large Badge #4","Verify Large Badge #5","Verify Large Badge #6","Verify Large Badge #7","Verify Large Badge #8","Verify Large Badge #9","Verify final FYNX production certification gate","Fast build, test and lint","Full build, test and lint","Run Android instrumentation tests and capture the real FYNX UI","Upload FYNX runtime screenshots and UI hierarchies","Upload exact-commit debug APK"]
 check("all major certification gates remain in the release workflow", all(x in workflow for x in required_steps))
-check("Android release build keeps fast and full Gradle paths", "./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache" in workflow and "./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache" in workflow)
+check("Android release build keeps fast and full Gradle paths", "./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache" in workflow and "./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRuntimeCert --no-daemon --build-cache" in workflow)
+check("server-backed Status lifecycle certification variant is built and run", "assembleRuntimeCert" in workflow and "verify_authenticated_status_lifecycle.py" in workflow)
 check("real-device instrumentation remains part of release certification", "reactivecircus/android-emulator-runner@v2" in workflow and "connectedDebugAndroidTest" in workflow)
 runtime_path = "scripts/verify_authenticated_runtime_navigation.py" if (ROOT / "scripts/verify_authenticated_runtime_navigation.py").is_file() else "scripts/verify_runtime_navigation.py"
 runtime_navigation = (ROOT / runtime_path).read_text(encoding="utf-8").lower()
