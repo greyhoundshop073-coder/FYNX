@@ -772,7 +772,7 @@ if not FAILURES:
                 report.append("- WARN Could not pre-grant RECORD_AUDIO in emulator; video flow will still be tested and any permission prompt must be handled")
             else:
                 audio_state = run("adb", "shell", "dumpsys", "package", PACKAGE).stdout
-                if re.search(r"android\\.permission\\.RECORD_AUDIO: granted=true", audio_state):
+                if re.search(r"android\.permission\.RECORD_AUDIO: granted=true", audio_state):
                     report.append("- PASS emulator RECORD_AUDIO permission is granted for Status video capture")
                 else:
                     report.append("- WARN RECORD_AUDIO grant command returned success but package state did not confirm it")
