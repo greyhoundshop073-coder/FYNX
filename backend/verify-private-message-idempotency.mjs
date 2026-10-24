@@ -10,7 +10,7 @@ class FakeMessagePool {
   nextId = 7001;
 
   async query(sql, params = []) {
-    const query = String(sql).replace(/\\s+/g, " ").trim().toLowerCase();
+    const query = String(sql).replace(/\s+/g, " ").trim().toLowerCase();
 
     if (query.startsWith("select 1 from blocks")) return { rows: [], rowCount: 0 };
 
