@@ -81,8 +81,8 @@ elif any(delivered != "false" or read != "false" for delivered, read in optimist
 
 # 1c. Runtime certification must exercise the real group voice-recording/send route,
 # then confirm a newly persisted audio media ID/type across force-stop and reopening.
-require(runtime_certification, r"def certify_group_voice_message\\(group_id:str\\)->None:", "Runtime certification must include real group voice-message capture")
-require(runtime_certification, r"certify_group_voice_message\\(group_id\\)", "Runtime certification must invoke the group voice-message journey")
+require(runtime_certification, r"def certify_group_voice_message\(group_id:str\)->None:", "Runtime certification must include real group voice-message capture")
+require(runtime_certification, r"certify_group_voice_message\(group_id\)", "Runtime certification must invoke the group voice-message journey")
 require(runtime_certification, r"Stop recording and send", "Group voice journey must stop/send through the actual composer control")
 require(runtime_certification, r"attachmentType.*audio", "Group voice journey must verify the backend audio attachment type")
 require(runtime_certification, r"force-stop/relaunch and reopening the same group", "Group voice journey must verify persistence after app restart")
