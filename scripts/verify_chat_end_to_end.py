@@ -87,6 +87,18 @@ require(runtime_certification, r"Stop recording and send", "Group voice journey 
 require(runtime_certification, r"attachmentType.*audio", "Group voice journey must verify the backend audio attachment type")
 require(runtime_certification, r"force-stop/relaunch and reopening the same group", "Group voice journey must verify persistence after app restart")
 
+# 1d. If no preconfigured peer secrets exist, the runtime may provision a dedicated
+# run-scoped account only on the explicitly isolated HTTPS Railway testing host.
+require(runtime_certification, r"def provision_isolated_runtime_peer\\(", "Runtime certification must have a dedicated isolated peer provisioning helper")
+require(runtime_certification, r'parsed\\.scheme!="https"', "Automatic peer provisioning must require HTTPS")
+require(runtime_certification, r'not host\\.endswith\\("\\.up\\.railway\\.app"\\)', "Automatic peer provisioning must be limited to Railway test hosts")
+require(runtime_certification, r'"testing" not in host', "Automatic peer provisioning must explicitly reject non-testing hosts")
+require(runtime_certification, r'base\\+"/api/auth/register"', "Automatic peer provisioning must use the existing backend registration endpoint")
+peer_guard_at = runtime_certification.find('if parsed.scheme!="https" or not host.endswith(".up.railway.app") or "testing" not in host:')
+peer_register_at = runtime_certification.find('base+"/api/auth/register"')
+if not (0 <= peer_guard_at < peer_register_at):
+    fail("Automatic peer provisioning must reject non-testing hosts before sending a registration request")
+
 # 2. Realtime client contract: authenticated websocket, message/status/typing handling.
 require(realtime, r"/realtime", "FynxRealtimeClient must target the backend realtime endpoint")
 require(realtime, r"token", "FynxRealtimeClient must authenticate realtime sessions with a token")
