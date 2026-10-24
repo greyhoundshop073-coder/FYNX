@@ -232,6 +232,8 @@ jobs:
         run: python3 scripts/verify_r6b_payment_expiry.py
       - name: Run Batch 2 financial hardening verification
         run: node verify-marketplace-batch2.mjs
+      - name: Verify privacy-settings update SQL and field preservation
+        run: node verify-privacy-settings-upsert.mjs
       - name: Verify private-message retry idempotency against the registered route
         run: node verify-private-message-idempotency.mjs
       - name: Verify group-send retry idempotency against the registered route
