@@ -34,6 +34,7 @@ conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 groups = read("app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt")
 realtime = read("app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt")
 messaging = read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt")
+offline_sync = read("app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt")
 backend = read("backend/server.js")
 isolation = read("backend/realtimeIsolationBootstrap.js")
 compat = read("backend/chatRealtimeCompatibility.js")
@@ -98,6 +99,15 @@ require(conversation, r"setMaxDuration\(120_000\)", "Voice recorder must enforce
 require(conversation, r"MEDIA_RECORDER_INFO_MAX_DURATION_REACHED", "Voice recorder must handle the maximum-duration callback")
 require(conversation, r"stopRecordingAction\s*=\s*::stopRecording", "Voice maximum-duration callback must terminate through the production stop/send path")
 require(conversation, r"voiceDurationMs = duration", "ConversationPanel must send the actual recorded voice duration to the production API")
+
+# 5b. Offline send reconciliation: never discard the durable request mapping until the
+# server-accepted message can replace its local pending bubble with a canonical server ID.
+guard_at = offline_sync.find("if (currentUserId.isNullOrBlank()) {")
+break_at = offline_sync.find("break", guard_at) if guard_at >= 0 else -1
+replace_at = offline_sync.find("FynxChatStore.replaceMessage")
+remove_at = offline_sync.find("FynxOfflineOutbox.remove")
+if not (0 <= guard_at < break_at < replace_at < remove_at):
+    fail("Offline outbox must retain a server-accepted message when current-user identity cannot be resolved; retry must keep its stable request ID")
 
 # 6. Backend message data model and API path.
 require(backend, r"CREATE TABLE IF NOT EXISTS messages", "Backend must own the production messages table")
