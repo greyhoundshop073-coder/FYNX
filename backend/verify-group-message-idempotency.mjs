@@ -135,7 +135,7 @@ test("group message send is idempotent and refuses message-ID collisions", async
   assert.equal(pool.messages.size, 1);
   assert.equal(broadcasts.length, 2);
   assert.equal(broadcastAttempts, 3, "ID collisions must be rejected before another realtime broadcast");
-  assert.equal(pool.insertAttempts, 5);
+  assert.equal(pool.insertAttempts, 6, "initial send, two valid retries, and three ID-collision probes each reach the insert guard");
 
   console.log("PASS committed message survives a transient broadcast error; stable-ID retry recovers delivery");
   console.log("PASS repeated POST retries retain one canonical row and replay the same realtime message ID");
