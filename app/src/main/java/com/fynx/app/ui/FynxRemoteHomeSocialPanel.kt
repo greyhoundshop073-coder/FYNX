@@ -1233,13 +1233,17 @@ private fun AudioPostPlayer(file: File) {
                 label = "voice_wave_phase"
             )
             LaunchedEffect(playback.playing, playback.prepared, playback.failed, player) {
+                if (!playback.prepared || playback.failed) {
+                    playbackProgress = 0f
+                    return@LaunchedEffect
+                }
                 while (playback.playing && playback.prepared && !playback.failed) {
                     playbackProgress = if (player.duration > 0) {
                         (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
                     } else 0f
                     delay(80L)
                 }
-                playbackProgress = if (player.duration > 0) {
+                playbackProgress = if (playback.prepared && !playback.failed && player.duration > 0) {
                     (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
                 } else 0f
             }

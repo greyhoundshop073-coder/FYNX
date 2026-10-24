@@ -184,6 +184,8 @@ for component in ("MusicPostPlayer(", "AudioPostPlayer("):
         raise SystemExit("HOME 4F MEDIA RED: " + component.rstrip("(") + " does not use lifecycle-managed async playback")
 if "enabled = playback.prepared && !playback.failed" not in home:
     raise SystemExit("HOME 4F MEDIA RED: audio playback controls must wait for prepared state")
+if "if (!playback.prepared || playback.failed)" not in home:
+    raise SystemExit("HOME 4F MEDIA RED: voice-note progress updater must not read decoder duration before preparation")
 fullscreen_start = home.index("if (fullscreen && file != null)")
 fullscreen_end = home.index("private fun relative(", fullscreen_start)
 if "contentScale = ContentScale.Fit" not in home[fullscreen_start:fullscreen_end]:
