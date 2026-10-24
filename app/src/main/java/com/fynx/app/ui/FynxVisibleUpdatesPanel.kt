@@ -113,6 +113,14 @@ fun FynxVisibleUpdatesPanel(
 
     LaunchedEffect(currentUsername, homeRefreshKey) { refreshStatuses() }
 
+    // Remove statuses at their actual expiry even if Home remains open and no other
+    // state changes trigger a recomposition.
+    LaunchedEffect(statuses) {
+        val nextExpiry = statuses.minOfOrNull { it.expiresAtMillis } ?: return@LaunchedEffect
+        kotlinx.coroutines.delay((nextExpiry - System.currentTimeMillis()).coerceAtLeast(1L))
+        statuses = statuses.filterNot(FynxStatus::isExpired)
+    }
+
     val current = currentUsername.removePrefix("@").trim().lowercase()
     val activeStatuses = statuses.filterNot(FynxStatus::isExpired)
     val viewedStatusIds = FynxStatusClient.viewedStatusIds(context)
