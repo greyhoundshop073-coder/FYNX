@@ -266,7 +266,7 @@ internal fun FynxMarketplaceCheckoutDialog(
                             if (q.fulfillmentMethod == "DELIVERY") FynxMarketplaceCheckoutAddress(name, phone, address, city, state, country) else null,
                             stableOrderId
                         ).onSuccess(onProtectedOrder)
-                            .onFailure { message = it.message ?: "Protected order could not be created." }
+                            .onFailure { message = marketplacePaymentFailureMessage(it) }
                         busy = false
                     }
                 }
