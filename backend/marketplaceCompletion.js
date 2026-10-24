@@ -571,7 +571,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
     const rawPhotoReference = typeof req.body?.photoReference === 'string' ? req.body.photoReference.trim() : '';
     const photoMediaId = rawPhotoReference ? Number(rawPhotoReference) : null;
     if (rawPhotoReference && (!Number.isSafeInteger(photoMediaId) || photoMediaId < 1)) return res.status(400).json({ error: 'photo reference must be a valid uploaded media id' });
-    if (!id || !recipientName || (!deliveryNote && !photoReference)) return res.status(400).json({ error: 'recipient name and delivery note or photo reference are required' });
+    if (!id || !recipientName || (!deliveryNote && photoMediaId === null)) return res.status(400).json({ error: 'recipient name and delivery note or photo reference are required' });
     const client = await pool.connect();
     try {
       await ensureSchema(); await client.query('BEGIN');
