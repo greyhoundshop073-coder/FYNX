@@ -665,12 +665,12 @@ if not FAILURES:
             # dummy Status should be created or published by the visual test.
             status_camera_xml = tap_control(
                 status_add_xml, ["Take photo"], "status-camera-photo-open",
-                ["Close camera", "Allow camera", "FYNX needs camera access"]
+                ["Take photo", "Allow camera", "FYNX needs camera access"]
             )
             if status_camera_xml and find_control(status_camera_xml, ["Allow camera"]) and not find_control(status_camera_xml, ["Close camera"]):
                 status_camera_xml = tap_control(
                     status_camera_xml, ["Allow camera"], "status-camera-permission",
-                    ["Close camera", "Take photo", "FYNX needs camera access"]
+                    ["Take photo", "FYNX needs camera access"]
                 )
             camera_ready = bool(
                 status_camera_xml
@@ -731,17 +731,47 @@ if not FAILURES:
                     status_add_xml = dump_ui("authenticated-status-camera-unavailable-return.xml")
             else:
                 FAILURES.append("Add status -> Take photo did not expose a usable CameraX capture screen")
+                # Always recover from the LIVE hierarchy before continuing. The old
+                # Add-status hierarchy is stale while the full-screen camera Dialog
+                # is open; tapping its Text coordinates was causing a second, misleading
+                # Text-composer failure after the camera readiness check.
+                recovery_xml = dump_ui("authenticated-status-camera-photo-not-ready-live.xml")
+                close_camera = find_control(recovery_xml, ["Close camera", "Close"])
+                if close_camera:
+                    recovery_xml = tap_control(
+                        recovery_xml, ["Close camera", "Close"], "status-camera-photo-not-ready-close",
+                        ["Add status", "Voice", "Text"]
+                    )
+                else:
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(0.8)
+                    recovery_xml = dump_ui("authenticated-status-camera-photo-not-ready-back.xml")
+                for _ in range(8):
+                    if (find_control(recovery_xml, ["Add status"])
+                            and find_control(recovery_xml, ["Voice"])
+                            and find_control(recovery_xml, ["Text"])):
+                        break
+                    time.sleep(0.5)
+                    recovery_xml = dump_ui("authenticated-status-camera-photo-not-ready-retry.xml")
+                if (find_control(recovery_xml, ["Add status"])
+                        and find_control(recovery_xml, ["Voice"])
+                        and find_control(recovery_xml, ["Text"])):
+                    status_add_xml = recovery_xml
+                    report.append("- PASS recovered to Add status after camera readiness failure; Text/Voice checks can continue")
+                else:
+                    status_add_xml = ""
+                    FAILURES.append("Camera readiness failure left Status stuck outside the Add status chooser")
 
             # Only exercise video recording when the photo camera is available.
             if camera_ready and status_add_xml and find_control(status_add_xml, ["Add status"]):
                 video_camera_xml = tap_control(
                     status_add_xml, ["Record video"], "status-camera-video-open",
-                    ["Close camera", "Allow camera", "FYNX needs camera access"]
+                    ["Record video", "Allow camera", "FYNX needs camera access"]
                 )
                 if video_camera_xml and find_control(video_camera_xml, ["Allow camera"]) and not find_control(video_camera_xml, ["Close camera"]):
                     video_camera_xml = tap_control(
                         video_camera_xml, ["Allow camera"], "status-camera-video-permission",
-                        ["Close camera", "Record video", "FYNX needs camera access"]
+                        ["Record video", "FYNX needs camera access"]
                     )
                 if video_camera_xml and find_control(video_camera_xml, ["Close camera"]) and find_control(video_camera_xml, ["Record video"]):
                     screenshot("authenticated-status-camera-video.png")
@@ -784,10 +814,15 @@ if not FAILURES:
                 report.append("- BLOCKED Status video runtime capture: photo camera capture was unavailable in this emulator run")
 
             # This run covers Text/Music plus Voice below; media is discarded, not published.
-            text_composer_xml = tap_control(
-                status_add_xml, ["Text"], "status-text-composer",
-                ["Type a Status", "Text styling", "Send"]
-            )
+            text_composer_xml = ""
+            if (status_add_xml and find_control(status_add_xml, ["Add status"])
+                    and find_control(status_add_xml, ["Text"])):
+                text_composer_xml = tap_control(
+                    status_add_xml, ["Text"], "status-text-composer",
+                    ["Type a Status", "Text styling", "Send"]
+                )
+            else:
+                FAILURES.append("Skipped Status Text tap because the live Add status chooser was not recovered; stale screen coordinates were not used")
             if text_composer_xml and (
                 find_control(text_composer_xml, ["Type a Status"])
                 or find_control(text_composer_xml, ["Text styling"])

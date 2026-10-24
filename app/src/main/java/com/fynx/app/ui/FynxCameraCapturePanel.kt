@@ -47,6 +47,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
@@ -345,27 +349,108 @@ fun FynxCameraCapturePanel(
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null){mode=CameraMode.PHOTO;showCaptureControls=true}},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(onClick={
-                if(mode==CameraMode.PHOTO){if(captureTimerSeconds>0){if(timerCountingDown==0){timerCountingDown=captureTimerSeconds;showCaptureControls=false;scope.launch{delay(captureTimerSeconds*1000L);timerCountingDown=0;capturePhotoNow()}}}else capturePhotoNow()}else{val active=recording;if(active!=null)active.stop()else{if(!hasAudio){audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);return@FilledIconButton};val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingType=if(videoNoteMode)"video_note" else "video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},enabled=!preparingPhoto,modifier=Modifier.size(80.dp),shape=androidx.compose.foundation.shape.CircleShape,colors=IconButtonDefaults.filledIconButtonColors(containerColor=Color.White,contentColor=Color.Black)){
-                                Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) {
-                                    if (videoNoteMode && recording != null) {
-                                        val progress = (recordingElapsed.toFloat() / 60_000f).coerceIn(0f, 1f)
-                                        Canvas(Modifier.fillMaxSize().padding(2.dp)) { drawArc(Color(0xFF8B7BE8), -90f, 360f * progress, false, style = androidx.compose.ui.graphics.drawscope.Stroke(5.dp.toPx())) }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Keep the shutter inaccessible until CameraX has actually bound the
+                // requested capture use case. This prevents an early tap being lost
+                // while the preview is still starting.
+                val shutterActionLabel = when {
+                    recording != null -> if (videoNoteMode) "Stop video note" else "Stop video recording"
+                    mode == CameraMode.PHOTO && imageCapture == null -> "Camera starting"
+                    mode == CameraMode.VIDEO && videoCapture == null -> "Camera starting"
+                    mode == CameraMode.PHOTO -> "Take photo"
+                    videoNoteMode -> "Record video note"
+                    else -> "Record video"
+                }
+                val shutterReady = !preparingPhoto && (
+                    if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null
+                )
+                FilterChip(
+                    selected = mode == CameraMode.PHOTO,
+                    onClick = { if (recording == null) { mode = CameraMode.PHOTO; showCaptureControls = true } },
+                    label = { Text("Photo") },
+                    leadingIcon = { Icon(Icons.Default.PhotoCamera, null) }
+                )
+                FilledIconButton(
+                    onClick = {
+                        if (mode == CameraMode.PHOTO) {
+                            if (captureTimerSeconds > 0) {
+                                if (timerCountingDown == 0) {
+                                    timerCountingDown = captureTimerSeconds
+                                    showCaptureControls = false
+                                    scope.launch {
+                                        delay(captureTimerSeconds * 1000L)
+                                        timerCountingDown = 0
+                                        capturePhotoNow()
                                     }
-                                    Icon(
-                                        if (mode == CameraMode.PHOTO) Icons.Default.PhotoCamera else if (recording != null) Icons.Default.Stop else Icons.Default.Videocam,
-                                        if (recording != null) {
-                                            if (videoNoteMode) "Stop video note" else "Stop video recording"
-                                        } else if (mode == CameraMode.PHOTO) {
-                                            "Take photo"
-                                        } else if (videoNoteMode) {
-                                            "Record video note"
-                                        } else {
-                                            "Record video"
-                                        }
-                                    )
                                 }
-                            };FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null){mode=CameraMode.VIDEO;showCaptureControls=true}},label={Text("Video")},leadingIcon={Icon(Icons.Default.Videocam,null)})}
+                            } else capturePhotoNow()
+                        } else {
+                            val active = recording
+                            if (active != null) active.stop()
+                            else {
+                                if (!hasAudio) {
+                                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    return@FilledIconButton
+                                }
+                                val capture = videoCapture ?: run {
+                                    error = "Video camera is still starting"
+                                    return@FilledIconButton
+                                }
+                                val file = File(context.cacheDir, "fynx_video_${System.currentTimeMillis()}.mp4")
+                                val pending = capture.output.prepareRecording(context, FileOutputOptions.Builder(file).build())
+                                val withAudio = if (hasAudio) pending.withAudioEnabled() else pending
+                                recordingStartedAt = System.currentTimeMillis()
+                                recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
+                                    if (event is VideoRecordEvent.Finalize) {
+                                        if (!event.hasError() && file.exists() && file.length() > 0L) {
+                                            pendingUri = Uri.fromFile(file)
+                                            pendingType = if (videoNoteMode) "video_note" else "video"
+                                            error = null
+                                        } else {
+                                            file.delete()
+                                            error = "Video capture failed (${event.error})"
+                                        }
+                                        recording = null
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    enabled = shutterReady,
+                    modifier = Modifier.size(80.dp).semantics(mergeDescendants = true) {
+                        contentDescription = shutterActionLabel
+                        role = Role.Button
+                    },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Color.Black)
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        if (videoNoteMode && recording != null) {
+                            val progress = (recordingElapsed.toFloat() / 60_000f).coerceIn(0f, 1f)
+                            Canvas(Modifier.fillMaxSize().padding(2.dp)) {
+                                drawArc(Color(0xFF8B7BE8), -90f, 360f * progress, false,
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(5.dp.toPx()))
+                            }
+                        }
+                        Icon(
+                            if (mode == CameraMode.PHOTO) Icons.Default.PhotoCamera
+                            else if (recording != null) Icons.Default.Stop
+                            else Icons.Default.Videocam,
+                            shutterActionLabel
+                        )
+                    }
+                }
+                FilterChip(
+                    selected = mode == CameraMode.VIDEO,
+                    onClick = { if (recording == null) { mode = CameraMode.VIDEO; showCaptureControls = true } },
+                    label = { Text("Video") },
+                    leadingIcon = { Icon(Icons.Default.Videocam, null) }
+                )
+            }
         }
     }
 }
