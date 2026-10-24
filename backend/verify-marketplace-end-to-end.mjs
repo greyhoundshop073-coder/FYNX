@@ -29,6 +29,8 @@ const checks = [
   ['seller delivery handoff exists', completion.includes("/api/marketplace/orders/:id/ship")],
   ['seller pickup handoff exists', completion.includes("/api/marketplace/orders/:id/pickup-handover")],
   ['buyer delivery confirmation exists', completion.includes("/api/marketplace/orders/:id/confirm-delivery")],
+  ['driver delivery photo is numeric, assigned-driver-owned, image-only, and stored by validated media ID', completion.includes('photo reference must be a valid uploaded media id') && completion.includes("SELECT mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1") && completion.includes("new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])") && completion.includes('String(photoMediaId)') && completion.includes('hasPhotoReference: photoMediaId !== null')],
+  ['assigned driver can upload optional photo proof while note-only delivery remains valid', seller.includes('Add delivery photo (optional)') && seller.includes('FynxProductionMessaging.uploadMedia(context, photoUri)') && seller.includes('recordMarketplaceDriverDelivery') && seller.includes('photoReference') && seller.includes('deliveryNotes[assignment.orderId].isNullOrBlank() || deliveryPhotoUris.containsKey(assignment.orderId)')],
   ['buyer inspection completion exists', completion.includes("/api/marketplace/orders/:id/complete") && completion.includes("48 * 60 * 60 * 1000")],
   ['protection can freeze the order before completion', protection.includes("status IN ('OPEN','UNDER_REVIEW')")],
   ['refund and dispute routes are available', protection.includes("/api/marketplace/protection/order/:id/dispute") && protection.includes("/api/marketplace/protection/order/:id/refund-request")],
