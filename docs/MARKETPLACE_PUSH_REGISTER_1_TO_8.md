@@ -230,3 +230,14 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 **Regression guard:** Added checks for blocked payouts/refunds, failed-without-provider-confirmation, and the duplicate-refund prevention guard. Exact-head CI remains required.
 
 **Verification:** Pending exact-head Backend CI on both PRs. No APK or live deployment is claimed from these branch-only changes.
+
+
+### Push 25 — Add a safe seller-only archive and republish path
+
+**Root cause:** Removing a Marketplace listing is a soft delete (`active=FALSE`). My Shop deliberately filtered inactive rows out of the inventory, but there was no owner-authorized route or UI action to restore a listing. Listings removed by the seller or deactivated when stock ran out could remain invisible permanently even after the seller had replenished stock.
+
+**Change:** My Shop continues to keep archived products out of the active buyer inventory and now shows them in a separate **Archived listings** section. Sellers can edit/restock an archived row and explicitly republish it. The backend locks the seller-owned row, checks that total stock exceeds units reserved by existing orders, and only then sets `active=TRUE`. Removing an item moves it into the in-session archive state instead of making it disappear from the seller's view.
+
+**Regression guard:** Seller-flow verification now checks archive separation, owner-scoped republish, unreserved-stock validation, and success/error feedback.
+
+**Verification:** Exact-head Android and Backend CI are pending. Republish is not live in Railway until the Marketplace PR is merged and the canonical deployment is verified.
