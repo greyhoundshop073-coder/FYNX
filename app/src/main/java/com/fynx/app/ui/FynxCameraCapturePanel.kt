@@ -74,7 +74,8 @@ fun FynxCameraCapturePanel(
     liveProofListingTitle: String = "",
     liveProofSellerUsername: String = "",
     onLiveProofStart: () -> Unit = {},
-    onDismiss: () -> Unit = {}
+    onDismiss: () -> Unit = {},
+    statusCapture: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -117,6 +118,8 @@ fun FynxCameraCapturePanel(
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recordingStartedAt by remember { mutableLongStateOf(0L) }
     var recordingElapsed by remember { mutableLongStateOf(0L) }
+    var activeRecordingFile by remember { mutableStateOf<File?>(null) }
+    var recordingNotice by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
     var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
@@ -132,13 +135,40 @@ fun FynxCameraCapturePanel(
     var showGrid by remember { mutableStateOf(false) }
 
     LaunchedEffect(recording != null, recordingStartedAt) { while (recording != null) { recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L); delay(200L) } }
-    LaunchedEffect(recording, recordingStartedAt, videoNoteMode) {
-        if (recording != null && videoNoteMode) {
-            delay(60_000L)
-            recording?.stop()
+    LaunchedEffect(recording, recordingStartedAt, videoNoteMode, statusCapture, activeRecordingFile) {
+        val active = recording ?: return@LaunchedEffect
+        val maximumDurationMs: Long? = when {
+            videoNoteMode -> 60_000L
+            statusCapture -> FYNX_STATUS_MAX_VIDEO_DURATION_MS
+            else -> null
+        }
+        while (recording == active) {
+            if (statusCapture && (activeRecordingFile?.length() ?: 0L) >= FYNX_STATUS_MAX_VIDEO_BYTES) {
+                recordingNotice = "Status video reached the upload-size limit. Your clip is ready to preview."
+                active.stop()
+                break
+            }
+            if (maximumDurationMs != null &&
+                System.currentTimeMillis() - recordingStartedAt >= maximumDurationMs
+            ) {
+                if (statusCapture && !videoNoteMode) {
+                    recordingNotice = "Status video reached its 90-second limit. Your clip is ready to preview."
+                }
+                active.stop()
+                break
+            }
+            delay(200L)
         }
     }
-    LaunchedEffect(showCaptureControls, pendingUri, recording, cameraControl, hasCamera, preparingPhoto) { if (showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0 && cameraControl != null && hasCamera && !preparingPhoto) { delay(5000L); if (!preparingPhoto) showCaptureControls = false } }
+    // Status creation must keep its capture/close controls visible. The ordinary
+    // camera may auto-hide secondary controls, but hiding Status's shutter made the
+    // creator appear broken and left accessibility automation unable to capture.
+    LaunchedEffect(showCaptureControls, pendingUri, recording, cameraControl, hasCamera, preparingPhoto, statusCapture) {
+        if (!statusCapture && showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0 && cameraControl != null && hasCamera && !preparingPhoto) {
+            delay(5000L)
+            if (!preparingPhoto) showCaptureControls = false
+        }
+    }
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
         val generation = bindGeneration + 1; bindGeneration = generation
@@ -155,13 +185,25 @@ fun FynxCameraCapturePanel(
                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .setTargetRotation(targetRotation)
                     .build()
-                val qualitySelector = QualitySelector.fromOrderedList(
-                    listOf(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD),
-                    FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
-                )
-                val recorder = Recorder.Builder()
-                    .setQualitySelector(qualitySelector)
-                    .build()
+                val qualitySelector = if (statusCapture) {
+                    QualitySelector.fromOrderedList(
+                        listOf(Quality.SD, Quality.HD),
+                        FallbackStrategy.lowerQualityOrHigherThan(Quality.HD)
+                    )
+                } else {
+                    QualitySelector.fromOrderedList(
+                        listOf(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD),
+                        FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+                    )
+                }
+                val recorderBuilder = Recorder.Builder().setQualitySelector(qualitySelector)
+                if (statusCapture) {
+                    // CameraX's target is approximate; the live file-size guard below
+                    // is the hard stop. This target keeps typical 90-second Status clips
+                    // safely below the backend's 12 MiB upload ceiling.
+                    recorderBuilder.setTargetVideoEncodingBitRate(700_000)
+                }
+                val recorder = recorderBuilder.build()
                 val video = VideoCapture.Builder(recorder)
                     .setTargetRotation(targetRotation)
                     .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
@@ -178,7 +220,7 @@ fun FynxCameraCapturePanel(
     }
     DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
-    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; filterIntensity = 1f; enhancing = false; error = null }
+    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingType = null; pendingUri = null; pendingOriginalUri = null; filter = CameraFilter.NATURAL; filterIntensity = 1f; enhancing = false; recordingNotice = null; error = null }
     fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
     fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) { val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val strength = intensity.coerceIn(0f, 1f)
             val matrix = ColorMatrix().apply {
@@ -244,6 +286,7 @@ fun FynxCameraCapturePanel(
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp)){
+                recordingNotice?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp)) }
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}
                 if(previewType=="image"){Text("Edit photo",style=MaterialTheme.typography.labelLarge)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){
@@ -337,7 +380,7 @@ fun FynxCameraCapturePanel(
                 }
             }
         }
-        if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp),horizontalAlignment=Alignment.CenterHorizontally){
+        if (showCaptureControls || recording != null || statusCapture) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp),horizontalAlignment=Alignment.CenterHorizontally){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")}}
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
             if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
@@ -404,6 +447,8 @@ fun FynxCameraCapturePanel(
                                 val pending = capture.output.prepareRecording(context, FileOutputOptions.Builder(file).build())
                                 val withAudio = if (hasAudio) pending.withAudioEnabled() else pending
                                 recordingStartedAt = System.currentTimeMillis()
+                                activeRecordingFile = file
+                                recordingNotice = null
                                 recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
                                     if (event is VideoRecordEvent.Finalize) {
                                         if (!event.hasError() && file.exists() && file.length() > 0L) {
@@ -412,9 +457,11 @@ fun FynxCameraCapturePanel(
                                             error = null
                                         } else {
                                             file.delete()
+                                            recordingNotice = null
                                             error = "Video capture failed (${event.error})"
                                         }
                                         recording = null
+                                        activeRecordingFile = null
                                     }
                                 }
                             }

@@ -42,6 +42,7 @@ data class FynxStatus(
 const val FYNX_STATUS_EXPIRY_MS = 24L * 60L * 60L * 1000L
 const val FYNX_STATUS_MAX_TEXT_LENGTH = 700
 const val FYNX_STATUS_MAX_VIDEO_DURATION_MS = 90_000L
+const val FYNX_STATUS_MAX_VIDEO_BYTES = 10L * 1024L * 1024L
 const val FYNX_STATUS_MAX_VOICE_DURATION_MS = 30_000L
 
 /** Shared pink/green ring used by Status and Stories across Home and the Status hub. */

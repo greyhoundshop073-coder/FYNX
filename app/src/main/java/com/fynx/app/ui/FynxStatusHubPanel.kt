@@ -318,7 +318,8 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                     FynxCameraCapturePanel(
                         onCaptured = { uri, type -> openCapturedStatus(uri, type) },
                         initialMode = cameraInitialMode,
-                        onDismiss = { cameraOpen = false }
+                        onDismiss = { cameraOpen = false },
+                        statusCapture = true
                     )
                 }
             }

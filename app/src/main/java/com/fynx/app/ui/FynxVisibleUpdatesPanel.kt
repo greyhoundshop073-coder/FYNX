@@ -261,12 +261,12 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
             }
             if (isOwn) {
                 IconButton(onClick = onCreateStatus, modifier = Modifier.align(Alignment.BottomEnd).requiredSize(25.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .background(Color(0xFF22C55E), CircleShape)
                         .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                         .clip(CircleShape)
                         .semantics { contentDescription = "Create your status" }
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(17.dp))
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
                 }
             }
         }

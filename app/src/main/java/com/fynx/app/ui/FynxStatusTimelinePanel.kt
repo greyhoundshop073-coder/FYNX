@@ -355,14 +355,14 @@ private fun StatusAvatar(
                 onClick = onAddClick,
                 modifier = Modifier.align(Alignment.BottomEnd)
                     .requiredSize(25.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    .background(Color(0xFF22C55E), CircleShape)
                     .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
                     .clip(CircleShape)
             ) {
                 Icon(
                     Icons.Default.Add,
                     contentDescription = "Create a new Status",
-                    tint = MaterialTheme.colorScheme.onPrimary,
+                    tint = Color.White,
                     modifier = Modifier.size(15.dp)
                 )
             }
