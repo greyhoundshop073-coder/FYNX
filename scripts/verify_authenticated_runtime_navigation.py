@@ -970,6 +970,110 @@ def certify_group_gallery_image(group_id:str)->None:
         report.append("- PASS Gallery image attachment ID/type remained in server history after app force-stop/relaunch and reopening the same group")
 
 
+
+def certify_group_voice_message(group_id:str)->None:
+    """Record/send a real group voice clip and verify server persistence across app restart."""
+    group_ui=wait_for_group_conversation_ui("group-voice-before.xml",timeout=12)
+    record_control=find_control(group_ui,["Record voice message"]) if group_ui else None
+    if not record_control:
+        FAILURES.append("group voice-message test could not establish a real group composer with its record button")
+        return
+
+    before,detail=backend_group_message_snapshot(group_id)
+    if not before and "returned 0 distinct" not in detail:
+        FAILURES.append("group voice-message test could not read baseline backend history: "+detail)
+        return
+
+    # Exercise Android's real microphone permission prompt when needed; do not grant
+    # RECORD_AUDIO silently through adb, which would hide a broken app permission path.
+    _,rx,ry=record_control
+    run("adb","shell","input","tap",str(rx),str(ry))
+    time.sleep(.6)
+    ui=dump_ui("group-voice-permission-or-recording.xml")
+    permission=find_control(ui,["While using the app","Allow while using app","Allow"])
+    if permission:
+        _,px,py=permission
+        run("adb","shell","input","tap",str(px),str(py))
+        time.sleep(.7)
+        ui=dump_ui("group-voice-after-permission.xml")
+        # First tap may have been consumed by the runtime permission dialog.
+        if find_control(ui,["Record voice message"]):
+            _,rx,ry=find_control(ui,["Record voice message"])
+            run("adb","shell","input","tap",str(rx),str(ry))
+            time.sleep(.6)
+            ui=dump_ui("group-voice-recording-started.xml")
+
+    stop=find_control(ui,["Stop recording and send"])
+    if not stop:
+        # Give Compose a bounded opportunity to expose the recording state.
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            time.sleep(.3)
+            ui=dump_ui("group-voice-waiting-for-stop.xml")
+            stop=find_control(ui,["Stop recording and send"])
+            if stop:
+                break
+    if not stop:
+        screenshot("group-voice-recording-start-failed.png")
+        FAILURES.append("group composer record button did not enter a stoppable voice-recording state")
+        return
+
+    # Ensure the clip is long enough for MediaRecorder.stop() to produce valid audio.
+    time.sleep(1.2)
+    ui=dump_ui("group-voice-before-stop.xml")
+    stop=find_control(ui,["Stop recording and send"])
+    if not stop:
+        FAILURES.append("group voice recording stopped unexpectedly before the user could send it")
+        return
+    _,sx,sy=stop
+    run("adb","shell","input","tap",str(sx),str(sy))
+
+    accepted={}
+    deadline=time.monotonic()+60
+    while time.monotonic()<deadline:
+        time.sleep(1)
+        latest,read_detail=backend_group_message_snapshot(group_id)
+        if latest:
+            attachments=[
+                (message_id,item) for message_id,item in latest.items()
+                if message_id not in before
+                and item.get("attachmentMediaId") is not None
+                and str(item.get("attachmentType") or "").lower()=="audio"
+                and str(item.get("senderUsername") or "").removeprefix("@").strip().casefold()==USERNAME.removeprefix("@").strip().casefold()
+            ]
+            if attachments:
+                accepted=dict(attachments[-1][1])
+                accepted["_runtime_message_id"]=str(attachments[-1][0])
+                break
+
+    screenshot("group-voice-message-sent.png")
+    voice_ui=dump_ui("group-voice-message-sent.xml")
+    alive,crashlog=capture_runtime_log("group-voice-message-process.log")
+    if not accepted:
+        FAILURES.append("stopping a real Group voice recording did not produce a new sender-owned audio attachment in authenticated backend history")
+        return
+    attachment_id=str(accepted.get("attachmentMediaId") or "")
+    message_id=str(accepted.get("_runtime_message_id") or accepted.get("id") or "")
+    if not attachment_id or str(accepted.get("attachmentType") or "").lower()!="audio":
+        FAILURES.append("group voice message reached backend history without a verifiable audio media ID/type")
+        return
+    if not alive or not voice_ui:
+        FAILURES.append("group voice message send left the app process or conversation UI unavailable")
+        return
+    report.append("- PASS actual Group voice recorder -> stop/send -> authenticated backend returned persisted audio attachment ID "+attachment_id)
+    if crashlog:
+        report.append("- Group voice-send crash-log evidence captured; process remained alive")
+
+    restore_home_after_restart("group-voice-message-reopen-home")
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE,timeout=30)
+    reopened=wait_for_group_conversation_ui("group-voice-message-reopened.xml",timeout=15)
+    persisted,persistence_detail=backend_group_message_snapshot(group_id)
+    stored=persisted.get(message_id)
+    if not reopened or not stored or str(stored.get("attachmentMediaId") or "")!=attachment_id or str(stored.get("attachmentType") or "").lower()!="audio":
+        FAILURES.append("group voice attachment ID/type did not remain in authenticated backend history after force-stop/relaunch and reopening the same group: "+persistence_detail)
+    else:
+        report.append("- PASS group voice attachment ID/type remained in server history after app force-stop/relaunch and reopening the same group")
+
 def exercise_notification_route(route:str, name:str)->bool:
     if not route: return False
     run("adb","shell","am","force-stop",PACKAGE)
@@ -1777,6 +1881,7 @@ if not FAILURES:
 
                         if sent_markers and group_id:
                             certify_group_gallery_image(group_id)
+                            certify_group_voice_message(group_id)
                             exercise_notification_route("fynx://group/"+group_id,"group-chat")
 
         else: FAILURES.append("authenticated Home -> "+name)
