@@ -299,3 +299,14 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 
 
 **Android follow-through:** The driver assignment dialog also exposes an optional delivery-photo picker; it uploads the selected image as the signed-in driver and passes the returned media ID to the validated delivery endpoint. The driver can still submit a recipient name plus note without a photo.
+
+
+### Push 31 — Fix PostgreSQL parameter binding in text search
+
+**Root cause:** The Marketplace listings route added the text-search value to the parameter array but emitted `ILIKE 2` (or another bare number) into SQL because the dollar sign was missing from the dynamic parameter placeholder. PostgreSQL cannot treat that integer as the intended search pattern, so text searches could fail even though discovery and basic listing loads passed.
+
+**Change:** All seven search fields (title, description, shop name, location, category, seller username, and display name) now use the same bound parameter placeholder, `ILIKE $n`. The search term remains parameterized rather than concatenated into SQL.
+
+**Regression guard:** End-to-end verification checks each ILIKE field uses the dollar-prefixed placeholder and rejects the old bare-number form.
+
+**Verification:** Exact-head Backend CI must pass. This is a Marketplace-only route/test change; no live query or deployment is claimed from the branch alone.
