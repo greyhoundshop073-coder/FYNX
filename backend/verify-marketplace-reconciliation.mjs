@@ -19,7 +19,7 @@ const checks = [
   ['idempotent payout ledger', worker.includes('PAYOUT-RELEASE-${operation.order_id}') && worker.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['payout amount reconciles seller net plus marketplace fee', worker.includes('operationAmount + marketplaceFee') && worker.includes('Math.round((operationAmount + marketplaceFee) * 100) / 100 !== escrowAmount')],
   ['payout currency matches escrow', worker.includes("String(operation.currency).toUpperCase() !== String(escrow.currency).toUpperCase()")],
-  ['active refund blocks payout', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED')") && worker.includes('refund financial operation is active for this order')],
+  ['blocked and unresolved failed refunds block payout; only verified provider failure is terminal', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED','BLOCKED')") && worker.includes("COALESCE(metadata->>'refundEvent','') <> 'refund.failed'") && worker.includes("COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'") && worker.includes('refund financial operation is unresolved for this order')],
   ['transfer success webhook', webhook.includes("eventName === 'transfer.success'")],
   ['transfer failure/reversal webhook', webhook.includes("eventName === 'transfer.failed'") && webhook.includes("eventName === 'transfer.reversed'")],
   ['payment webhook amount validation', webhook.includes('orderExpectedAmount') && webhook.includes('paidAmount') && webhook.includes('expectedAmount')],
