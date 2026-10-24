@@ -86,6 +86,9 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
       const shippingAddress = fulfillmentMethod === 'DELIVERY' ? normalizeAddress(item?.shippingAddress) : null;
       return { listingId, quantity, fulfillmentMethod, shippingAddress };
     });
+    // Lock multi-cart listings in a deterministic order to reduce deadlocks when
+    // buyers quote the same products in different cart orders.
+    normalizedItems.sort((a, b) => a.listingId - b.listingId);
     if (normalizedItems.some((item) => !item.listingId || !item.quantity || !item.fulfillmentMethod)) {
       return res.status(400).json({ error: 'every cart item requires listing, quantity and fulfillment method' });
     }

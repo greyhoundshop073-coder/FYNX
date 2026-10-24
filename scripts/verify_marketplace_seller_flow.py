@@ -10,6 +10,24 @@ product_card = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferen
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
 app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 saved_products_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSavedMarketplaceProductsPanel.kt").read_text()
+remote_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()
+marketplace_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt").read_text()
+discovery_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDiscoveryClient.kt").read_text()
+order_lifecycle = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text()
+discovery_routes = (ROOT / "backend/discoveryRoutes.js").read_text()
+social_routes = (ROOT / "backend/socialRoutes.js").read_text()
+marketplace_checkout_route = (ROOT / "backend/marketplaceCheckout.js").read_text()
+
+import re
+
+EXPECTED_DISCOVERY_CATEGORIES = ["All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other"]
+EXPECTED_SELLER_CATEGORIES = EXPECTED_DISCOVERY_CATEGORIES[1:]
+
+def _extract_string_list(pattern: str, source: str):
+    match = re.search(pattern, source, re.DOTALL)
+    if not match:
+        return None
+    return re.findall(r'"([^"]+)"', match.group(1))
 
 checks = [
     ("seller support keeps a bounded real media limit", "const val MAX_PRODUCT_MEDIA = 12" in support),
@@ -25,16 +43,26 @@ checks = [
     ("active seller flow previews selected media", "ImageView" in marketplace and "contextIsVideo" in marketplace),
     ("active seller flow supports media removal", 'media = media.filterNot { it == uri }' in marketplace),
     ("active seller flow publishes the selected media list", "createMarketplaceListing" in marketplace and ", media)" in marketplace),
-    ("seller form offers a complete category selector and condition choices", all(f'"{category}"' in marketplace for category in ("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Other")) and '"REFURBISHED" to "Refurbished"' in marketplace),
+    ("Marketplace discovery client sends category under the backend-supported query key", '&category=${URLEncoder.encode(category, "UTF-8")}' in remote_client and 'req.query?.category' in discovery_routes),
+    ("Marketplace backend filters selected categories exactly and leaves All unfiltered", 'category.toLowerCase() !== "all"' in discovery_routes and 'where.push("l.category=$" + params.length)' in discovery_routes),
+    ("seller form and discovery expose the same expanded category set",
+     _extract_string_list(r"val categories = listOf\(([^)]*)\)", marketplace) == EXPECTED_DISCOVERY_CATEGORIES
+     and _extract_string_list(r'Text\("Category"[\s\S]*?listOf\(([^)]*)\)\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
+     and _extract_string_list(r'FYNX uses a human-readable area[\s\S]*?listOf\(([^)]*)\)\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
+     and '"REFURBISHED" to "Refurbished"' in marketplace),
     ("seller form shows category-specific product specifications", all(term in marketplace for term in ('"Brand"', '"Model / model number"', '"Size / fit"', '"Dimensions (e.g. 120 × 60 × 75 cm)"', '"Year"', '"Ingredients, skin/hair type, or expiry details"', '"What is included, duration, and service area"'))),
     ("category specifications are included in the saved product description with bounded length", 'append("\\n\\nProduct specifications\\n")' in marketplace and "MAX_DESCRIPTION_LENGTH" in marketplace and "listingDescription" in marketplace),
     ("seller publishes selected condition and composed specifications through the existing listing path", 'title, listingDescription, "", price.toDouble(), currency, category, condition' in marketplace and 'validListing(title, listingDescription' in marketplace),
     ("active marketplace remains backend listing driven", "FynxRemoteSocialClient.listings" in marketplace),
+    ("Marketplace discovery includes the signed-in seller own active products while the detail UI disables self-purchase and backend checkout rejects it", 'const params = [req.user.sub]' in discovery_routes and 'l.seller_id<>$1' not in discovery_routes and 'canPurchase = !isOwnListing' in marketplace and 'Buyers can see it in Marketplace, but you cannot buy your own product.' in marketplace and 'enabled = canPurchase && l.quantity > 0' in marketplace and "you cannot purchase your own listing" in marketplace_checkout_route),
+    ("Marketplace discovery hides sellers blocked in either direction without hiding the signed-in seller own listings", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))" in discovery_routes and "l.seller_id<>$1" not in discovery_routes),
+    ("Marketplace listings fallback and public storefront apply the same two-way block filter while allowing the signed-in seller to see their own products", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))" in social_routes and "l.seller_id <> $1" not in social_routes),
     ("product details show the real media carousel", "items(l.mediaIds.take(12))" in marketplace),
     ("product details show seller and fulfillment information", 'Text("Seller:' in marketplace and 'Text("Location:' in marketplace and "deliveryAvailable" in marketplace and "pickupAvailable" in marketplace),
     ("active Marketplace exposes the visible Message seller action wired to the real chat deep link", 'Text("Message seller")' in detail_components and "onContact = { contactSeller(listing.sellerUsername, listing.id) }" in marketplace and "FynxDeepLinkParser.chatAppLink" in marketplace and "Intent.ACTION_VIEW" in marketplace),
     ("active marketplace exposes Add to cart", "Add to cart" in marketplace and "cart = cart + listing" in marketplace),
     ("active marketplace Buy now enters the real checkout", "onBuyNow = { selected = null; checkoutListing = listing }" in marketplace and "FynxMarketplaceCheckoutDialog" in marketplace),
+    ("confirmed single-item Buy Now payment removes the purchased product and quantity from the saved cart", "onPaid = { paymentOrder = null; cart = cart.filterNot { it.id == order.listingId }; cartQuantities = cartQuantities.filterKeys { it != order.listingId }; protectedOrder = order; reload() }" in marketplace),
     ("active marketplace details are scrollable for phone screens", "verticalScroll(rememberScrollState())" in marketplace),
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
@@ -51,7 +79,8 @@ checks = [
     ("marketplace cart opens from the real cart button", "showCart = true" in marketplace and "Icons.Default.ShoppingCart" in marketplace),
     ("marketplace cart prevents duplicate listing entries", "cart.none { it.id == listing.id }" in marketplace),
     ("marketplace cart passes selected products into multi-product checkout", "onCheckout = { selectedItems -> showCart = false; multiCheckoutItems = selectedItems }" in marketplace and "multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities" in marketplace and "multiPaymentListingIds = selectedItems.map { it.id }.toSet()" in marketplace),
-    ("marketplace Buy now is disabled when the real listing is out of stock", "onBuyNow" in marketplace and "enabled = l.quantity > 0" in marketplace),
+    ("cart checkout is blocked when a selected listing has become unavailable or cart quantity exceeds available stock", "val unavailable = selected.any { it.quantity <= 0 || (quantities[it.id] ?: 1) > it.quantity }" in marketplace and "enabled = selected.isNotEmpty() && !mixed && !unavailable" in marketplace and "Some selected products no longer have enough stock." in marketplace),
+    ("marketplace Buy now and Add to cart are disabled for out-of-stock products and seller-owned listings", "onBuyNow" in marketplace and "enabled = canPurchase && l.quantity > 0" in marketplace and "Text(if (!canPurchase) \"Your listing\" else if (l.quantity > 0) \"Add to cart\" else \"Out of stock\")" in marketplace),
     ("marketplace checkout initializes payment against the protected order", "initializeMarketplacePayment(context, order.id, email)" in marketplace),
     ("marketplace checkout requires payment verification before protection confirmation", "verifyMarketplacePayment(context, payment?.reference.orEmpty())" in marketplace),
     ("marketplace checkout rejects an expired client-side quote before order creation", "marketplaceQuoteExpired(q.expiresAt)" in checkout),
@@ -71,6 +100,12 @@ checks = [
     ("My Shop profile save success uses semantic success green while profile failures remain errors", 'shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }' in seller_center and 'shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }' in seller_center),
     ("My Shop clears stale profile errors when any field changes and before retrying save", all(fragment in seller_center for fragment in ("shopName = it.take(120); shopMessage = null; shopError = null", "shopDescription = it.take(800); shopMessage = null; shopError = null", "shopLocation = it.take(160); shopMessage = null; shopError = null", "shopContactPhone = it.take(40); shopMessage = null; shopError = null", "shopSaving = true\n                            shopMessage = null\n                            shopError = null"))),
     ("My Shop preserves listing edit, delete, and per-listing delivery/pickup settings", 'Icon(Icons.Default.Edit, "Edit listing")' in seller_center and 'Icon(Icons.Default.Delete, "Remove listing")' in seller_center and "FynxMarketplaceShippingSettingsCard(" in seller_center),
+    ("My Shop stock editor and inventory cards label total stock and backend rejects quantities below existing reservations", 'label = { Text("Total stock (0 = out of stock)") }' in seller_center and '${listing.quantity} total stock • ${listing.category} • ${listing.condition}' in seller_center and "Stock cannot be reduced below items already reserved by active orders." in seller_center and "if (quantity < reservedQuantity)" in social_routes and "reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE" in social_routes),
+    ("buyer-facing Marketplace uses available stock after reservations while My Shop retains total stock", social_routes.count("AS available_quantity") >= 3 and discovery_routes.count("AS available_quantity") >= 2 and 'o.optInt("available_quantity", o.optInt("quantity"))' in remote_client and 'label = { Text("Total stock (0 = out of stock)") }' in seller_center),
+    ("paginated Marketplace discovery parses available_quantity instead of total quantity", 'o.optInt("available_quantity", o.optInt("quantity", 0))' in discovery_client and "AS available_quantity" in discovery_routes),
+    ("public Marketplace detail and fallback parsers use available stock while My Shop explicitly keeps total stock", 'parseListings(raw, preferAvailableStock = true)' in marketplace_client and 'parseListingObject(JSONObject(raw).getJSONObject("listing"), preferAvailableStock = true)' in marketplace_client and 'parseListings(raw, preferAvailableStock = false)' in marketplace_client and 'if (preferAvailableStock)' in marketplace_client and 'o.optInt("available_quantity", o.optInt("quantity", 0))' in marketplace_client),
+    ("My Shop edit form and authenticated backend update description, category, condition, and location while retaining seller ownership and price-watch notifications", all(fragment in seller_center for fragment in ('label = { Text("Product description") }', 'label = { Text("Category") }', 'Text("Condition", style = MaterialTheme.typography.labelLarge)', 'listOf("NEW", "USED", "REFURBISHED")', 'label = { Text("Product location") }', 'verticalScroll(rememberScrollState())')) and all(fragment in marketplace_client for fragment in ('"description", cleanDescription.take(4000)', '"category", cleanCategory.take(40)', '"condition", cleanCondition', '"location", cleanLocation.take(160)')) and all(fragment in social_routes for fragment in ('description = $4, category = $5, condition = $6, location = $7', 'WHERE id = $1 AND seller_id = $2 FOR UPDATE', 'if (priceChanged)'))),
+    ("My Shop listing cards display the first uploaded product image and an explicit fallback when no media exists", 'FynxRemoteMedia(' in seller_center and 'FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())' in seller_center and 'Product image unavailable' in seller_center),
     ("My Shop keeps seller-order review in Orders and driver assignments in Delivery & drivers", 'if (activeSection == "Orders")' in seller_center and "FynxMarketplaceSellerOrders(context = context" in seller_center and 'if (activeSection == "Delivery & drivers")' in seller_center and "showDriverAssignments = true" in seller_center),
     ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Earnings history"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
     ("My Shop reports partial settlement-history failures instead of silently presenting incomplete earnings as complete", "var settlementFailures = 0" in seller_center and "settlementFailures += 1" in seller_center and "Some settlement records could not load. Refresh My Shop to retry." in seller_center and "moneyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }" in seller_center),
@@ -84,8 +119,14 @@ checks = [
     ("product cards expose a stateful Save action wired to saved-product APIs", "isFavorite = listing.id in savedProductIds" in marketplace and "onFavorite = { toggleSavedProductFromCard(listing.id) }" in marketplace and "FynxRemoteSocialClient.saveMarketplaceProduct(context, listingId)" in marketplace and "FynxRemoteSocialClient.unsaveMarketplaceProduct(context, listingId)" in marketplace and 'Icons.Default.Favorite else Icons.Default.FavoriteBorder' in product_card),
     ("product-card Save disables repeated taps and shows pending feedback", "isFavoriteBusy = listing.id in savedProductBusyIds" in marketplace and "enabled = !isFavoriteBusy" in product_card and "CircularProgressIndicator(" in product_card),
     ("product cards show truthful inventory availability from listing quantity", '"Out of stock"' in product_card and '"Only ${listing.quantity} left"' in product_card and "listing.quantity <= 0" in product_card and "listing.quantity <= 5" in product_card),
+    ("Saved Products hides listings when either the buyer or seller has blocked the other", "WHERE sp.user_id = $1 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))" in social_routes),
     ("Saved Products can open the canonical listing in Marketplace", 'Text("View product")' in saved_products_panel and "onOpenListing(product.id)" in saved_products_panel and 'FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" })' in app_shell and "loadExactMarketplaceListing(context, listingId)" in marketplace),
     ("Marketplace Orders shortcut fetches independently and shows loading/error states", "fun reloadOrders()" in marketplace and "ordersLoading" in marketplace and "ordersError" in marketplace and "Loading your orders…" in marketplace and "Orders could not load." in marketplace and "onOrders = { showOrders = true; reloadOrders() }" in marketplace),
+    ("successful listing publish refreshes the seller-owned inventory endpoint rather than public discovery", "myListings(context).getOrThrow().firstOrNull { it.id == id }" in remote_client and "General discovery deliberately excludes the signed-in seller's own products." in remote_client),
+    ("seller inventory refresh hides soft-deleted listings after the backend returns inactive history", 'FynxMarketplaceClient.myListings(context)' in seller_center and '.onSuccess { listings = it.filter { listing -> listing.active } }' in seller_center),
+    ("My Shop distinguishes an inventory load failure from a genuinely empty inventory and offers retry", 'listings.isEmpty() && error != null' in seller_center and 'Text("Retry loading listings")' in seller_center),
+    ("buyer order delivery detail failures offer an explicit retry", 'deliveryDetailsError?.let' in order_lifecycle and 'Text("Retry delivery details")' in order_lifecycle and '.onFailure { deliveryDetailsError' in order_lifecycle),
+    ("fallback Marketplace search matches shop name, location and category", all(term in social_routes for term in ("COALESCE(l.store_name", "COALESCE(l.location", "COALESCE(l.category")) and "COALESCE(l.store_name" in discovery_routes),
 ]
 
 failed = [name for name, ok in checks if not ok]
