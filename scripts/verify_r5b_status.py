@@ -218,6 +218,12 @@ require('Marketplace link parses back to Marketplace','"marketplace"->if(normali
 require('Marketplace product detail share button reaches the real listing share action','FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title))' in marketplace and 'onShare = {' in marketplace and 'IconButton(onClick = onShare)' in marketplace_detail and 'Icon(Icons.Default.Share, "Share"' in marketplace_detail)
 
 
+status_screen_insets = app[app.index('val screenContentModifier'):app.index('Box(screenContentModifier)')] if 'val screenContentModifier' in app and 'Box(screenContentModifier)' in app else ''
+require(
+    'Status immersive surface reaches behind system navigation inset',
+    '.then(if (selected == "Home" || selected == "Stories") Modifier else Modifier.navigationBarsPadding())' in status_screen_insets
+)
+
 require('status editor resizes above the keyboard using IME insets','BoxWithConstraints(Modifier.fillMaxSize().imePadding().background(Color(background))' in mature)
 require('status text editor avoids oversized fixed bottom spacer','padding(top = 76.dp, bottom = 24.dp)' in mature)
 require('status style panel is a bounded modal bottom sheet with a pinned Done action','ModalBottomSheet(' in mature and 'containerColor = Color(0xFF202124)' in mature and '.heightIn(min = 280.dp, max = 420.dp)' in mature and '.weight(1f)' in mature and 'pin Done outside the' in mature and 'Text("Done", color = Color.White' in mature and 'rememberModalBottomSheetState(skipPartiallyExpanded = true)' in mature)
