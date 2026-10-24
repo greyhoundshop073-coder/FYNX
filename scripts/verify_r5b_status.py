@@ -210,7 +210,7 @@ require('status interaction controls','viewCount' in timeline and 'likeCount' in
 require('status emoji reaction controls','EmojiEmotions' in timeline and 'showReactionPicker' in timeline and 'listOf("❤️", "😂", "😮", "😢", "👍", "👏", "🔥", "🎉")' in timeline)
 require('status external share action','FynxShareActions.share(context, FynxShareActions.statusPayload(status))' in timeline and 'fun statusPayload(status: FynxStatus)' in share)
 require('status share uses Stories destination','FynxDeepLinkParser.storiesWebLink()' in share and 'Stories' in deeplink)
-require('owner delete UI','FynxStatusClient.delete(context, status.id)' in timeline and 'status.ownerUsername.equals(viewerUsername, true)' in timeline)
+require('owner delete UI','FynxStatusClient.delete(context, status.id)' in timeline and 'val isOwnStatus = status.ownerUsername.removePrefix("@").trim()' in timeline and 'if (isOwnStatus)' in timeline)
 require('24 hour viewer expiry','FYNX_STATUS_EXPIRY_MS' in timeline)
 require('Home Status row excludes expired or invalid-expiry updates','val activeStatuses = statuses.filterNot(FynxStatus::isExpired)' in visible)
 require('Home Status row removes expiring stories while Home stays open','LaunchedEffect(statuses)' in visible and 'val nextExpiry = statuses.minOfOrNull { it.expiresAtMillis }' in visible and 'statuses = statuses.filterNot(FynxStatus::isExpired)' in visible)
