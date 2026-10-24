@@ -1637,7 +1637,7 @@ private fun MarketplaceMultiProductPaymentDialog(
                                     message = it.message ?: "Could not open Paystack checkout."
                                 }
                             }
-                        }.onFailure { message = it.message ?: "Could not start protected payment." }
+                        }.onFailure { message = marketplacePaymentFailureMessage(it) }
                         busy = false
                     }
                 }) {
