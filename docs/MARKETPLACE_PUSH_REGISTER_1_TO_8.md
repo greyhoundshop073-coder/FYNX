@@ -296,3 +296,6 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 **Regression guard:** `backend/verify-marketplace-fulfillment.mjs` asserts numeric ID validation, owner-scoped media lookup, allowed image MIME checking, and canonical photo evidence insertion.
 
 **Verification:** Exact-head Backend CI is required. No deployment or device test is claimed.
+
+
+**Android follow-through:** The driver assignment dialog also exposes an optional delivery-photo picker; it uploads the selected image as the signed-in driver and passes the returned media ID to the validated delivery endpoint. The driver can still submit a recipient name plus note without a photo.
