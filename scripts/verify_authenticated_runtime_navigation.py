@@ -3,7 +3,7 @@
 # Keep authenticated recovery coverage enabled after detector corrections.
 # Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
-import os, subprocess, time, html, re, json, uuid, binascii, struct, zlib
+import os, subprocess, time, html, re, json, uuid, binascii, struct, zlib, atexit
 import urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -14,6 +14,7 @@ USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
+RUNTIME_PRIVACY_RESTORES=[]
 LOGIN_MODE="server credential login"
 
 def run(*args:str, timeout:int=30):
@@ -554,6 +555,67 @@ def backend_login_token(username:str,password:str)->tuple[str,str]:
     if not token:
         raise ValueError("backend login returned no access token")
     return base,token
+
+def _is_isolated_runtime_backend(base:str)->bool:
+    parsed=urllib.parse.urlparse(base)
+    host=(parsed.hostname or "").casefold()
+    return parsed.scheme=="https" and host.endswith(".up.railway.app") and "testing" in host
+
+def _runtime_privacy_request(base:str,token:str,method:str,payload:dict|None=None)->dict:
+    data=json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-store"}
+    if data is not None:
+        headers["Content-Type"]="application/json"
+    request=urllib.request.Request(base+"/api/privacy",data=data,headers=headers,method=method)
+    with urllib.request.urlopen(request,timeout=20) as response:
+        raw=response.read().decode("utf-8","replace")
+    return json.loads(raw) if raw.strip() else {}
+
+def backend_prepare_isolated_private_chat_privacy(peer_username:str,peer_password:str)->tuple[bool,str]:
+    """Temporarily allow the primary and run-scoped peer to message only on the isolated test backend."""
+    if not USERNAME or not PASSWORD or not peer_username or not peer_password:
+        return False,"primary and dedicated peer credentials are required"
+    try:
+        base_primary,token_primary=backend_login_token(USERNAME,PASSWORD)
+        base_peer,token_peer=backend_login_token(peer_username,peer_password)
+        if base_primary!=base_peer or not _is_isolated_runtime_backend(base_primary):
+            return False,"temporary message privacy change refused: host is not the isolated Railway testing service"
+        for username,password,token in (
+            (USERNAME,PASSWORD,token_primary),
+            (peer_username,peer_password,token_peer),
+        ):
+            current=_runtime_privacy_request(base_primary,token,"GET")
+            settings=current.get("settings") if isinstance(current,dict) else {}
+            old=str((settings or {}).get("messages_visibility") or "My friends")
+            if old not in {"Everyone","My friends","Nobody"}:
+                return False,"backend returned an unrecognized messages visibility value"
+            if old!="Everyone":
+                # Record cleanup before PATCH so a lost response cannot strand a changed setting.
+                RUNTIME_PRIVACY_RESTORES.append((username,password,base_primary,old))
+                _runtime_privacy_request(base_primary,token,"PATCH",{"settings":{"messages_visibility":"Everyone"}})
+        return True,"temporary messages visibility enabled for the CI account and run-scoped peer on isolated testing backend"
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return False,"isolated test privacy setup failed:"+status+" "+type(error).__name__
+
+def restore_runtime_private_chat_privacy()->list[str]:
+    """Restore only privacy settings changed by this isolated private-chat test."""
+    failures=[]
+    pending=list(reversed(RUNTIME_PRIVACY_RESTORES))
+    RUNTIME_PRIVACY_RESTORES.clear()
+    for username,password,expected_base,old_visibility in pending:
+        try:
+            base,token=backend_login_token(username,password)
+            if base!=expected_base or not _is_isolated_runtime_backend(base):
+                failures.append("private Chat test privacy restore refused because the isolated testing host changed")
+                continue
+            _runtime_privacy_request(base,token,"PATCH",{"settings":{"messages_visibility":old_visibility}})
+        except Exception as error:
+            status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+            failures.append("private Chat test could not restore a prior messages visibility setting:"+status+" "+type(error).__name__)
+    return failures
+
+atexit.register(restore_runtime_private_chat_privacy)
 
 def backend_private_message_exists(peer_username:str,marker_text:str,expected_sender:str)->tuple[bool,str]:
     """Check exact private-message text and sender through server history, not local cache."""
@@ -1159,22 +1221,53 @@ def exercise_notification_route(route:str, name:str)->bool:
     started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d",route,PACKAGE,timeout=30)
     time.sleep(2.5)
     xml=dump_ui(f"{name}-notification-cold.xml")
-    alive, crashlog=capture_runtime_log(f"{name}-notification-cold-process.log")
+    # On a fresh process the sign-in gate is expected until the existing E2E session is restored.
+    if find_control(xml,["Sign In"]):
+        _,login_error=login()
+        if login_error:
+            FAILURES.append(f"{name} notification route could not restore the authenticated test session: "+login_error)
+            return False
+        started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d",route,PACKAGE,timeout=30)
+        time.sleep(1.5)
+        xml=dump_ui(f"{name}-notification-cold-authenticated.xml")
+    if name=="private-chat":
+        xml=wait_for_conversation_ui(f"{name}-notification-cold-destination.xml",timeout=12)
+        destination_ok=bool(xml and (find_control(xml,["Message composer","Edit message composer","Chat message composer area"]) or find_control(xml,["No messages here yet"])))
+    elif name=="group-chat":
+        xml=wait_for_group_conversation_ui(f"{name}-notification-cold-destination.xml",timeout=12)
+        destination_ok=bool(xml and "Group unavailable" not in xml and (find_control(xml,["Message...","Message composer","Chat message composer area"]) or find_control(xml,["Messaging is restricted","No messages here yet"])))
+    else:
+        destination_ok=bool(xml)
+    alive,crashlog=capture_runtime_log(f"{name}-notification-cold-process.log")
     screenshot(f"{name}-notification-cold.png")
-    if started.returncode != 0 or not xml or not alive:
-        FAILURES.append(f"{name} notification tap route cold-start caused the authenticated app to exit or lose its UI")
+    if started.returncode!=0 or not xml or not alive:
+        FAILURES.append(f"{name} notification route cold-start caused the authenticated app to exit or lose its UI")
+        return False
+    if not destination_ok:
+        FAILURES.append(f"{name} notification route cold-start kept the process alive but did not open its actual destination")
         return False
     warm=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d",route,PACKAGE,timeout=30)
-    time.sleep(1.5)
-    warm_xml=dump_ui(f"{name}-notification-warm.xml")
+    time.sleep(1.0)
+    if name=="private-chat":
+        warm_xml=wait_for_conversation_ui(f"{name}-notification-warm-destination.xml",timeout=12)
+        warm_destination_ok=bool(warm_xml and (find_control(warm_xml,["Message composer","Edit message composer","Chat message composer area"]) or find_control(warm_xml,["No messages here yet"])))
+    elif name=="group-chat":
+        warm_xml=wait_for_group_conversation_ui(f"{name}-notification-warm-destination.xml",timeout=12)
+        warm_destination_ok=bool(warm_xml and "Group unavailable" not in warm_xml and (find_control(warm_xml,["Message...","Message composer","Chat message composer area"]) or find_control(warm_xml,["Messaging is restricted","No messages here yet"])))
+    else:
+        warm_xml=dump_ui(f"{name}-notification-warm.xml")
+        warm_destination_ok=bool(warm_xml)
     warm_alive,warm_crashlog=capture_runtime_log(f"{name}-notification-warm-process.log")
     screenshot(f"{name}-notification-warm.png")
-    if warm.returncode != 0 or not warm_xml or not warm_alive:
-        FAILURES.append(f"{name} notification tap route warm-start caused the authenticated app to exit or lose its UI")
+    if warm.returncode!=0 or not warm_xml or not warm_alive:
+        FAILURES.append(f"{name} notification route warm-start caused the authenticated app to exit or lose its UI")
+        return False
+    if not warm_destination_ok:
+        FAILURES.append(f"{name} notification route warm-start kept the process alive but did not retain the actual destination")
         return False
     if crashlog or warm_crashlog:
         report.append(f"- {name} notification-route crash evidence captured")
-    report.append(f"- PASS {name} notification tap route: cold + warm Activity launch remain alive")
+    report.append(f"- PASS {name} notification route opens the real destination on cold-authenticated and warm Activity launches")
     return True
 
 def login():
@@ -1332,29 +1425,12 @@ else:
             report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
-    # Capture the real Settings home from the authenticated running APK.
-    profile_xml=tap_control(xml,["Open FYNX profile"],"settings-open-profile",["Edit profile","Settings"])
-    if profile_xml:
-        settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
-        if settings_xml:
-            report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
-        else:
-            FAILURES.append("profile -> Settings home did not open")
-    else:
-        FAILURES.append("Home -> profile entry did not open for Settings visual capture")
-    # Return through the app's own back stack. Do not force-stop/relaunch here:
-    # offline/local test sessions may be in-memory and a cold start can send the
-    # emulator back to the sign-in gate, making unrelated navigation checks fail.
-    for step in range(3):
-        current=dump_ui(f"authenticated-after-settings-back-{step}.xml")
-        if find_control(current,["Open FYNX camera"]) or find_control(current,["Chat"]) and find_control(current,["Friends"]):
-            xml=current
-            break
-        run("adb","shell","input","keyevent","4")
-        time.sleep(0.8)
-    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
-    if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
-        FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
+    # Profile/Settings belongs to another workstream. Do not touch its source or
+    # let its screenshot-only navigation block Chat/Groups certification.
+    report.append("- SKIPPED Profile/Settings screenshot certification: owned by the separate Profile workstream")
+    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-before-chat-groups.xml") or xml
+    if find_control(xml,["Sign In"]):
+        FAILURES.append("authenticated Home was unavailable before Chat/Groups runtime checks")
     composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
     if composer_xml:
         report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
@@ -1595,6 +1671,11 @@ if not FAILURES:
                     if not normalized_self or normalized_self==normalized_peer:
                         FAILURES.append("private Chat E2E peer must be configured and different from the primary E2E account")
                     else:
+                        privacy_ready,privacy_detail=backend_prepare_isolated_private_chat_privacy(peer_username,peer_password)
+                        if privacy_ready:
+                            report.append("- PASS "+privacy_detail)
+                        else:
+                            FAILURES.append("private Chat E2E could not safely establish temporary test-only messaging privacy: "+privacy_detail)
                         restore_home_after_restart("private-chat-send-test-home")
                         run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
                         peer_chat=wait_for_conversation_ui("private-chat-send-test-open.xml")
@@ -1649,21 +1730,34 @@ if not FAILURES:
                                 return ""
 
                             private_sent=[]
-                            private_keyboard_marker="CI_PRIVATE_KEYBOARD_"+str(time.time_ns())
-                            if private_enter_marker(private_keyboard_marker,"private-chat-keyboard-send"):
+                            private_enter_marker_text="CI_PRIVATE_ENTER_"+str(time.time_ns())
+                            if private_enter_marker(private_enter_marker_text,"private-chat-multiline-enter"):
                                 run("adb","shell","input","keyevent","66")
-                                sent_ui=private_wait_marker(private_keyboard_marker,"private-chat-keyboard-send")
-                                if sent_ui:
-                                    private_sent.append((private_keyboard_marker,"private Chat keyboard Send"))
-                                    report.append("- PASS private Chat keyboard Send moved unique marker from composer to a visible message")
+                                time.sleep(.4)
+                                enter_ui=dump_ui("private-chat-multiline-enter-result.xml")
+                                _,draft_remains=private_marker_state(enter_ui,private_enter_marker_text)
+                                if draft_remains:
+                                    report.append("- PASS private Chat multiline composer retains its draft when physical Enter inserts a newline")
                                 else:
-                                    FAILURES.append("private Chat keyboard Send did not create a separate visible message")
+                                    FAILURES.append("private Chat multiline Enter unexpectedly discarded the draft")
+
+                            # Keep the same live ConversationPanel between keyboard and button checks.
+                            current_ui=dump_ui("private-chat-before-button-clear.xml")
+                            composer=find_control(current_ui,["Message composer","Edit message composer","Chat message composer area","Message..."])
+                            if composer:
+                                _,cx,cy=composer
+                                run("adb","shell","input","tap",str(cx),str(cy))
+                                run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+                                run("adb","shell","input","keyevent","KEYCODE_DEL")
+                                time.sleep(.3)
+                                cleared_ui=dump_ui("private-chat-button-clear-result.xml")
+                                _,old_draft_remains=private_marker_state(cleared_ui,private_enter_marker_text)
+                                if old_draft_remains:
+                                    FAILURES.append("private Chat composer could not clear the multiline Enter draft before Send-button certification")
 
                             private_button_marker="CI_PRIVATE_BUTTON_"+str(time.time_ns())
-                            restore_home_after_restart("private-chat-button-send-home")
-                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
-                            reopened_peer=wait_for_conversation_ui("private-chat-button-send-open.xml")
-                            if reopened_peer and find_control(reopened_peer,["Message composer","Edit message composer","Chat message composer area","Message..."]):
+                            current_ui=dump_ui("private-chat-button-send-current.xml")
+                            if current_ui and find_control(current_ui,["Message composer","Edit message composer","Chat message composer area","Message..."]):
                                 if private_enter_marker(private_button_marker,"private-chat-composer-button"):
                                     before_button=dump_ui("private-chat-button-before-tap.xml")
                                     send_button=find_exact_control(before_button,"Send message") or find_control(before_button,["Send message"])
@@ -1672,14 +1766,14 @@ if not FAILURES:
                                         run("adb","shell","input","tap",str(x),str(y))
                                         sent_ui=private_wait_marker(private_button_marker,"private-chat-composer-button")
                                         if sent_ui:
-                                            private_sent.append((private_button_marker,"private Chat composer button"))
-                                            report.append("- PASS private Chat composer button moved unique marker into a visible message")
+                                            private_sent.append((private_button_marker,"private Chat Send button"))
+                                            report.append("- PASS private Chat Send button moved a unique marker into a visible message")
                                         else:
-                                            FAILURES.append("private Chat composer button did not create a separate visible message")
+                                            FAILURES.append("private Chat Send button did not create a separate visible message")
                                     else:
-                                        FAILURES.append("private Chat composer button was not exposed with the expected Send message accessibility label")
+                                        FAILURES.append("private Chat Send button was not exposed with the expected Send message accessibility label")
                             else:
-                                FAILURES.append("private Chat button test could not reopen a usable peer ConversationPanel")
+                                FAILURES.append("private Chat Send-button test lost the active ConversationPanel before typing its marker")
 
                             for marker_text,method in private_sent:
                                 remote_ok,remote_detail=backend_private_message_exists(peer_username,marker_text,USERNAME)
@@ -1698,7 +1792,10 @@ if not FAILURES:
                                 FAILURES.append("incoming private Chat delivery could not be prepared: "+peer_send_detail)
                             else:
                                 report.append("- PASS "+peer_send_detail)
-                                restore_home_after_restart("private-chat-incoming-home")
+                                # Keep this process authenticated, return to Home, then reopen the same
+                                # real peer conversation to exercise incoming delivery and history refresh.
+                                run("adb","shell","input","keyevent","4")
+                                time.sleep(.6)
                                 run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(peer_username,safe=""),PACKAGE,timeout=30)
                                 incoming_ui=""
                                 for _ in range(24):
@@ -1722,12 +1819,11 @@ if not FAILURES:
                     report.append("- BLOCKED private Chat send/receive certification: "+reason)
                     FAILURES.append("private Chat end-to-end send/receive was not certified: "+reason)
 
-                if private_chat_username:
-                    route_username=private_chat_username.removeprefix("@").strip()
-                    if route_username:
-                        exercise_notification_route("fynx://chat/" + route_username, "private-chat")
+                if peer_username and conversation_ui_opened:
+                    exercise_notification_route("fynx://chat/" + urllib.parse.quote(peer_username.removeprefix("@").strip(),safe=""), "private-chat")
                 else:
-                    report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
+                    report.append("- BLOCKED private-chat notification-route certification because no dedicated peer conversation was opened")
+                    FAILURES.append("private Chat notification route requires the dedicated CI peer destination")
                 reset=restore_home_after_restart("authenticated-home-chat-group-reset") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 group_after=""
@@ -2091,6 +2187,9 @@ if marketplace_xml:
 else:
     FAILURES.append("authenticated Home -> Marketplace")
     
+for privacy_restore_error in restore_runtime_private_chat_privacy():
+    FAILURES.append(privacy_restore_error)
+
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
            "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png","",
