@@ -301,7 +301,18 @@ fun FynxCameraCapturePanel(
                                         val progress = (recordingElapsed.toFloat() / 60_000f).coerceIn(0f, 1f)
                                         Canvas(Modifier.fillMaxSize().padding(2.dp)) { drawArc(Color(0xFF8B7BE8), -90f, 360f * progress, false, style = androidx.compose.ui.graphics.drawscope.Stroke(5.dp.toPx())) }
                                     }
-                                    Icon(if(mode==CameraMode.PHOTO)Icons.Default.PhotoCamera else if(recording!=null)Icons.Default.Stop else Icons.Default.Videocam,if(recording!=null)"Stop video note" else if(mode==CameraMode.PHOTO)"Take photo" else "Record video note")
+                                    Icon(
+                                        if (mode == CameraMode.PHOTO) Icons.Default.PhotoCamera else if (recording != null) Icons.Default.Stop else Icons.Default.Videocam,
+                                        if (recording != null) {
+                                            if (videoNoteMode) "Stop video note" else "Stop video recording"
+                                        } else if (mode == CameraMode.PHOTO) {
+                                            "Take photo"
+                                        } else if (videoNoteMode) {
+                                            "Record video note"
+                                        } else {
+                                            "Record video"
+                                        }
+                                    )
                                 }
                             };FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null){mode=CameraMode.VIDEO;showCaptureControls=true}},label={Text("Video")},leadingIcon={Icon(Icons.Default.Videocam,null)})}
         }

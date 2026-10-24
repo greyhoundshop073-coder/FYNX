@@ -659,8 +659,111 @@ if not FAILURES:
             screenshot("authenticated-status-create.png")
             report.append("- PASS Home own-Status + button opens the real Add status panel")
             report.append("- PASS Add status panel exposes both Voice and Text creation choices")
-            # This run focuses on previously unverified Text and Music journeys.
-            # Voice has already been captured in a prior artifact; do not repeat it.
+
+            # Test the real Status camera route with actual emulator capture and discard.
+            # Never tap Send here: this runtime entry is not server-authenticated and no
+            # dummy Status should be created or published by the visual test.
+            status_camera_xml = tap_control(
+                status_add_xml, ["Take photo"], "status-camera-photo-open",
+                ["Close camera", "Allow camera", "FYNX needs camera access"]
+            )
+            if status_camera_xml and find_control(status_camera_xml, ["Allow camera"]) and not find_control(status_camera_xml, ["Close camera"]):
+                status_camera_xml = tap_control(
+                    status_camera_xml, ["Allow camera"], "status-camera-permission",
+                    ["Close camera", "Take photo", "FYNX needs camera access"]
+                )
+            camera_ready = bool(
+                status_camera_xml
+                and find_control(status_camera_xml, ["Close camera"])
+                and find_control(status_camera_xml, ["Take photo"])
+            )
+            if camera_ready:
+                screenshot("authenticated-status-camera-photo.png")
+                report.append("- PASS Add status -> Take photo opens the real CameraX photo capture UI")
+                photo_preview_xml = tap_control(
+                    status_camera_xml, ["Take photo"], "status-camera-capture-photo",
+                    ["Retake", "Send"]
+                )
+                if photo_preview_xml and find_control(photo_preview_xml, ["Retake"]):
+                    screenshot("authenticated-status-camera-photo-preview.png")
+                    report.append("- PASS camera photo capture opens a preview with Retake and Send controls")
+                    status_camera_xml = tap_control(
+                        photo_preview_xml, ["Retake"], "status-camera-photo-retake",
+                        ["Close camera", "Take photo"]
+                    )
+                    if status_camera_xml and find_control(status_camera_xml, ["Close camera"]):
+                        status_add_xml = tap_control(
+                            status_camera_xml, ["Close camera"], "status-camera-photo-close",
+                            ["Add status", "Voice", "Text"]
+                        )
+                    else:
+                        FAILURES.append("Retake did not return the Status photo flow to the CameraX capture screen")
+                else:
+                    FAILURES.append("Status camera photo capture did not expose the real Retake/Send preview")
+            elif status_camera_xml and find_control(status_camera_xml, ["FYNX needs camera access"]):
+                # Explicitly separate an unavailable runner camera from a passing capture.
+                report.append("- BLOCKED Status photo/video runtime capture: emulator camera permission or hardware is unavailable")
+                close_camera = find_control(status_camera_xml, ["Close camera", "Close"])
+                if close_camera:
+                    _, camera_x, camera_y = close_camera
+                    run("adb", "shell", "input", "tap", str(camera_x), str(camera_y))
+                    time.sleep(0.7)
+                    status_add_xml = dump_ui("authenticated-status-camera-unavailable-return.xml")
+            else:
+                FAILURES.append("Add status -> Take photo did not expose a usable CameraX capture screen")
+
+            # Only exercise video recording when the photo camera is available.
+            if camera_ready and status_add_xml and find_control(status_add_xml, ["Add status"]):
+                video_camera_xml = tap_control(
+                    status_add_xml, ["Record video"], "status-camera-video-open",
+                    ["Close camera", "Allow camera", "FYNX needs camera access"]
+                )
+                if video_camera_xml and find_control(video_camera_xml, ["Allow camera"]) and not find_control(video_camera_xml, ["Close camera"]):
+                    video_camera_xml = tap_control(
+                        video_camera_xml, ["Allow camera"], "status-camera-video-permission",
+                        ["Close camera", "Record video", "FYNX needs camera access"]
+                    )
+                if video_camera_xml and find_control(video_camera_xml, ["Close camera"]) and find_control(video_camera_xml, ["Record video"]):
+                    screenshot("authenticated-status-camera-video.png")
+                    report.append("- PASS Add status -> Record video opens the real CameraX video capture UI")
+                    video_recording_xml = tap_control(
+                        video_camera_xml, ["Record video"], "status-camera-video-record-start",
+                        ["Stop video recording"]
+                    )
+                    if video_recording_xml and find_control(video_recording_xml, ["Stop video recording"]):
+                        time.sleep(1.6)
+                        video_recording_xml = dump_ui("authenticated-status-camera-video-recording.xml")
+                        screenshot("authenticated-status-camera-video-recording.png")
+                        video_preview_xml = tap_control(
+                            video_recording_xml, ["Stop video recording"], "status-camera-video-record-stop",
+                            ["Retake", "Send"]
+                        )
+                        if video_preview_xml and find_control(video_preview_xml, ["Retake"]):
+                            screenshot("authenticated-status-camera-video-preview.png")
+                            report.append("- PASS real Status video recording opens a preview with Retake and Send controls")
+                            video_camera_xml = tap_control(
+                                video_preview_xml, ["Retake"], "status-camera-video-retake",
+                                ["Close camera", "Record video"]
+                            )
+                            if video_camera_xml and find_control(video_camera_xml, ["Close camera"]):
+                                status_add_xml = tap_control(
+                                    video_camera_xml, ["Close camera"], "status-camera-video-close",
+                                    ["Add status", "Voice", "Text"]
+                                )
+                            else:
+                                FAILURES.append("Retake did not return the Status video flow to the CameraX capture screen")
+                        else:
+                            FAILURES.append("Status video recording did not expose the real Retake/Send preview")
+                    else:
+                        FAILURES.append("Status video camera did not enter the recording state")
+                elif video_camera_xml and find_control(video_camera_xml, ["FYNX needs camera access"]):
+                    report.append("- BLOCKED Status video runtime capture: emulator camera permission or hardware is unavailable")
+                else:
+                    FAILURES.append("Add status -> Record video did not expose the video recording controls")
+            else:
+                report.append("- BLOCKED Status video runtime capture: photo camera capture was unavailable in this emulator run")
+
+            # This run covers Text/Music plus Voice below; media is discarded, not published.
             text_composer_xml = tap_control(
                 status_add_xml, ["Text"], "status-text-composer",
                 ["Type a Status", "Text styling", "Send"]
@@ -891,7 +994,7 @@ if not FAILURES:
 
             # Leave Voice without publishing and prove the app returns to Home.
             voice_closed_xml = ""
-            for _ in range(5):
+            for _ in range(6):
                 voice_closed_xml = dump_ui("authenticated-status-voice-close-check.xml")
                 if (find_control(voice_closed_xml, ["Open FYNX camera"])
                         and find_control(voice_closed_xml, ["Chat"])
@@ -904,6 +1007,9 @@ if not FAILURES:
                 else:
                     run("adb", "shell", "input", "keyevent", "4")
                 time.sleep(0.7)
+            # The last tap may have completed navigation at the end of the loop. Always
+            # observe one fresh screen before recording a return-navigation failure.
+            voice_closed_xml = dump_ui("authenticated-status-voice-close-final.xml")
             if (find_control(voice_closed_xml, ["Open FYNX camera"])
                     and find_control(voice_closed_xml, ["Chat"])
                     and find_control(voice_closed_xml, ["Friends"])):
@@ -949,7 +1055,12 @@ if not FAILURES:
                "- authenticated-status-voice-composer.png",
                "- authenticated-status-voice-recording.png",
                "- authenticated-status-voice-preview.png",
-               "- authenticated-status-voice-playing.png"]
+               "- authenticated-status-voice-playing.png",
+               "- authenticated-status-camera-photo.png",
+               "- authenticated-status-camera-photo-preview.png",
+               "- authenticated-status-camera-video.png",
+               "- authenticated-status-camera-video-recording.png",
+               "- authenticated-status-camera-video-preview.png"]
     if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
         # This APK's saved-device path deliberately provides local UI access,
         # not a server-authenticated session. Certify the Status journey above,
