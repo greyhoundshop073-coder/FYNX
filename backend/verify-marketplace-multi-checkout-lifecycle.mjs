@@ -23,7 +23,7 @@ const checks = [
   ['fulfillment authorization is seller-specific', completion.includes('only the seller can update fulfillment progress')],
   ['completion is blocked by an active protection case', completion.includes('hasActiveProtectionCase(client, id)')],
   ['payout reconciliation remains child-order scoped', settlement.includes('WHERE order_id=$1') && settlement.includes('PAYOUT-RELEASE-' + '$' + '{operation.order_id}')],
-  ['payout is blocked when a refund is active for that child', settlement.includes("operation_type='REFUND'") && settlement.includes('refund financial operation is active for this order')],
+  ['payout is blocked while a child refund remains unresolved; only provider-confirmed failure is terminal', settlement.includes("operation_type='REFUND'") && settlement.includes("status IN ('PENDING','SUCCEEDED','BLOCKED')") && settlement.includes("COALESCE(metadata->>'refundEvent','') <> 'refund.failed'") && settlement.includes("COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'") && settlement.includes('refund financial operation is unresolved for this order')],
   ['multi-product Paystack webhook reconciliation exists', webhook.includes('FYNX-CHECKOUT-') && webhook.includes('marketplace_checkout_groups') && webhook.includes('marketplace_checkout_group_items')],
   ['expired multi-product groups are reconciled as one unit', expiry.includes('expireUnpaidMarketplaceCheckoutGroups') && expiry.includes('UPDATE marketplace_checkout_groups SET status=\'CANCELLED\'')],
   ['expired group checkout releases every child inventory reservation', expiry.includes('checkout_group_payment_expired') && expiry.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)')],
