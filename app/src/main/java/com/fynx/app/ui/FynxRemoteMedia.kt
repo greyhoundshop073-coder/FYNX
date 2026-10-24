@@ -71,8 +71,7 @@ fun FynxRemoteMedia(
     contentScale: ContentScale = ContentScale.Fit,
     rounded: Boolean = true,
     autoPlay: Boolean = true,
-    playbackActive: Boolean = true,
-    enableImagePreview: Boolean = true
+    playbackActive: Boolean = true
 ) {
     val context = LocalContext.current
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
@@ -153,8 +152,8 @@ fun FynxRemoteMedia(
         }
         "image" -> bitmap?.let {
             var showFullScreen by remember(resolvedUrl) { mutableStateOf(false) }
-            val baseImageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
-            val imageModifier = if (enableImagePreview) baseImageModifier.clickable { showFullScreen = true } else baseImageModifier
+            val imageModifier = (if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier)
+                .clickable { showFullScreen = true }
             Image(it.asImageBitmap(), "Open image", imageModifier, contentScale = contentScale)
             if (showFullScreen) {
                 Dialog(onDismissRequest = { showFullScreen = false }) {
@@ -226,8 +225,7 @@ fun FynxRemoteProfileAvatar(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     ownerUsername: String? = null,
-    onStatusClick: (() -> Unit)? = null,
-    enableImagePreview: Boolean = true
+    onStatusClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val normalizedOwner = ownerUsername?.removePrefix("@")?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
@@ -259,7 +257,7 @@ fun FynxRemoteProfileAvatar(
                     Text(contentDescription.orEmpty().trim().firstOrNull()?.uppercase() ?: "F", color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             } else {
-                FynxRemoteMedia("/api/media/${resolvedMediaId.trim()}", "image", Modifier.fillMaxSize().clip(RoundedCornerShape(50)), enableImagePreview = enableImagePreview)
+                FynxRemoteMedia("/api/media/${resolvedMediaId.trim()}", "image", Modifier.fillMaxSize().clip(RoundedCornerShape(50)))
             }
         }
         Box(modifier = modifier.then(if (hasActiveStatus) Modifier.border(2.dp, Color(0xFF22C55E), RoundedCornerShape(50)).padding(2.dp) else Modifier).clip(RoundedCornerShape(50)).then(if (hasActiveStatus && onStatusClick != null) Modifier.clickable { onStatusClick() } else Modifier), contentAlignment = Alignment.Center) { avatar() }

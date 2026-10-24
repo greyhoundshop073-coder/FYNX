@@ -153,33 +153,13 @@ profile_button_index = app_source.find('contentDescription = "Open FYNX profile"
 profile_menu_index = app_source.find('contentDescription = "Profile menu, three dots"')
 if profile_button_index < 0 or profile_menu_index < 0 or profile_menu_index <= profile_button_index:
     raise SystemExit("HOME INTERACTIONS RED: Home profile and profile-menu accessibility controls are missing or out of order")
-# Start at the avatar Box, not its accessibility label: the label occurs at
-# the end of the modifier chain, so slicing from it cannot see size/clickable.
-profile_box_index = app_source.rfind("Box(", 0, profile_button_index)
-if profile_box_index < 0:
-    raise SystemExit("HOME INTERACTIONS RED: profile avatar Box is missing")
-profile_touch_region = app_source[profile_box_index:profile_menu_index]
+profile_touch_region = app_source[profile_button_index:profile_menu_index]
 if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
     raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")
-# The avatar is intentionally a standalone 48dp clickable Box. Formatting and
-# modifier chains may span lines, so assert its actual size/click semantics.
-normalized_profile_region = normalize_source(profile_touch_region)
-if "Modifier.size(48.dp).clickable" not in normalized_profile_region:
-    raise SystemExit("HOME INTERACTIONS RED: profile avatar must own a standalone 48dp clickable touch target")
-if 'contentAlignment = Alignment.Center' not in profile_touch_region:
-    raise SystemExit("HOME INTERACTIONS RED: profile avatar touch target must preserve centered avatar content")
-# Verify the restored original three-dot IconButton as a separate sibling
-# control. Do not impose the newer blue 28dp redesign on the Home UI.
-profile_menu_box_index = app_source.rfind("Box(", 0, profile_menu_index)
-if profile_menu_box_index < 0:
-    raise SystemExit("HOME INTERACTIONS RED: profile menu container is missing")
-menu_region_end = app_source.find("DropdownMenu(", profile_menu_index)
-if menu_region_end < 0:
-    raise SystemExit("HOME INTERACTIONS RED: profile menu dropdown is missing")
-normalized_menu_region = normalize_source(app_source[profile_menu_box_index:menu_region_end])
-if "IconButton(" not in normalized_menu_region or "Modifier.size(44.dp)" not in normalized_menu_region or "onClick = { profileAvatarMenuOpen = true }" not in normalized_menu_region:
-    raise SystemExit("HOME INTERACTIONS RED: restored profile three-dot IconButton must remain clickable")
-
+require(profile_touch_region, 'Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', "profile avatar has its own non-overlapped 48dp touch target")
+menu_box_start = app_source.rfind('Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', profile_button_index, profile_menu_index)
+if menu_box_start <= profile_button_index:
+    raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling 48dp touch target")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
 require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
 require(app_source, '"Contacts" -> "Chats"', "Contacts back returns to Chats")

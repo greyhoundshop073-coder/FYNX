@@ -12,7 +12,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,7 +28,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -396,33 +394,26 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            Modifier.size(48.dp).clickable {
-                                selected = "Profile"
-                                openProfileSettings = false
-                            }.semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Use one explicit 48dp touch target for the avatar. The nested
-                            // IconButton's expanded minimum-touch semantics were visible to
-                            // accessibility but did not reliably navigate in emulator taps.
-                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp), enableImagePreview = false)
-                            else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
-                            else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
+                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            IconButton(
+                                onClick = { selected = "Profile"; openProfileSettings = false },
+                                modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" }
+                            ) {
+                                if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
+                                else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
+                                else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
+                            }
                         }
-                        // Restore the original compact three-dot menu control; keep its
-                        // existing menu actions and avoid changing the avatar navigation.
+                        // Keep the 3-dot control beside the avatar, not on top of it.
+                        // Material IconButton expands to a 48dp touch target even when its
+                        // visual icon is smaller; overlaying it makes the profile target
+                        // unclickable on real devices and in accessibility/UI automation.
                         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                             IconButton(
                                 onClick = { profileAvatarMenuOpen = true },
                                 modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" }
                             ) {
-                                Icon(
-                                    Icons.Default.MoreHoriz,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
+                                Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
                             }
                             DropdownMenu(
                                 expanded = profileAvatarMenuOpen,
