@@ -91,6 +91,7 @@ fun HomePanel(
                         onOpenMarketplaceListing = { listingId -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(listingId)))) },
                         onCreatePost = { showCreateMenu = true },
                         onOpenAuthorProfile = onOpenAuthorProfile,
+                        onOpenStatusOwner = onOpenStatusOwner,
                         initialPostId = initialPostId,
                         initialCommentId = initialCommentId,
                         onInitialPostConsumed = onInitialPostConsumed,
