@@ -184,9 +184,21 @@ async function initiatePayout(payload) {
       return;
     }
 
-    const refundConflict = (await client.query(`SELECT 1 FROM marketplace_financial_operations WHERE order_id=$1 AND operation_type='REFUND' AND status IN ('PENDING','SUCCEEDED') LIMIT 1`, [operation.order_id])).rowCount > 0;
+    const refundConflict = (await client.query(`
+      SELECT 1 FROM marketplace_financial_operations
+      WHERE order_id=$1 AND operation_type='REFUND'
+        AND (
+          status IN ('PENDING','SUCCEEDED','BLOCKED')
+          OR (
+            status='FAILED'
+            AND COALESCE(metadata->>'refundEvent','') <> 'refund.failed'
+            AND COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'
+          )
+        )
+      LIMIT 1
+    `, [operation.order_id])).rowCount > 0;
     if (refundConflict) {
-      await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, ['refund financial operation is active for this order', operation.id]);
+      await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, ['refund financial operation is unresolved for this order', operation.id]);
       await client.query('COMMIT');
       return;
     }
