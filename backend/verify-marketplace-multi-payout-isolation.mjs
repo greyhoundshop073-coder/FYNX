@@ -19,7 +19,7 @@ const checks = [
   ['payout ledger remains child-order idempotent', worker.includes('PAYOUT-RELEASE-${operation.order_id}') && worker.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['payout webhook records the child operation order id', webhook.includes('operation.order_id') && webhook.includes('seller_payout')],
   ['existing reconciliation contract covers payout account currency', reconciliation.includes('payout account currency is matched to the order currency')],
-  ['active refund on one child blocks only that child payout operation', worker.includes("WHERE order_id=$1 AND operation_type='REFUND'") && worker.includes('refund financial operation is active for this order')],
+  ['unresolved refund on one child blocks only that child payout operation; only provider-confirmed failure is terminal', worker.includes("WHERE order_id=$1 AND operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED','BLOCKED')") && worker.includes("COALESCE(metadata->>'refundEvent','') <> 'refund.failed'") && worker.includes("COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'") && worker.includes('refund financial operation is unresolved for this order')],
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
