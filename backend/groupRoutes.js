@@ -88,6 +88,7 @@ export function registerGroupRoutes({ app, pool: providedPool = null, jwtSecret:
       const row=(await db.query(`SELECT m.id,m.group_id,m.sender_id,m.text,m.attachment_media_id,m.attachment_type,m.reply_to_id,m.reaction,m.edited_at,m.deleted_at,m.pinned,m.created_at,u.username AS sender_username FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id WHERE m.id=$1 LIMIT 1`,[id])).rows[0];
       if (!row) return res.status(500).json({error:'group message persistence failed'});
       if (String(row.group_id)!==groupId || String(row.sender_id)!==String(req.user.sub)) return res.status(409).json({error:'message id already used',code:'MESSAGE_ID_CONFLICT'});
+      if (String(row.text ?? "") !== text || (row.attachment_media_id == null ? null : String(row.attachment_media_id)) !== (attachmentMediaId == null ? null : String(attachmentMediaId)) || String(row.attachment_type ?? "") !== String(attachmentType ?? "") || (row.reply_to_id == null ? null : String(row.reply_to_id)) !== (replyToId == null ? null : String(replyToId))) return res.status(409).json({error:'message ID already used for different content',code:'MESSAGE_ID_CONFLICT'});
       const message = messageJson(row);
       // Retries may receive the already-persisted message, but must not rebroadcast it.
       // Re-broadcast the canonical ID on idempotent retries: a previous DB commit may have outlived a failed realtime publish.
