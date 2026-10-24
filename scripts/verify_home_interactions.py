@@ -158,13 +158,20 @@ if header_start < 0 or 'Modifier.weight(1f)' in app_source[header_start:profile_
     raise SystemExit("HOME INTERACTIONS RED: Home header must not wrap the profile controls in a weighted Row that can compress and overlap touch targets")
 if 'Modifier.weight(1f)' not in app_source[profile_menu_index:app_source.find('Row(verticalAlignment = Alignment.CenterVertically)', profile_menu_index)]:
     raise SystemExit("HOME INTERACTIONS RED: Home brand label must occupy remaining header width after the profile controls")
-profile_touch_region = app_source[profile_button_index:profile_menu_index]
+profile_box_start = app_source.rfind("Box(", 0, profile_button_index)
+menu_box_start = app_source.rfind("Box(", profile_button_index, profile_menu_index)
+if profile_box_start < 0:
+    raise SystemExit("HOME INTERACTIONS RED: profile avatar must have its own Box touch target")
+if menu_box_start <= profile_button_index:
+    raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling Box touch target")
+profile_touch_region = app_source[profile_box_start:menu_box_start]
+menu_touch_region = app_source[menu_box_start:profile_menu_index]
 if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
     raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")
-require(profile_touch_region, 'Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', "profile avatar has its own non-overlapped 48dp touch target")
-menu_box_start = app_source.rfind('Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', profile_button_index, profile_menu_index)
-if menu_box_start <= profile_button_index:
-    raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling 48dp touch target")
+require_normalized(profile_touch_region, "Modifier.size(48.dp).clickable", "profile avatar has its own non-overlapped 48dp clickable touch target")
+require_normalized(profile_touch_region, "contentAlignment = Alignment.Center", "profile avatar touch target centers its content")
+require_normalized(menu_touch_region, "Modifier.size(48.dp).clickable", "profile menu has its own separate 48dp clickable touch target")
+require_normalized(menu_touch_region, "contentAlignment = Alignment.Center", "profile menu touch target centers its content")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
 require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
 require(app_source, '"Contacts" -> "Chats"', "Contacts back returns to Chats")
