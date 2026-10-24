@@ -43,17 +43,46 @@ def run(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
         return subprocess.CompletedProcess(args, 124, out + "\nCOMMAND TIMEOUT")
 
 
-def api_request(method: str, path: str, payload: dict | None = None):
+def api_request(
+    method: str,
+    path: str,
+    payload: dict | None = None,
+    *,
+    timeout: float = 25.0,
+    retries: int = 3,
+    retry_delay: float = 10.0,
+):
+    """Use bounded retries for safe requests; match the repository's Render cold-start policy."""
     body = json.dumps(payload).encode("utf-8") if payload is not None else None
     headers = {"Accept": "application/json"}
     if body is not None:
         headers["Content-Type"] = "application/json"
     if TOKEN:
         headers["Authorization"] = "Bearer " + TOKEN
-    request = urllib.request.Request(BASE + path, data=body, headers=headers, method=method)
-    with urllib.request.urlopen(request, timeout=25) as response:
-        raw = response.read().decode("utf-8", "replace")
-        return json.loads(raw) if raw.strip() else {}
+    # Retrying the login endpoint is safe; never replay an arbitrary content-creation POST.
+    retry_safe = method.upper() in {"GET", "DELETE"} or (
+        method.upper() == "POST" and path == "/api/auth/login"
+    )
+    attempts = max(1, retries if retry_safe else 1)
+    retryable_http = {408, 425, 429, 500, 502, 503, 504}
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        request = urllib.request.Request(BASE + path, data=body, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                raw = response.read().decode("utf-8", "replace")
+                return json.loads(raw) if raw.strip() else {}
+        except urllib.error.HTTPError as exc:
+            if exc.code not in retryable_http or attempt >= attempts:
+                raise
+            last_error = exc
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if attempt >= attempts:
+                raise
+            last_error = exc
+        if attempt < attempts:
+            time.sleep(retry_delay)
+    raise last_error or RuntimeError(f"{method} {path} request failed")
 
 
 def api_login() -> str:
@@ -548,13 +577,24 @@ def main() -> int:
     global RUN_START_MS
     RUN_START_MS = int(time.time() * 1000)
     try:
+        # Wake the Render free-tier service and confirm database readiness before
+        # authenticating. The repository's production reachability gate uses this
+        # same 120-second / three-attempt policy for genuine cold starts.
+        health = api_request("GET", "/health", timeout=120, retries=3, retry_delay=10)
+        if health.get("ok") is not True or health.get("service") != "fynx-backend" or health.get("database") != "ready":
+            raise RuntimeError("production /health did not report a ready database")
+        ready = api_request("GET", "/ready", timeout=120, retries=3, retry_delay=10)
+        if ready.get("ok") is not True or ready.get("service") != "fynx-backend" or ready.get("database") != "ready":
+            raise RuntimeError("production /ready did not report a ready database")
         if not api_login():
             raise RuntimeError("API login returned no access token")
         existing = api_statuses()
         BASELINE_STATUS_IDS = {str(item.get("id") or "") for item in existing if str(item.get("id") or "")}
     except Exception as exc:
+        reason = f"HTTP {exc.code}" if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
         report.extend(["## Result: BLOCKED",
-                       "- Live authenticated Status API preflight did not complete (" + type(exc).__name__ + ").",
+                       "- Production health/readiness and authenticated Status API preflight did not complete (" + reason + ").",
+                       "- The test will not create content while the live backend is unavailable or unauthenticated.",
                        "- No test Status was created. Existing debug/local UI certification remains separate."])
         (ROOT / "FYNX-server-status-lifecycle.md").write_text("\n".join(report) + "\n", encoding="utf-8")
         print("\n".join(report))
@@ -679,8 +719,12 @@ def main() -> int:
     report += ["## Results"]
     report.extend("- " + item for item in NOTES)
     report.extend("- FAIL: " + item for item in FAILURES)
+    blocked_checks = any(item.strip().upper().startswith("BLOCKED") for item in NOTES)
+    result_label = "RED" if FAILURES else ("PARTIAL / BLOCKED" if blocked_checks else "GREEN")
     report.append("")
-    report.append("## Result: " + ("RED" if FAILURES else "GREEN"))
+    report.append("## Result: " + result_label)
+    if blocked_checks and not FAILURES:
+        report.append("- Some environment-dependent Status/Story journeys remain unverified; do not treat this report as full certification.")
     report.append("")
     (ROOT / "FYNX-server-status-lifecycle.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     print("\n".join(report))

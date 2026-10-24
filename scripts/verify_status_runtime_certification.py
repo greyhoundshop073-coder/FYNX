@@ -23,6 +23,11 @@ checks = {
     "runtime certification uses the non-debuggable APK, real sign-in UI and real account credentials":
         'app/build/outputs/apk/runtimeCert/app-runtimeCert.apk' in runtime and
         'FYNX_E2E_USERNAME' in runtime and 'FYNX_E2E_PASSWORD' in runtime and 'fynx://home' in runtime,
+    "Status lifecycle preflight wakes Render and follows the repository health/readiness retry policy":
+        '"/health"' in runtime and '"/ready"' in runtime and
+        'timeout=120' in runtime and 'retries=3' in runtime and 'retry_delay=10' in runtime,
+    "environment-blocked Status journeys cannot be reported as a full GREEN certification":
+        'PARTIAL / BLOCKED' in runtime and 'do not treat this report as full certification' in runtime,
     "Text Status must be verified by server retrieval and real Story viewer before cleanup":
         '"/api/statuses"' in runtime and 'TEXT_MARKER' in runtime and
         'authenticated-server-status-text-viewer' in runtime and 'delete_through_viewer' in runtime,
