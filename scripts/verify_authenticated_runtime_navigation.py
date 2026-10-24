@@ -813,6 +813,33 @@ def backend_group_access_contract(group_id:str)->tuple[bool,str]:
 
 
 
+def backend_group_member_names(group_id:str)->tuple[set[str],str]:
+    """Read the authenticated server roster for one known CI-owned group."""
+    if not USERNAME or not PASSWORD:
+        return set(),"primary E2E credentials are unavailable"
+    try:
+        base,token=backend_login_token(USERNAME,PASSWORD)
+        path="/api/groups/"+urllib.parse.quote(group_id,safe="")+"/members"
+        request=urllib.request.Request(
+            base+path,
+            headers={"Authorization":"Bearer "+token,"Accept":"application/json","Cache-Control":"no-cache"},
+            method="GET",
+        )
+        with urllib.request.urlopen(request,timeout=20) as response:
+            payload=json.loads(response.read().decode("utf-8","replace"))
+        members=payload.get("members")
+        if not isinstance(members,list):
+            return set(),"server group roster response omitted the members array"
+        names={
+            str(item.get("username") or "").removeprefix("@").strip().casefold()
+            for item in members if isinstance(item,dict)
+        }
+        return names,"authenticated server roster returned "+str(len(names))+" member usernames"
+    except Exception as error:
+        status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+        return set(),"authenticated group roster read failed:"+status+" "+type(error).__name__
+
+
 def make_ci_attachment_png(path:Path)->None:
     """Write a tiny valid RGB PNG for the real Android Photo Picker; no user media is read."""
     width=48
