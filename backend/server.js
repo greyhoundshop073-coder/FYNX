@@ -12,7 +12,6 @@ import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js"
 import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
-import { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 
 const { Pool } = pg;
@@ -29,16 +28,7 @@ app.use((req, res, next) => {
   if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   next();
 });
-app.use(express.json({
-  limit: "18mb",
-  strict: true,
-  // Paystack verifies the HMAC over the exact incoming bytes, not JSON re-serialization.
-  verify: (req, _res, buffer) => {
-    if (String(req.originalUrl || "").split("?")[0] === "/api/marketplace/payments/paystack/webhook") {
-      req.rawBody = Buffer.from(buffer);
-    }
-  }
-}));
+app.use(express.json({ limit: "18mb", strict: true }));
 app.use((req, res, next) => {
   if (req.method !== "GET" && req.method !== "HEAD") res.setHeader("Cache-Control", "no-store");
   next();
@@ -954,7 +944,6 @@ wss.on("connection", (socket, req) => {
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
-if (pool) registerMarketplacePaystackWebhook({ app, pool });
 registerMarketplaceReputationRoutes({ app, pool, auth });
 registerMarketplaceCompletionRoutes({ app, pool, auth });
 if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });
