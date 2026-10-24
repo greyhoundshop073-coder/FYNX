@@ -23,6 +23,7 @@ social_routes = read("backend/socialRoutes.js")
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 home_shell = read("app/src/main/java/com/fynx/app/ui/HomePanel.kt")
 visible_updates = read("app/src/main/java/com/fynx/app/ui/FynxVisibleUpdatesPanel.kt")
+remote_media = read("app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt")
 ai_panel = read("app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt")
 ai_client = read("app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt")
 comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
@@ -150,6 +151,9 @@ if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
 
 app_source = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 require(app_source, "import androidx.compose.foundation.clickable", "Home profile controls import Compose clickable extension")
+require(app_source, "allowImagePreview = false", "Home header avatar taps navigate to Profile instead of opening the avatar image")
+require(remote_media, "allowImagePreview: Boolean = true", "shared media retains image-preview compatibility by default")
+require(remote_media, "allowImagePreview = allowImagePreview", "profile avatar forwards caller-specific image-preview policy")
 profile_button_index = app_source.find('contentDescription = "Open FYNX profile"')
 profile_menu_index = app_source.find('contentDescription = "Profile menu, three dots"')
 if profile_button_index < 0 or profile_menu_index < 0 or profile_menu_index <= profile_button_index:
