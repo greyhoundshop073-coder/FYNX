@@ -250,7 +250,7 @@ fun FynxStatusTimelinePanel(
             { selected = null },
             { selected = null; refreshKey++ },
             onOpenMessage,
-            onPreviousOwner = previousOwner?.let { target -> { selected = target } },
+            onPreviousOwner = previousOwner?.let { target -> { selected = firstUnseenStatusForOwner(target.ownerUsername, target) } },
             onNextOwner = nextOwner?.let { target ->
                 { selected = firstUnseenStatusForOwner(target.ownerUsername, target) }
             }
