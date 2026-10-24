@@ -42,9 +42,13 @@ fun FynxMarketplaceSellerCenterPanel() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listings by remember { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
+    var archivedListings by remember { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var deletingId by remember { mutableStateOf<String?>(null) }
+    var republishingId by remember { mutableStateOf<String?>(null) }
+    var listingActionError by remember { mutableStateOf<String?>(null) }
+    var listingActionMessage by remember { mutableStateOf<String?>(null) }
     var editingListing by remember { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
     var editTitle by rememberSaveable { mutableStateOf("") }
     var editDescription by rememberSaveable { mutableStateOf("") }
@@ -145,7 +149,12 @@ fun FynxMarketplaceSellerCenterPanel() {
             loading = true
             error = null
             FynxMarketplaceClient.myListings(context)
-                .onSuccess { listings = it.filter { listing -> listing.active } }
+                .onSuccess { inventory ->
+                    listings = inventory.filter { listing -> listing.active }
+                    archivedListings = inventory.filterNot { listing -> listing.active }
+                    listingActionError = null
+                    listingActionMessage = null
+                }
                 .onFailure { error = it.message ?: "Could not load your listings." }
             shopLoading = true
             shopError = null
@@ -413,8 +422,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.Inventory2, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(8.dp))
-                        Text("You have no active listings yet", style = MaterialTheme.typography.titleMedium)
-                        Text("Create a product from Marketplace to manage it here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (archivedListings.isEmpty()) "You have no active listings yet" else "No active listings right now", style = MaterialTheme.typography.titleMedium)
+                        Text(if (archivedListings.isEmpty()) "Create a product from Marketplace to manage it here." else "Republish an archived listing below or create a new product.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -463,8 +472,15 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     deletingId = listing.id
                                     scope.launch {
                                         FynxMarketplaceClient.deleteListing(context, listing.id)
-                                            .onSuccess { listings = listings.filterNot { it.id == listing.id } }
-                                            .onFailure { error = it.message ?: "Listing could not be removed." }
+                                            .onSuccess {
+                                                val archived = listings.firstOrNull { it.id == listing.id }?.copy(active = false)
+                                                listings = listings.filterNot { it.id == listing.id }
+                                                if (archived != null) archivedListings = listOf(archived) + archivedListings.filterNot { it.id == listing.id }
+                                                listingActionMessage = "${listing.title} was archived and is no longer visible to buyers."
+                                                listingActionError = null
+                                                error = null
+                                            }
+                                            .onFailure { listingActionError = it.message ?: "Listing could not be removed." }
                                         deletingId = null
                                     }
                                 }) { Icon(Icons.Default.Delete, "Remove listing") }
@@ -480,6 +496,85 @@ fun FynxMarketplaceSellerCenterPanel() {
                 }
             }
         }
+        }
+
+        if (activeSection == "Listings" && !loading && archivedListings.isNotEmpty()) {
+            item { Text("Archived listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
+            items(archivedListings, key = { "archived-${it.id}" }) { listing ->
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (listing.mediaIds.isNotEmpty()) {
+                                FynxRemoteMedia(
+                                    mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
+                                    type = "auto",
+                                    modifier = Modifier.size(72.dp)
+                                )
+                            } else {
+                                Surface(
+                                    modifier = Modifier.size(72.dp),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Inventory2, contentDescription = "Product image unavailable", modifier = Modifier.size(26.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(listing.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text(formatSellerMoney(listing.price, listing.currency), color = MaterialTheme.colorScheme.primary)
+                                Text("${listing.quantity} total stock • ${listing.category} • ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Archived · hidden from buyers", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = {
+                                editingListing = listing
+                                editTitle = listing.title
+                                editDescription = listing.description
+                                editCategory = listing.category
+                                editCondition = listing.condition.uppercase(Locale.US)
+                                editLocation = listing.location
+                                editPrice = listing.price.toString()
+                                editQuantity = listing.quantity.toString()
+                                editError = null
+                            }) { Icon(Icons.Default.Edit, "Edit archived listing") }
+                        }
+                        Text(
+                            if (listing.quantity > 0) "This product stays hidden until you republish it." else "Add stock with Edit before republishing.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                republishingId = listing.id
+                                listingActionError = null
+                                listingActionMessage = null
+                                scope.launch {
+                                    FynxMarketplaceClient.reactivateListing(context, listing.id)
+                                        .onSuccess {
+                                            archivedListings = archivedListings.filterNot { it.id == listing.id }
+                                            listings = listOf(listing.copy(active = true)) + listings.filterNot { it.id == listing.id }
+                                            listingActionMessage = "${listing.title} is live in Marketplace again."
+                                        }
+                                        .onFailure { listingActionError = it.message ?: "Listing could not be republished." }
+                                    republishingId = null
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = listing.quantity > 0 && republishingId == null
+                        ) {
+                            if (republishingId == listing.id) CircularProgressIndicator(Modifier.size(18.dp))
+                            else Text("Republish listing")
+                        }
+                    }
+                }
+            }
+        }
+        if (activeSection == "Listings" && listingActionMessage != null) item {
+            Text(listingActionMessage!!, color = androidx.compose.ui.graphics.Color(0xFF16A34A))
+        }
+        if (activeSection == "Listings" && listingActionError != null) item {
+            Text(listingActionError!!, color = MaterialTheme.colorScheme.error)
         }
     }
 
@@ -578,6 +673,17 @@ fun FynxMarketplaceSellerCenterPanel() {
                             FynxMarketplaceClient.updateListing(context, selectedListing.id, editTitle, editDescription, editCategory, editCondition, editLocation, price, quantity)
                                 .onSuccess {
                                     listings = listings.map { current ->
+                                        if (current.id == selectedListing.id) current.copy(
+                                            title = editTitle.trim(),
+                                            description = editDescription.trim(),
+                                            category = editCategory.trim(),
+                                            condition = editCondition.trim().uppercase(Locale.US),
+                                            location = editLocation.trim(),
+                                            price = price,
+                                            quantity = quantity
+                                        ) else current
+                                    }
+                                    archivedListings = archivedListings.map { current ->
                                         if (current.id == selectedListing.id) current.copy(
                                             title = editTitle.trim(),
                                             description = editDescription.trim(),
