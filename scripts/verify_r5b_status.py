@@ -172,6 +172,7 @@ require('mature publish validation','Write something first.' in mature and 'Add 
 require('single backend Status hub','FynxStatusTimelinePanel(' in hub and 'StoriesPanel()' not in hub)
 require('hub mature + creation route','FynxMatureStatusComposerPanel' in hub and 'composing = true' in hub)
 require('hub camera route remains real','FynxCameraCapturePanel' in hub and 'openCapturedStatus' in hub)
+require('Status camera uses safe drawing insets and creator entry state is refreshed','Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing))' in hub and 'remember(startWithCreator) { mutableStateOf(startWithCreator) }' in hub)
 require('legacy Stories wrapper','FynxStatusTimelinePanel()' in stories and 'SharedPreferences' not in stories)
 require('timeline backend list','FynxStatusClient.list(context)' in timeline)
 require('Home Status tap routes to the tapped user Stories','onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim())' in visible and 'onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }' in app)

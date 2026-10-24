@@ -700,6 +700,26 @@ if not FAILURES:
                         FAILURES.append("Retake did not return the Status photo flow to the CameraX capture screen")
                 else:
                     FAILURES.append("Status camera photo capture did not expose the real Retake/Send preview")
+                    # Do not keep using the chooser's stale accessibility tree while a
+                    # full-screen camera Dialog is still open. Attempt the normal Close
+                    # control first, then Android Back as a recovery route; preserve the
+                    # capture failure above so this cannot turn a broken journey GREEN.
+                    recovery_xml = dump_ui("authenticated-status-camera-photo-recovery.xml")
+                    if find_control(recovery_xml, ["Close camera"]):
+                        recovery_xml = tap_control(
+                            recovery_xml, ["Close camera"], "status-camera-photo-recovery-close",
+                            ["Add status", "Voice", "Text"]
+                        )
+                    elif not find_control(recovery_xml, ["Add status"]):
+                        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                        time.sleep(0.8)
+                        recovery_xml = dump_ui("authenticated-status-camera-photo-recovery-after-back.xml")
+                    for _ in range(4):
+                        if find_control(recovery_xml, ["Add status"]) and find_control(recovery_xml, ["Voice"]) and find_control(recovery_xml, ["Text"]):
+                            break
+                        time.sleep(0.5)
+                        recovery_xml = dump_ui("authenticated-status-camera-photo-recovery-retry.xml")
+                    status_add_xml = recovery_xml
             elif status_camera_xml and find_control(status_camera_xml, ["FYNX needs camera access"]):
                 # Explicitly separate an unavailable runner camera from a passing capture.
                 report.append("- BLOCKED Status photo/video runtime capture: emulator camera permission or hardware is unavailable")
@@ -964,6 +984,35 @@ if not FAILURES:
                         if stopped_xml and find_control(stopped_xml, ["Voice Status ready"]):
                             screenshot("authenticated-status-voice-preview.png")
                             report.append("- PASS stopping voice capture opens the local recording preview without publishing")
+
+                            # Exercise caption input while the keyboard is visible. This is
+                            # a local draft check only; never tap Send from a debug-only session.
+                            caption_text = "FYNX voice caption runtime check"
+                            caption_fields = find_edit_fields(stopped_xml)
+                            if caption_fields:
+                                caption_x, caption_y = caption_fields[0]
+                                run("adb", "shell", "input", "tap", str(caption_x), str(caption_y))
+                                input_text(caption_text)
+                                time.sleep(0.8)
+                                caption_xml = dump_ui("authenticated-status-voice-caption-keyboard.xml")
+                                screenshot("authenticated-status-voice-caption-keyboard.png")
+                                if caption_text in caption_xml and find_control(caption_xml, ["Send"]):
+                                    report.append("- PASS Voice Status caption is visible with the keyboard open; captured authenticated-status-voice-caption-keyboard.png")
+                                else:
+                                    FAILURES.append("Voice Status caption was not retained/usable while the keyboard was open")
+                                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                                time.sleep(0.6)
+                                caption_return_xml = dump_ui("authenticated-status-voice-caption-keyboard-dismissed.xml")
+                                if caption_text in caption_return_xml and find_control(caption_return_xml, ["Play voice preview"]):
+                                    report.append("- PASS voice caption and local recording preview survive keyboard dismissal")
+                                    stopped_xml = caption_return_xml
+                                else:
+                                    FAILURES.append("Voice caption or local recording preview was lost after keyboard dismissal")
+                                    if caption_return_xml:
+                                        stopped_xml = caption_return_xml
+                            else:
+                                FAILURES.append("Recorded Voice Status did not expose an editable caption field")
+
                             preview_xml = tap_control(
                                 stopped_xml, ["Play voice preview"], "status-voice-preview-play",
                                 ["Stop voice preview"]
@@ -993,22 +1042,34 @@ if not FAILURES:
                 FAILURES.append("Could not reopen Add status to exercise Voice recording and preview")
 
             # Leave Voice without publishing and prove the app returns to Home.
-            voice_closed_xml = ""
-            for _ in range(6):
-                voice_closed_xml = dump_ui("authenticated-status-voice-close-check.xml")
+            # Try the visible close action once, then use Android Back only if the
+            # composer is still present. This avoids repeatedly tapping stale coordinates
+            # during an AnimatedContent navigation transition.
+            voice_closed_xml = dump_ui("authenticated-status-voice-close-check.xml")
+            for attempt in range(10):
                 if (find_control(voice_closed_xml, ["Open FYNX camera"])
                         and find_control(voice_closed_xml, ["Chat"])
                         and find_control(voice_closed_xml, ["Friends"])):
                     break
                 close_control = find_control(voice_closed_xml, ["Back from Status composer"])
-                if close_control:
+                if close_control and attempt == 0:
                     _, close_x, close_y = close_control
                     run("adb", "shell", "input", "tap", str(close_x), str(close_y))
+                    time.sleep(0.8)
+                    voice_closed_xml = dump_ui("authenticated-status-voice-close-after-tap.xml")
+                    if (find_control(voice_closed_xml, ["Open FYNX camera"])
+                            and find_control(voice_closed_xml, ["Chat"])
+                            and find_control(voice_closed_xml, ["Friends"])):
+                        break
+                # If the close button did not complete navigation, Android Back invokes
+                # the composer's own BackHandler and uses the same onClose path.
+                if find_control(voice_closed_xml, ["Back from Status composer"]):
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
                 else:
-                    run("adb", "shell", "input", "keyevent", "4")
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
                 time.sleep(0.7)
-            # The last tap may have completed navigation at the end of the loop. Always
-            # observe one fresh screen before recording a return-navigation failure.
+                voice_closed_xml = dump_ui("authenticated-status-voice-close-retry.xml")
+            # Observe a fresh screen before recording a return-navigation failure.
             voice_closed_xml = dump_ui("authenticated-status-voice-close-final.xml")
             if (find_control(voice_closed_xml, ["Open FYNX camera"])
                     and find_control(voice_closed_xml, ["Chat"])
@@ -1055,6 +1116,7 @@ if not FAILURES:
                "- authenticated-status-voice-composer.png",
                "- authenticated-status-voice-recording.png",
                "- authenticated-status-voice-preview.png",
+               "- authenticated-status-voice-caption-keyboard.png",
                "- authenticated-status-voice-playing.png",
                "- authenticated-status-camera-photo.png",
                "- authenticated-status-camera-photo-preview.png",

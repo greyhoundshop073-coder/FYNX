@@ -65,7 +65,7 @@ private data class FynxRecentMedia(
 fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}, onComposerVisibilityChange: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var addStatusOpen by remember { mutableStateOf(startWithCreator) }
+    var addStatusOpen by remember(startWithCreator) { mutableStateOf(startWithCreator) }
     var composing by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
     var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
@@ -311,7 +311,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     FynxCameraCapturePanel(
                         onCaptured = { uri, type -> openCapturedStatus(uri, type) },
                         initialMode = cameraInitialMode,
