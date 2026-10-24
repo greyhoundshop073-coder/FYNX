@@ -1178,7 +1178,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
 
     }
     selectedGroup?.let { groupForDialogs ->
-        if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = "Group details could not sync yet. Check your connection and retry." } } } }
+        if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated ->
+            if (FynxGroupsStore.updateGroup(context, updated)) {
+                // Member actions already committed through the dedicated server member endpoints.
+                // Keep the local cache in step without posting a full group sync that can overwrite membership.
+                currentGroup = updated
+            } else {
+                syncMessage = "The local member roster could not be saved. Reopen Members to refresh it from the server."
+            }
+        }
         if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
         if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
         if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, onInvite = { username ->
@@ -1232,16 +1240,63 @@ private fun formatMessageClock(timestamp: Long): String {
 @Composable
 private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, onDismiss: () -> Unit, onGroupChanged: (FynxGroup) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var current by remember(group.id) { mutableStateOf(group) }
     val management = remember(group.id) { mutableStateOf(FynxGroupManagementStore.load(context, group.id)) }
     var username by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
-    val myRole = current.members.firstOrNull { it.username.equals(currentUsername, true) }?.role ?: FynxGroupRole.MEMBER
+    var refreshing by remember { mutableStateOf(false) }
+    var busyMember by remember { mutableStateOf<String?>(null) }
+    val myRole = current.members.firstOrNull { it.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true) }?.role ?: FynxGroupRole.MEMBER
     val canManage = FynxGroupsBatch3.canManage(myRole)
     val isAdmin = myRole == FynxGroupRole.ADMIN
     val prefs = remember(current.id) { FynxConversationPreferences.group(context, current.id) }
     val canAddMembers = isAdmin || prefs.getBoolean("add_members", true)
+    val serverConnected = FynxBackendClient.hasAccessToken(context)
     val memberPhotoIds = remember(current.members) { mutableStateMapOf<String, String?>() }
+
+    fun applyServerRoster(remote: List<FynxGroupRemoteClient.RemoteMember>): Boolean {
+        val members = remote.mapNotNull { remoteMember ->
+            val clean = remoteMember.username.trim().removePrefix("@")
+            if (clean.isBlank()) null
+            else FynxGroupMember(
+                clean,
+                runCatching { FynxGroupRole.valueOf(remoteMember.role.trim().uppercase()) }.getOrDefault(FynxGroupRole.MEMBER)
+            )
+        }.distinctBy { it.username.lowercase() }
+        val serverOwner = members.firstOrNull { it.role == FynxGroupRole.ADMIN }?.username
+            ?: current.ownerUsername.trim().removePrefix("@")
+        val updated = current.copy(ownerUsername = serverOwner, members = members)
+        val validation = FynxGroupsBatch1.validate(updated)
+        if (validation.isNotEmpty()) {
+            message = "Server returned an invalid group roster: " + validation.joinToString()
+            return false
+        }
+        current = updated
+        onGroupChanged(updated)
+        return true
+    }
+
+    suspend fun refreshServerRoster(): Boolean {
+        if (!FynxBackendClient.hasAccessToken(context)) {
+            message = "Server membership changes require a signed-in server session."
+            return false
+        }
+        refreshing = true
+        val result = FynxGroupRemoteClient.loadMembers(context, group.id)
+        val loaded = if (result.isSuccess) applyServerRoster(result.getOrThrow()) else {
+            message = "Could not load the server member list. Check the connection and reopen Members."
+            false
+        }
+        refreshing = false
+        return loaded
+    }
+
+    LaunchedEffect(group.id) {
+        if (serverConnected) refreshServerRoster()
+        else message = "Showing the saved roster. Server membership changes require a connection."
+    }
+
     LaunchedEffect(current.members.map { it.username }) {
         current.members.forEach { member ->
             val normalized = member.username.removePrefix("@").trim()
@@ -1250,51 +1305,154 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
             }
         }
     }
+
     FynxPlainDialog(onDismissRequest = onDismiss, title = { Text("Members • ${current.members.size}", style = MaterialTheme.typography.headlineSmall) }, text = {
         Column {
-            if (canManage && canAddMembers) Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = username, onValueChange = { username = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("Username") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done))
-                IconButton(onClick = {
-                    val clean = username.trim()
-                    if (clean.isBlank() || current.members.any { it.username.equals(clean, true) }) message = "Enter a new username" else {
-                        val updated = current.copy(members = current.members + FynxGroupMember(clean))
-                        if (FynxGroupsBatch1.validate(updated).isEmpty()) { current = updated; onGroupChanged(updated); username = ""; message = "Member added" } else message = "Could not add member"
+            if (refreshing) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text("Refreshing server roster…", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (canManage && canAddMembers && serverConnected) Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    enabled = !refreshing && busyMember == null,
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    label = { Text("Username") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done)
+                )
+                IconButton(
+                    enabled = !refreshing && busyMember == null && username.trim().removePrefix("@").isNotBlank(),
+                    onClick = {
+                        val clean = username.trim().removePrefix("@")
+                        if (clean.isBlank() || current.members.any { it.username.removePrefix("@").equals(clean, true) }) {
+                            message = "That username is already in the group."
+                        } else {
+                            scope.launch {
+                                busyMember = clean
+                                val result = FynxGroupRemoteClient.addMember(context, group.id, clean)
+                                if (result.isSuccess) {
+                                    val added = result.getOrThrow()
+                                    val role = runCatching { FynxGroupRole.valueOf(added.role.trim().uppercase()) }.getOrDefault(FynxGroupRole.MEMBER)
+                                    val updated = current.copy(members = (current.members.filterNot { it.username.equals(added.username, true) } + FynxGroupMember(added.username, role)))
+                                    current = updated
+                                    onGroupChanged(updated)
+                                    username = ""
+                                    val reloaded = refreshServerRoster()
+                                    message = when {
+                                        !reloaded -> "Member change was accepted by the server, but the roster could not refresh. Reopen Members to verify."
+                                        added.alreadyMember -> "@${added.username} was already a member."
+                                        else -> "@${added.username} was added to the group."
+                                    }
+                                } else {
+                                    message = "The server could not add this member. Check group permissions and the username, then retry."
+                                }
+                                busyMember = null
+                            }
+                        }
                     }
-                }) { Icon(Icons.Default.Add, "Add member") }
-            } else if (!canAddMembers) Text("Adding members is disabled in Group Settings.", style = MaterialTheme.typography.bodySmall)
+                ) { Icon(Icons.Default.Add, "Add member") }
+            } else if (!canAddMembers) {
+                Text("Adding members is disabled in Group Settings.", style = MaterialTheme.typography.bodySmall)
+            } else if (!serverConnected) {
+                Text("Connect to the server to change group membership.", style = MaterialTheme.typography.bodySmall)
+            }
+
             if (message.isNotBlank()) Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(current.members, key = { it.username }) { member ->
-                    val blocked = management.value.state.blockedUsernames.contains(member.username)
+                    val normalizedMember = member.username.trim().removePrefix("@")
+                    val normalizedOwner = current.ownerUsername.trim().removePrefix("@")
+                    val normalizedSelf = currentUsername.trim().removePrefix("@")
+                    val isOwner = normalizedMember.equals(normalizedOwner, true)
+                    val isSelf = normalizedMember.equals(normalizedSelf, true)
+                    val busy = busyMember.equals(member.username, true)
+                    val blocked = management.value.state.blockedUsernames.any { it.equals(member.username, true) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         FynxRemoteProfileAvatar(
-                            mediaId = memberPhotoIds[member.username.removePrefix("@").trim()],
+                            mediaId = memberPhotoIds[normalizedMember],
                             contentDescription = member.username,
                             modifier = Modifier.size(38.dp),
                             ownerUsername = member.username
                         )
                         Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) { Text(member.username, style = MaterialTheme.typography.titleSmall); Text(if (blocked) "Blocked" else member.role.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if (canManage && member.username != current.ownerUsername) {
-                            TextButton(onClick = {
-                                val action = if (member.role == FynxGroupRole.MODERATOR) FynxGroupMemberAction.DEMOTE_MODERATOR else FynxGroupMemberAction.PROMOTE_MODERATOR
-                                val nextState = FynxGroupsBatch3.applyAction(management.value.state, member.username, action)
-                                if (nextState != null) {
-                                    management.value = management.value.copy(state = nextState); FynxGroupManagementStore.save(context, management.value)
-                                    val role = if (member.role == FynxGroupRole.MODERATOR) FynxGroupRole.MEMBER else FynxGroupRole.MODERATOR
-                                    val updated = current.copy(members = current.members.map { if (it.username == member.username) it.copy(role = role) else it }); current = updated; onGroupChanged(updated)
+                        Column(Modifier.weight(1f)) {
+                            Text(member.username, style = MaterialTheme.typography.titleSmall)
+                            Text(if (blocked) "Blocked" else member.role.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (isAdmin && !isOwner && !isSelf && member.role != FynxGroupRole.ADMIN && serverConnected) {
+                            TextButton(
+                                enabled = !refreshing && busyMember == null,
+                                onClick = {
+                                    scope.launch {
+                                        busyMember = member.username
+                                        val demoting = member.role == FynxGroupRole.MODERATOR
+                                        val result = if (demoting) {
+                                            FynxGroupRemoteClient.demoteMember(context, group.id, member.username)
+                                        } else {
+                                            FynxGroupRemoteClient.promoteMember(context, group.id, member.username)
+                                        }
+                                        if (result.isSuccess) {
+                                            val nextRole = if (demoting) FynxGroupRole.MEMBER else FynxGroupRole.MODERATOR
+                                            val updated = current.copy(members = current.members.map { if (it.username.equals(member.username, true)) it.copy(role = nextRole) else it })
+                                            current = updated
+                                            onGroupChanged(updated)
+                                            val action = if (demoting) FynxGroupMemberAction.DEMOTE_MODERATOR else FynxGroupMemberAction.PROMOTE_MODERATOR
+                                            val nextState = FynxGroupsBatch3.applyAction(management.value.state, member.username, action)
+                                            if (nextState != null) {
+                                                management.value = management.value.copy(state = nextState)
+                                                FynxGroupManagementStore.save(context, management.value)
+                                            }
+                                            val reloaded = refreshServerRoster()
+                                            message = if (reloaded) {
+                                                if (demoting) "@${member.username} is now a member." else "@${member.username} is now a moderator."
+                                            } else "Role change was accepted by the server, but the roster could not refresh. Reopen Members to verify."
+                                        } else {
+                                            message = "The server rejected the role change. Only group admins can promote or demote members."
+                                        }
+                                        busyMember = null
+                                    }
                                 }
-                            }) { Text(if (member.role == FynxGroupRole.MODERATOR) "Demote" else "Mod") }
-                            TextButton(onClick = {
-                                val action = if (blocked) FynxGroupMemberAction.UNBLOCK else FynxGroupMemberAction.BLOCK
-                                val nextState = FynxGroupsBatch3.applyAction(management.value.state, member.username, action)
-                                if (nextState != null) { management.value = management.value.copy(state = nextState); FynxGroupManagementStore.save(context, management.value) }
-                            }) { Text(if (blocked) "Unblock" else "Block") }
-                            TextButton(onClick = {
-                                val updated = current.copy(members = current.members.filterNot { it.username == member.username })
-                                if (FynxGroupsBatch1.validate(updated).isEmpty()) { current = updated; onGroupChanged(updated) } else message = "The group must keep one admin"
-                            }) { Text("Remove") }
+                            ) { Text(if (member.role == FynxGroupRole.MODERATOR) "Demote" else "Mod") }
+                        }
+                        if (canManage && !isOwner) {
+                            TextButton(
+                                enabled = !refreshing && busyMember == null && serverConnected,
+                                onClick = {
+                                    val action = if (blocked) FynxGroupMemberAction.UNBLOCK else FynxGroupMemberAction.BLOCK
+                                    val nextState = FynxGroupsBatch3.applyAction(management.value.state, member.username, action)
+                                    if (nextState != null) {
+                                        management.value = management.value.copy(state = nextState)
+                                        FynxGroupManagementStore.save(context, management.value)
+                                    }
+                                }
+                            ) { Text(if (blocked) "Unblock" else "Block") }
+                        }
+                        val canRemove = canManage && !isOwner && !isSelf &&
+                            (isAdmin || (myRole == FynxGroupRole.MODERATOR && member.role == FynxGroupRole.MEMBER))
+                        if (canRemove && serverConnected) {
+                            TextButton(
+                                enabled = !refreshing && busyMember == null,
+                                onClick = {
+                                    scope.launch {
+                                        busyMember = member.username
+                                        val result = FynxGroupRemoteClient.removeMember(context, group.id, member.username)
+                                        if (result.isSuccess) {
+                                            current = current.copy(members = current.members.filterNot { it.username.equals(member.username, true) })
+                                            onGroupChanged(current)
+                                            val reloaded = refreshServerRoster()
+                                            message = if (reloaded) "@${member.username} was removed from the group." else "Removal was accepted by the server, but the roster could not refresh. Reopen Members to verify."
+                                        } else {
+                                            message = "The server rejected the removal. Admins can remove any other member; moderators can remove regular members."
+                                        }
+                                        busyMember = null
+                                    }
+                                }
+                            ) { Text(if (busy) "…" else "Remove") }
                         }
                     }
                 }

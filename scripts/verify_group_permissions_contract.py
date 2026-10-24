@@ -40,6 +40,15 @@ checks = {
     "runtime group-send markers stay short enough for reliable ADB input while remaining per-run unique": 'keyboard_marker="CI_GROUP_KEYBOARD_"+uuid.uuid4().hex[:5]' in runtime and 'app_button_marker="CI_GROUP_BUTTON_"+uuid.uuid4().hex[:5]' in runtime,
     "runtime cert requires new server-persisted image ID/type and history persistence after reopening": "attachmentMediaId" in runtime and 'attachment_type!="image"' in runtime and "group-gallery-image-reopened.xml" in runtime,
 }
+checks.update({
+    "member dialog adds through the server membership endpoint": "FynxGroupRemoteClient.addMember(context, group.id, clean)" in active,
+    "member dialog removes through the server-authorized DELETE endpoint": "FynxGroupRemoteClient.removeMember(context, group.id, member.username)" in active and "app.delete('/api/groups/:groupId/members/:username'" in membership_routes,
+    "member role changes use dedicated server endpoints": "FynxGroupRemoteClient.promoteMember(context, group.id, member.username)" in active and "FynxGroupRemoteClient.demoteMember(context, group.id, member.username)" in active,
+    "only admins can change member roles in UI and server": "if (isAdmin && !isOwner && !isSelf && member.role != FynxGroupRole.ADMIN && serverConnected)" in active and "if(!isAdmin(actor?.role))" in membership_routes,
+    "member dialog refreshes authoritative server roster": "FynxGroupRemoteClient.loadMembers(context, group.id)" in active and "suspend fun loadMembers(context:Context,groupId:String)" in group_client,
+    "member dialog does not overwrite member changes by full group sync": 'if (showMembers) FynxGroupMembersDialog' in active and 'currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated)' not in active,
+})
+
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
     print(("PASS: " if ok else "FAIL: ") + name)

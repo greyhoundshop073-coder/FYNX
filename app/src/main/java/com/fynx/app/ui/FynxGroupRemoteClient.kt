@@ -8,7 +8,7 @@ import org.json.JSONObject
 object FynxGroupRemoteClient {
     data class RemoteMessage(val id:String,val text:String,val senderUsername:String,val timestamp:Long,val attachmentMediaId:String?,val attachmentType:String?,val attachmentUrl:String?,val replyToId:String?=null,val reaction:String?=null,val edited:Boolean=false,val deleted:Boolean=false,val pinned:Boolean=false)
     data class RemotePermissions(val sendMessages:Boolean=true,val sendMedia:Boolean=true,val addMembers:Boolean=true,val inviteLinks:Boolean=true,val approveNewMembers:Boolean=false,val disappearingSeconds:Int=0)
-    data class RemoteMember(val username:String,val role:String,val joinedAt:Long)
+    data class RemoteMember(val username:String,val role:String,val joinedAt:Long,val alreadyMember:Boolean=false)
     data class RemoteInvite(val groupId:String,val token:String,val name:String,val description:String,val memberCount:Int,val approveNewMembers:Boolean,val alreadyMember:Boolean,val pending:Boolean)
     data class RemoteJoinRequest(val username:String,val requestedAt:Long)
     data class RemotePollOption(val id:String,val text:String,val voteCount:Int)
@@ -24,7 +24,19 @@ object FynxGroupRemoteClient {
         val body=JSONObject().put("username",username.trim().removePrefix("@"))
         val root=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/members",body.toString()).getOrThrow())
         val member=root.getJSONObject("member")
-        RemoteMember(member.optString("username"),member.optString("role","MEMBER"),member.optLong("joinedAt"))
+        RemoteMember(member.optString("username"),member.optString("role","MEMBER"),member.optLong("joinedAt"),root.optBoolean("alreadyMember",false))
+    }
+    suspend fun removeMember(context:Context,groupId:String,username:String):Result<Unit> = runCatching {
+        FynxBackendClient.delete(context,"/api/groups/$groupId/members/${Uri.encode(username.trim().removePrefix("@"))}").getOrThrow()
+        Unit
+    }
+    suspend fun promoteMember(context:Context,groupId:String,username:String):Result<Unit> = runCatching {
+        FynxBackendClient.postJson(context,"/api/groups/$groupId/members/${Uri.encode(username.trim().removePrefix("@"))}/promote",JSONObject().toString()).getOrThrow()
+        Unit
+    }
+    suspend fun demoteMember(context:Context,groupId:String,username:String):Result<Unit> = runCatching {
+        FynxBackendClient.postJson(context,"/api/groups/$groupId/members/${Uri.encode(username.trim().removePrefix("@"))}/demote",JSONObject().toString()).getOrThrow()
+        Unit
     }
     suspend fun loadPermissions(context:Context,groupId:String):Result<RemotePermissions> = runCatching { val o=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/permissions").getOrThrow()).optJSONObject("permissions")?:JSONObject();RemotePermissions(o.optBoolean("send_messages",true),o.optBoolean("send_media",true),o.optBoolean("add_members",true),o.optBoolean("invite_links",true),o.optBoolean("approve_new_members",false),o.optInt("disappearing_seconds",0)) }
     suspend fun updatePermissions(context:Context,groupId:String,permissions:RemotePermissions):Result<RemotePermissions> = runCatching { val body=JSONObject().apply{put("sendMessages",permissions.sendMessages);put("sendMedia",permissions.sendMedia);put("addMembers",permissions.addMembers);put("inviteLinks",permissions.inviteLinks);put("approveNewMembers",permissions.approveNewMembers);put("disappearingSeconds",permissions.disappearingSeconds)};val o=JSONObject(FynxBackendClient.patchJson(context,"/api/groups/$groupId/permissions",body.toString()).getOrThrow()).optJSONObject("permissions")?:JSONObject();RemotePermissions(o.optBoolean("send_messages",permissions.sendMessages),o.optBoolean("send_media",permissions.sendMedia),o.optBoolean("add_members",permissions.addMembers),o.optBoolean("invite_links",permissions.inviteLinks),o.optBoolean("approve_new_members",permissions.approveNewMembers),o.optInt("disappearing_seconds",permissions.disappearingSeconds)) }
