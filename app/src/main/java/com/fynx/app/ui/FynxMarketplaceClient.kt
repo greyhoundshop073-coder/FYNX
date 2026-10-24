@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
 /** Account-scoped Marketplace network client. No fake listings are generated. */
 object FynxMarketplaceClient {
