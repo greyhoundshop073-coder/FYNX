@@ -1734,7 +1734,7 @@ if not FAILURES:
                             if find_control(button_start_ui,["Message...","Message composer","Edit message composer","Chat message composer area"]):
                                 if enter_marker(app_button_marker,"group-app-send-button"):
                                     current_ui=dump_ui("group-app-send-button-before-tap.xml")
-                                    app_send_control=find_control(current_ui,["Record voice message"])
+                                    app_send_control=find_control(current_ui,["Send message"])
                                     if app_send_control:
                                         _,bx,by=app_send_control
                                         run("adb","shell","input","tap",str(bx),str(by))
@@ -1745,7 +1745,7 @@ if not FAILURES:
                                         else:
                                             FAILURES.append("FYNX composer button did not move marker into separate visible group message")
                                     else:
-                                        FAILURES.append("FYNX composer button test could not find the actual trailing composer button")
+                                        FAILURES.append("FYNX composer button did not expose the Send message accessibility action for non-empty text")
                             else:
                                 FAILURES.append("FYNX composer button test could not reopen a usable CI group composer")
 

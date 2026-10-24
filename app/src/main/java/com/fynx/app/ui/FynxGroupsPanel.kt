@@ -1155,7 +1155,20 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(if (voiceRecording) Icons.Default.Stop else Icons.Default.Mic, if (voiceRecording) "Stop recording and send" else "Record voice message", modifier = Modifier.size(23.dp), tint = Color.White)
+                            Icon(
+                                imageVector = when {
+                                    voiceRecording -> Icons.Default.Stop
+                                    text.isNotBlank() -> Icons.Default.Send
+                                    else -> Icons.Default.Mic
+                                },
+                                contentDescription = when {
+                                    voiceRecording -> "Stop recording and send"
+                                    text.isNotBlank() -> "Send message"
+                                    else -> "Record voice message"
+                                },
+                                modifier = Modifier.size(23.dp),
+                                tint = Color.White
+                            )
                         }
                     }
                 }
