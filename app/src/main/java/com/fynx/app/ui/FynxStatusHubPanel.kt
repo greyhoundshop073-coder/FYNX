@@ -311,7 +311,10 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                // The camera panel applies safe insets to its own header and bottom
+                // controls. Insetting this full-screen container a second time clips
+                // the Photo/shutter/Video row in the Status camera dialog.
+                Box(Modifier.fillMaxSize()) {
                     FynxCameraCapturePanel(
                         onCaptured = { uri, type -> openCapturedStatus(uri, type) },
                         initialMode = cameraInitialMode,
