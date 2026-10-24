@@ -210,6 +210,8 @@ require('status share uses Stories destination','FynxDeepLinkParser.storiesWebLi
 require('owner delete UI','FynxStatusClient.delete(context, status.id)' in timeline and 'status.ownerUsername.equals(viewerUsername, true)' in timeline)
 require('24 hour viewer expiry','FYNX_STATUS_EXPIRY_MS' in timeline)
 require('Home Status row excludes expired or invalid-expiry updates','val activeStatuses = statuses.filterNot(FynxStatus::isExpired)' in visible)
+require('Home Status row removes expiring stories while Home stays open','LaunchedEffect(statuses)' in visible and 'val nextExpiry = statuses.minOfOrNull { it.expiresAtMillis }' in visible and 'statuses = statuses.filterNot(FynxStatus::isExpired)' in visible)
+require('Status Timeline removes expiring stories and closes an expired viewer','LaunchedEffect(statuses)' in timeline and 'val nextExpiry = statuses.minOfOrNull { it.expiresAtMillis }' in timeline and 'statuses = statuses.filterNot(FynxStatus::isExpired)' in timeline and 'LaunchedEffect(selected, statuses)' in timeline and 'if (selected?.isExpired() == true) selected = null' in timeline)
 
 require('Marketplace share payload exists','fun marketplacePayload(' in share and 'FynxDeepLinkParser.marketplaceWebLink(listingId)' in share)
 require('Marketplace share preserves real listing id','marketplaceWebLink(listingId)' in share and 'fun marketplaceWebLink(listingId:String?=null)' in deeplink)
