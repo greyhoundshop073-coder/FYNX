@@ -180,6 +180,21 @@ object FynxMarketplaceClient {
         return FynxBackendClient.postJson(context, "/api/marketplace/listings/$id/update", payload.toString()).map { }
     }
 
+    suspend fun reactivateListing(context: Context, listingId: String): Result<Unit> {
+        val id = listingId.trim().toLongOrNull()?.takeIf { it > 0 }
+            ?: return Result.failure(IllegalArgumentException("Invalid listing id."))
+        return FynxBackendClient.postJson(
+            context,
+            "/api/marketplace/listings/$id/reactivate",
+            JSONObject().toString()
+        ).mapCatching { raw ->
+            val response = JSONObject(raw)
+            if (!response.optBoolean("ok") || !response.optBoolean("active")) {
+                throw IllegalStateException("The listing was not confirmed as republished.")
+            }
+        }
+    }
+
     suspend fun deleteListing(context: Context, listingId: String): Result<Unit> = FynxBackendClient.delete(context, "/api/marketplace/listings/${encode(listingId)}").map { }
     fun safetyAssessment(listing: Listing): FynxMarketplaceSafetyAssessment = FynxMarketplaceSafety.analyze(listing.title, listing.description, listing.storeName, listing.location)
     fun mediaUrl(context: Context, mediaId: String): String = "${FynxBackendClient.baseUrl(context)}/api/media/${encode(mediaId)}"
