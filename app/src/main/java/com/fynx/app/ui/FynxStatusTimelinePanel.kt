@@ -185,7 +185,8 @@ fun FynxStatusTimelinePanel(
                     isMe = true,
                     onClick = { if (myStatus != null) selected = myStatus else onCreateClick() },
                     showAdd = true,
-                    unseen = myStatus != null && ownerHasUnseen(username)
+                    unseen = myStatus != null && ownerHasUnseen(username),
+                    onAddClick = onCreateClick
                 )
             }
             item {
@@ -254,7 +255,8 @@ private fun StatusAvatar(
     showAdd: Boolean = false,
     status: FynxStatus? = null,
     modifier: Modifier = Modifier,
-    unseen: Boolean = true
+    unseen: Boolean = true,
+    onAddClick: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val cachedPhotoId = remember(ownerUsername) {
@@ -312,8 +314,20 @@ private fun StatusAvatar(
             )
         }
         if (showAdd) {
-            Box(Modifier.size(22.dp).align(Alignment.BottomEnd).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Add, "Add Status", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(15.dp))
+            IconButton(
+                onClick = onAddClick,
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .requiredSize(25.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
+                    .clip(CircleShape)
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Create a new Status",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(15.dp)
+                )
             }
         }
     }
@@ -369,10 +383,11 @@ private fun StatusHomeRow(
     isMe: Boolean,
     onClick: () -> Unit,
     showAdd: Boolean = false,
-    unseen: Boolean = false
+    unseen: Boolean = false,
+    onAddClick: () -> Unit = {}
 ) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-        StatusAvatar(ownerUsername, ownerDisplayName, showAdd, status, unseen = unseen)
+        StatusAvatar(ownerUsername, ownerDisplayName, showAdd, status, unseen = unseen, onAddClick = onAddClick)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(if (isMe) "My status" else ownerDisplayName, fontWeight = FontWeight.SemiBold, maxLines = 1)
