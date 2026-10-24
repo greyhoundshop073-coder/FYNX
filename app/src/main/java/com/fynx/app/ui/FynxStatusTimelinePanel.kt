@@ -106,6 +106,17 @@ fun FynxStatusTimelinePanel(
 
     LaunchedEffect(refreshKey) { refresh() }
 
+    // Expiration must take effect while the Timeline or Story viewer remains open,
+    // not only when the user navigates away or manually refreshes.
+    LaunchedEffect(statuses) {
+        val nextExpiry = statuses.minOfOrNull { it.expiresAtMillis } ?: return@LaunchedEffect
+        kotlinx.coroutines.delay((nextExpiry - System.currentTimeMillis()).coerceAtLeast(1L))
+        statuses = statuses.filterNot(FynxStatus::isExpired)
+    }
+    LaunchedEffect(selected, statuses) {
+        if (selected?.isExpired() == true) selected = null
+    }
+
     LaunchedEffect(statuses, openOwnerUsername, openStatusId, loading, error) {
         // Keep a requested Status deep link pending while loading or after a failed
         // fetch. A transient network failure must not consume the command before
