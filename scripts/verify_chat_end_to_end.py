@@ -67,6 +67,17 @@ require(conversation, r"realtimeClient\.acknowledgeMessage\(", "ConversationPane
 require(conversation, r"realtimeClient\.sendRead\(", "ConversationPanel must send realtime read acknowledgements")
 require(conversation, r"realtimeClient\.sendTyping\(", "ConversationPanel must use the realtime typing transport")
 
+# 1b. Both group text-send entry points must remain pending until the server returns its
+# canonical message. An optimistic bubble is not evidence of delivery or read receipt.
+optimistic_group_send_states = re.findall(
+    r"val optimistic = ChatMessage\\(text\\.trim\\(\\), true, UUID\\.randomUUID\\(\\)\\.toString\\(\\), delivered = (true|false), read = (true|false), replyToId = replyToId\\)",
+    groups,
+)
+if len(optimistic_group_send_states) != 2:
+    fail("Group keyboard-send and composer-button callbacks must both be covered by the optimistic delivery-state regression gate")
+elif any(delivered != "false" or read != "false" for delivered, read in optimistic_group_send_states):
+    fail("Group text messages must stay pending/unread until the backend confirms delivery; optimistic UI must not claim delivery or read state")
+
 # 2. Realtime client contract: authenticated websocket, message/status/typing handling.
 require(realtime, r"/realtime", "FynxRealtimeClient must target the backend realtime endpoint")
 require(realtime, r"token", "FynxRealtimeClient must authenticate realtime sessions with a token")
