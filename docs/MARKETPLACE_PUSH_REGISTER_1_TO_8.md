@@ -252,3 +252,14 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 **Regression guard:** Updated both refund/dispute and Stage 15G runtime integration checks to assert the actual bootstrap path and webhook-specific raw-body capture. This is a test correction based on the current code structure, not a skipped or weakened check.
 
 **Verification:** Backend CI on the resulting exact commit must pass. Railway remains on the last successful canonical deployment; no deployment or device test is claimed from this PR.
+
+
+### Push 27 — Explain unavailable Paystack without implying checkout succeeded
+
+**Root cause:** The current Railway testing environment has no `PAYSTACK_SECRET_KEY`; the server correctly returns HTTP 503 before contacting Paystack, but the Android dialog displayed the raw backend HTTP/JSON error. That was technically honest but confusing for a buyer.
+
+**Change:** The checkout dialog now maps only the explicit provider-not-configured response to a clear message that no payment started and the cart remains unchanged. Other failures keep their actual error detail, and the order/receipt success callback still runs only after backend payment verification.
+
+**Regression guard:** The end-to-end verifier asserts the explicit no-charge/retry copy and that payment verification remains the only path that invokes the successful checkout callback.
+
+**Verification:** This is a UI/source change only; exact-head Android and Backend CI remain required. Paystack is still not configured in Railway, so live payments remain a release blocker. No payment or deployment is claimed.
