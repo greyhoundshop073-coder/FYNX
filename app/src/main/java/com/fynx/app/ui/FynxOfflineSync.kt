@@ -29,14 +29,18 @@ object FynxOfflineSync {
             if (result.isSuccess) {
                 val remote = result.getOrThrow()
                 val currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
-                if (!currentUserId.isNullOrBlank()) {
-                    FynxChatStore.replaceMessage(
-                        context,
-                        item.recipient,
-                        item.id,
-                        FynxProductionMessaging.toChatMessage(remote, currentUserId)
-                    )
+                if (currentUserId.isNullOrBlank()) {
+                    // The server accepted the send, but the local pending ID cannot be reconciled
+                    // safely yet. Keep this durable item; its stable requestId makes the next
+                    // retry idempotent, and it can replace the pending bubble once identity loads.
+                    break
                 }
+                FynxChatStore.replaceMessage(
+                    context,
+                    item.recipient,
+                    item.id,
+                    FynxProductionMessaging.toChatMessage(remote, currentUserId)
+                )
                 FynxOfflineOutbox.remove(context, item.id)
                 completed++
             } else {
