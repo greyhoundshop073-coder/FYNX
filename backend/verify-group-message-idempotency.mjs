@@ -117,6 +117,12 @@ test("group message send is idempotent and refuses message-ID collisions", async
   assert.equal(broadcasts.length, 2);
   assert.deepEqual(broadcasts[0], broadcasts[1], "replayed realtime events must retain the canonical group/message ID");
 
+  const changedPayload = await send({ text: "different body under same stable ID" });
+  assert.equal(changedPayload.statusCode, 409, "a stable ID cannot be reused for different content in the same group");
+  assert.equal(changedPayload.body?.code, "MESSAGE_ID_CONFLICT");
+  assert.equal(pool.messages.size, 1);
+  assert.equal(broadcasts.length, 2, "content collisions must not create another realtime event");
+
   const crossGroup = await send({ groupId: "group_ci_002" });
   assert.equal(crossGroup.statusCode, 409, "an ID already owned by another group must conflict");
   assert.equal(crossGroup.body?.code, "MESSAGE_ID_CONFLICT");
