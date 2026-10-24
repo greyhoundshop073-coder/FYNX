@@ -155,6 +155,9 @@ fun FynxStatusTimelinePanel(
         .sortedByDescending { it.createdAtMillis }
     val myStatus = latestByOwner.firstOrNull { normalizedOwner(it.ownerUsername) == normalizedOwner(username) }
     val recentUpdates = latestByOwner.filterNot { normalizedOwner(it.ownerUsername) == normalizedOwner(username) }
+    // Keep viewer navigation consistent with the visible Status rows: own updates first,
+    // then other owners in their row order. Each owner's stack still shows its own progress.
+    val storyOwnerOrder = listOfNotNull(myStatus) + recentUpdates
     var menuOpen by remember { mutableStateOf(false) }
     var archiveOpen by remember { mutableStateOf(false) }
     var archivedStatuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
@@ -235,13 +238,22 @@ fun FynxStatusTimelinePanel(
 
     selected?.let { initial ->
         val ownerStatuses = visibleStatuses.filter { normalizedOwner(it.ownerUsername) == normalizedOwner(initial.ownerUsername) }.sortedBy { it.createdAtMillis }
+        val currentOwnerIndex = storyOwnerOrder.indexOfFirst {
+            normalizedOwner(it.ownerUsername) == normalizedOwner(initial.ownerUsername)
+        }
+        val previousOwner = storyOwnerOrder.getOrNull(currentOwnerIndex - 1)
+        val nextOwner = storyOwnerOrder.getOrNull(currentOwnerIndex + 1)
         FynxStatusStoryViewer(
             ownerStatuses,
             ownerStatuses.indexOfFirst { it.id == initial.id }.coerceAtLeast(0),
             username,
             { selected = null },
             { selected = null; refreshKey++ },
-            onOpenMessage
+            onOpenMessage,
+            onPreviousOwner = previousOwner?.let { target -> { selected = target } },
+            onNextOwner = nextOwner?.let { target ->
+                { selected = firstUnseenStatusForOwner(target.ownerUsername, target) }
+            }
         )
     }
 
@@ -436,7 +448,9 @@ private fun FynxStatusStoryViewer(
     viewerUsername: String,
     onDismiss: () -> Unit,
     onDeleted: () -> Unit,
-    onOpenMessage: (String) -> Unit
+    onOpenMessage: (String) -> Unit,
+    onPreviousOwner: (() -> Unit)? = null,
+    onNextOwner: (() -> Unit)? = null
 ) {
     if (statuses.isEmpty()) return
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -510,11 +524,19 @@ private fun FynxStatusStoryViewer(
     }
 
     fun movePrevious() {
-        if (index > 0) index-- else onDismiss()
+        if (index > 0) {
+            index--
+        } else {
+            onPreviousOwner?.invoke() ?: onDismiss()
+        }
     }
 
     fun moveNext() {
-        if (index < statuses.lastIndex) index++ else onDismiss()
+        if (index < statuses.lastIndex) {
+            index++
+        } else {
+            onNextOwner?.invoke() ?: onDismiss()
+        }
     }
 
     LaunchedEffect(status.id) {
@@ -647,14 +669,14 @@ private fun FynxStatusStoryViewer(
                             Modifier
                                 .weight(0.25f)
                                 .fillMaxHeight()
-                                .clickable(enabled = index > 0) { if (index > 0) index-- }
+                                .clickable(enabled = index > 0 || onPreviousOwner != null) { movePrevious() }
                         )
                         Spacer(Modifier.weight(0.50f).fillMaxHeight())
                         Box(
                             Modifier
                                 .weight(0.25f)
                                 .fillMaxHeight()
-                                .clickable(enabled = index < statuses.lastIndex) { if (index < statuses.lastIndex) index++ }
+                                .clickable(enabled = index < statuses.lastIndex || onNextOwner != null) { moveNext() }
                         )
                     }
                 }
