@@ -70,7 +70,7 @@ require(conversation, r"realtimeClient\.sendTyping\(", "ConversationPanel must u
 # 1b. Both group text-send entry points must remain pending until the server returns its
 # canonical message. An optimistic bubble is not evidence of delivery or read receipt.
 optimistic_group_send_states = re.findall(
-    r"val optimistic = ChatMessage\\(text\\.trim\\(\\), true, UUID\\.randomUUID\\(\\)\\.toString\\(\\), delivered = (true|false), read = (true|false), replyToId = replyToId\\)",
+    r"val optimistic = ChatMessage\(text\.trim\(\), true, UUID\.randomUUID\(\)\.toString\(\), delivered = (true|false), read = (true|false), replyToId = replyToId\)",
     groups,
 )
 if len(optimistic_group_send_states) != 2:
