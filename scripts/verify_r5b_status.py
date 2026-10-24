@@ -237,6 +237,7 @@ require('status editor resizes above the keyboard using IME insets','BoxWithCons
 require('status text editor avoids oversized fixed bottom spacer','padding(top = 76.dp, bottom = 24.dp)' in mature)
 require('status style panel is a bounded modal bottom sheet with a pinned Done action','ModalBottomSheet(' in mature and 'containerColor = Color(0xFF202124)' in mature and '.heightIn(min = 280.dp, max = 420.dp)' in mature and '.weight(1f)' in mature and 'pin Done outside the' in mature and 'Text("Done", color = Color.White' in mature and 'rememberModalBottomSheetState(skipPartiallyExpanded = true)' in mature)
 require('status style panel uses the Material 3 drag handle','dragHandle = {' in mature and 'BottomSheetDefaults.DragHandle(' in mature and 'width = 44.dp' in mature and 'height = 5.dp' in mature)
+require('immersive Status composer darkens only the app-shell backdrop and restores it on exit','var statusComposerImmersive by remember' in app and 'containerColor = if (statusComposerImmersive) Color.Black else MaterialTheme.colorScheme.background' in app and 'onComposerVisibilityChange = { statusComposerImmersive = it }' in app and 'onComposerVisibilityChange: (Boolean) -> Unit = {}' in hub and 'LaunchedEffect(composing) { onComposerVisibilityChange(composing) }' in hub and 'onDispose { onComposerVisibilityChange(false) }' in hub and 'statusComposerImmersive = false' in app)
 
 failed=[label for label,ok in checks if not ok]
 for label,ok in checks: print(('GREEN' if ok else 'RED')+' - '+label)
