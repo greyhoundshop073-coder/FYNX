@@ -194,6 +194,21 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 openChatMarketplaceListingId = destination.marketplaceListingId
                 val normalized = destination.username.removePrefix("@").trim()
                 if (normalized.isNotBlank()) {
+                    // Resolve the visible route immediately. Previously this effect awaited
+                    // the remote user search before setting openChat, so a slow/failed search
+                    // left a valid deep link sitting on Home and made the conversation appear
+                    // not to open at all. Match the Friends -> Chat path: show a provisional
+                    // conversation while the authoritative recipient lookup runs.
+                    val provisionalChat = ChatPreview(
+                        name = normalized,
+                        username = "@$normalized",
+                        lastMessage = "Start a conversation",
+                        time = "Now"
+                    )
+                    openGroup = null
+                    profileUser = null
+                    openChat = provisionalChat
+
                     val local = withContext(Dispatchers.IO) {
                         FynxChatStore.loadPreviews(context).firstOrNull {
                             it.username.removePrefix("@").equals(normalized, true)
@@ -210,8 +225,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         FynxSocialClient.searchUsers(context, normalized).getOrNull()
                             ?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
                     } else null
-                    openGroup = null
-                    profileUser = null
                     val resolvedChat = local ?: remote?.let { user ->
                         ChatPreview(
                             name = user.displayName.ifBlank { normalized },
@@ -223,8 +236,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     } ?: selfUsername?.takeIf { isSelfTarget }?.let {
                         ChatPreview(name = it, username = "@$it", lastMessage = "Start a conversation", time = "Now")
                     }
-                    openChat = resolvedChat
                     if (resolvedChat != null) {
+                        openChat = resolvedChat
                         withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, resolvedChat) }
                     }
                 }
