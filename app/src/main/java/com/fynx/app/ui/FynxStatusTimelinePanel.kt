@@ -447,6 +447,7 @@ private fun FynxStatusStoryViewer(
     var showReplyEmojiPicker by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
+    val currentStatusId by rememberUpdatedState(status.id)
     val viewerPaused = replyPaused || showReactionPicker || showViewers || menuOpen || deleting
     BackHandler(onBack = {
         when {
@@ -460,9 +461,13 @@ private fun FynxStatusStoryViewer(
     var statusProgress by remember(status.id) { mutableFloatStateOf(0f) }
 
     fun refreshInteractions() {
+        val requestedStatusId = status.id
         scope.launch {
-            FynxStatusClient.interactions(context, status.id)
-                .onSuccess { interactions = it; interactionError = null }
+            val result = FynxStatusClient.interactions(context, requestedStatusId)
+            // The viewer can move to another Status while an earlier request is in flight.
+            // Never let a late response repaint the new owner's reaction/like state.
+            if (currentStatusId != requestedStatusId) return@launch
+            result.onSuccess { interactions = it; interactionError = null }
                 .onFailure { interactionError = it.message }
         }
     }
@@ -472,18 +477,21 @@ private fun FynxStatusStoryViewer(
         mutualFollowUsernames = emptySet()
         viewersLoading = true
         viewersError = null
+        val requestedStatusId = status.id
         scope.launch {
-            FynxStatusClient.viewers(context, status.id)
-                .onSuccess { loaded ->
-                    viewers = loaded
-                    viewersLoading = false
-                    FynxStatusClient.mutualFollowUsernames(context, loaded.map { it.username })
-                        .onSuccess { mutualFollowUsernames = it }
-                }
-                .onFailure {
+            val result = FynxStatusClient.viewers(context, requestedStatusId)
+            if (currentStatusId != requestedStatusId) return@launch
+            result.onSuccess { loaded ->
+                viewers = loaded
+                viewersLoading = false
+                FynxStatusClient.mutualFollowUsernames(context, loaded.map { it.username })
+                    .onSuccess { if (currentStatusId == requestedStatusId) mutualFollowUsernames = it }
+            }.onFailure {
+                if (currentStatusId == requestedStatusId) {
                     viewersError = it.message ?: "Unable to load viewers."
                     viewersLoading = false
                 }
+            }
         }
     }
 
@@ -496,6 +504,20 @@ private fun FynxStatusStoryViewer(
     }
 
     LaunchedEffect(status.id) {
+        // Clear every identity-bound piece of UI before the next Status data loads.
+        // This avoids briefly showing the previous user's reactions or viewer names.
+        interactions = FynxStatusInteractions()
+        interactionError = null
+        viewers = emptyList()
+        viewersLoading = false
+        viewersError = null
+        mutualFollowUsernames = emptySet()
+        showViewers = false
+        showReactionPicker = false
+        showReplyEmojiPicker = false
+        menuOpen = false
+        canReplyToStatus = false
+        replyRelationshipLoading = true
         replyText = ""
         replyFocused = false
         statusProgress = 0f
@@ -504,15 +526,18 @@ private fun FynxStatusStoryViewer(
     }
 
     LaunchedEffect(status.id, viewerUsername) {
+        val requestedStatusId = status.id
         canReplyToStatus = false
         replyRelationshipLoading = true
         if (status.ownerUsername.equals(viewerUsername, true)) {
             replyRelationshipLoading = false
         } else {
-            FynxStatusClient.mutualFollowUsernames(context, listOf(status.ownerUsername))
-                .onSuccess { mutual -> canReplyToStatus = status.ownerUsername.lowercase() in mutual }
-                .onFailure { canReplyToStatus = false }
-            replyRelationshipLoading = false
+            val result = FynxStatusClient.mutualFollowUsernames(context, listOf(status.ownerUsername))
+            if (currentStatusId == requestedStatusId) {
+                result.onSuccess { mutual -> canReplyToStatus = status.ownerUsername.lowercase() in mutual }
+                    .onFailure { canReplyToStatus = false }
+                replyRelationshipLoading = false
+            }
         }
     }
 
@@ -819,14 +844,17 @@ private fun FynxStatusStoryViewer(
                                                 val body = replyText.trim()
                                                 if (body.isEmpty()) return@IconButton
                                                 replying = true
+                                                val replyStatusId = status.id
                                                 scope.launch {
-                                                    FynxStatusClient.reply(context, status.id, body)
+                                                    FynxStatusClient.reply(context, replyStatusId, body)
                                                         .onSuccess {
-                                                            replyText = ""
-                                                            showReplyEmojiPicker = false
+                                                            if (currentStatusId == replyStatusId) {
+                                                                replyText = ""
+                                                                showReplyEmojiPicker = false
+                                                            }
                                                             refreshInteractions()
                                                         }
-                                                        .onFailure { interactionError = it.message }
+                                                        .onFailure { if (currentStatusId == replyStatusId) interactionError = it.message }
                                                     replying = false
                                                 }
                                             }
@@ -838,10 +866,11 @@ private fun FynxStatusStoryViewer(
                             )
                             IconButton(
                                 onClick = {
+                                    val likeStatusId = status.id
                                     scope.launch {
-                                        FynxStatusClient.toggleLike(context, status.id)
-                                            .onSuccess { refreshInteractions() }
-                                            .onFailure { interactionError = it.message }
+                                        FynxStatusClient.toggleLike(context, likeStatusId)
+                                            .onSuccess { if (currentStatusId == likeStatusId) refreshInteractions() }
+                                            .onFailure { if (currentStatusId == likeStatusId) interactionError = it.message }
                                     }
                                 },
                                 enabled = !replying
@@ -957,10 +986,11 @@ private fun FynxStatusStoryViewer(
                                 items(listOf("❤️", "😂", "😮", "😢", "👍", "👏", "🔥", "🎉")) { emoji ->
                                     TextButton(onClick = {
                                         showReactionPicker = false
+                                        val reactionStatusId = status.id
                                         scope.launch {
-                                            FynxStatusClient.react(context, status.id, emoji)
-                                                .onSuccess { refreshInteractions() }
-                                                .onFailure { interactionError = it.message }
+                                            FynxStatusClient.react(context, reactionStatusId, emoji)
+                                                .onSuccess { if (currentStatusId == reactionStatusId) refreshInteractions() }
+                                                .onFailure { if (currentStatusId == reactionStatusId) interactionError = it.message }
                                         }
                                     }) { Text(emoji, fontSize = 28.sp) }
                                 }
