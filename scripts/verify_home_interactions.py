@@ -158,12 +158,18 @@ if header_start < 0 or 'Modifier.weight(1f)' in app_source[header_start:profile_
     raise SystemExit("HOME INTERACTIONS RED: Home header must not wrap the profile controls in a weighted Row that can compress and overlap touch targets")
 if 'Modifier.weight(1f)' not in app_source[profile_menu_index:app_source.find('Row(verticalAlignment = Alignment.CenterVertically)', profile_menu_index)]:
     raise SystemExit("HOME INTERACTIONS RED: Home brand label must occupy remaining header width after the profile controls")
-profile_touch_region = app_source[profile_button_index:profile_menu_index]
-if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
+profile_box_start = app_source.rfind("Box(", 0, profile_button_index)
+profile_comment_start = app_source.find("// The avatar and overflow menu are fixed-width siblings", profile_box_start)
+if profile_box_start < header_start or profile_comment_start < profile_box_start:
+    raise SystemExit("HOME INTERACTIONS RED: profile avatar must have a distinct Compose Box before the overflow menu")
+profile_box = app_source[profile_box_start:profile_comment_start]
+if "Modifier.align(Alignment.BottomEnd)" in profile_box:
     raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")
-require(profile_touch_region, 'Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', "profile avatar has its own non-overlapped 48dp touch target")
-menu_box_start = app_source.rfind('Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', profile_button_index, profile_menu_index)
-if menu_box_start <= profile_button_index:
+if "Modifier.size(48.dp).clickable" not in profile_box or 'contentDescription = "Open FYNX profile"' not in profile_box or "contentAlignment = Alignment.Center" not in profile_box:
+    raise SystemExit("HOME INTERACTIONS RED: profile avatar must have an independent accessible 48dp clickable Box")
+menu_box_start = app_source.rfind("Box(", profile_button_index, profile_menu_index)
+menu_box = app_source[menu_box_start:profile_menu_index] if menu_box_start >= 0 else ""
+if menu_box_start <= profile_button_index or "Modifier.size(48.dp).clickable" not in menu_box or 'contentDescription = "Profile menu, three dots"' not in menu_box:
     raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling 48dp touch target")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
 require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")

@@ -1058,7 +1058,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                 } else {
                     var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
                     LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
-                    bitmap?.let { Image(it.asImageBitmap(), "Full screen post media", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                    bitmap?.let { Image(it.asImageBitmap(), "Full screen post media", Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
                 }
                 IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) { Icon(Icons.Default.Close, "Close media viewer", tint = Color.White) }
             }
@@ -1068,27 +1068,115 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
 
 private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
 
+private data class HomeAudioPlayback(
+    val player: MediaPlayer,
+    val prepared: Boolean,
+    val failed: Boolean,
+    val playing: Boolean,
+    val durationMs: Long,
+    val togglePlayback: () -> Unit
+)
+
+@Composable
+private fun rememberHomeAudioPlayback(file: File, knownDurationMs: Long = 0L): HomeAudioPlayback {
+    val player = remember(file) { MediaPlayer() }
+    var prepared by remember(file) { mutableStateOf(false) }
+    var failed by remember(file) { mutableStateOf(false) }
+    var playing by remember(file) { mutableStateOf(false) }
+    var durationMs by remember(file) { mutableLongStateOf(knownDurationMs.coerceAtLeast(0L)) }
+
+    DisposableEffect(player) {
+        prepared = false
+        failed = false
+        playing = false
+        player.setOnPreparedListener { preparedPlayer ->
+            durationMs = if (knownDurationMs > 0L) knownDurationMs else preparedPlayer.duration.toLong().coerceAtLeast(0L)
+            prepared = true
+        }
+        player.setOnCompletionListener { completedPlayer ->
+            playing = false
+            runCatching { completedPlayer.seekTo(0) }
+        }
+        player.setOnErrorListener { _, _, _ ->
+            prepared = false
+            playing = false
+            failed = true
+            true
+        }
+        try {
+            player.setDataSource(file.absolutePath)
+            player.prepareAsync()
+        } catch (_: Exception) {
+            prepared = false
+            failed = true
+        }
+        onDispose {
+            runCatching { player.setOnPreparedListener(null) }
+            runCatching { player.setOnCompletionListener(null) }
+            runCatching { player.setOnErrorListener(null) }
+            runCatching { player.release() }
+        }
+    }
+
+    val togglePlayback: () -> Unit = {
+        if (prepared && !failed) {
+            runCatching {
+                if (player.isPlaying) {
+                    player.pause()
+                    playing = false
+                } else {
+                    if (player.duration > 0 && player.currentPosition >= player.duration) player.seekTo(0)
+                    player.start()
+                    playing = true
+                }
+            }.onFailure {
+                failed = true
+                playing = false
+            }
+        }
+    }
+    return HomeAudioPlayback(player, prepared, failed, playing, durationMs, togglePlayback)
+}
+
 @Composable
 private fun MusicPostPlayer(mediaId: String, title: String, artist: String, durationMs: Long) {
     val context = LocalContext.current
     var file by remember(mediaId) { mutableStateOf<File?>(null) }
-    LaunchedEffect(mediaId) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio") } }
-    if (file != null) {
-        val player = remember(file) { MediaPlayer().apply { setDataSource(file!!.absolutePath); prepare() } }
-        var playing by remember(file) { mutableStateOf(false) }
-        DisposableEffect(player) {
-            player.setOnCompletionListener { playing = false; runCatching { player.seekTo(0) } }
-            onDispose { runCatching { player.release() } }
+    var loadFailed by remember(mediaId) { mutableStateOf(false) }
+    var retryNonce by remember(mediaId) { mutableIntStateOf(0) }
+    LaunchedEffect(mediaId, retryNonce) {
+        file = null
+        loadFailed = false
+        file = withContext(Dispatchers.IO) {
+            runCatching { FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio") }.getOrNull()
         }
+        loadFailed = file == null
+    }
+    if (file == null) {
         Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
             Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                    Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                Text(if (loadFailed) "Music unavailable" else "Loading music…", Modifier.weight(1f).padding(horizontal = 10.dp), style = MaterialTheme.typography.bodyMedium)
+                if (loadFailed) TextButton(onClick = { retryNonce++ }) { Text("Retry") } else CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
+        }
+    } else {
+        val audioFile = file!!
+        val playback = rememberHomeAudioPlayback(audioFile, durationMs)
+        Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
+            Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                        Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                        Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                    }
+                    Text(formatMusicDuration(playback.durationMs), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                    IconButton(enabled = playback.prepared && !playback.failed, onClick = playback.togglePlayback) {
+                        Icon(if (playback.playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playback.playing) "Pause music" else "Play music")
+                    }
                 }
-                Text(formatMusicDuration(durationMs.takeIf { it > 0 } ?: player.duration.toLong()), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
-                IconButton(onClick = { runCatching { if (player.isPlaying) { player.pause(); playing = false } else { if (player.currentPosition >= player.duration) player.seekTo(0); player.start(); playing = true } } }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause music" else "Play music") }
+                if (playback.failed) Text("This music couldn't be played.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -1101,25 +1189,9 @@ private fun formatMusicDuration(durationMs: Long): String {
 
 @Composable
 private fun AudioPostPlayer(file: File) {
-    val player = remember(file) {
-        MediaPlayer().apply {
-            setDataSource(file.absolutePath)
-            prepare()
-        }
-    }
-    var playing by remember(file) { mutableStateOf(false) }
-
-    DisposableEffect(player) {
-        player.setOnCompletionListener {
-            playing = false
-            runCatching { player.seekTo(0) }
-        }
-        onDispose {
-            runCatching { player.release() }
-        }
-    }
-
-    val durationSeconds = (player.duration / 1000).coerceAtLeast(0)
+    val playback = rememberHomeAudioPlayback(file)
+    val player = playback.player
+    val durationSeconds = (playback.durationMs / 1000L).toInt().coerceAtLeast(0)
 
     Surface(
         modifier = Modifier
@@ -1138,23 +1210,13 @@ private fun AudioPostPlayer(file: File) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
-                onClick = {
-                    runCatching {
-                        if (player.isPlaying) {
-                            player.pause()
-                            playing = false
-                        } else {
-                            if (player.currentPosition >= player.duration) player.seekTo(0)
-                            player.start()
-                            playing = true
-                        }
-                    }
-                },
+                enabled = playback.prepared && !playback.failed,
+                onClick = playback.togglePlayback,
                 modifier = Modifier.size(40.dp)
             ) {
                 Icon(
-                    imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (playing) "Pause voice note" else "Play voice note",
+                    imageVector = if (playback.playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (playback.playing) "Pause voice note" else "Play voice note",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -1170,41 +1232,49 @@ private fun AudioPostPlayer(file: File) {
                 animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart),
                 label = "voice_wave_phase"
             )
-            LaunchedEffect(playing, player) {
-                while (playing) {
+            LaunchedEffect(playback.playing, playback.prepared, playback.failed, player) {
+                while (playback.playing && playback.prepared && !playback.failed) {
                     playbackProgress = if (player.duration > 0) {
                         (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
                     } else 0f
-                    delay(50L)
+                    delay(80L)
                 }
                 playbackProgress = if (player.duration > 0) {
                     (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
                 } else 0f
             }
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(38.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                waveformHeights.forEachIndexed { index, baseHeight ->
-                    val distance = kotlin.math.abs(index - wavePhase)
-                    val pulse = if (playing) (kotlin.math.sin((index + wavePhase) * 0.72f) + 1f) * 0.18f else 0f
-                    val height = (baseHeight * (0.82f + pulse)).coerceIn(7f, 34f)
-                    val passed = index < playbackProgress * waveformHeights.size
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height(height.dp)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(
-                                if (passed || (playing && distance < 0.9f))
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
-                            )
-                    )
+            if (playback.failed) {
+                Text("Voice note unavailable", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+            } else if (!playback.prepared) {
+                Box(Modifier.weight(1f).height(38.dp), contentAlignment = Alignment.CenterStart) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    waveformHeights.forEachIndexed { index, baseHeight ->
+                        val distance = kotlin.math.abs(index - wavePhase)
+                        val pulse = if (playback.playing) (kotlin.math.sin((index + wavePhase) * 0.72f) + 1f) * 0.18f else 0f
+                        val height = (baseHeight * (0.82f + pulse)).coerceIn(7f, 34f)
+                        val passed = index < playbackProgress * waveformHeights.size
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(height.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .background(
+                                    if (passed || (playback.playing && distance < 0.9f))
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
+                                )
+                        )
+                    }
                 }
             }
 
@@ -1215,10 +1285,10 @@ private fun AudioPostPlayer(file: File) {
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
             ) {
                 Text(
-                    text = "${durationSeconds}s",
+                    text = if (playback.prepared) "${durationSeconds}s" else if (playback.failed) "!" else "…",
                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = if (playback.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                 )
             }
         }

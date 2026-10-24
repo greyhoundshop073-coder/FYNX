@@ -32,6 +32,7 @@ required_home = {
     "prepareAsync()": "asynchronous feed video preparation",
     "DisposableEffect(file)": "video lifecycle cleanup",
     "DisposableEffect(player)": "audio lifecycle cleanup",
+    "rememberHomeAudioPlayback": "shared asynchronous audio setup for Home music and voice notes",
     "player.release()": "audio resource release",
     "FynxRemoteProfileAvatar": "real author identity media",
     "MaterialTheme.colorScheme": "theme-aware Home presentation",
@@ -155,5 +156,37 @@ required_runtime_capture = [
 missing_runtime_capture = [token for token in required_runtime_capture if token not in runtime_navigation]
 if missing_runtime_capture:
     raise SystemExit("HOME 4F RUNTIME RED: stable Home capture gate missing " + ", ".join(missing_runtime_capture))
+
+
+# Audio decoding must never block the Compose/UI thread. The shared helper must prepare
+# asynchronously, expose a prepared/error state, disable premature playback, and release resources.
+audio_helper_start = home.index("private fun rememberHomeAudioPlayback(")
+audio_helper_end = home.index("@Composable\nprivate fun MusicPostPlayer(", audio_helper_start)
+audio_helper = home[audio_helper_start:audio_helper_end]
+for token, label in (
+    ("prepareAsync()", "asynchronous player preparation"),
+    ("setOnPreparedListener", "prepared callback"),
+    ("setOnErrorListener", "audio decoder error handling"),
+    ("onDispose", "audio lifecycle disposal"),
+    ("player.release()", "audio player release"),
+):
+    if token not in audio_helper:
+        raise SystemExit("HOME 4F MEDIA RED: audio helper missing " + label)
+if ".prepare()" in audio_helper:
+    raise SystemExit("HOME 4F MEDIA RED: synchronous audio preparation can block the Home UI")
+for component in ("MusicPostPlayer(", "AudioPostPlayer("):
+    start = home.index("private fun " + component)
+    end = home.find("\n@Composable", start + 1)
+    if end < 0:
+        end = len(home)
+    body = home[start:end]
+    if "rememberHomeAudioPlayback(" not in body:
+        raise SystemExit("HOME 4F MEDIA RED: " + component.rstrip("(") + " does not use lifecycle-managed async playback")
+if "enabled = playback.prepared && !playback.failed" not in home:
+    raise SystemExit("HOME 4F MEDIA RED: audio playback controls must wait for prepared state")
+fullscreen_start = home.index("if (fullscreen && file != null)")
+fullscreen_end = home.index("private fun relative(", fullscreen_start)
+if "contentScale = ContentScale.Fit" not in home[fullscreen_start:fullscreen_end]:
+    raise SystemExit("HOME 4F MEDIA RED: fullscreen photo viewer must fit the complete image instead of cropping edges")
 
 print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")
