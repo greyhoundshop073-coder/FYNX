@@ -194,7 +194,7 @@ require('timeline status viewer','FynxStatusStoryViewer(' in timeline and 'Dialo
 require('status viewer image',contains_call(timeline, 'FynxRemoteMedia', 'image'))
 require('status viewer video',contains_call(timeline, 'FynxRemoteMedia', 'video'))
 require('status viewer voice',contains_remote_audio_call(timeline))
-require('status viewer left-right navigation across update and owner boundaries','clickable(enabled = index > 0 || onPreviousOwner != null)' in timeline and 'clickable(enabled = index < statuses.lastIndex || onNextOwner != null)' in timeline and 'fun movePrevious()' in timeline and 'fun moveNext()' in timeline)
+require('status viewer left-right navigation across update and owner boundaries','clickable(enabled = index > 0 || onPreviousOwner != null)' in timeline and 'clickable(enabled = index < statuses.lastIndex || onNextOwner != null)' in timeline and 'fun movePrevious()' in timeline and 'fun moveNext()' in timeline and 'onPreviousOwner = previousOwner?.let { target -> { selected = firstUnseenStatusForOwner(target.ownerUsername, target) } }' in timeline)
 require('status viewer Android back closes after nested panels','BackHandler(onBack = {' in timeline and 'showViewers -> showViewers = false' in timeline and 'showReactionPicker -> showReactionPicker = false' in timeline and 'else -> onDismiss()' in timeline)
 require('status viewer swipe down closes','totalY > 140f' in timeline and 'onDismiss()' in timeline)
 require('status viewer horizontal swipe navigation','totalX > 120f' in timeline and 'totalX < -120f' in timeline)
