@@ -5,6 +5,7 @@ const read = (file) => fs.readFileSync(new URL(file, import.meta.url), 'utf8');
 const protection = read('./marketplaceProtection.js');
 const resolution = read('./marketplaceProtectionResolution.js');
 const webhook = read('./marketplacePaystackWebhook.js');
+const server = read('./server.js');
 const settlement = read('./marketplaceSettlementWorker.js');
 const checkout = read('./marketplaceCheckoutOrder.js');
 
@@ -17,6 +18,8 @@ const checks = [
   ['refund resolution creates a child-order financial operation', resolution.includes('INSERT INTO marketplace_financial_operations') && resolution.includes('row.order_id') && resolution.includes("'REFUND'")],
   ['refund resolution can fall back to the verified parent checkout reference for a child order', resolution.includes('resolveOrderPaymentReference(client, row.order_id, row.payment_reference)') && resolution.includes('marketplace_checkout_group_items') && resolution.includes('g.payment_reference')],
   ['refund webhook maps a group transaction to the correct child financial operation', webhook.includes('async function findRefundOperation') && webhook.includes('resolved_payment_reference') && webhook.includes('f.provider_reference=ANY($1::text[])') && webhook.includes('marketplace_checkout_group_items')],
+  ['Paystack webhook route is registered by the actual server entrypoint', server.includes('import { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";') && server.includes('registerMarketplacePaystackWebhook({ app, pool })') && webhook.includes("app.post('/api/marketplace/payments/paystack/webhook'")],
+  ['raw Paystack JSON bytes are preserved before signature verification', server.includes('verify: (req, _res, buffer) =>') && server.includes('req.rawBody = Buffer.from(buffer)') && webhook.includes('Buffer.isBuffer(req.rawBody)')],
   ['shared-reference ambiguity counts succeeded refunds before selecting a child', (() => { const query = webhook.split('const candidates = await client.query', 1)[1]?.split('[transactionReference]);', 1)[0] || ''; return query.includes("f.operation_type='REFUND'") && query.includes('${effectiveReference}=$1') && !query.includes("f.status IN ('PENDING','FAILED')") && webhook.includes('candidates.rows.length === 1 && refundOperationCanApply(candidates.rows[0], eventName)'); })()],
   ['terminal succeeded refunds ignore stale non-processed webhook events', webhook.includes('function refundOperationCanApply') && webhook.includes("if (currentStatus === 'SUCCEEDED') return eventName === 'refund.processed'") && webhook.includes('findRefundOperation(client, transactionReference, refund, eventName)')],
   ['duplicate processed-refund webhooks do not repeat reservation release', webhook.includes("operation.status === 'SUCCEEDED' && eventName === 'refund.processed'")],
