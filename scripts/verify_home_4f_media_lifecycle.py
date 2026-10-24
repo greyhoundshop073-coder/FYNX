@@ -32,6 +32,8 @@ required_home = {
     "prepareAsync()": "asynchronous feed video preparation",
     "DisposableEffect(file)": "video lifecycle cleanup",
     "DisposableEffect(player)": "audio lifecycle cleanup",
+    "DisposableEffect(surface)": "inline video Surface wrapper cleanup",
+    "surface?.release()": "explicit Android Surface release",
     "rememberHomeAudioPlayback": "shared asynchronous audio setup for Home music and voice notes",
     "player.release()": "audio resource release",
     "FynxRemoteProfileAvatar": "real author identity media",
@@ -190,5 +192,32 @@ fullscreen_start = home.index("if (fullscreen && file != null)")
 fullscreen_end = home.index("private fun relative(", fullscreen_start)
 if "contentScale = ContentScale.Fit" not in home[fullscreen_start:fullscreen_end]:
     raise SystemExit("HOME 4F MEDIA RED: fullscreen photo viewer must fit the complete image instead of cropping edges")
+
+
+# Inline and fullscreen video must report decoder failures, offer retry, and release surfaces.
+video_start = home.index("private fun FynxFeedTextureVideo(")
+video_end = home.index("@Composable\ninternal fun RemoteSocialMedia(", video_start)
+video_player = home[video_start:video_end]
+for token, label in (
+    ("player.setOnErrorListener", "inline video decoder error handling"),
+    ("playbackFailed", "inline video error state"),
+    ("retryNonce++", "inline video retry action"),
+    ("Video couldn't be played", "inline video error feedback"),
+    ("DisposableEffect(surface)", "Surface lifetime boundary"),
+    ("surface?.release()", "Surface wrapper release"),
+):
+    if token not in video_player:
+        raise SystemExit("HOME 4F MEDIA RED: missing " + label)
+full_start = home.index("var fullscreenVideoView by remember(file)")
+full_end = home.index("DisposableEffect(file)", full_start)
+full_player = home[full_start:full_end]
+for token, label in (
+    ("fullscreenVideoLoading", "fullscreen video loading state"),
+    ("setOnErrorListener", "fullscreen video decoder error handling"),
+    ("fullscreenVideoFailed", "fullscreen video error state"),
+    ('Text("Retry video")', "fullscreen video retry action"),
+):
+    if token not in full_player:
+        raise SystemExit("HOME 4F MEDIA RED: missing " + label)
 
 print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")

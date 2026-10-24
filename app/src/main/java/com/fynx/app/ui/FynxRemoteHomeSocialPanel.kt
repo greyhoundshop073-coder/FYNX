@@ -869,6 +869,16 @@ private fun FynxFeedTextureVideo(
     val player = remember(file) { MediaPlayer() }
     var prepared by remember(file) { mutableStateOf(false) }
     var playing by remember(file) { mutableStateOf(false) }
+    var playbackFailed by remember(file) { mutableStateOf(false) }
+    var retryNonce by remember(file) { mutableIntStateOf(0) }
+
+    // A Surface wraps the TextureView's SurfaceTexture and must be released independently.
+    DisposableEffect(surface) {
+        onDispose {
+            runCatching { player.setSurface(null) }
+            runCatching { surface?.release() }
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         AndroidView(
@@ -894,22 +904,39 @@ private fun FynxFeedTextureVideo(
             }
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            FilledIconButton(
-                onClick = {
-                    if (!prepared) return@FilledIconButton
-                    runCatching {
-                        if (playing) { player.pause(); playing = false } else { player.start(); playing = true }
-                        onPlayingChanged(playing)
+            when {
+                playbackFailed -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Video couldn't be played", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                    IconButton(onClick = { retryNonce++ }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Default.Refresh, "Retry video", tint = Color.White)
                     }
-                },
-                modifier = Modifier.size(56.dp)
-            ) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video") }
+                }
+                !prepared -> CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
+                else -> FilledIconButton(
+                    onClick = {
+                        if (!prepared) return@FilledIconButton
+                        runCatching {
+                            if (playing) { player.pause(); playing = false } else { player.start(); playing = true }
+                            onPlayingChanged(playing)
+                        }.onFailure {
+                            playbackFailed = true
+                            prepared = false
+                            playing = false
+                            onPlayingChanged(false)
+                        }
+                    },
+                    modifier = Modifier.size(56.dp)
+                ) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video") }
+            }
         }
     }
 
-    LaunchedEffect(file, surface) {
+    LaunchedEffect(file, surface, retryNonce) {
+        prepared = false
+        playing = false
+        playbackFailed = false
+        onPlayingChanged(false)
         if (surface == null) return@LaunchedEffect
-        prepared = false; playing = false; onPlayingChanged(false)
         runCatching {
             player.reset()
             player.setDataSource(file.absolutePath)
@@ -921,15 +948,31 @@ private fun FynxFeedTextureVideo(
                 if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
             player.setOnCompletionListener { playing = false; onPlayingChanged(false) }
-            player.setOnErrorListener { _, _, _ -> prepared = false; playing = false; onPlayingChanged(false); true }
+            player.setOnErrorListener { _, _, _ ->
+                prepared = false
+                playing = false
+                playbackFailed = true
+                onPlayingChanged(false)
+                true
+            }
             player.prepareAsync()
-        }.onFailure { prepared = false; playing = false; onPlayingChanged(false) }
+        }.onFailure {
+            prepared = false
+            playing = false
+            playbackFailed = true
+            onPlayingChanged(false)
+        }
     }
     LaunchedEffect(playbackActive, prepared) {
         if (!prepared) return@LaunchedEffect
         runCatching {
             if (playbackActive && !playing) { player.start(); playing = true; onPlayingChanged(true) }
             else if (!playbackActive && playing) { player.pause(); playing = false; onPlayingChanged(false) }
+        }.onFailure {
+            playbackFailed = true
+            prepared = false
+            playing = false
+            onPlayingChanged(false)
         }
     }
     LaunchedEffect(muted, prepared) {
@@ -1010,35 +1053,69 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     var fullscreenPlayer by remember(file) { mutableStateOf<MediaPlayer?>(null) }
                     var fullscreenPlaying by remember(file) { mutableStateOf(false) }
                     var fullscreenMuted by remember(file) { mutableStateOf(true) }
+                    var fullscreenVideoLoading by remember(file) { mutableStateOf(true) }
+                    var fullscreenVideoFailed by remember(file) { mutableStateOf(false) }
                     AndroidView(
                         factory = { ctx ->
                             FynxPassiveVideoView(ctx).apply {
                                 fullscreenVideoView = this
                                 layoutParams = ViewGroup.LayoutParams(-1, -1)
-                                setVideoPath(file!!.absolutePath)
                                 setOnPreparedListener { player ->
+                                    fullscreenVideoLoading = false
+                                    fullscreenVideoFailed = false
                                     fullscreenPlayer = player
                                     player.isLooping = true
                                     player.setVolume(0f, 0f)
                                     player.start()
                                     fullscreenPlaying = true
                                 }
+                                setOnErrorListener { _, _, _ ->
+                                    fullscreenVideoLoading = false
+                                    fullscreenVideoFailed = true
+                                    fullscreenPlaying = false
+                                    fullscreenPlayer = null
+                                    true
+                                }
                                 setOnCompletionListener { fullscreenPlaying = false }
+                                setVideoPath(file!!.absolutePath)
                             }
                         },
                         modifier = Modifier.fillMaxSize()
                     )
-                    IconButton(
-                        onClick = {
-                            val view = fullscreenVideoView
-                            if (view != null) {
-                                if (fullscreenPlaying) { view.pause(); fullscreenPlaying = false }
-                                else { view.start(); fullscreenPlaying = true }
-                            }
-                        },
-                        modifier = Modifier.align(Alignment.Center).size(64.dp)
-                    ) {
-                        Icon(if (fullscreenPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (fullscreenPlaying) "Pause full-screen video" else "Play full-screen video", tint = Color.White, modifier = Modifier.size(42.dp))
+                    if (fullscreenVideoLoading && !fullscreenVideoFailed) {
+                        CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
+                    }
+                    if (fullscreenVideoFailed) {
+                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Video couldn't be played", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                            TextButton(
+                                onClick = {
+                                    val view = fullscreenVideoView
+                                    if (view != null) {
+                                        fullscreenVideoLoading = true
+                                        fullscreenVideoFailed = false
+                                        fullscreenPlaying = false
+                                        runCatching { view.stopPlayback(); view.setVideoPath(file!!.absolutePath) }
+                                            .onFailure { fullscreenVideoLoading = false; fullscreenVideoFailed = true }
+                                    }
+                                },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                            ) { Text("Retry video") }
+                        }
+                    }
+                    if (!fullscreenVideoLoading && !fullscreenVideoFailed) {
+                        IconButton(
+                            onClick = {
+                                val view = fullscreenVideoView
+                                if (view != null) {
+                                    if (fullscreenPlaying) { view.pause(); fullscreenPlaying = false }
+                                    else { view.start(); fullscreenPlaying = true }
+                                }
+                            },
+                            modifier = Modifier.align(Alignment.Center).size(64.dp)
+                        ) {
+                            Icon(if (fullscreenPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (fullscreenPlaying) "Pause full-screen video" else "Play full-screen video", tint = Color.White, modifier = Modifier.size(42.dp))
+                        }
                     }
                     IconButton(
                         onClick = {

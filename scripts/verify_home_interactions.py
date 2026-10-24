@@ -149,6 +149,7 @@ if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
     raise SystemExit("HOME INTERACTIONS RED: OpenAI API key must never be present in Android client code")
 
 app_source = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
+require(app_source, "import androidx.compose.foundation.clickable", "Home profile controls import Compose clickable extension")
 profile_button_index = app_source.find('contentDescription = "Open FYNX profile"')
 profile_menu_index = app_source.find('contentDescription = "Profile menu, three dots"')
 if profile_button_index < 0 or profile_menu_index < 0 or profile_menu_index <= profile_button_index:
