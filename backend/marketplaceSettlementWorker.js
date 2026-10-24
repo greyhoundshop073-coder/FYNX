@@ -346,6 +346,98 @@ async function verifyPayout(payload) {
   }
 }
 
+async function recoverBlockedPayoutAfterRefundResolution(operationId, { logger = console } = {}) {
+  if (!pool) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Read the relationship first, then lock order -> operation -> escrow to
+    // avoid reversing the order used by dispute/refund transactions.
+    const identity = (await client.query(
+      "SELECT order_id FROM marketplace_financial_operations WHERE id=$1 AND operation_type='PAYOUT_RELEASE'",
+      [operationId]
+    )).rows[0];
+    if (!identity) { await client.query('COMMIT'); return null; }
+
+    const order = (await client.query(
+      "SELECT id,status FROM marketplace_orders WHERE id=$1 FOR UPDATE",
+      [identity.order_id]
+    )).rows[0];
+    const operation = (await client.query(
+      "SELECT * FROM marketplace_financial_operations WHERE id=$1 AND operation_type='PAYOUT_RELEASE' FOR UPDATE",
+      [operationId]
+    )).rows[0];
+    if (!order || order.status !== 'COMPLETED'
+      || !operation
+      || operation.status !== 'BLOCKED'
+      || operation.failure_reason !== 'refund financial operation is unresolved for this order') {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const escrow = (await client.query(
+      "SELECT * FROM marketplace_escrows WHERE order_id=$1 FOR UPDATE",
+      [operation.order_id]
+    )).rows[0];
+    if (!escrow || escrow.status !== 'RELEASE_PENDING') {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const unresolvedRefund = (await client.query(`
+      SELECT 1 FROM marketplace_financial_operations
+      WHERE order_id=$1 AND operation_type='REFUND'
+        AND (
+          status IN ('PENDING','SUCCEEDED','BLOCKED')
+          OR (
+            status='FAILED'
+            AND COALESCE(metadata->>'refundEvent','') <> 'refund.failed'
+            AND COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'
+          )
+        )
+      LIMIT 1
+    `, [operation.order_id])).rowCount > 0;
+    if (unresolvedRefund) {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const operationAmount = Number(operation.amount);
+    const escrowAmount = Number(escrow.amount);
+    const marketplaceFee = Number(operation.metadata?.marketplaceFee || 0);
+    const currency = String(operation.currency || '').toUpperCase();
+    const recipientCode = String(operation.metadata?.recipientCode || '').trim();
+    if (!Number.isFinite(operationAmount) || !Number.isFinite(escrowAmount)
+      || !Number.isFinite(marketplaceFee) || operationAmount <= 0 || marketplaceFee < 0
+      || Math.round((operationAmount + marketplaceFee) * 100) / 100 !== escrowAmount
+      || currency !== String(escrow.currency || '').toUpperCase()
+      || !['NGN','USD'].includes(currency)
+      || !recipientCode) {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const resumed = (await client.query(`
+      UPDATE marketplace_financial_operations
+      SET status='PENDING',failure_reason=NULL,
+          metadata=COALESCE(metadata,'{}'::jsonb) || $1::jsonb,
+          updated_at=NOW()
+      WHERE id=$2 AND operation_type='PAYOUT_RELEASE' AND status='BLOCKED'
+        AND failure_reason='refund financial operation is unresolved for this order'
+      RETURNING id
+    `, [JSON.stringify({ payoutResumedAfterRefundResolutionAt: new Date().toISOString() }), operation.id])).rows[0];
+    await client.query('COMMIT');
+    return resumed ? String(resumed.id) : null;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error('[fynx-marketplace] blocked payout recovery failed', error?.message || error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export function registerMarketplaceSettlementWorker({ jobs, logger = console }) {
   if (!jobs?.enabled || typeof jobs.enqueue !== 'function') return;
   globalThis.__fynxJobHandlers = globalThis.__fynxJobHandlers || {};
@@ -371,6 +463,35 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
   const scan = async () => {
     if (!pool) return;
     try {
+      const bucketTime = Date.now();
+      const blocked = await pool.query(`
+        SELECT fo.id
+        FROM marketplace_financial_operations fo
+        JOIN marketplace_escrows e ON e.order_id=fo.order_id
+        JOIN marketplace_orders o ON o.id=fo.order_id
+        WHERE fo.operation_type='PAYOUT_RELEASE'
+          AND fo.status='BLOCKED'
+          AND fo.failure_reason='refund financial operation is unresolved for this order'
+          AND o.status='COMPLETED'
+          AND e.status='RELEASE_PENDING'
+        ORDER BY fo.updated_at ASC
+        LIMIT 20
+      `);
+      for (const row of blocked.rows) {
+        try {
+          const operationId = await recoverBlockedPayoutAfterRefundResolution(String(row.id), { logger });
+          if (operationId) {
+            const verificationCycle = payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime);
+            await jobs.enqueue('marketplace.payout.release', { operationId, verificationCycle }, {
+              idempotencyKey: verificationCycle,
+              maxAttempts: 5
+            });
+          }
+        } catch (error) {
+          logger.error('[fynx-marketplace] blocked payout recovery enqueue failed', error?.message || error);
+        }
+      }
+
       const pending = await pool.query(`
         SELECT fo.id,fo.provider_reference,fo.updated_at
         FROM marketplace_financial_operations fo
@@ -381,7 +502,6 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
           AND fo.updated_at <= NOW() - INTERVAL '2 minutes'
         ORDER BY fo.updated_at ASC
         LIMIT 20`);
-      const bucketTime = Date.now();
       for (const row of pending.rows) {
         const operationId = String(row.id);
         if (row.provider_reference) {
