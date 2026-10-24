@@ -62,7 +62,7 @@ private data class FynxRecentMedia(
 
 /** Single Status/Stories surface. */
 @Composable
-fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}) {
+fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}, onComposerVisibilityChange: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var addStatusOpen by remember { mutableStateOf(startWithCreator) }
@@ -133,6 +133,13 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
 
     LaunchedEffect(composing, cameraOpen, addStatusOpen) {
         if (!composing && !cameraOpen && !addStatusOpen) timelineRefreshKey++
+    }
+
+    // Let the app shell darken the otherwise exposed system-bar backdrop only while
+    // the immersive Status composer is active. This does not alter other screens.
+    LaunchedEffect(composing) { onComposerVisibilityChange(composing) }
+    DisposableEffect(Unit) {
+        onDispose { onComposerVisibilityChange(false) }
     }
 
     BackHandler(enabled = addStatusOpen) { if (startWithCreator) onExitCreator() else addStatusOpen = false }
