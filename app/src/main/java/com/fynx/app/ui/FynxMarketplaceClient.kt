@@ -47,7 +47,7 @@ object FynxMarketplaceClient {
         val discovery = FynxDiscoveryClient.marketplaceDiscovery(context, query, category)
         if (discovery.isSuccess) return discovery
         return FynxBackendClient.get(context, "/api/marketplace/listings?q=${encode(query)}&category=${encode(category)}")
-            .mapCatching(::parseListings)
+            .mapCatching { raw -> parseListings(raw, preferAvailableStock = true) }
     }
 
     suspend fun listingById(context: Context, listingId: String): Result<Listing> {
@@ -56,7 +56,7 @@ object FynxMarketplaceClient {
             return Result.failure(IllegalArgumentException("invalid listing id"))
         }
         return FynxBackendClient.get(context, "/api/marketplace/listing/${encode(normalized)}")
-            .mapCatching { raw -> parseListingObject(JSONObject(raw).getJSONObject("listing")) }
+            .mapCatching { raw -> parseListingObject(JSONObject(raw).getJSONObject("listing"), preferAvailableStock = true) }
     }
 
     data class SellerReputation(val rank: Int, val sellerCount: Int, val successfulSales: Int, val totalOrders: Int, val completionRate: Double, val averageRating: Double, val reviewCount: Int, val tier: String)
@@ -68,7 +68,8 @@ object FynxMarketplaceClient {
         }
 
     suspend fun myListings(context: Context): Result<List<Listing>> =
-        FynxBackendClient.get(context, "/api/marketplace/my-listings").mapCatching(::parseListings)
+        FynxBackendClient.get(context, "/api/marketplace/my-listings")
+            .mapCatching { raw -> parseListings(raw, preferAvailableStock = false) }
 
     suspend fun shippingSettings(context: Context, listingId: String): Result<ShippingSettings> {
         val id = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
@@ -183,15 +184,24 @@ object FynxMarketplaceClient {
     fun safetyAssessment(listing: Listing): FynxMarketplaceSafetyAssessment = FynxMarketplaceSafety.analyze(listing.title, listing.description, listing.storeName, listing.location)
     fun mediaUrl(context: Context, mediaId: String): String = "${FynxBackendClient.baseUrl(context)}/api/media/${encode(mediaId)}"
 
-    private fun parseListings(raw: String): List<Listing> {
+    private fun parseListings(raw: String, preferAvailableStock: Boolean): List<Listing> {
         val array = JSONObject(raw).getJSONArray("listings")
-        return buildList { for (i in 0 until array.length()) add(parseListingObject(array.getJSONObject(i))) }
+        return buildList {
+            for (i in 0 until array.length()) {
+                add(parseListingObject(array.getJSONObject(i), preferAvailableStock))
+            }
+        }
     }
 
-    private fun parseListingObject(o: JSONObject): Listing {
+    private fun parseListingObject(o: JSONObject, preferAvailableStock: Boolean): Listing {
         val media = o.optJSONArray("media_ids") ?: JSONArray()
         val ids = buildList { for (j in 0 until media.length()) add(media.getString(j)) }
-        return Listing(o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), o.optInt("quantity", 0), o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true))
+        val quantity = if (preferAvailableStock) {
+            o.optInt("available_quantity", o.optInt("quantity", 0))
+        } else {
+            o.optInt("quantity", 0)
+        }
+        return Listing(o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), quantity, o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true))
     }
 
     private fun encode(value: String): String = java.net.URLEncoder.encode(value.trim(), "UTF-8")

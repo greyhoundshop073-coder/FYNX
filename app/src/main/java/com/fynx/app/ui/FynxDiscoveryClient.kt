@@ -62,7 +62,7 @@ object FynxDiscoveryClient {
                 val o = array.getJSONObject(i)
                 val media = o.optJSONArray("media_ids") ?: JSONArray()
                 val ids = buildList { for (j in 0 until media.length()) add(media.get(j).toString()) }
-                add(FynxMarketplaceClient.Listing(o.optString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), o.optInt("quantity", 0), o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true)))
+                add(FynxMarketplaceClient.Listing(o.optString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), o.optInt("available_quantity", o.optInt("quantity", 0)), o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true)))
             }
         }
     }

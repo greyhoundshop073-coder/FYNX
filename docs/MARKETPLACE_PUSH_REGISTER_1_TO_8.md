@@ -165,7 +165,7 @@ This document is the handoff register for the eight numbered batches. Push 8 rem
 
 **Change:** Add the explicit `java.util.Locale` import. No Home, Avatar, Chat, or Groups source is changed.
 
-**Verification:** Pending CI for the new exact head. The previous Android build also failed at `FynxApp.kt:394,408` (`Unresolved reference 'clickable'`) and the Home interaction gate failed the independent avatar 48dp target check; these remain outside this Marketplace branch and are not changed here.
+**Verification at parent head `5e47b0c`:** Backend `validate` is green, including Marketplace receipt, lifecycle, shipping, refund/dispute, accounting, and shop-profile checks. Android compilation no longer reports the earlier Marketplace `Locale` symbol error; the actual Kotlin build now fails at the untouched `FynxApp.kt:394,408` unresolved `clickable` references. The separate build workflow also stops at the Home avatar 48dp target guard before Gradle. Both are outside this branch's Marketplace-only change; this new head's CI is pending.
 
 ## Verification evidence and remaining blockers
 
@@ -183,3 +183,13 @@ This document is the handoff register for the eight numbered batches. Push 8 rem
 - [Paystack — Refunds](https://paystack.com/docs/payments/refunds/)
 
 The relevant patterns adapted here are accurate stock/inventory presentation, consistent seller and location discovery, recoverable upload/order detail failures, and reconciliation against provider-verified payment state. FYNX's Nigerian delivery flow still keeps the seller-selected local phone driver and agreed public meeting point.
+
+
+### Push 21 — Use available stock in buyer-facing Marketplace discovery and detail parsing
+
+**Root cause:** Backend listing APIs return both `quantity` (seller-managed total stock) and `available_quantity = max(0, quantity - reserved_quantity)`. The paginated `FynxDiscoveryClient` and the `FynxMarketplaceClient` public detail/fallback parsers read only `quantity`. A buyer could therefore see reserved units reported as “available” even though the checkout backend would reject the extra quantity.
+
+**Change:** Discovery maps `available_quantity` with a compatibility fallback to `quantity`. Public listing detail and fallback parsing explicitly use available stock; the authenticated `/api/marketplace/my-listings` path explicitly keeps total stock for the seller's inventory cards and stock editor. Added regression assertions for both paths.
+
+**Verification:** Pending CI for this exact head. The Android integration build remains blocked by the untouched `FynxApp.kt:394,408` compile errors and the pre-Gradle Home avatar touch-target gate. No files from Home, Chat/Groups, Status, Profile, or Avatar were edited.
+
