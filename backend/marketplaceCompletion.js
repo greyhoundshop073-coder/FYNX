@@ -568,7 +568,9 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
     const id = parseUuid(req.params.id);
     const recipientName = typeof req.body?.recipientName === 'string' ? req.body.recipientName.trim().slice(0, 120) : '';
     const deliveryNote = typeof req.body?.deliveryNote === 'string' ? req.body.deliveryNote.trim().slice(0, 1000) : '';
-    const photoReference = typeof req.body?.photoReference === 'string' ? req.body.photoReference.trim().slice(0, 1000) : '';
+    const rawPhotoReference = typeof req.body?.photoReference === 'string' ? req.body.photoReference.trim() : '';
+    const photoMediaId = rawPhotoReference ? Number(rawPhotoReference) : null;
+    if (rawPhotoReference && (!Number.isSafeInteger(photoMediaId) || photoMediaId < 1)) return res.status(400).json({ error: 'photo reference must be a valid uploaded media id' });
     if (!id || !recipientName || (!deliveryNote && !photoReference)) return res.status(400).json({ error: 'recipient name and delivery note or photo reference are required' });
     const client = await pool.connect();
     try {
@@ -582,10 +584,21 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (order.status !== 'SHIPPED' || order.fulfillment_method !== 'DELIVERY' || !assignment.handover_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery requires a shipped order and recorded custody handover' }); }
       if (assignment.delivered_at) { await client.query('COMMIT'); return res.json({ delivered: true, deliveredAt: assignment.delivered_at, idempotent: true }); }
       if (await hasActiveProtectionCase(client, id)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
+      if (photoMediaId !== null) {
+        const media = (await client.query(
+          'SELECT mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1',
+          [photoMediaId, req.user.sub]
+        )).rows[0];
+        const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+        if (!media || !allowedImageTypes.has(String(media.mime_type || '').trim().toLowerCase())) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'delivery photo must be an uploaded image owned by the assigned driver' });
+        }
+      }
       const updated = await client.query("UPDATE marketplace_delivery_assignments SET delivered_at=NOW(),updated_at=NOW() WHERE order_id=$1 RETURNING delivered_at", [id]);
       await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'RECIPIENT_NAME',$3)", [id, req.user.sub, recipientName]);
       if (deliveryNote) await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'DELIVERY_NOTE',$3)", [id, req.user.sub, deliveryNote]);
-      if (photoReference) await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'PHOTO_REFERENCE',$3)", [id, req.user.sub, photoReference]);
+      if (photoMediaId !== null) await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'PHOTO_REFERENCE',$3)", [id, req.user.sub, String(photoMediaId)]);
       const current = order.fulfillment_status || 'DISPATCHED';
       await client.query("UPDATE marketplace_orders SET fulfillment_status='DELIVERED',fulfillment_status_updated_at=NOW(),updated_at=NOW() WHERE id=$1", [id]);
       await recordFulfillmentEvent(client, id, req.user.sub, 'DRIVER_DELIVERY_REPORTED', current, 'DELIVERED', { recipientName, hasPhotoReference: Boolean(photoReference), hasDeliveryNote: Boolean(deliveryNote) });
