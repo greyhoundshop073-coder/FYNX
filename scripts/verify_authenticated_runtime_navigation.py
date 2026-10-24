@@ -762,6 +762,21 @@ if not FAILURES:
                     status_add_xml = ""
                     FAILURES.append("Camera readiness failure left Status stuck outside the Add status chooser")
 
+            # Video capture records audio as well as video. CI's debug-only UI path
+            # can have CAMERA granted from a prior step while RECORD_AUDIO remains
+            # denied; in that state the shutter opens a permission prompt instead of
+            # starting recording. Grant the runtime permission in this disposable
+            # emulator test environment, without changing app auth or repository secrets.
+            audio_grant = run("adb", "shell", "pm", "grant", PACKAGE, "android.permission.RECORD_AUDIO")
+            if audio_grant.returncode != 0:
+                report.append("- WARN Could not pre-grant RECORD_AUDIO in emulator; video flow will still be tested and any permission prompt must be handled")
+            else:
+                audio_state = run("adb", "shell", "dumpsys", "package", PACKAGE).stdout
+                if re.search(r"android\\.permission\\.RECORD_AUDIO: granted=true", audio_state):
+                    report.append("- PASS emulator RECORD_AUDIO permission is granted for Status video capture")
+                else:
+                    report.append("- WARN RECORD_AUDIO grant command returned success but package state did not confirm it")
+
             # Only exercise video recording when the photo camera is available.
             if camera_ready and status_add_xml and find_control(status_add_xml, ["Add status"]):
                 video_camera_xml = tap_control(
@@ -812,6 +827,51 @@ if not FAILURES:
                     FAILURES.append("Add status -> Record video did not expose the video recording controls")
             else:
                 report.append("- BLOCKED Status video runtime capture: photo camera capture was unavailable in this emulator run")
+
+            # Normalize the real screen after the video journey before attempting Text.
+            # A failed recording must not leave a full-screen camera Dialog open while
+            # the test reuses stale Add-status coordinates. Preserve the original video
+            # failure, but recover independently so Text/Music/Voice still get tested.
+            live_after_video_xml = dump_ui("authenticated-status-video-postcheck-live.xml")
+            if not (find_control(live_after_video_xml, ["Add status"])
+                    and find_control(live_after_video_xml, ["Voice"])
+                    and find_control(live_after_video_xml, ["Text"])):
+                if find_control(live_after_video_xml, ["Stop video recording"]):
+                    live_after_video_xml = tap_control(
+                        live_after_video_xml, ["Stop video recording"], "status-video-recovery-stop",
+                        ["Retake", "Send"]
+                    )
+                if find_control(live_after_video_xml, ["Retake"]):
+                    live_after_video_xml = tap_control(
+                        live_after_video_xml, ["Retake"], "status-video-recovery-retake",
+                        ["Close camera", "Record video"]
+                    )
+                if find_control(live_after_video_xml, ["Close camera"]):
+                    live_after_video_xml = tap_control(
+                        live_after_video_xml, ["Close camera"], "status-video-recovery-close",
+                        ["Add status", "Voice", "Text"]
+                    )
+                if not (find_control(live_after_video_xml, ["Add status"])
+                        and find_control(live_after_video_xml, ["Voice"])
+                        and find_control(live_after_video_xml, ["Text"])):
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(0.8)
+                    live_after_video_xml = dump_ui("authenticated-status-video-recovery-after-back.xml")
+                for _ in range(8):
+                    if (find_control(live_after_video_xml, ["Add status"])
+                            and find_control(live_after_video_xml, ["Voice"])
+                            and find_control(live_after_video_xml, ["Text"])):
+                        break
+                    time.sleep(0.5)
+                    live_after_video_xml = dump_ui("authenticated-status-video-recovery-retry.xml")
+            if (find_control(live_after_video_xml, ["Add status"])
+                    and find_control(live_after_video_xml, ["Voice"])
+                    and find_control(live_after_video_xml, ["Text"])):
+                status_add_xml = live_after_video_xml
+                report.append("- PASS returned to the live Add status chooser after video capture check")
+            else:
+                status_add_xml = ""
+                FAILURES.append("Video capture check left Status outside the Add status chooser; Text/Voice checks cannot safely continue")
 
             # This run covers Text/Music plus Voice below; media is discarded, not published.
             text_composer_xml = ""
