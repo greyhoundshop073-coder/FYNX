@@ -206,6 +206,17 @@ fun FynxMatureStatusComposerPanel(
     }
     DisposableEffect(Unit) { onDispose { recorder?.let { runCatching { it.stop() }; runCatching { it.release() } }; recordingFile?.let { if (it.exists()) runCatching { it.delete() } } } }
 
+    // A completed recording is no longer held by recordingFile, so give its draft
+    // URI its own lifecycle. Replacing, deleting, or closing a voice draft removes
+    // only the app-cache file created by this recorder; gallery URIs are untouched.
+    val localVoiceDraft = mediaUri?.takeIf {
+        type == FynxStatusType.VOICE && it.scheme.equals("file", ignoreCase = true)
+    }
+    DisposableEffect(localVoiceDraft) {
+        val capturedDraft = localVoiceDraft
+        onDispose { deleteMatureVoiceDraft(context, capturedDraft) }
+    }
+
     // Android system Back must behave like the visible close control on every composer mode.
     // During publishing, ignore Back so an in-flight upload is not abandoned accidentally.
     BackHandler(enabled = !publishing) {
@@ -912,6 +923,17 @@ private fun FynxLocalStatusAudioPreview(uri: Uri, durationMs: Long) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+
+private fun deleteMatureVoiceDraft(context: Context, uri: Uri?) {
+    if (!uri?.scheme.equals("file", ignoreCase = true)) return
+    runCatching {
+        val path = uri?.path ?: return@runCatching
+        val cacheRoot = context.cacheDir.canonicalPath + File.separator
+        val draft = File(path).canonicalFile
+        if (draft.path.startsWith(cacheRoot) && draft.isFile) draft.delete()
     }
 }
 
