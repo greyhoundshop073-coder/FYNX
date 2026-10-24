@@ -241,3 +241,14 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 **Regression guard:** Seller-flow verification now checks archive separation, owner-scoped republish, unreserved-stock validation, and success/error feedback.
 
 **Verification:** Exact-head Android and Backend CI are pending. Republish is not live in Railway until the Marketplace PR is merged and the canonical deployment is verified.
+
+
+### Push 26 — Reconcile the Paystack hook with the generated runtime entrypoint
+
+**Root cause:** Production starts through `realtimeIsolationBootstrap.js` and `serverBootstrap.js`, which inject Marketplace checkout and Paystack webhook routes into the generated runtime. Push 23 initially added an additional static `server.js` Paystack import/registration, which the generated-runtime injector would add a second time. Its generic raw-body capture also unnecessarily copied every JSON request body. The refund ambiguity guard had a separate test bug: `split(..., 1)` drops the segment the assertion intended to inspect, creating a false failure.
+
+**Change:** Keep the existing generated-runtime bootstrap as the single source for route registration. Restore the static `server.js` markers it expects, and preserve raw request bytes only when the request path is the signed Paystack webhook. The refund verifier now inspects the candidate SQL query using explicit string indices and verifies the runtime bootstrap, rather than incorrectly requiring a static source registration.
+
+**Regression guard:** Updated both refund/dispute and Stage 15G runtime integration checks to assert the actual bootstrap path and webhook-specific raw-body capture. This is a test correction based on the current code structure, not a skipped or weakened check.
+
+**Verification:** Backend CI on the resulting exact commit must pass. Railway remains on the last successful canonical deployment; no deployment or device test is claimed from this PR.
