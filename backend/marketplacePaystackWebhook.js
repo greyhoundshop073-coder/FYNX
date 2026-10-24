@@ -16,7 +16,15 @@ function amountSubunit(amount, currency) {
   return Math.round(value * 100);
 }
 
-async function findRefundOperation(client, transactionReference, refund) {
+function refundOperationCanApply(operation, eventName) {
+  const currentStatus = String(operation?.status || '').toUpperCase();
+  // A completed refund is terminal: accept only duplicate processed notifications
+  // (which are handled as no-ops), never stale pending/failed notifications.
+  if (currentStatus === 'SUCCEEDED') return eventName === 'refund.processed';
+  return currentStatus === 'PENDING' || currentStatus === 'FAILED';
+}
+
+async function findRefundOperation(client, transactionReference, refund, eventName) {
   const schema = (await client.query(`SELECT
     to_regclass('public.marketplace_checkout_group_items') IS NOT NULL
       AND to_regclass('public.marketplace_checkout_groups') IS NOT NULL
@@ -43,17 +51,22 @@ async function findRefundOperation(client, transactionReference, refund) {
         AND ${effectiveReference}=$2
         AND f.provider_reference=ANY($1::text[])
       ORDER BY f.created_at DESC LIMIT 2 FOR UPDATE OF f`, [identities, transactionReference]);
-    if (exact.rows.length === 1) return exact.rows[0];
+    if (exact.rows.length === 1) {
+      return refundOperationCanApply(exact.rows[0], eventName) ? exact.rows[0] : null;
+    }
     if (exact.rows.length > 1) return null;
   }
+  // Count every refund operation for the shared payment reference, including
+  // SUCCEEDED rows. Filtering to PENDING/FAILED before counting could hide an
+  // earlier child refund and misattribute its replay to another child order.
   const candidates = await client.query(`${select}
     WHERE f.operation_type='REFUND'
       AND ${effectiveReference}=$1
-      AND f.status IN ('PENDING','FAILED')
     ORDER BY f.created_at DESC LIMIT 2 FOR UPDATE OF f`, [transactionReference]);
-  // A shared checkout reference may identify several child refunds. Never guess
-  // which child the provider event belongs to when the refund identity is absent.
-  return candidates.rows.length === 1 ? candidates.rows[0] : null;
+  // With no exact provider refund identity, any shared-reference ambiguity fails closed.
+  return candidates.rows.length === 1 && refundOperationCanApply(candidates.rows[0], eventName)
+    ? candidates.rows[0]
+    : null;
 }
 
 async function reconcileRefundEvent(client, eventName, refund) {
@@ -61,7 +74,7 @@ async function reconcileRefundEvent(client, eventName, refund) {
   if (!transactionReference) return false;
   const status = String(refund?.status || '').toLowerCase();
   const providerReference = refund?.refund_reference || refund?.id || null;
-  const operation = await findRefundOperation(client, transactionReference, refund);
+  const operation = await findRefundOperation(client, transactionReference, refund, eventName);
   if (!operation) return false;
   // A duplicate processed event must not release the same listing reservation twice.
   if (operation.status === 'SUCCEEDED' && eventName === 'refund.processed') return true;
