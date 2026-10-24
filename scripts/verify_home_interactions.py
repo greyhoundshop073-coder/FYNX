@@ -165,7 +165,10 @@ if profile_box_start < 0:
 if menu_box_start <= profile_button_index:
     raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling Box touch target")
 profile_touch_region = app_source[profile_box_start:menu_box_start]
-menu_touch_region = app_source[menu_box_start:profile_menu_index]
+brand_row_start = app_source.find('Row(\n                        Modifier.weight(1f),\n                        verticalAlignment = Alignment.CenterVertically', menu_box_start)
+if brand_row_start <= menu_box_start:
+    raise SystemExit("HOME INTERACTIONS RED: Home brand label must remain a separate weighted sibling after the profile menu")
+menu_touch_region = app_source[menu_box_start:brand_row_start]
 if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
     raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")
 require_normalized(profile_touch_region, "Modifier.size(48.dp).clickable", "profile avatar has its own non-overlapped 48dp clickable touch target")
