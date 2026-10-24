@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 
 data class FynxStatusViewer(
     val username: String,
@@ -160,8 +161,20 @@ object FynxStatusClient {
 
     private const val VIEWED_STATUS_IDS = "fynx_viewed_status_ids"
 
+    // Seen/unseen is user state, not device state. Keep it in an account-specific
+    // namespace so switching local accounts cannot carry one person's viewed rings
+    // into another account's Home/Status feed.
+    private fun viewedStatusPreferences(context: Context) = run {
+        val account = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() } ?: "signed_out"
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(account.toByteArray(Charsets.UTF_8))
+            .take(12)
+            .joinToString("") { "%02x".format(it) }
+        context.getSharedPreferences("fynx_status_views_$digest", Context.MODE_PRIVATE)
+    }
+
     fun viewedStatusIds(context: Context): Set<String> =
-        context.getSharedPreferences("fynx_status_views", Context.MODE_PRIVATE)
+        viewedStatusPreferences(context)
             .getStringSet(VIEWED_STATUS_IDS, emptySet())
             ?.toSet()
             .orEmpty()
@@ -169,7 +182,7 @@ object FynxStatusClient {
     private fun rememberViewed(context: Context, statusId: String) {
         val id = statusId.trim()
         if (id.isBlank()) return
-        val prefs = context.getSharedPreferences("fynx_status_views", Context.MODE_PRIVATE)
+        val prefs = viewedStatusPreferences(context)
         val updated = prefs.getStringSet(VIEWED_STATUS_IDS, emptySet()).orEmpty().toMutableSet()
         updated.add(id)
         prefs.edit().putStringSet(VIEWED_STATUS_IDS, updated).apply()
