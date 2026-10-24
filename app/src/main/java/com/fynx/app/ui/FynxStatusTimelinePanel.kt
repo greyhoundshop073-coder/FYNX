@@ -581,7 +581,7 @@ private fun FynxStatusStoryViewer(
         } else {
             val result = FynxStatusClient.mutualFollowUsernames(context, listOf(status.ownerUsername))
             if (currentStatusId == requestedStatusId) {
-                result.onSuccess { mutual -> canReplyToStatus = status.ownerUsername.lowercase() in mutual }
+                result.onSuccess { mutual -> canReplyToStatus = status.ownerUsername.removePrefix("@").trim().lowercase() in mutual }
                     .onFailure { canReplyToStatus = false }
                 replyRelationshipLoading = false
             }
@@ -1000,7 +1000,7 @@ private fun FynxStatusStoryViewer(
                                             }
                                             if (viewer.reaction != null) Text(viewer.reaction, fontSize = 22.sp)
                                             else if (viewer.liked) Icon(Icons.Default.Favorite, "Liked", tint = MaterialTheme.colorScheme.error)
-                                            if (viewer.username.lowercase() in mutualFollowUsernames) {
+                                            if (viewer.username.removePrefix("@").trim().lowercase() in mutualFollowUsernames) {
                                                 TextButton(onClick = {
                                                     showViewers = false
                                                     onOpenMessage(viewer.username)
