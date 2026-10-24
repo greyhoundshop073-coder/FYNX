@@ -168,7 +168,7 @@ if "Modifier.align(Alignment.BottomEnd)" in profile_box:
 if "Modifier.size(48.dp).clickable" not in profile_box or 'contentDescription = "Open FYNX profile"' not in profile_box or "contentAlignment = Alignment.Center" not in profile_box:
     raise SystemExit("HOME INTERACTIONS RED: profile avatar must have an independent accessible 48dp clickable Box")
 menu_box_start = app_source.rfind("Box(", profile_button_index, profile_menu_index)
-menu_box = app_source[menu_box_start:profile_menu_index] if menu_box_start >= 0 else ""
+menu_label_end = profile_menu_index + len('contentDescription = "Profile menu, three dots"')\nmenu_box = app_source[menu_box_start:menu_label_end] if menu_box_start >= 0 else ""
 if menu_box_start <= profile_button_index or "Modifier.size(48.dp).clickable" not in menu_box or 'contentDescription = "Profile menu, three dots"' not in menu_box:
     raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling 48dp touch target")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
