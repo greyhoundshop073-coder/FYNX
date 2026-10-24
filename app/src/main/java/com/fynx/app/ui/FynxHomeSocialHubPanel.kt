@@ -513,7 +513,8 @@ fun FynxHomeSocialHubPanel(
                 showComposer = false
                 showFastCamera = true
             },
-            onOpenAuthorProfile = onOpenAuthorProfile
+            onOpenAuthorProfile = onOpenAuthorProfile,
+            onOpenStatusOwner = onOpenStatusOwner
         )
     }
 
