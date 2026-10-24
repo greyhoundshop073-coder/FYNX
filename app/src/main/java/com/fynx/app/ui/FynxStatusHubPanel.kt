@@ -92,6 +92,11 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
         composing = true
     }
 
+    // Close/back must stop any catalogue preview rather than restarting it on the next open.
+    LaunchedEffect(showStatusMusicPicker) {
+        if (!showStatusMusicPicker) statusMusicPreviewId = null
+    }
+
     LaunchedEffect(showStatusMusicPicker, statusMusicSearch, statusMusicRetryKey) {
         if (showStatusMusicPicker) {
             statusMusicLoading = true
