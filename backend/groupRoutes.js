@@ -56,7 +56,12 @@ export function registerGroupRoutes({ app, pool: providedPool = null, jwtSecret:
       if(!groupAccess && requestedOwner!==String(currentUser.username||'').toLowerCase())return res.status(403).json({error:'group membership required'});
       if(groupAccess && !canManageMembers(groupAccess.role))return res.status(403).json({error:'group management permission required'});
       const name=String(req.body?.name||'').trim().slice(0,120); const requestedPhoto=req.body?.groupPhotoMediaId==null?null:Number(req.body.groupPhotoMediaId); if(requestedPhoto!==null&&(!Number.isInteger(requestedPhoto)||requestedPhoto<1))return res.status(400).json({error:'invalid group photo'}); const description=String(req.body?.description||'').trim().slice(0,500); const visibility=String(req.body?.visibility||'PRIVATE').toUpperCase()==='PUBLIC'?'PUBLIC':'PRIVATE'; if(name.length<2)return res.status(400).json({error:'group name is required'});
-      const users=await findUsers(req.body?.members); const requested=new Map(users.map(u=>[String(u.username).toLowerCase(),u])); requested.set(String(currentUser.username).toLowerCase(),{...currentUser,requestedRole:groupAccess?.role||'ADMIN'});
+      const users=await findUsers(req.body?.members);
+      const submittedNames=[...new Set((Array.isArray(req.body?.members)?req.body.members:[]).map(value=>typeof value==='object'&&value!==null?String(value.username||''):String(value||'')).map(value=>value.trim().toLowerCase().replace(/^@+/,'')).filter(Boolean))];
+      const resolvedNames=new Set(users.map(user=>String(user.username||'').toLowerCase()));
+      const unknownNames=submittedNames.filter(username=>!resolvedNames.has(username));
+      if(unknownNames.length)return res.status(404).json({error:'one or more group member accounts were not found',code:'GROUP_MEMBER_NOT_FOUND',usernames:unknownNames});
+      const requested=new Map(users.map(u=>[String(u.username).toLowerCase(),u])); requested.set(String(currentUser.username).toLowerCase(),{...currentUser,requestedRole:groupAccess?.role||'ADMIN'});
       await client.query('BEGIN');
       const existing=(await client.query(`SELECT id,owner_id,group_photo_media_id FROM fynx_groups WHERE id=$1 FOR UPDATE`,[groupId])).rows[0];
       let groupOwner=currentUser;
@@ -68,6 +73,13 @@ export function registerGroupRoutes({ app, pool: providedPool = null, jwtSecret:
       }
       if(existing){
         await client.query(`UPDATE fynx_groups SET name=$1,description=$2,visibility=$3,group_photo_media_id=COALESCE($4,group_photo_media_id),updated_at=NOW() WHERE id=$5`,[name,description,visibility,requestedPhoto,groupId]);
+        // Members dialog edits are sent as the full requested roster. Reconcile it in the same transaction as group metadata so local adds/removes cannot report success without persisting on the server.
+        const requestedUserIds=[...new Set([...requested.values()].map(user=>String(user.id)))];
+        await client.query(`DELETE FROM fynx_group_members WHERE group_id=$1 AND NOT (user_id = ANY($2::bigint[]))`,[groupId,requestedUserIds]);
+        for(const user of requested.values()){
+          const role=String(user.id)===String(groupOwner.id)?'ADMIN':normalizeRole(user.requestedRole);
+          await client.query(`INSERT INTO fynx_group_members(group_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(group_id,user_id) DO UPDATE SET role=EXCLUDED.role`,[groupId,user.id,role]);
+        }
       }else{
         await client.query(`INSERT INTO fynx_groups(id,owner_id,name,description,visibility,group_photo_media_id) VALUES($1,$2,$3,$4,$5,$6)`,[groupId,currentUser.id,name,description,visibility,requestedPhoto]);
         for(const user of requested.values()){
