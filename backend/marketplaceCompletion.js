@@ -601,7 +601,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (photoMediaId !== null) await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'PHOTO_REFERENCE',$3)", [id, req.user.sub, String(photoMediaId)]);
       const current = order.fulfillment_status || 'DISPATCHED';
       await client.query("UPDATE marketplace_orders SET fulfillment_status='DELIVERED',fulfillment_status_updated_at=NOW(),updated_at=NOW() WHERE id=$1", [id]);
-      await recordFulfillmentEvent(client, id, req.user.sub, 'DRIVER_DELIVERY_REPORTED', current, 'DELIVERED', { recipientName, hasPhotoReference: Boolean(photoReference), hasDeliveryNote: Boolean(deliveryNote) });
+      await recordFulfillmentEvent(client, id, req.user.sub, 'DRIVER_DELIVERY_REPORTED', current, 'DELIVERED', { recipientName, hasPhotoReference: photoMediaId !== null, hasDeliveryNote: Boolean(deliveryNote) });
       await client.query('COMMIT');
       return res.json({ delivered: true, deliveredAt: updated.rows[0].delivered_at, awaitingBuyerConfirmation: true });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace driver delivery', error); return res.status(500).json({ error: 'driver delivery confirmation failed' }); }
