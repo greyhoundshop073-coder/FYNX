@@ -6,6 +6,14 @@ workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="ut
 runtime = (ROOT / "scripts/verify_authenticated_status_lifecycle.py").read_text(encoding="utf-8")
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
 
+def syntax_check(source):
+    try:
+        compile(source, "scripts/verify_authenticated_status_lifecycle.py", "exec")
+        return True
+    except SyntaxError as exc:
+        print(f"Python syntax error in Status lifecycle test at line {exc.lineno}: {exc.msg}")
+        return False
+
 checks = {
     "runtime certification variant inherits debug dependencies without enabling the debug-only saved-device path":
         'create("runtimeCert")' in gradle and 'initWith(getByName("debug"))' in gradle and
@@ -20,9 +28,16 @@ checks = {
         'authenticated-server-status-text-viewer' in runtime and 'delete_through_viewer' in runtime,
     "music-only certification selects a published catalogue track and verifies backend MUSIC status":
         'FYNX Music' in runtime and '"MUSIC"' in runtime and 'musicCatalogueId' in runtime,
-    "test data is owner-cleaned and no credentials/tokens are written to output":
+    "test-created Statuses are owner-cleaned and API tokens are never emitted":
         'finally:' in runtime and 'cleanup_status' in runtime and
         'access tokens are never written' in runtime,
+    "login username/password hierarchies remain in memory and are never saved as artifacts":
+        "def read_ui_unpersisted()" in runtime and
+        'latest = read_ui_unpersisted()' in runtime and
+        'dump_ui("authenticated-server-status-login-filled.xml")' not in runtime and
+        'dump_ui("authenticated-server-status-login-wait.xml")' not in runtime,
+    "long runtime script is syntax-compiled before expensive emulator certification":
+        syntax_check(runtime),
     "existing debug login contract remains untouched":
         'ApplicationInfo.FLAG_DEBUGGABLE' in auth and 'localDebugAccountForLogin' in auth and
         'FynxRemoteAuthClient.login(context, requestedUsername, password)' in auth,

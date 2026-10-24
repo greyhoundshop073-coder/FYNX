@@ -115,6 +115,15 @@ def dump_ui(name: str = "status-cert-current.xml") -> str:
     (ROOT / name).write_bytes(raw)
     return raw.decode("utf-8", "replace")
 
+def read_ui_unpersisted() -> str:
+    """Read the live hierarchy for sign-in only; never save username/password UI to artifacts."""
+    result = run("adb", "shell", "uiautomator", "dump", "/sdcard/fynx-status-cert-login.xml")
+    if result.returncode != 0:
+        return ""
+    raw = subprocess.run(["adb", "exec-out", "cat", "/sdcard/fynx-status-cert-login.xml"],
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False).stdout
+    return raw.decode("utf-8", "replace") if raw.startswith(b"<?xml") else ""
+
 
 def nodes(xml_text: str):
     if not xml_text:
@@ -274,7 +283,6 @@ def sign_in() -> bool:
             xml = dump_ui("authenticated-server-status-login-retry.xml")
     if not xml or not find_control(xml, ["Username"]):
         FAILURES.append("normal server sign-in form did not expose Username; markers: " + marker_summary(xml))
-        screenshot("authenticated-server-status-login-failed.png")
         return False
     username_control = find_control(xml, ["Username"])
     if username_control:
@@ -286,35 +294,34 @@ def sign_in() -> bool:
             return False
         run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
         time.sleep(0.4)
-    xml = dump_ui("authenticated-server-status-username-entered.xml")
+    # Read live login controls in memory only. The hierarchy can contain the test
+    # username, and after password entry it may contain sensitive accessibility data.
+    xml = read_ui_unpersisted()
     password_control = find_control(xml, ["Password"])
-    if not password_control:
-        FAILURES.append("Password field was not available in the non-debuggable sign-in form.")
-        screenshot("authenticated-server-status-password-missing.png")
+    sign_in_control = find_control(xml, ["Sign In"])
+    if not password_control or not sign_in_control:
+        FAILURES.append("Password field or Sign In button was unavailable in the normal server sign-in form.")
         return False
-    _, x, y = password_control
-    run("adb", "shell", "input", "tap", str(x), str(y))
+    _, password_x, password_y = password_control
+    _, sign_in_x, sign_in_y = sign_in_control
+    run("adb", "shell", "input", "tap", str(password_x), str(password_y))
     time.sleep(0.2)
     if input_text(PASSWORD).returncode != 0:
         FAILURES.append("Android input could not enter the configured test password.")
         return False
     run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
     time.sleep(0.5)
-    xml = dump_ui("authenticated-server-status-login-filled.xml")
-    control = find_control(xml, ["Sign In"])
-    if not control:
-        FAILURES.append("Sign In button was unavailable after entering the test credentials.")
-        return False
-    _, x, y = control
-    run("adb", "shell", "input", "tap", str(x), str(y))
+    # Do not dump/save the login hierarchy while the password field is populated.
+    run("adb", "shell", "input", "tap", str(sign_in_x), str(sign_in_y))
     deadline = time.monotonic() + 75.0
     latest = ""
     while time.monotonic() < deadline:
         time.sleep(1.0)
-        latest = dump_ui("authenticated-server-status-login-wait.xml")
+        latest = read_ui_unpersisted()
         if (find_control(latest, ["Open FYNX camera"])
                 and find_control(latest, ["Chat"])
                 and find_control(latest, ["Friends"])):
+            (ROOT / "authenticated-server-status-login-success.xml").write_text(latest, encoding="utf-8")
             screenshot("authenticated-server-status-login-success.png")
             return True
         combined = " ".join((n.attrib.get("text") or "") + " " + (n.attrib.get("content-desc") or "")
@@ -322,7 +329,7 @@ def sign_in() -> bool:
         if "invalid password" in combined or "invalid credentials" in combined or "incorrect password" in combined:
             break
     FAILURES.append("the real FYNX sign-in UI did not reach Home; visible markers: " + marker_summary(latest))
-    screenshot("authenticated-server-status-login-failed.png")
+    # Do not save a screenshot or accessibility dump of a failed login screen.
     return False
 
 
