@@ -443,6 +443,58 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         return ""
     return next_xml
 
+def provision_isolated_runtime_peer()->tuple[str,str,str]:
+    """Create one dedicated runtime peer only on the explicitly isolated Railway testing backend."""
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    parsed=urllib.parse.urlparse(base)
+    host=(parsed.hostname or "").casefold()
+    if parsed.scheme!="https" or not host.endswith(".up.railway.app") or "testing" not in host:
+        return "","","automatic peer provisioning refused: configured host is not the isolated Railway testing service"
+
+    try:
+        run_number=int(os.environ.get("GITHUB_RUN_ID","0")) % 100_000_000
+        attempt=max(1,int(os.environ.get("GITHUB_RUN_ATTEMPT","1"))) % 100
+    except ValueError:
+        run_number=int(time.time()) % 100_000_000
+        attempt=1
+
+    last_error="registration did not return an access token"
+    for _ in range(3):
+        # Valid backend username: 3-32 lowercase letters/digits/underscores.
+        # The run and attempt fragments make peers independently identifiable; the random
+        # suffix avoids collision if the same job is manually rerun or restarted.
+        peer_username=f"fynxpeer_{run_number:08d}_{attempt:02d}_{uuid.uuid4().hex[:4]}"
+        peer_password=uuid.uuid4().hex+uuid.uuid4().hex
+        body=json.dumps({
+            "username":peer_username,
+            "password":peer_password,
+            "displayName":"FYNX CI Peer",
+            "phone":""
+        }).encode("utf-8")
+        request=urllib.request.Request(
+            base+"/api/auth/register",
+            data=body,
+            headers={"Content-Type":"application/json","Accept":"application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request,timeout=20) as response:
+                payload=json.loads(response.read().decode("utf-8","replace"))
+            token=str(payload.get("accessToken") or "").strip()
+            user=payload.get("user") if isinstance(payload.get("user"),dict) else {}
+            registered_username=str(user.get("username") or "").strip().lower()
+            if response.status not in (200,201) or not token or registered_username!=peer_username:
+                last_error="isolated backend registration returned an unexpected response"
+                continue
+            return peer_username,peer_password,"dedicated run-scoped peer registered on isolated testing backend"
+        except Exception as error:
+            status=" HTTP "+str(error.code) if getattr(error,"code",None) is not None else ""
+            last_error="isolated peer registration failed:"+status+" "+type(error).__name__
+            if getattr(error,"code",None)!=409:
+                break
+    return "","",last_error
+
+
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
     base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
@@ -1366,6 +1418,17 @@ if not FAILURES:
                 private_chat_username=first_username_in_xml(after)
                 peer_username=os.environ.get("FYNX_E2E_PEER_USERNAME","").strip().removeprefix("@")
                 peer_password=os.environ.get("FYNX_E2E_PEER_PASSWORD","")
+                peer_setup_detail=""
+                if bool(peer_username) != bool(peer_password):
+                    peer_setup_detail="only one of FYNX_E2E_PEER_USERNAME/FYNX_E2E_PEER_PASSWORD is configured; provide both or leave both empty for isolated automatic provisioning"
+                    peer_username=""
+                    peer_password=""
+                elif not peer_username and not peer_password:
+                    peer_username,peer_password,peer_setup_detail=provision_isolated_runtime_peer()
+                    if peer_username and peer_password:
+                        report.append("- PASS "+peer_setup_detail+" ("+peer_username+"); no peer secrets are embedded in source or APK")
+                else:
+                    peer_setup_detail="dedicated peer credentials were supplied through repository secrets"
                 real_chat_target=peer_username or backend_real_chat_target()
                 conversation_after=""
                 conversation_ui_opened=False
@@ -1627,7 +1690,7 @@ if not FAILURES:
                                 else:
                                     FAILURES.append("incoming marker missing from server history: "+remote_detail)
                 else:
-                    reason="FYNX_E2E_PEER_USERNAME/FYNX_E2E_PEER_PASSWORD secrets are required to prove private Chat send/receive without messaging an arbitrary user"
+                    reason=peer_setup_detail or "a dedicated private-chat E2E peer could not be configured safely"
                     report.append("- BLOCKED private Chat send/receive certification: "+reason)
                     FAILURES.append("private Chat end-to-end send/receive was not certified: "+reason)
 
