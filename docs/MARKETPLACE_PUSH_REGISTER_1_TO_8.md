@@ -263,3 +263,14 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 **Regression guard:** The end-to-end verifier asserts the explicit no-charge/retry copy and that payment verification remains the only path that invokes the successful checkout callback.
 
 **Verification:** This is a UI/source change only; exact-head Android and Backend CI remain required. Paystack is still not configured in Railway, so live payments remain a release blocker. No payment or deployment is claimed.
+
+
+### Push 28 — Do not reserve inventory when the payment provider is unavailable
+
+**Root cause:** Both protected checkout order endpoints reserved stock and committed `PAYMENT_PENDING` orders before Android attempted Paystack initialization. With no `PAYSTACK_SECRET_KEY`, the payment endpoint returns HTTP 503 after the reservation, leaving an unpaid reservation until the expiry worker runs. Repeated attempts can unnecessarily hold stock even though the checkout can never be paid in the current environment.
+
+**Change:** New single-product and multi-product checkout creation now fails closed with HTTP 503 / `PAYMENT_PROVIDER_NOT_CONFIGURED` before the listing row locks, order inserts, or inventory reservations when the Paystack secret is absent/blank. Existing checkout IDs still follow their idempotent read path, so this does not duplicate or rewrite an already-created order. Both Android checkout dialogs use the truthful “no payment started/cart unchanged” message for this preflight failure.
+
+**Regression guard:** The Batch 3 checkout guard asserts that the provider check occurs after idempotency resolution but before stock locks. The end-to-end guard verifies both single and multi checkout UIs map the provider-unavailable error without invoking the paid callback.
+
+**Verification:** Exact-head Backend CI and Android Build are required. Railway currently has no Paystack secret; no payment, deployment, or device test is claimed.
