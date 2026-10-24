@@ -217,3 +217,16 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 **Regression guard:** The refund/dispute verifier now checks both server registration and raw-body preservation alongside refund identity/ambiguity safety.
 
 **Verification:** Exact-head Backend CI must pass before this PR can be considered integration-ready. No unrelated Home, Status, Profile/Avatar, or Chat/Groups files were touched.
+
+
+### Push 24 — Keep dispute resolution blocked while refund outcomes are unresolved
+
+**Root cause:** The dispute resolver treated only `PENDING` and `SUCCEEDED` financial operations as conflicts. A `BLOCKED` refund (for example, a provider amount/currency mismatch) or a `FAILED` refund caused by a timeout/request error without confirmed provider state could be ignored when resolving for the seller or cancelling protection. The idempotent buyer refund path also allowed an existing `BLOCKED` operation to fall through to a duplicate insert attempt.
+
+**Change:** Buyer refund approval now blocks on active, succeeded, or blocked payouts. Seller resolution and protection cancellation block on `PENDING`, `SUCCEEDED`, and `BLOCKED` refunds, and on `FAILED` refunds unless metadata proves Paystack explicitly returned a terminal `refund.failed` event or the recovery worker verified a failed provider state. An existing blocked refund returns HTTP 409 with a reconciliation message instead of attempting another refund.
+
+**Paired worker fix:** Push 24 also tightens the isolated PR #348 payout worker to honor the same unresolved-refund rule before transferring seller funds. It does not merge the PRs or touch non-Marketplace source.
+
+**Regression guard:** Added checks for blocked payouts/refunds, failed-without-provider-confirmation, and the duplicate-refund prevention guard. Exact-head CI remains required.
+
+**Verification:** Pending exact-head Backend CI on both PRs. No APK or live deployment is claimed from these branch-only changes.
