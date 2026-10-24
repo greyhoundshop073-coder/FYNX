@@ -605,7 +605,7 @@ fun FynxMatureStatusComposerPanel(
                                 }
                             } else if (mediaUri != null) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FynxLocalStatusAudioPreview(mediaUri, elapsed.coerceAtLeast(1_000L))
+                                    FynxLocalStatusAudioPreview(mediaUri!!, elapsed.coerceAtLeast(1_000L))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                         OutlinedButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) {
                                             Icon(Icons.Default.Close, "Clear voice")
