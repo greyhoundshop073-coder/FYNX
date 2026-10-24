@@ -274,3 +274,14 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 **Regression guard:** The Batch 3 checkout guard asserts that the provider check occurs after idempotency resolution but before stock locks. The end-to-end guard verifies both single and multi checkout UIs map the provider-unavailable error without invoking the paid callback.
 
 **Verification:** Exact-head Backend CI and Android Build are required. Railway currently has no Paystack secret; no payment, deployment, or device test is claimed.
+
+
+### Push 29 — Recover payout operations blocked by a refund that later resolves (paired change in PR #348)
+
+**Root cause:** The payout worker correctly blocks a payout when a refund remains unresolved, but marking the payout operation `BLOCKED` removes it from the periodic scan, which otherwise only revisits `PENDING` operations. The seller retry endpoint accepts only `FAILED` payout operations and `RELEASE_ELIGIBLE` escrow, so a previously blocked payout could remain stranded even after a refund later became a confirmed terminal failure.
+
+**Change:** PR #348 now scans only for payout operations blocked with the exact unresolved-refund reason. Recovery locks the order, payout operation and escrow; requires a completed order and `RELEASE_PENDING` escrow; rechecks that no refund remains unresolved; validates the seller recipient and amount/fee/currency reconciliation; then changes that one operation back to `PENDING` and enqueues the existing idempotent payout release job. Other blocked payout reasons, unresolved/blocked refunds, mismatched accounting and disputed escrow stay blocked.
+
+**Regression guard:** `backend/verify-marketplace-reconciliation.mjs` verifies the specific reason filter, eligibility locks/guards, refund predicate and guarded `BLOCKED → PENDING` transition.
+
+**Verification:** Exact-head Backend CI is queued for PR #348. PR #347 Android Build remains blocked by the unrelated Home interactions gate; no files outside Marketplace scope were changed. No live payout, deployment, or device test is claimed.
