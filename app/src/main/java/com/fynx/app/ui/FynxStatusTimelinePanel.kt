@@ -486,6 +486,8 @@ private fun FynxStatusStoryViewer(
     var showReplyEmojiPicker by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
+    val isOwnStatus = status.ownerUsername.removePrefix("@").trim()
+        .equals(viewerUsername.removePrefix("@").trim(), ignoreCase = true)
     val currentStatusId by rememberUpdatedState(status.id)
     val viewerPaused = replyPaused || showReactionPicker || showViewers || menuOpen || deleting
     BackHandler(onBack = {
@@ -576,7 +578,7 @@ private fun FynxStatusStoryViewer(
         val requestedStatusId = status.id
         canReplyToStatus = false
         replyRelationshipLoading = true
-        if (status.ownerUsername.equals(viewerUsername, true)) {
+        if (isOwnStatus) {
             replyRelationshipLoading = false
         } else {
             val result = FynxStatusClient.mutualFollowUsernames(context, listOf(status.ownerUsername))
@@ -763,7 +765,7 @@ private fun FynxStatusStoryViewer(
                             FynxShareActions.share(context, FynxShareActions.statusPayload(status))
                         }
                     )
-                    if (status.ownerUsername.equals(viewerUsername, true)) {
+                    if (isOwnStatus) {
                         DropdownMenuItem(
                             text = { Text(if (deleting) "Deleting…" else "Delete") },
                             enabled = !deleting,
@@ -839,7 +841,7 @@ private fun FynxStatusStoryViewer(
                                 }
                             }
                         }
-                        if (status.ownerUsername.equals(viewerUsername, true)) {
+                        if (isOwnStatus) {
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(18.dp),
@@ -867,7 +869,7 @@ private fun FynxStatusStoryViewer(
                                 minLines = 1,
                                 maxLines = 4,
                                 shape = RoundedCornerShape(26.dp),
-                                placeholder = { Text(if (status.ownerUsername.equals(viewerUsername, true)) "Your Status" else if (replyRelationshipLoading) "Checking who can reply…" else if (canReplyToStatus) "Reply to this Status…" else "Mutual follow required to reply", color = Color.White.copy(alpha = 0.72f)) },
+                                placeholder = { Text(if (isOwnStatus) "Your Status" else if (replyRelationshipLoading) "Checking who can reply…" else if (canReplyToStatus) "Reply to this Status…" else "Mutual follow required to reply", color = Color.White.copy(alpha = 0.72f)) },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Color.White,
                                     unfocusedTextColor = Color.White,
