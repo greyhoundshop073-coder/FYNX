@@ -293,7 +293,7 @@ The relevant patterns adapted here are accurate stock/inventory presentation, co
 
 **Change:** Delivery photo references must now be numeric uploaded-media IDs. After confirming the signed-in user is the assigned, currently approved FYNX driver and the order is eligible for delivery confirmation, the backend verifies the media row belongs to that driver and has an allowed image MIME type (JPEG, PNG, WebP, or GIF). Only the canonical media ID is stored. Invalid, missing, foreign-owned, or non-image media is rejected before the delivery timestamp/evidence is written. Delivery notes without a photo remain supported.
 
-**Regression guard:** `backend/verify-marketplace-fulfillment.mjs` asserts numeric ID validation, owner-scoped media lookup, allowed image MIME checking, and canonical photo evidence insertion.
+**Regression guard:** `backend/verify-marketplace-fulfillment.mjs` asserts numeric ID validation, owner-scoped media lookup, allowed image MIME checking, and canonical photo evidence insertion. The end-to-end guard also checks the actual driver UI upload path and note-only fallback.
 
 **Verification:** Exact-head Backend CI is required. No deployment or device test is claimed.
 
