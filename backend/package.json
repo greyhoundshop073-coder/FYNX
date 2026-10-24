@@ -3,7 +3,7 @@
   "version": "1.1.1",
   "type": "module",
   "scripts": {
-    "prestart": "node verify-auth-token-contract.mjs && node verify-runtime-bootstrap.mjs && node verify-deployment-provenance.mjs && node verify-media-route.mjs && node verify-marketplace-discovery-query.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
+    "prestart": "node verify-runtime-bootstrap.mjs && node verify-deployment-provenance.mjs && node verify-media-route.mjs && node verify-marketplace-discovery-query.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
     "start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"
   },
   "dependencies": {

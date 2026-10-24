@@ -153,6 +153,11 @@ profile_button_index = app_source.find('contentDescription = "Open FYNX profile"
 profile_menu_index = app_source.find('contentDescription = "Profile menu, three dots"')
 if profile_button_index < 0 or profile_menu_index < 0 or profile_menu_index <= profile_button_index:
     raise SystemExit("HOME INTERACTIONS RED: Home profile and profile-menu accessibility controls are missing or out of order")
+header_start = app_source.find('topBar = {')
+if header_start < 0 or 'Modifier.weight(1f)' in app_source[header_start:profile_button_index]:
+    raise SystemExit("HOME INTERACTIONS RED: Home header must not wrap the profile controls in a weighted Row that can compress and overlap touch targets")
+if 'Modifier.weight(1f)' not in app_source[profile_menu_index:app_source.find('Row(verticalAlignment = Alignment.CenterVertically)', profile_menu_index)]:
+    raise SystemExit("HOME INTERACTIONS RED: Home brand label must occupy remaining header width after the profile controls")
 profile_touch_region = app_source[profile_button_index:profile_menu_index]
 if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
     raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")

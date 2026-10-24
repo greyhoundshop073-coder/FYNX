@@ -25,6 +25,13 @@ assert.match(sql, /mm\.owner_id\s*=\s*\$2/i, "media owner must be allowed to rea
 assert.match(sql, /privacy_settings/i, "profile-photo visibility rules must be enforced");
 assert.match(sql, /FROM\s+blocks/i, "blocked users must be excluded");
 assert.match(sql, /FROM\s+statuses/i, "status media must retain audience checks");
+assert.match(sql, /FROM\s+marketplace_listings/i, "active Marketplace listing media must be retrievable by authenticated viewers");
+assert.match(sql, /ml\.active\s*=\s*TRUE/i, "only active Marketplace listings may expose listing media");
+assert.match(sql, /ml\.seller_id/i, "Marketplace listing media privacy must be tied to the listing seller");
+assert.ok(sql.includes("mm.owner_id = ml.seller_id"), "Marketplace media ownership must match its listing seller");
+assert.match(sql, /jsonb_array_elements_text\(/i, "listing media IDs must be read from the JSONB array without string-regex parsing");
+assert.match(sql, /AS\s+listing_media\(media_id\)/i, "JSONB listing media set-returning function must expose a scalar media_id column");
+assert.match(sql, /listing_media\.media_id\s*=\s*CAST\(mm\.id\s+AS\s+TEXT\)/i, "listing media authorization must compare the scalar JSONB media ID to the requested media record");
 assert.doesNotMatch(sql, /ORDER\s+BY\s+m\.id\s+DESC/i, "media query must not order by an unjoined messages alias");
 assert.doesNotMatch(sql, /ORDER\s+BY/i, "single-media authorization lookup must not contain an unnecessary or invalid ORDER BY clause");
 
