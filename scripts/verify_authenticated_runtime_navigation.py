@@ -1306,7 +1306,8 @@ report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
         "This journey uses a real FYNX account supplied through GitHub Actions secrets.",
-        "No fabricated users, posts, messages or listings are created.",
+        "For two-account delivery verification, a run-scoped CI peer may be provisioned only when dedicated peer secrets are absent and the configured HTTPS Railway host passes the explicit testing-host guard.",
+        "Private test markers are exchanged only between the authenticated CI account and that dedicated peer; they are never sent to people found by username search.",,
         "If the test account has no group, the journey creates one dedicated CI Chat Recovery Group only on the configured isolated testing backend so the real Groups screen can be exercised.",
         "Credentials are never written to the APK or repository."]
 
