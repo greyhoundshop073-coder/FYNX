@@ -807,6 +807,110 @@ if not FAILURES:
             else:
                 FAILURES.append("Could not reopen Add status to test the Music creation path")
 
+            # Exercise the real Voice capture and local preview path without publishing.
+            # This is intentionally a local-media check only; it does not claim that a
+            # debug-only UI session can persist a Status to the authenticated backend.
+            voice_home_xml = ""
+            for _ in range(6):
+                voice_home_xml = dump_ui("authenticated-status-voice-return-home.xml")
+                if find_control(voice_home_xml, ["Create your status"]):
+                    break
+                if (find_control(voice_home_xml, ["Open FYNX camera"])
+                        and find_control(voice_home_xml, ["Chat"])
+                        and find_control(voice_home_xml, ["Friends"])):
+                    break
+                run("adb", "shell", "input", "keyevent", "4")
+                time.sleep(0.7)
+
+            voice_add_xml = ""
+            if find_control(voice_home_xml, ["Create your status"]):
+                voice_add_xml = tap_control(
+                    voice_home_xml, ["Create your status"], "status-voice-add",
+                    ["Add status", "Voice", "Text"]
+                )
+            elif find_control(voice_home_xml, ["Voice"]) and find_control(voice_home_xml, ["Text"]):
+                # Reuse a currently displayed Add status chooser rather than opening
+                # an additional copy of the sheet.
+                voice_add_xml = voice_home_xml
+
+            if voice_add_xml and find_control(voice_add_xml, ["Voice"]):
+                voice_composer_xml = tap_control(
+                    voice_add_xml, ["Voice"], "status-voice-composer",
+                    ["Start recording"]
+                )
+                if voice_composer_xml and find_control(voice_composer_xml, ["Start recording"]):
+                    report.append("- PASS Add status -> Voice opens the actual recording composer")
+                    recording_xml = tap_control(
+                        voice_composer_xml, ["Start recording"], "status-voice-record-start",
+                        ["Stop •", "Pause"]
+                    )
+                    if recording_xml:
+                        # Give MediaRecorder enough time to write a playable local file.
+                        time.sleep(1.4)
+                        recording_xml = dump_ui("authenticated-status-voice-recording.xml")
+                        screenshot("authenticated-status-voice-recording.png")
+                        if find_control(recording_xml, ["Stop •", "Pause"]):
+                            report.append("- PASS Voice Status recording state is visible in the running emulator")
+                        else:
+                            FAILURES.append("Voice recorder did not remain in the recording state after Start recording")
+
+                        stopped_xml = tap_control(
+                            recording_xml, ["Stop •"], "status-voice-stop",
+                            ["Voice Status ready", "Play voice preview", "Delete"]
+                        )
+                        if stopped_xml and find_control(stopped_xml, ["Voice Status ready"]):
+                            screenshot("authenticated-status-voice-preview.png")
+                            report.append("- PASS stopping voice capture opens the local recording preview without publishing")
+                            preview_xml = tap_control(
+                                stopped_xml, ["Play voice preview"], "status-voice-preview-play",
+                                ["Stop voice preview"]
+                            )
+                            if preview_xml and find_control(preview_xml, ["Stop voice preview"]):
+                                screenshot("authenticated-status-voice-playing.png")
+                                report.append("- PASS local voice preview plays from the recorded file")
+                                preview_stopped_xml = tap_control(
+                                    preview_xml, ["Stop voice preview"], "status-voice-preview-stop",
+                                    ["Play voice preview"]
+                                )
+                            else:
+                                preview_stopped_xml = stopped_xml
+                                FAILURES.append("Local voice preview did not enter its playing state after Play voice preview")
+                            if preview_stopped_xml:
+                                discarded_xml = tap_control(
+                                    preview_stopped_xml, ["Delete"], "status-voice-discard",
+                                    ["Start recording"]
+                                )
+                                if discarded_xml and find_control(discarded_xml, ["Start recording"]):
+                                    report.append("- PASS voice draft can be discarded before publishing")
+                        else:
+                            FAILURES.append("Stopping the voice recording did not expose its preview/delete controls")
+                else:
+                    FAILURES.append("Add status -> Voice did not expose Start recording")
+            else:
+                FAILURES.append("Could not reopen Add status to exercise Voice recording and preview")
+
+            # Leave Voice without publishing and prove the app returns to Home.
+            voice_closed_xml = ""
+            for _ in range(5):
+                voice_closed_xml = dump_ui("authenticated-status-voice-close-check.xml")
+                if (find_control(voice_closed_xml, ["Open FYNX camera"])
+                        and find_control(voice_closed_xml, ["Chat"])
+                        and find_control(voice_closed_xml, ["Friends"])):
+                    break
+                close_control = find_control(voice_closed_xml, ["Back from Status composer"])
+                if close_control:
+                    _, close_x, close_y = close_control
+                    run("adb", "shell", "input", "tap", str(close_x), str(close_y))
+                else:
+                    run("adb", "shell", "input", "keyevent", "4")
+                time.sleep(0.7)
+            if (find_control(voice_closed_xml, ["Open FYNX camera"])
+                    and find_control(voice_closed_xml, ["Chat"])
+                    and find_control(voice_closed_xml, ["Friends"])):
+                report.append("- PASS closing the unsubmitted Voice draft returns to Home")
+            else:
+                FAILURES.append("Voice recording/preview flow did not return to Home cleanly")
+
             # Do not publish dummy content from a debug-only local UI session.
             # This path is not server-authenticated, so backend persistence,
             # own-Status refresh, viewer playback, and reactions are not certifiable here.
@@ -841,7 +945,11 @@ if not FAILURES:
                "- authenticated-status-text-filled.png",
                "- authenticated-status-text-styling.png",
                "- authenticated-status-music-catalogue.png",
-               "- authenticated-status-music-composer.png"]
+               "- authenticated-status-music-composer.png",
+               "- authenticated-status-voice-composer.png",
+               "- authenticated-status-voice-recording.png",
+               "- authenticated-status-voice-preview.png",
+               "- authenticated-status-voice-playing.png"]
     if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
         # This APK's saved-device path deliberately provides local UI access,
         # not a server-authenticated session. Certify the Status journey above,
