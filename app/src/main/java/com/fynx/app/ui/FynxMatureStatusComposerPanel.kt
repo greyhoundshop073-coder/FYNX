@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
 import android.view.ViewGroup
@@ -603,7 +605,7 @@ fun FynxMatureStatusComposerPanel(
                                 }
                             } else if (mediaUri != null) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FynxRemoteAudio(mediaUri.toString(), Modifier.fillMaxWidth().padding(horizontal = 24.dp), elapsed.coerceAtLeast(1_000L))
+                                    FynxLocalStatusAudioPreview(mediaUri, elapsed.coerceAtLeast(1_000L))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                         OutlinedButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) {
                                             Icon(Icons.Default.Close, "Clear voice")
@@ -795,6 +797,124 @@ private fun MatureStatusColorSwatch(
     )
 }
 private fun matureStatusFont(font: FynxStatusTextFont): FontFamily = when (font) { FynxStatusTextFont.SERIF -> FontFamily.Serif; FynxStatusTextFont.TYPEWRITER -> FontFamily.Monospace; else -> FontFamily.SansSerif }
+
+@Composable
+private fun FynxLocalStatusAudioPreview(uri: Uri, durationMs: Long) {
+    val context = LocalContext.current
+    var player by remember(uri) { mutableStateOf<MediaPlayer?>(null) }
+    var playing by remember(uri) { mutableStateOf(false) }
+    var loading by remember(uri) { mutableStateOf(false) }
+    var positionMs by remember(uri) { mutableLongStateOf(0L) }
+    var actualDurationMs by remember(uri) { mutableLongStateOf(durationMs.coerceAtLeast(1L)) }
+    var error by remember(uri) { mutableStateOf<String?>(null) }
+
+    DisposableEffect(uri) {
+        onDispose {
+            player?.let { current -> runCatching { current.stop() }; runCatching { current.release() } }
+            player = null
+        }
+    }
+    LaunchedEffect(player, playing) {
+        while (playing) {
+            player?.let { current -> runCatching { positionMs = current.currentPosition.toLong() } }
+            delay(120L)
+        }
+    }
+
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            enabled = !loading,
+            onClick = {
+                val current = player
+                if (current != null) {
+                    if (playing) {
+                        runCatching { current.pause(); current.seekTo(0) }
+                        positionMs = 0L
+                        playing = false
+                    } else {
+                        if (actualDurationMs > 0L && positionMs >= actualDurationMs) {
+                            runCatching { current.seekTo(0) }
+                            positionMs = 0L
+                        }
+                        runCatching { current.start() }
+                            .onSuccess { playing = true }
+                            .onFailure { error = "Audio preview unavailable." }
+                    }
+                } else {
+                    loading = true
+                    error = null
+                    var pending: MediaPlayer? = null
+                    try {
+                        val created = MediaPlayer().apply {
+                            setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                                    .build()
+                            )
+                            setDataSource(context, uri)
+                            setOnPreparedListener { prepared ->
+                                actualDurationMs = prepared.duration.toLong().coerceAtLeast(1L)
+                                loading = false
+                                player = prepared
+                                prepared.start()
+                                playing = true
+                            }
+                            setOnCompletionListener { completed ->
+                                positionMs = completed.duration.toLong()
+                                playing = false
+                            }
+                            setOnErrorListener { failed, _, _ ->
+                                loading = false
+                                playing = false
+                                error = "Audio preview unavailable."
+                                if (player === failed) player = null
+                                runCatching { failed.release() }
+                                true
+                            }
+                        }
+                        pending = created
+                        player = created
+                        created.prepareAsync()
+                    } catch (failure: Exception) {
+                        loading = false
+                        playing = false
+                        error = failure.message ?: "Audio preview unavailable."
+                        runCatching { pending?.release() }
+                        player = null
+                    }
+                }
+            },
+            modifier = Modifier.size(42.dp)
+        ) {
+            Icon(
+                if (playing) Icons.Default.Stop else Icons.Default.Mic,
+                contentDescription = if (playing) "Stop voice preview" else "Play voice preview"
+            )
+        }
+        Column(Modifier.weight(1f).padding(start = 8.dp)) {
+            LinearProgressIndicator(
+                progress = {
+                    if (actualDurationMs > 0L) (positionMs.toFloat() / actualDurationMs.toFloat()).coerceIn(0f, 1f) else 0f
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                error ?: when {
+                    loading -> "Preparing voice preview…"
+                    playing -> "Playing voice Status"
+                    else -> "Voice recording · ${formatMatureTime(actualDurationMs)}"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 private fun beginMatureVoiceRecording(context: Context, onStarted: (MediaRecorder, File) -> Unit, onError: (String) -> Unit) { val file = File(context.cacheDir, "fynx-status-${System.currentTimeMillis()}.m4a"); var recorder: MediaRecorder? = null; try { recorder = MediaRecorder().apply { setAudioSource(MediaRecorder.AudioSource.MIC); setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); setAudioEncoder(MediaRecorder.AudioEncoder.AAC); setMaxDuration(FYNX_STATUS_MAX_VOICE_DURATION_MS.toInt()); setOutputFile(file.absolutePath); prepare(); start() }; onStarted(recorder, file) } catch (e: Exception) { runCatching { recorder?.reset() }; runCatching { recorder?.release() }; runCatching { file.delete() }; onError(e.message ?: "Unable to start voice recording.") } }
 private fun stopMatureVoiceRecording(recorder: MediaRecorder?, file: File?, onFinished: (Uri?, String?) -> Unit) { if (recorder == null) { onFinished(null, "Voice recorder is not active."); return }; var stopped = false; try { recorder.stop(); stopped = true } catch (e: Exception) { runCatching { recorder.reset() }; onFinished(null, e.message ?: "Unable to stop voice recording.") } finally { runCatching { recorder.release() } }; if (stopped) { val output = file?.takeIf { it.exists() && it.length() > 0L }; if (output != null) onFinished(Uri.fromFile(output), null) else { runCatching { file?.delete() }; onFinished(null, "Voice recording was empty.") } } }
 private fun formatMatureTime(ms: Long): String { val total = (ms / 1000L).coerceAtLeast(0L); return "%02d:%02d".format(total / 60L, total % 60L) }
