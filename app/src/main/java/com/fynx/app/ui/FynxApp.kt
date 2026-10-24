@@ -82,6 +82,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var profileUser by remember { mutableStateOf<String?>(null) }
     var statusOpenOwner by remember { mutableStateOf<String?>(null) }
     var statusCreatorRequested by remember { mutableStateOf(false) }
+    var statusComposerImmersive by remember { mutableStateOf(false) }
     var statusOpenId by remember { mutableStateOf<String?>(null) }
     var postOpenId by remember { mutableStateOf<String?>(null) }
     var postOpenCommentId by remember { mutableStateOf<String?>(null) }
@@ -269,6 +270,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         if (selected != "Stories") {
             statusOpenOwner = null
             statusOpenId = null
+            statusComposerImmersive = false
         }
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
@@ -353,7 +355,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
         Scaffold(
             modifier = Modifier.nestedScroll(homeScrollConnection),
-            containerColor = MaterialTheme.colorScheme.background,
+            // Status's immersive creator needs a dark backdrop beneath transparent system bars.
+            // All other surfaces keep their existing theme background.
+            containerColor = if (statusComposerImmersive) Color.Black else MaterialTheme.colorScheme.background,
             topBar = {
             if (selected == "Stories") {
                 // Stories and its creator/viewer are immersive surfaces. Do not reserve
@@ -674,7 +678,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Calendar" -> CalendarPanel()
             "Stories" -> FynxStatusHubPanel(
                 startWithCreator = statusCreatorRequested,
-                onExitCreator = { statusCreatorRequested = false; selected = "Home" },
+                onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false; selected = "Home" },
+                onComposerVisibilityChange = { statusComposerImmersive = it },
                 openOwnerUsername = statusOpenOwner,
                 openStatusId = statusOpenId,
                 onOpenCommandConsumed = { statusOpenOwner = null; statusOpenId = null },
