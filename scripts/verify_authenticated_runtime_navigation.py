@@ -863,10 +863,14 @@ def _enter_debug_local_ui_after_gateway_502(login_xml: str) -> tuple[str, str]:
         return login_xml, "password field was not available to clear for local UI entry"
     _, px, py = password_control
     run("adb", "shell", "input", "tap", str(px), str(py))
+    # Compose password fields do not consistently honor CTRL+A on the emulator.
+    # Move to the end and send a bounded batch of delete key events as a fallback.
     run("adb", "shell", "input", "keyevent", "KEYCODE_CTRL_A")
     run("adb", "shell", "input", "keyevent", "KEYCODE_DEL")
+    run("adb", "shell", "input", "keyevent", "KEYCODE_MOVE_END")
+    run("adb", "shell", "input", "keyevent", *(["KEYCODE_DEL"] * 128))
     run("adb", "shell", "input", "keyevent", "4")
-    time.sleep(.5)
+    time.sleep(.8)
     cleared_xml = dump_ui("authenticated-login-local-entry-cleared.xml")
     try:
         root = ET.fromstring(cleared_xml)
