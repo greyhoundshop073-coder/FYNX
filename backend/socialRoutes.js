@@ -52,6 +52,15 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     return marketplaceSchemaPromise;
   };
 
+  const marketplaceMediaTypesProjection = `ARRAY(
+    SELECT COALESCE(mm.mime_type, '')
+    FROM jsonb_array_elements_text(
+      CASE WHEN jsonb_typeof(l.media_ids) = 'array' THEN l.media_ids ELSE '[]'::jsonb END
+    ) WITH ORDINALITY AS listing_media(media_id, ord)
+    LEFT JOIN message_media mm ON CAST(mm.id AS TEXT) = listing_media.media_id
+    ORDER BY listing_media.ord
+  ) AS media_types`;
+
   app.get("/api/users/search", auth, async (req, res) => {
     try {
       const query = typeof req.query?.q === "string" ? req.query.q.trim() : "";
@@ -173,8 +182,8 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR COALESCE(l.store_name, '') ILIKE $${params.length} OR COALESCE(shop.shop_name, '') ILIKE $${params.length} OR COALESCE(l.location, '') ILIKE $${params.length} OR COALESCE(l.category, '') ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 100`, params);
-      return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [] })) });
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 100`, params);
+      return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })) });
     } catch (error) { console.error("marketplace listings", error); return res.status(500).json({ error: "marketplace lookup failed" }); }
   });
 
@@ -182,8 +191,8 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     try {
       await ensureMarketplaceSchema();
       await ensureMarketplaceShopProfileSchema(pool);
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.active, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE l.seller_id = $1 ORDER BY l.created_at DESC`, [req.user.sub]);
-      return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [] })) });
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.active, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE l.seller_id = $1 ORDER BY l.created_at DESC`, [req.user.sub]);
+      return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })) });
     } catch (error) { console.error("my marketplace listings", error); return res.status(500).json({ error: "seller listings lookup failed" }); }
   });
 
@@ -217,8 +226,8 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     try {
       await ensureMarketplaceSchema();
       await ensureMarketplaceShopProfileSchema(pool);
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.active, l.created_at, sp.created_at AS saved_at FROM marketplace_saved_products sp JOIN marketplace_listings l ON l.id = sp.listing_id JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE sp.user_id = $1 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id)) ORDER BY sp.created_at DESC LIMIT 200`, [req.user.sub]);
-      return res.json({ products: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [] })) });
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.active, l.created_at, sp.created_at AS saved_at FROM marketplace_saved_products sp JOIN marketplace_listings l ON l.id = sp.listing_id JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE sp.user_id = $1 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id)) ORDER BY sp.created_at DESC LIMIT 200`, [req.user.sub]);
+      return res.json({ products: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })) });
     } catch (error) { console.error("marketplace saved products", error); return res.status(500).json({ error: "saved products lookup failed" }); }
   });
 
