@@ -29,8 +29,8 @@ source = source.replace(
   'function rateLimit(bucket, limit) {\n  return (req, res, next) => {\n    let authenticatedSubject = req.user?.sub || "";\n    if (!authenticatedSubject && JWT_SECRET) {\n      const header = req.get("authorization") || "";\n      const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";\n      if (token) {\n        try { authenticatedSubject = String(jwt.verify(token, JWT_SECRET).sub || ""); } catch { authenticatedSubject = ""; }\n      }\n    }\n    const identity = authenticatedSubject ? `user:${authenticatedSubject}` : `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;\n    const key = `${bucket}:${identity}`;'
 );
 
-source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";\nimport { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";\nimport { registerMarketplaceCheckoutRoutes } from "./marketplaceCheckout.js";\nimport { registerMarketplaceCheckoutOrderRoutes } from "./marketplaceCheckoutOrder.js";\nimport { registerMarketplaceShippingRoutes } from "./marketplaceShipping.js";');
-source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) startMarketplaceInspectionReconciliation({ pool });\nif (pool) registerMarketplacePaystackWebhook({ app, pool });');
+source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";\nimport { registerMarketplaceListingLifecycleRoutes } from "./marketplaceListingLifecycleRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";\nimport { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";\nimport { registerMarketplaceCheckoutRoutes } from "./marketplaceCheckout.js";\nimport { registerMarketplaceCheckoutOrderRoutes } from "./marketplaceCheckoutOrder.js";\nimport { registerMarketplaceShippingRoutes } from "./marketplaceShipping.js";');
+source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) startMarketplaceInspectionReconciliation({ pool });\nif (pool) registerMarketplacePaystackWebhook({ app, pool });\nif (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });\nif (pool) registerMarketplaceListingLifecycleRoutes({ app, pool, auth });');
 source = source.replace(
   'registerMarketplaceCompletionRoutes({ app, pool, auth });',
   'registerMarketplaceCompletionRoutes({ app, pool, auth });\nif (pool) {\n  registerMarketplaceCheckoutRoutes({ app, pool, auth });\n  registerMarketplaceCheckoutOrderRoutes({ app, pool, auth });\n  registerMarketplaceShippingRoutes({ app, pool, auth });\n}'
@@ -106,6 +106,14 @@ source = source.replace(
   'initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });',
   'await initDatabase();'
 );
+for (const contract of [
+  'import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";',
+  'import { registerMarketplaceListingLifecycleRoutes } from "./marketplaceListingLifecycleRoutes.js";',
+  "registerMarketplaceShopProfileRoutes({ app, pool, auth })",
+  "registerMarketplaceListingLifecycleRoutes({ app, pool, auth })"
+]) {
+  if (!source.includes(contract)) throw new Error(`FYNX backend startup missing Marketplace deployment contract: ${contract}`);
+}
 await writeFile(runtimePath, source, "utf8");
 
 await import("./scalability.js");
