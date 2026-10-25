@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const read = (file) => fs.readFileSync(new URL(file, import.meta.url), 'utf8');
 
 const checkout = read('./marketplaceCheckoutOrder.js');
+const quote = read('./marketplaceCheckout.js');
 const completion = read('./marketplaceCompletion.js');
 const settlement = read('./marketplaceSettlementWorker.js');
 const webhook = read('./marketplacePaystackWebhook.js');
@@ -12,6 +13,8 @@ const checks = [
   ['multi-product checkout route exists', checkout.includes("/api/marketplace/checkout/multi-order")],
   ['multi-product checkout is capped at 20 distinct products', checkout.includes('rawItems.length > 20') && checkout.includes('at most 20 different products')],
   ['duplicate listings are rejected', checkout.includes('DUPLICATE_LISTING')],
+  ['multi-cart quote acquires listing locks in deterministic order', quote.includes('normalizedItems.sort((a, b) => a.listingId - b.listingId)') && quote.includes('for (const item of normalizedItems)')],
+  ['multi-cart order creation uses the same deterministic listing lock order', checkout.includes('const sortedItems = [...items].sort((a, b) => a.listingId - b.listingId)') && checkout.includes('for (const item of sortedItems)')],
   ['checkout idempotency serializes same-ID concurrent requests before lookup', checkout.includes('pg_advisory_xact_lock(hashtext(\'fynx-marketplace-checkout:\' || $1::text))') && checkout.includes('FROM marketplace_checkout_groups WHERE id=$1 FOR UPDATE')],
   ['checkout ID reuse by a different buyer returns a conflict', checkout.includes('existing && String(existing.buyer_id) !== String(req.user.sub)') && checkout.includes('code: \'CHECKOUT_ID_REUSE_CONFLICT\'')],
   ['checkout idempotency compares every requested listing, quantity, fulfillment method and delivery address', checkout.includes('const sameRequest = requestedItems.length === existingItems.length') && checkout.includes('order.group_listing_id') && checkout.includes('order.group_quantity') && checkout.includes('sameAddress(order.shipping_address, item.address)') && checkout.includes('requestedBuyerNote')],
@@ -23,7 +26,7 @@ const checks = [
   ['fulfillment authorization is seller-specific', completion.includes('only the seller can update fulfillment progress')],
   ['completion is blocked by an active protection case', completion.includes('hasActiveProtectionCase(client, id)')],
   ['payout reconciliation remains child-order scoped', settlement.includes('WHERE order_id=$1') && settlement.includes('PAYOUT-RELEASE-' + '$' + '{operation.order_id}')],
-  ['payout is blocked when a refund is active for that child', settlement.includes("operation_type='REFUND'") && settlement.includes('refund financial operation is active for this order')],
+  ['payout is blocked while a child refund remains unresolved; only provider-confirmed failure is terminal', settlement.includes("operation_type='REFUND'") && settlement.includes("status IN ('PENDING','SUCCEEDED','BLOCKED')") && settlement.includes("COALESCE(metadata->>'refundEvent','') <> 'refund.failed'") && settlement.includes("COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'") && settlement.includes('refund financial operation is unresolved for this order')],
   ['multi-product Paystack webhook reconciliation exists', webhook.includes('FYNX-CHECKOUT-') && webhook.includes('marketplace_checkout_groups') && webhook.includes('marketplace_checkout_group_items')],
   ['expired multi-product groups are reconciled as one unit', expiry.includes('expireUnpaidMarketplaceCheckoutGroups') && expiry.includes('UPDATE marketplace_checkout_groups SET status=\'CANCELLED\'')],
   ['expired group checkout releases every child inventory reservation', expiry.includes('checkout_group_payment_expired') && expiry.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)')],

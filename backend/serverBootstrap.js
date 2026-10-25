@@ -38,7 +38,7 @@ source = source.replace(
 );
 source = source.replace(
   'app.use(express.json({ limit: "18mb", strict: true }));',
-  'app.use(express.json({ limit: "18mb", strict: true, verify: (req, _res, buf) => { req.rawBody = Buffer.from(buf); } }));'
+  'app.use(express.json({ limit: "18mb", strict: true, verify: (req, _res, buf) => { if (String(req.originalUrl || "").split("?")[0] === "/api/marketplace/payments/paystack/webhook") req.rawBody = Buffer.from(buf); } }));'
 );
 
 // R3 private-message realtime helpers are defined in the production runtime,

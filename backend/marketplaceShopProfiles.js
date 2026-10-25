@@ -1,31 +1,39 @@
-export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
-  let schemaPromise;
+const schemaPromises = new WeakMap();
 
-  const ensureSchema = async () => {
-    if (!schemaPromise) {
-      schemaPromise = pool.query(`
-        CREATE TABLE IF NOT EXISTS marketplace_shop_profiles (
-          seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          shop_name TEXT NOT NULL DEFAULT '',
-          description TEXT NOT NULL DEFAULT '',
-          location TEXT NOT NULL DEFAULT '',
-          contact_phone TEXT NOT NULL DEFAULT '',
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          CHECK (length(shop_name) <= 120),
-          CHECK (length(description) <= 800),
-          CHECK (length(location) <= 160),
-          CHECK (length(contact_phone) <= 40)
-        );
-        CREATE INDEX IF NOT EXISTS marketplace_shop_profiles_updated_idx
-          ON marketplace_shop_profiles (updated_at DESC);
-      `).catch((error) => {
-        schemaPromise = undefined;
-        throw error;
-      });
-    }
-    return schemaPromise;
-  };
+/** Shared, idempotent schema readiness for persistent Marketplace shop identity. */
+export function ensureMarketplaceShopProfileSchema(pool) {
+  if (!pool || (typeof pool !== "object" && typeof pool !== "function")) {
+    return Promise.reject(new Error("Marketplace database pool is unavailable"));
+  }
+  let pending = schemaPromises.get(pool);
+  if (!pending) {
+    pending = pool.query(`
+      CREATE TABLE IF NOT EXISTS marketplace_shop_profiles (
+        seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        shop_name TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        location TEXT NOT NULL DEFAULT '',
+        contact_phone TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CHECK (length(shop_name) <= 120),
+        CHECK (length(description) <= 800),
+        CHECK (length(location) <= 160),
+        CHECK (length(contact_phone) <= 40)
+      );
+      CREATE INDEX IF NOT EXISTS marketplace_shop_profiles_updated_idx
+        ON marketplace_shop_profiles (updated_at DESC);
+    `).catch((error) => {
+      schemaPromises.delete(pool);
+      throw error;
+    });
+    schemaPromises.set(pool, pending);
+  }
+  return pending;
+}
+
+export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
+  const ensureSchema = () => ensureMarketplaceShopProfileSchema(pool);
 
   const publicProfile = (row) => ({
     username: row.username,
@@ -96,8 +104,13 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
         FROM users u
         LEFT JOIN marketplace_shop_profiles p ON p.seller_id = u.id
         WHERE lower(u.username) = lower($1)
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id = $2 AND b.blocked_id = u.id)
+               OR (b.blocker_id = u.id AND b.blocked_id = $2)
+          )
         LIMIT 1
-      `, [username]);
+      `, [username, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: 'seller not found' });
       return res.json({ shop: publicProfile(result.rows[0]) });
     } catch (error) {

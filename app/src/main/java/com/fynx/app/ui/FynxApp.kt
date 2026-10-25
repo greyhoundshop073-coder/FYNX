@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -397,7 +398,13 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }.semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
+                        if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(
+                            mediaId = remoteMyPhotoId,
+                            contentDescription = myProfile.displayName,
+                            modifier = Modifier.size(38.dp),
+                            ownerUsername = myProfile.username,
+                            allowImagePreview = false
+                        )
                         else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
                         else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
                     }

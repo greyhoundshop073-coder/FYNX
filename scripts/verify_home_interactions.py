@@ -149,6 +149,11 @@ if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
     raise SystemExit("HOME INTERACTIONS RED: OpenAI API key must never be present in Android client code")
 
 app_source = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
+remote_media = read("app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt")
+require(app_source, "import androidx.compose.foundation.clickable", "Home profile controls import Compose clickable extension")
+require(app_source, "allowImagePreview = false", "Home header avatar taps navigate to Profile instead of opening the avatar image")
+require(remote_media, "allowImagePreview: Boolean = true", "shared media retains image-preview compatibility by default")
+require(remote_media, "allowImagePreview = allowImagePreview", "profile avatar forwards caller-specific image-preview policy")
 profile_button_index = app_source.find('contentDescription = "Open FYNX profile"')
 profile_menu_index = app_source.find('contentDescription = "Profile menu, three dots"')
 if profile_button_index < 0 or profile_menu_index < 0 or profile_menu_index <= profile_button_index:
@@ -158,12 +163,19 @@ if header_start < 0 or 'Modifier.weight(1f)' in app_source[header_start:profile_
     raise SystemExit("HOME INTERACTIONS RED: Home header must not wrap the profile controls in a weighted Row that can compress and overlap touch targets")
 if 'Modifier.weight(1f)' not in app_source[profile_menu_index:app_source.find('Row(verticalAlignment = Alignment.CenterVertically)', profile_menu_index)]:
     raise SystemExit("HOME INTERACTIONS RED: Home brand label must occupy remaining header width after the profile controls")
-profile_touch_region = app_source[profile_button_index:profile_menu_index]
-if "Box(Modifier.align(Alignment.BottomEnd))" in profile_touch_region:
+profile_box_start = app_source.rfind("Box(", header_start, profile_button_index)
+profile_comment_start = app_source.find("// The avatar and overflow menu are fixed-width siblings", profile_box_start, profile_menu_index)
+if profile_box_start < header_start or profile_comment_start < profile_box_start:
+    raise SystemExit("HOME INTERACTIONS RED: profile avatar must have a distinct Compose Box before the overflow menu")
+profile_box = app_source[profile_box_start:profile_comment_start]
+if "Modifier.align(Alignment.BottomEnd)" in profile_box:
     raise SystemExit("HOME INTERACTIONS RED: profile menu overlays the avatar; Material IconButton minimum touch targets can steal profile taps")
-require(profile_touch_region, 'Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', "profile avatar has its own non-overlapped 48dp touch target")
-menu_box_start = app_source.rfind('Box(Modifier.size(48.dp), contentAlignment = Alignment.Center)', profile_button_index, profile_menu_index)
-if menu_box_start <= profile_button_index:
+if "Modifier.size(48.dp).clickable" not in profile_box or 'contentDescription = "Open FYNX profile"' not in profile_box or "contentAlignment = Alignment.Center" not in profile_box:
+    raise SystemExit("HOME INTERACTIONS RED: profile avatar must have an independent accessible 48dp clickable Box")
+menu_box_start = app_source.rfind("Box(", profile_comment_start, profile_menu_index)
+menu_label_end = profile_menu_index + len('contentDescription = "Profile menu, three dots"')
+menu_box = app_source[menu_box_start:menu_label_end] if menu_box_start >= 0 else ""
+if menu_box_start <= profile_comment_start or "Modifier.size(48.dp).clickable" not in menu_box or 'contentDescription = "Profile menu, three dots"' not in menu_box:
     raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling 48dp touch target")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
 require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")

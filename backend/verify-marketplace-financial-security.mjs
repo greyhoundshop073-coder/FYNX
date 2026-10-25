@@ -20,7 +20,7 @@ const checks = [
   ['payout request locks order and escrow', settlement.includes("WHERE id=$1 FOR UPDATE") && settlement.includes('marketplace_escrows WHERE order_id=$1 FOR UPDATE')],
   ['payout blocks disputed funds', settlement.includes("order.status === 'DISPUTED' || escrow.status === 'DISPUTED'")],
   ['payout requires release eligibility', settlement.includes("escrow.status !== 'RELEASE_ELIGIBLE'") && settlement.includes("order.status !== 'COMPLETED'")],
-  ['payout worker blocks active refunds', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED')")],
+  ['payout worker blocks unresolved refunds, and only provider-confirmed terminal failures stop blocking', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED','BLOCKED')") && worker.includes("COALESCE(metadata->>'refundEvent','') <> 'refund.failed'") && worker.includes("COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'")],
   ['payout worker requires release-pending escrow', worker.includes("escrow.status !== 'RELEASE_PENDING'")],
   ['admin resolution locks protection case/order rows', resolution.includes('WHERE c.id=$1 FOR UPDATE')],
   ['admin resolution checks payout/refund conflicts', resolution.includes('const payoutConflict') && resolution.includes('const refundConflict')],

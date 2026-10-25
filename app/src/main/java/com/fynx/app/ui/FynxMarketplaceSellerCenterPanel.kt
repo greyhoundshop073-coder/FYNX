@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -35,17 +36,37 @@ private data class SellerMoneyRecord(
     val updatedAt: String
 )
 
+private data class SellerMoneyTotals(
+    val protectedFunds: Double,
+    val availableForPayout: Double,
+    val payoutPending: Double,
+    val paidOut: Double
+)
+
+private data class SellerMoneySnapshot(
+    val records: List<SellerMoneyRecord>,
+    val totals: Map<String, SellerMoneyTotals>?
+)
+
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
 fun FynxMarketplaceSellerCenterPanel() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listings by remember { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
+    var archivedListings by remember { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var deletingId by remember { mutableStateOf<String?>(null) }
+    var republishingId by remember { mutableStateOf<String?>(null) }
+    var listingActionError by remember { mutableStateOf<String?>(null) }
+    var listingActionMessage by remember { mutableStateOf<String?>(null) }
     var editingListing by remember { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
     var editTitle by rememberSaveable { mutableStateOf("") }
+    var editDescription by rememberSaveable { mutableStateOf("") }
+    var editCategory by rememberSaveable { mutableStateOf("") }
+    var editCondition by rememberSaveable { mutableStateOf("NEW") }
+    var editLocation by rememberSaveable { mutableStateOf("") }
     var editPrice by rememberSaveable { mutableStateOf("") }
     var editQuantity by rememberSaveable { mutableStateOf("") }
     var editSaving by remember { mutableStateOf(false) }
@@ -63,6 +84,8 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyLoading by remember { mutableStateOf(true) }
     var moneyError by remember { mutableStateOf<String?>(null) }
     var moneyRecords by remember { mutableStateOf(emptyList<SellerMoneyRecord>()) }
+    var moneyTotals by remember { mutableStateOf(emptyMap<String, SellerMoneyTotals>()) }
+    var moneyTotalsFromBackend by remember { mutableStateOf(false) }
     var showDriverAssignments by remember { mutableStateOf(false) }
     var activeSection by rememberSaveable { mutableStateOf("Overview") }
     var shopName by rememberSaveable { mutableStateOf("") }
@@ -78,59 +101,52 @@ fun FynxMarketplaceSellerCenterPanel() {
         scope.launch {
             moneyLoading = true
             moneyError = null
-            FynxBackendClient.get(context, "/api/marketplace/seller/orders")
-                .onSuccess { raw ->
-                    val orders = JSONObject(raw).optJSONArray("orders")
-                    val records = mutableListOf<SellerMoneyRecord>()
-                    var settlementFailures = 0
-                    if (orders != null) {
-                        for (i in 0 until orders.length()) {
-                            val order = orders.optJSONObject(i) ?: continue
-                            val orderId = order.optString("id")
-                            if (orderId.isBlank()) continue
-                            FynxBackendClient.get(context, "/api/marketplace/settlement/order/$orderId")
-                                .onSuccess { settlementRaw ->
-                                    val settlement = JSONObject(settlementRaw)
-                                    val accounting = settlement.optJSONObject("accounting") ?: run {
-                                        settlementFailures += 1
-                                        return@onSuccess
-                                    }
-                                    val protection = settlement.optJSONObject("protection")
-                                    val escrow = settlement.optJSONObject("escrow")
-                                    val funds = protection?.optString("funds").orEmpty().ifBlank { escrow?.optString("status").orEmpty() }.ifBlank { "UNKNOWN" }
-                                    val operations = settlement.optJSONArray("operations")
-                                    var payoutStatus = funds
-                                    var updatedAt = order.optString("updatedAt").ifBlank { order.optString("createdAt") }
-                                    if (operations != null) {
-                                        for (j in 0 until operations.length()) {
-                                            val op = operations.optJSONObject(j) ?: continue
-                                            if (op.optString("operation_type") == "PAYOUT_RELEASE") {
-                                                payoutStatus = op.optString("status").ifBlank { funds }
-                                                updatedAt = op.optString("updated_at").ifBlank { updatedAt }
-                                                break
-                                            }
-                                        }
-                                    }
-                                    records += SellerMoneyRecord(
-                                        orderId = orderId,
-                                        title = order.optJSONObject("product")?.optString("title").orEmpty().ifBlank { "FYNX order" },
-                                        currency = accounting.optString("currency", order.optString("currency", "NGN")).uppercase(),
-                                        sellerNet = accounting.optDouble("sellerNetAmount", 0.0),
-                                        marketplaceFee = accounting.optDouble("marketplaceFee", 0.0),
-                                        funds = funds,
-                                        payoutStatus = payoutStatus,
-                                        updatedAt = updatedAt
-                                    )
-                                }
-                                .onFailure { settlementFailures += 1 }
+            val result = FynxBackendClient.get(context, "/api/marketplace/settlement/seller/summary")
+                .mapCatching { raw ->
+                    val root = JSONObject(raw)
+                    val settlements = root.optJSONArray("settlements")
+                        ?: throw IllegalStateException("Seller earnings response was incomplete.")
+                    val totalsArray = root.optJSONArray("totals")
+                    val totals = mutableMapOf<String, SellerMoneyTotals>()
+                    if (totalsArray != null) {
+                        for (i in 0 until totalsArray.length()) {
+                            val row = totalsArray.optJSONObject(i) ?: continue
+                            val currency = row.optString("currency", "NGN").uppercase()
+                            totals[currency] = SellerMoneyTotals(
+                                protectedFunds = row.optDouble("protectedFunds", 0.0),
+                                availableForPayout = row.optDouble("availableForPayout", 0.0),
+                                payoutPending = row.optDouble("payoutPending", 0.0),
+                                paidOut = row.optDouble("paidOut", 0.0)
+                            )
                         }
                     }
-                    moneyRecords = records.sortedByDescending { it.updatedAt }
-                    if (settlementFailures > 0) {
-                        moneyError = "Some settlement records could not load. Refresh My Shop to retry."
+                    val records = mutableListOf<SellerMoneyRecord>()
+                    for (i in 0 until settlements.length()) {
+                        val row = settlements.optJSONObject(i) ?: continue
+                        val orderId = row.optString("orderId")
+                        if (orderId.isBlank()) continue
+                        val funds = row.optString("funds").ifBlank { "UNKNOWN" }
+                        val payoutStatus = row.optString("payoutStatus").ifBlank { funds }
+                        records += SellerMoneyRecord(
+                            orderId = orderId,
+                            title = row.optString("title").ifBlank { "FYNX order" },
+                            currency = row.optString("currency", "NGN").uppercase(),
+                            sellerNet = row.optDouble("sellerNetAmount", 0.0),
+                            marketplaceFee = row.optDouble("marketplaceFee", 0.0),
+                            funds = funds,
+                            payoutStatus = payoutStatus,
+                            updatedAt = row.optString("updatedAt")
+                        )
                     }
+                    SellerMoneySnapshot(records, if (totalsArray != null) totals else null)
                 }
-                .onFailure { moneyError = it.message ?: "Seller earnings could not load." }
+            result.onSuccess { snapshot ->
+                moneyRecords = snapshot.records.sortedByDescending { it.updatedAt }
+                moneyTotals = snapshot.totals.orEmpty()
+                moneyTotalsFromBackend = snapshot.totals != null
+            }.onFailure { failure ->
+                moneyError = failure.message ?: "Seller earnings could not load."
+            }
             moneyLoading = false
         }
     }
@@ -140,7 +156,12 @@ fun FynxMarketplaceSellerCenterPanel() {
             loading = true
             error = null
             FynxMarketplaceClient.myListings(context)
-                .onSuccess { listings = it }
+                .onSuccess { inventory ->
+                    listings = inventory.filter { listing -> listing.active }
+                    archivedListings = inventory.filterNot { listing -> listing.active }
+                    listingActionError = null
+                    listingActionMessage = null
+                }
                 .onFailure { error = it.message ?: "Could not load your listings." }
             shopLoading = true
             shopError = null
@@ -177,7 +198,8 @@ fun FynxMarketplaceSellerCenterPanel() {
 
     LaunchedEffect(Unit) { refresh() }
 
-    val currencies = moneyRecords.map { it.currency }.distinct()
+    // Include currencies from all-history totals even if recent detail rows omit them.
+    val currencies = (moneyRecords.map { it.currency } + moneyTotals.keys).distinct().sorted()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(12.dp),
@@ -207,7 +229,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Your shop at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text(if (shopName.isBlank()) "Set up your shop identity so buyers can recognize your business." else shopName, style = MaterialTheme.typography.titleMedium)
-                        Text("${listings.size} listing${if (listings.size == 1) "" else "s"} • ${moneyRecords.size} order settlement record${if (moneyRecords.size == 1) "" else "s"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${listings.size} listing${if (listings.size == 1) "" else "s"} • ${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(onClick = { activeSection = "Shop profile" }, modifier = Modifier.weight(1f)) { Text("Shop profile") }
                             OutlinedButton(onClick = { activeSection = "Listings" }, modifier = Modifier.weight(1f)) { Text("Manage listings") }
@@ -321,15 +343,27 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     currencies.forEach { currency ->
                         val rows = moneyRecords.filter { it.currency == currency }
-                        val protected = rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet }
-                        val available = rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet }
-                        val pending = rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet }
-                        val paid = rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
+                        val serverTotals = moneyTotals[currency]
+                        val protected = if (moneyTotalsFromBackend) serverTotals?.protectedFunds ?: 0.0
+                            else rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet }
+                        val available = if (moneyTotalsFromBackend) serverTotals?.availableForPayout ?: 0.0
+                            else rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet }
+                        val pending = if (moneyTotalsFromBackend) serverTotals?.payoutPending ?: 0.0
+                            else rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet }
+                        val paid = if (moneyTotalsFromBackend) serverTotals?.paidOut ?: 0.0
+                            else rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
                         Text(currency, fontWeight = FontWeight.Bold)
                         MoneySummaryRow("Protected", protected, currency)
                         MoneySummaryRow("Available for payout", available, currency)
                         MoneySummaryRow("Payout pending", pending, currency)
                         MoneySummaryRow("Paid out", paid, currency)
+                    }
+                    if (!moneyLoading && moneyError == null && !moneyTotalsFromBackend) {
+                        Text(
+                            "This backend only provides the latest 100 settlements. Totals below may not include older orders.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -338,7 +372,7 @@ fun FynxMarketplaceSellerCenterPanel() {
         if (activeSection == "Earnings & payouts") item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Earnings history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("Recent earnings history (latest 100; showing 20)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     moneyError?.let { message ->
                         Text(message, color = MaterialTheme.colorScheme.error)
                         TextButton(onClick = { loadMoney() }, enabled = !moneyLoading) {
@@ -394,14 +428,22 @@ fun FynxMarketplaceSellerCenterPanel() {
         if (activeSection == "Listings") {
         if (loading) {
             item { Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+        } else if (listings.isEmpty() && error != null) {
+            item {
+                OutlinedButton(onClick = { refresh() }, modifier = Modifier.fillMaxWidth(), enabled = !loading) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Retry loading listings")
+                }
+            }
         } else if (listings.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.Inventory2, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(8.dp))
-                        Text("You have no active listings yet", style = MaterialTheme.typography.titleMedium)
-                        Text("Create a product from Marketplace to manage it here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (archivedListings.isEmpty()) "You have no active listings yet" else "No active listings right now", style = MaterialTheme.typography.titleMedium)
+                        Text(if (archivedListings.isEmpty()) "Create a product from Marketplace to manage it here." else "Republish an archived listing below or create a new product.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -410,17 +452,38 @@ fun FynxMarketplaceSellerCenterPanel() {
             items(listings, key = { it.id }) { listing ->
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (listing.mediaIds.isNotEmpty()) {
+                                FynxRemoteMedia(
+                                    mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
+                                    type = FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
+                                    modifier = Modifier.size(88.dp)
+                                )
+                            } else {
+                                Surface(
+                                    modifier = Modifier.size(88.dp),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Inventory2, contentDescription = "Product image unavailable", modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
                             Column(Modifier.weight(1f)) {
                                 Text(listing.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                 Text(formatSellerMoney(listing.price, listing.currency), color = MaterialTheme.colorScheme.primary)
-                                Text("${listing.quantity} in stock • ${listing.category} • ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${listing.quantity} total stock • ${listing.category} • ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (deletingId == listing.id) CircularProgressIndicator(Modifier.size(24.dp))
                             else Row {
                                 IconButton(onClick = {
                                     editingListing = listing
                                     editTitle = listing.title
+                                    editDescription = listing.description
+                                    editCategory = listing.category
+                                    editCondition = listing.condition.uppercase(Locale.US)
+                                    editLocation = listing.location
                                     editPrice = listing.price.toString()
                                     editQuantity = listing.quantity.toString()
                                     editError = null
@@ -429,8 +492,15 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     deletingId = listing.id
                                     scope.launch {
                                         FynxMarketplaceClient.deleteListing(context, listing.id)
-                                            .onSuccess { listings = listings.filterNot { it.id == listing.id } }
-                                            .onFailure { error = it.message ?: "Listing could not be removed." }
+                                            .onSuccess {
+                                                val archived = listings.firstOrNull { it.id == listing.id }?.copy(active = false)
+                                                listings = listings.filterNot { it.id == listing.id }
+                                                if (archived != null) archivedListings = listOf(archived) + archivedListings.filterNot { it.id == listing.id }
+                                                listingActionMessage = "${listing.title} was archived and is no longer visible to buyers."
+                                                listingActionError = null
+                                                error = null
+                                            }
+                                            .onFailure { listingActionError = it.message ?: "Listing could not be removed." }
                                         deletingId = null
                                     }
                                 }) { Icon(Icons.Default.Delete, "Remove listing") }
@@ -447,6 +517,85 @@ fun FynxMarketplaceSellerCenterPanel() {
             }
         }
         }
+
+        if (activeSection == "Listings" && !loading && archivedListings.isNotEmpty()) {
+            item { Text("Archived listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
+            items(archivedListings, key = { "archived-${it.id}" }) { listing ->
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (listing.mediaIds.isNotEmpty()) {
+                                FynxRemoteMedia(
+                                    mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
+                                    type = FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
+                                    modifier = Modifier.size(72.dp)
+                                )
+                            } else {
+                                Surface(
+                                    modifier = Modifier.size(72.dp),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Inventory2, contentDescription = "Product image unavailable", modifier = Modifier.size(26.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(listing.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text(formatSellerMoney(listing.price, listing.currency), color = MaterialTheme.colorScheme.primary)
+                                Text("${listing.quantity} total stock • ${listing.category} • ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Archived · hidden from buyers", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = {
+                                editingListing = listing
+                                editTitle = listing.title
+                                editDescription = listing.description
+                                editCategory = listing.category
+                                editCondition = listing.condition.uppercase(Locale.US)
+                                editLocation = listing.location
+                                editPrice = listing.price.toString()
+                                editQuantity = listing.quantity.toString()
+                                editError = null
+                            }) { Icon(Icons.Default.Edit, "Edit archived listing") }
+                        }
+                        Text(
+                            if (listing.quantity > 0) "This product stays hidden until you republish it." else "Add stock with Edit before republishing.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                republishingId = listing.id
+                                listingActionError = null
+                                listingActionMessage = null
+                                scope.launch {
+                                    FynxMarketplaceClient.reactivateListing(context, listing.id)
+                                        .onSuccess {
+                                            archivedListings = archivedListings.filterNot { it.id == listing.id }
+                                            listings = listOf(listing.copy(active = true)) + listings.filterNot { it.id == listing.id }
+                                            listingActionMessage = "${listing.title} is live in Marketplace again."
+                                        }
+                                        .onFailure { listingActionError = it.message ?: "Listing could not be republished." }
+                                    republishingId = null
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = listing.quantity > 0 && republishingId == null
+                        ) {
+                            if (republishingId == listing.id) CircularProgressIndicator(Modifier.size(18.dp))
+                            else Text("Republish listing")
+                        }
+                    }
+                }
+            }
+        }
+        if (activeSection == "Listings" && listingActionMessage != null) item {
+            Text(listingActionMessage!!, color = androidx.compose.ui.graphics.Color(0xFF16A34A))
+        }
+        if (activeSection == "Listings" && listingActionError != null) item {
+            Text(listingActionError!!, color = MaterialTheme.colorScheme.error)
+        }
     }
 
     if (editingListing != null) {
@@ -455,12 +604,52 @@ fun FynxMarketplaceSellerCenterPanel() {
             onDismissRequest = { if (!editSaving) editingListing = null },
             title = { Text("Edit listing") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Update the product name, price and available stock. Existing orders and delivery settings are preserved.", style = MaterialTheme.typography.bodySmall)
+                Column(
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Update the product details, price and available stock. Existing orders, photos and delivery settings are preserved.", style = MaterialTheme.typography.bodySmall)
                     OutlinedTextField(
                         value = editTitle,
                         onValueChange = { editTitle = it.take(160) },
                         label = { Text("Product name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editDescription,
+                        onValueChange = { editDescription = it.take(4000) },
+                        label = { Text("Product description") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 5,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editCategory,
+                        onValueChange = { editCategory = it.take(40) },
+                        label = { Text("Category") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    Text("Condition", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                        listOf("NEW", "USED", "REFURBISHED").forEach { condition ->
+                            FilterChip(
+                                selected = editCondition == condition,
+                                onClick = { editCondition = condition },
+                                enabled = !editSaving,
+                                label = { Text(condition.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }, maxLines = 1)
+                                }
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = editLocation,
+                        onValueChange = { editLocation = it.take(160) },
+                        label = { Text("Product location") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         enabled = !editSaving
@@ -476,11 +665,12 @@ fun FynxMarketplaceSellerCenterPanel() {
                     OutlinedTextField(
                         value = editQuantity,
                         onValueChange = { editQuantity = it.filter(Char::isDigit).take(9) },
-                        label = { Text("Available stock (0 = out of stock)") },
+                        label = { Text("Total stock (0 = out of stock)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         enabled = !editSaving
                     )
+                    Text("Stock cannot be reduced below items already reserved by active orders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     editError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
@@ -488,6 +678,10 @@ fun FynxMarketplaceSellerCenterPanel() {
                 Button(
                     enabled = !editSaving &&
                         editTitle.trim().length >= 2 &&
+                        editDescription.trim().length >= 5 &&
+                        editCategory.trim().isNotBlank() &&
+                        editCondition.trim().uppercase(Locale.US) in setOf("NEW", "USED", "REFURBISHED") &&
+                        editLocation.trim().isNotBlank() &&
                         editPrice.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true &&
                         editQuantity.toIntOrNull()?.let { it >= 0 } == true,
                     onClick = {
@@ -496,11 +690,26 @@ fun FynxMarketplaceSellerCenterPanel() {
                         editSaving = true
                         editError = null
                         scope.launch {
-                            FynxMarketplaceClient.updateListing(context, selectedListing.id, editTitle, price, quantity)
+                            FynxMarketplaceClient.updateListing(context, selectedListing.id, editTitle, editDescription, editCategory, editCondition, editLocation, price, quantity)
                                 .onSuccess {
                                     listings = listings.map { current ->
                                         if (current.id == selectedListing.id) current.copy(
                                             title = editTitle.trim(),
+                                            description = editDescription.trim(),
+                                            category = editCategory.trim(),
+                                            condition = editCondition.trim().uppercase(Locale.US),
+                                            location = editLocation.trim(),
+                                            price = price,
+                                            quantity = quantity
+                                        ) else current
+                                    }
+                                    archivedListings = archivedListings.map { current ->
+                                        if (current.id == selectedListing.id) current.copy(
+                                            title = editTitle.trim(),
+                                            description = editDescription.trim(),
+                                            category = editCategory.trim(),
+                                            condition = editCondition.trim().uppercase(Locale.US),
+                                            location = editLocation.trim(),
                                             price = price,
                                             quantity = quantity
                                         ) else current
