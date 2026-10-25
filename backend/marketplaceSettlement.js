@@ -269,7 +269,42 @@ export function registerMarketplaceSettlementRoutes({ app }) {
         ORDER BY COALESCE(payout.updated_at, o.updated_at, o.created_at) DESC
         LIMIT 100
       `, [req.user.sub]);
+      const totalsResult = await pool.query(`
+        WITH seller_settlements AS (
+          SELECT
+            UPPER(COALESCE(o.currency, 'NGN')) AS currency,
+            COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
+            COALESCE(e.status, 'UNKNOWN') AS funds,
+            payout.status AS payout_status
+          FROM marketplace_orders o
+          LEFT JOIN marketplace_escrows e ON e.order_id = o.id
+          LEFT JOIN LATERAL (
+            SELECT f.status, f.updated_at
+            FROM marketplace_financial_operations f
+            WHERE f.order_id = o.id AND f.operation_type = 'PAYOUT_RELEASE'
+            ORDER BY f.updated_at DESC, f.created_at DESC
+            LIMIT 1
+          ) payout ON TRUE
+          WHERE o.seller_id = $1
+        )
+        SELECT
+          currency,
+          COALESCE(SUM(CASE WHEN funds IN ('HELD', 'DISPUTED', 'REFUND_PENDING') THEN seller_net_amount ELSE 0 END), 0) AS protected_funds,
+          COALESCE(SUM(CASE WHEN funds = 'RELEASE_ELIGIBLE' THEN seller_net_amount ELSE 0 END), 0) AS available_for_payout,
+          COALESCE(SUM(CASE WHEN funds = 'RELEASE_PENDING' OR payout_status = 'PENDING' THEN seller_net_amount ELSE 0 END), 0) AS payout_pending,
+          COALESCE(SUM(CASE WHEN funds = 'RELEASED' OR payout_status = 'SUCCEEDED' THEN seller_net_amount ELSE 0 END), 0) AS paid_out
+        FROM seller_settlements
+        GROUP BY currency
+        ORDER BY currency
+      `, [req.user.sub]);
       return res.json({
+        totals: totalsResult.rows.map((row) => ({
+          currency: String(row.currency || 'NGN').toUpperCase(),
+          protectedFunds: Number(row.protected_funds || 0),
+          availableForPayout: Number(row.available_for_payout || 0),
+          payoutPending: Number(row.payout_pending || 0),
+          paidOut: Number(row.paid_out || 0)
+        })),
         settlements: result.rows.map((row) => ({
           orderId: String(row.order_id),
           title: String(row.title || 'FYNX order'),
