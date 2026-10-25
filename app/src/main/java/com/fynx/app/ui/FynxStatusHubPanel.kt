@@ -509,6 +509,10 @@ private fun FynxAddStatusPanel(
             }
         }
 
+        // Recents/Photos/Videos only describe the device library when broad media
+        // access is granted. Keep the first-run picker focused instead of showing
+        // a filter that cannot affect the system Photo Picker.
+        if (mediaPermissionGranted) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -539,6 +543,7 @@ private fun FynxAddStatusPanel(
                     )
                 }
             }
+        }
         }
 
         if (!mediaPermissionGranted) {
@@ -591,6 +596,9 @@ private fun FynxAddStatusPanel(
         }
     }
 
+    // Multi-select only applies to the in-app recent-media grid. It is misleading
+    // beside the system picker when library permission has not been granted.
+    if (mediaPermissionGranted) {
     FloatingActionButton(
         onClick = { selectionMode = !selectionMode; layoutMode = false; if (!selectionMode) selectedMediaUris = emptySet() },
         modifier = Modifier
@@ -601,6 +609,7 @@ private fun FynxAddStatusPanel(
         containerColor = MaterialTheme.colorScheme.primary
     ) {
         Icon(Icons.Default.SelectAll, contentDescription = if (selectionMode) "Cancel media selection" else "Select multiple media")
+    }
     }
     if (selectionMode) { Surface(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding(), tonalElevation = 6.dp, color = MaterialTheme.colorScheme.surface) { Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { selectionMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("${selectedMediaUris.size} selected", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); TextButton(onClick = { selectedMediaUris = emptySet(); selectionMessage = null; selectionMode = false; layoutMode = false }) { Text("Cancel") }; Button(onClick = ::finishSelection, enabled = selectedMediaUris.isNotEmpty()) { Text(if (layoutMode) "Create layout" else "Next") } } } } }
     }
