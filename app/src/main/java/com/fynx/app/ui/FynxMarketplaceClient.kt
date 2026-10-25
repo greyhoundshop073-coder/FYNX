@@ -24,7 +24,8 @@ object FynxMarketplaceClient {
         val pickupAvailable: Boolean,
         val deliveryFee: Double?,
         val mediaIds: List<String>,
-        val active: Boolean = true
+        val active: Boolean = true,
+        val mediaTypes: List<String> = emptyList()
     )
 
     data class ShippingSettings(
@@ -199,6 +200,16 @@ object FynxMarketplaceClient {
     fun safetyAssessment(listing: Listing): FynxMarketplaceSafetyAssessment = FynxMarketplaceSafety.analyze(listing.title, listing.description, listing.storeName, listing.location)
     fun mediaUrl(context: Context, mediaId: String): String = "${FynxBackendClient.baseUrl(context)}/api/media/${encode(mediaId)}"
 
+    fun mediaDisplayType(mimeType: String?): String {
+        val type = mimeType.orEmpty().trim().lowercase(Locale.US)
+        return when {
+            type.startsWith("video/") -> "video"
+            type == "image/gif" -> "gif"
+            type.startsWith("image/") -> "image"
+            else -> "auto"
+        }
+    }
+
     private fun parseListings(raw: String, preferAvailableStock: Boolean): List<Listing> {
         val array = JSONObject(raw).getJSONArray("listings")
         return buildList {
@@ -211,12 +222,14 @@ object FynxMarketplaceClient {
     private fun parseListingObject(o: JSONObject, preferAvailableStock: Boolean): Listing {
         val media = o.optJSONArray("media_ids") ?: JSONArray()
         val ids = buildList { for (j in 0 until media.length()) add(media.getString(j)) }
+        val mediaTypesJson = o.optJSONArray("media_types") ?: JSONArray()
+        val mediaTypes = buildList { for (j in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(j)) }
         val quantity = if (preferAvailableStock) {
             o.optInt("available_quantity", o.optInt("quantity", 0))
         } else {
             o.optInt("quantity", 0)
         }
-        return Listing(o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), quantity, o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true))
+        return Listing(o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), quantity, o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true), mediaTypes)
     }
 
     private fun encode(value: String): String = java.net.URLEncoder.encode(value.trim(), "UTF-8")
