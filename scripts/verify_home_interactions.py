@@ -61,7 +61,7 @@ require(home, "FynxSafetyRemoteClient.submitReport(", "Home post reports use the
 require(home, "val reportReasons = listOf(", "Home report sheet offers selectable reasons")
 require(home, "Post ID: ${post.id}. Reported from Home feed.", "Home reports preserve the exact post reference")
 require(home, "ignoreCase = true", "Home does not offer reporting for the current user own posts")
-if (home.includes("FynxDiscoveryClient.recordEvent(context, \"REPORT\"")):
+if 'FynxDiscoveryClient.recordEvent(context, "REPORT"' in home:
     raise SystemExit("HOME INTERACTIONS RED: reporting must not be recorded as analytics only")
 require(home, 'hydrateInteractionStates(page.posts)', "interaction state re-entry hydration")
 require(home, 'interactionStates = emptyMap()', "interaction state reset before re-hydration")
