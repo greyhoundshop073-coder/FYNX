@@ -547,6 +547,36 @@ def verify_status_viewer(status: dict, name: str, expected_text: str | None = No
     if not find_control(xml, ["Status menu"]) or not find_control(xml, ["Like Status"]) or not find_control(xml, ["React"]):
         FAILURES.append(name + ": viewer controls were missing.")
         return False
+
+    # A catalogue track attached to a MUSIC Status is not proof of playable audio.
+    # Exercise the actual viewer player: Play must become Pause after preparation,
+    # then Pause must return to Play before the Status is deleted.
+    if str(status.get("type") or "").upper() == "MUSIC":
+        if not find_control(xml, ["Play audio"]):
+            FAILURES.append(name + ": music-only Status viewer did not expose its Play audio control.")
+            screenshot(name + "-music-audio-control-missing.png")
+            return False
+        playback_xml = tap_control(
+            xml, ["Play audio"], name + "-music-playback-start",
+            ["Pause audio", "Audio unavailable"], timeout=25.0
+        )
+        if not playback_xml:
+            return False
+        if find_control(playback_xml, ["Audio unavailable"]):
+            FAILURES.append(name + ": the music-only Status viewer reported Audio unavailable instead of starting playback.")
+            return False
+        if not find_control(playback_xml, ["Pause audio"]):
+            FAILURES.append(name + ": the music-only Status player did not switch to Pause audio after preparation.")
+            return False
+        NOTES.append("PASS music-only Status viewer started playback through its real audio player.")
+        paused_xml = tap_control(
+            playback_xml, ["Pause audio"], name + "-music-playback-pause",
+            ["Play audio"], timeout=12.0
+        )
+        if not paused_xml or not find_control(paused_xml, ["Play audio"]):
+            FAILURES.append(name + ": the music-only Status viewer did not pause playback cleanly.")
+            return False
+        NOTES.append("PASS music-only Status viewer paused playback and returned to the Play audio state.")
     return True
 
 
@@ -577,7 +607,7 @@ def main() -> int:
     global RUN_START_MS
     RUN_START_MS = int(time.time() * 1000)
     try:
-        # Wake the Render free-tier service and confirm database readiness before
+        # Wake the Railway testing service and confirm database readiness before
         # authenticating. The repository's production reachability gate uses this
         # same 120-second / three-attempt policy for genuine cold starts.
         health = api_request("GET", "/health", timeout=120, retries=3, retry_delay=10)

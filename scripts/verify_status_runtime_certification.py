@@ -45,6 +45,12 @@ checks = {
         'authenticated-server-status-text-viewer' in runtime and 'delete_through_viewer' in runtime,
     "music-only certification selects a published catalogue track and verifies backend MUSIC status":
         'FYNX Music' in runtime and '"MUSIC"' in runtime and 'musicCatalogueId' in runtime,
+    "music-only Status viewer verifies real audio playback and pause states":
+        'name + "-music-playback-start"' in runtime and
+        '["Pause audio", "Audio unavailable"]' in runtime and
+        'name + "-music-playback-pause"' in runtime and
+        'PASS music-only Status viewer started playback through its real audio player.' in runtime and
+        'PASS music-only Status viewer paused playback and returned to the Play audio state.' in runtime,
     "test-created Statuses are owner-cleaned and API tokens are never emitted":
         'finally:' in runtime and 'cleanup_status' in runtime and
         'access tokens are never written' in runtime,
