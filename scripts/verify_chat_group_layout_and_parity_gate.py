@@ -6,6 +6,8 @@ UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 PRIVATE = (UI / "ConversationPanel.kt").read_text(encoding="utf-8")
 ACTIVE_GROUP = (UI / "FynxGroupsPanel.kt").read_text(encoding="utf-8")
 APP = (UI / "FynxApp.kt").read_text(encoding="utf-8")
+MAIN_ACTIVITY = (ROOT / "app/src/main/java/com/fynx/app/MainActivity.kt").read_text(encoding="utf-8")
+RUNTIME_CERTIFICATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 CALLS = (UI / "FynxCallsPanel.kt").read_text(encoding="utf-8")
 REALTIME = (UI / "FynxRealtimeClient.kt").read_text(encoding="utf-8")
 MODELS = (UI / "ChatModels.kt").read_text(encoding="utf-8")
@@ -18,6 +20,23 @@ def require(label, condition):
 
 # The route check prevents a green gate from certifying an unused legacy screen.
 require("app routes group conversations to the active FynxGroupConversationPanel", "FynxGroupConversationPanel(groupId = openGroup!!" in APP)
+require(
+    "singleTop navigation delivers a fresh event even when the incoming Chat/Group URI is identical",
+    "private val deepLinkRequestIdState = mutableLongStateOf(0L)" in MAIN_ACTIVITY
+    and "deepLinkRequestIdState.longValue++" in MAIN_ACTIVITY
+    and "lastHandledDeepLink" not in MAIN_ACTIVITY
+    and "deepLinkRequestId = deepLinkRequestIdState.longValue" in MAIN_ACTIVITY
+)
+require(
+    "app route effect responds to repeated identical deep-link events",
+    "deepLinkRequestId: Long = 0L" in APP
+    and "LaunchedEffect(deepLinkDestination, deepLinkRequestId)" in APP
+)
+require(
+    "runtime certification leaves Chat/Groups then reopens the exact same notification URI",
+    'if name in {"private-chat", "group-chat"}:' in RUNTIME_CERTIFICATION
+    and "repeated identical notification route reopened after Back" in RUNTIME_CERTIFICATION
+)
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
 require("active group conversation has bottom content padding", "contentPadding = PaddingValues(bottom" in ACTIVE_GROUP)
 require("active group conversation uses 48dp minimum touch targets", "Modifier.size(48.dp)" in ACTIVE_GROUP)

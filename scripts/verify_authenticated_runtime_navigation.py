@@ -1304,6 +1304,61 @@ def exercise_notification_route(route:str, name:str)->bool:
     if not warm_destination_ok:
         FAILURES.append(f"{name} notification route warm-start kept the process alive but did not retain the actual destination")
         return False
+
+    # singleTop notifications may deliver the exact same URI to onNewIntent.
+    # Leave the current destination, then replay that identical route without a
+    # force-stop; this catches a router that incorrectly deduplicates URI values.
+    if name in {"private-chat", "group-chat"}:
+        run("adb", "shell", "input", "keyevent", "4")
+        home_after_back = wait_for_controls(
+            f"{name}-notification-home-after-back.xml",
+            ["Open FYNX camera", "Chat", "Friends"],
+            timeout=10.0,
+        )
+        if not home_after_back:
+            screenshot(f"{name}-notification-home-after-back-missing.png")
+            FAILURES.append(f"{name} repeated-route test could not return to the real Home surface after Back")
+            return False
+
+        repeated = run(
+            "adb", "shell", "am", "start", "-W", "-a",
+            "android.intent.action.VIEW", "-d", route, PACKAGE, timeout=30
+        )
+        if name == "private-chat":
+            repeated_xml = wait_for_conversation_ui(
+                f"{name}-notification-repeated-destination.xml", timeout=12
+            )
+            repeated_destination_ok = bool(
+                repeated_xml and (
+                    find_control(repeated_xml, ["Message composer", "Edit message composer", "Chat message composer area"])
+                    or find_control(repeated_xml, ["No messages here yet"])
+                )
+            )
+        else:
+            repeated_xml = wait_for_group_conversation_ui(
+                f"{name}-notification-repeated-destination.xml", timeout=12
+            )
+            repeated_destination_ok = bool(
+                repeated_xml and "Group unavailable" not in repeated_xml and (
+                    find_control(repeated_xml, ["Message...", "Message composer", "Chat message composer area"])
+                    or find_control(repeated_xml, ["Messaging is restricted", "No messages here yet"])
+                )
+            )
+        repeated_alive, repeated_crashlog = capture_runtime_log(
+            f"{name}-notification-repeated-process.log"
+        )
+        screenshot(f"{name}-notification-repeated.png")
+        if repeated.returncode != 0 or not repeated_xml or not repeated_alive or not repeated_destination_ok:
+            details = (repeated.stdout or "").strip().replace("\n", " | ")
+            FAILURES.append(
+                f"{name} repeated identical notification route did not reopen after Back; "
+                f"intent dispatch: {details or 'no ActivityManager output'}"
+            )
+            return False
+        if repeated_crashlog:
+            report.append(f"- {name} repeated-route crash evidence captured; process remained alive")
+        report.append(f"- PASS {name} repeated identical notification route reopened after Back")
+
     if crashlog or warm_crashlog:
         report.append(f"- {name} notification-route crash evidence captured")
     report.append(f"- PASS {name} notification route opens the real destination on cold-authenticated and warm Activity launches")
