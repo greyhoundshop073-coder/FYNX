@@ -22,6 +22,9 @@ checks.extend([
     ("failed next-page requests stop automatic re-fetch loops", "var paginationError by remember" in home and "paginationError == null" in home and "paginationError != null && !retry" in home),
     ("next-page retry keeps the existing continuation cursor", "fun loadMore(retry: Boolean = false)" in home and "beforeCursor = feedNextCursor" in home),
     ("Home presents a dedicated cursor-preserving pagination retry", 'item(key = "feed_pagination_error")' in home and 'loadMore(retry = true)' in home and 'Text("Retry loading posts")' in home),
+    ("initial Home feed request has a bounded deadline", "private const val HOME_FEED_REQUEST_TIMEOUT_MS = 18_000L" in home and "withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS)" in home),
+    ("initial feed timeout clears spinner and request lock", "Your feed is taking too long to load. Check your connection and retry." in home and "loading = false\n                feedRequestInFlight = false\n                return@launch" in home),
+    ("cached Home feed revalidation is also bounded", "val refreshedPage = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS)" in home and "finally {\n                                feedRequestInFlight = false" in home),
 ])
 for name, ok in checks:
     if not ok:

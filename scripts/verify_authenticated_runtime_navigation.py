@@ -946,9 +946,26 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
     if photo_button is None:
         current, _ = allow_camera_or_audio_permission(current)
         photo_button = find_control(current, ["Take photo"])
+
+    # CameraX can show PreviewView and its control row before ImageCapture finishes binding.
+    # Wait for the real Compose click target to become enabled before attempting a capture.
+    photo_ready_deadline = time.monotonic() + 25.0
+    photo_ready_attempt = 0
+    while photo_button is None and time.monotonic() < photo_ready_deadline:
+        current = dump_ui(f"authenticated-camera-photo-action-ready-{photo_ready_attempt}.xml")
+        photo_ready_attempt += 1
+        current, permission_used = allow_camera_or_audio_permission(current)
+        photo_button = find_control(current, ["Take photo"])
+        if photo_button is None:
+            time.sleep(.4)
+
     if photo_button is None:
         screenshot("authenticated-camera-photo-button-missing.png")
-        FAILURES.append("camera capture runtime: Take photo action was not accessible")
+        FAILURES.append(
+            "camera capture runtime: Take photo stayed disabled until the CameraX capture use case became ready; "
+            "camera permission or ImageCapture binding did not settle; visible markers: "
+            + visible_marker_summary(current)
+        )
         return current
 
     _, px, py = photo_button

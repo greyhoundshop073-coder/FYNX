@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt"
 REMOTE_MEDIA = ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt"
+CAMERA = ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt"
 PANEL = ROOT / "app/src/main/java/com/fynx/app/ui/HomePanel.kt"
 LIFECYCLE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt"
 MEDIA_CACHE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt"
@@ -15,6 +16,7 @@ RUNTIME_NAVIGATION = ROOT / "scripts/verify_authenticated_runtime_navigation.py"
 
 home = HOME.read_text(encoding="utf-8")
 remote_media = REMOTE_MEDIA.read_text(encoding="utf-8")
+camera_capture = CAMERA.read_text(encoding="utf-8")
 panel = PANEL.read_text(encoding="utf-8")
 lifecycle = LIFECYCLE.read_text(encoding="utf-8")
 media_cache = MEDIA_CACHE.read_text(encoding="utf-8")
@@ -52,6 +54,19 @@ if missing:
     raise SystemExit("HOME 4F MEDIA RED: missing " + ", ".join(missing))
 if "MediaController" in home:
     raise SystemExit("HOME 4F MEDIA RED: legacy Android MediaController must not be present in the Home feed")
+
+required_camera_readiness = {
+    "CameraX readiness derives from the active bound use case":
+        "val captureReady = hasCamera && cameraControl != null" in camera_capture
+        and "(if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null)" in camera_capture,
+    "capture control is disabled before CameraX is ready":
+        "FilledIconButton(enabled = captureReady || recording != null, onClick={" in camera_capture,
+    "user sees an explicit camera startup state":
+        'Text("Starting camera…"' in camera_capture,
+}
+missing_camera_readiness = [label for label, ok in required_camera_readiness.items() if not ok]
+if missing_camera_readiness:
+    raise SystemExit("HOME 4F CAMERA RED: " + ", ".join(missing_camera_readiness))
 
 required_media_cache = [
     'path.startsWith("/api/media/")',
@@ -293,6 +308,8 @@ if camera_journey_start < 0 or runtime_navigation.count("exercise_camera_capture
 camera_journey = runtime_navigation[camera_journey_start:runtime_navigation.find("\ndef login(", camera_journey_start)]
 for token, label in (
     ('["Take photo"]', "photo capture action"),
+    ("photo_ready_deadline = time.monotonic() + 25.0", "photo capture waits for CameraX binding before tapping"),
+    ('authenticated-camera-photo-action-ready-', "photo readiness hierarchy is captured while waiting"),
     ('["Record video note"]', "video capture action"),
     ('["Stop video note"]', "video stop/finalization action"),
     ('["Retake"]', "photo/video retake actions"),

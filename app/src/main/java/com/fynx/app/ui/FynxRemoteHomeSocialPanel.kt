@@ -55,6 +55,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.Locale
@@ -62,6 +63,7 @@ import org.json.JSONObject
 
 private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
 private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
+private const val HOME_FEED_REQUEST_TIMEOUT_MS = 18_000L
 private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val mutualFriends: Int, val reason: String, val photoId: String?)
 
 @Composable
@@ -340,7 +342,22 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             }
             val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
             var cachedRevalidationStarted = false
-            FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
+            val feedPageResult = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS) {
+                FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
+            }
+            if (feedPageResult == null) {
+                // A slow/unavailable backend must not leave the feed spinner running indefinitely.
+                // Preserve already-loaded content and expose a user-retryable state.
+                error = if (posts.isEmpty()) {
+                    "Your feed is taking too long to load. Check your connection and retry."
+                } else {
+                    "Could not refresh the feed. Showing the posts already loaded."
+                }
+                loading = false
+                feedRequestInFlight = false
+                return@launch
+            }
+            feedPageResult
                 .onSuccess { page ->
                     posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; paginationError = null
                     interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
@@ -353,9 +370,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                         loading = false
                         scope.launch {
                             try {
-                                FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
-                                    .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; paginationError = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
-                                    .onFailure { /* Keep the valid cached snapshot visible. */ }
+                                val refreshedPage = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS) {
+                                    FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
+                                }
+                                refreshedPage?.onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; paginationError = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
                             } finally {
                                 feedRequestInFlight = false
                             }
