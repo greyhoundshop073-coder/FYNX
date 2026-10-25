@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { applyNotificationBootstrapPatch } from "./notificationBootstrapPatch.js";
 
 const importMarker = "import { inspectTrustSafetyText } from './trustSafety.js';";
@@ -29,4 +30,16 @@ assert.throws(
   "required patch markers fail clearly instead of silently mis-wiring routes"
 );
 
-console.log("Notification bootstrap idempotency: PASS (imports, route wiring, missing required marker)");
+
+// Generated routes are inserted into socialRoutes.js. Escape template interpolation here
+// so the SQL WHERE clause is evaluated when the inserted handler runs, not at bootstrap.
+const reactionBootstrapSource = await readFile(new URL("./socialPostReactionBootstrap.js", import.meta.url), "utf8");
+assert.ok(reactionBootstrapSource.includes("WHERE \\${where.join(' AND ')}"), "reaction bootstrap must preserve the generated route's WHERE interpolation");
+assert.equal(reactionBootstrapSource.split("WHERE \\${where.join(' AND ')}").length - 1, 1, "the dynamic WHERE clause has one deliberately escaped interpolation");
+
+
+assert.ok(reactionBootstrapSource.includes("r.reaction_type AS reaction"), "reaction-users query must read the schema's reaction_type column");
+assert.ok(reactionBootstrapSource.includes("where.push('r.reaction_type=$2')"), "reaction-users filter must use the schema's reaction_type column");
+assert.equal(reactionBootstrapSource.includes("r.reaction=$2"), false, "reaction-users query must not reference a nonexistent reaction column");
+
+console.log("Notification bootstrap idempotency and reaction route contracts: PASS");
