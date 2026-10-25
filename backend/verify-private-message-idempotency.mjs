@@ -103,6 +103,7 @@ test("private message retry replays canonical realtime event without duplicate r
       id: String(row.id),
       senderId: String(row.sender_id),
       senderUsername: row.sender_username,
+      clientMessageId: row.client_message_id == null ? null : String(row.client_message_id),
       recipientId: String(row.recipient_id),
       recipientUsername: row.recipient_username,
       text: row.text,
@@ -158,12 +159,14 @@ test("private message retry replays canonical realtime event without duplicate r
   const retry = await send();
   assert.equal(retry.statusCode, 200, "retry with the same stable ID must recover as idempotent success");
   assert.equal(retry.body?.message?.id, "7001");
+  assert.equal(retry.body?.message?.clientMessageId, REQUEST_ID, "canonical API response must expose the stable client ID used for exact recovery");
   assert.equal(pool.messages.size, 1, "retry must not create a second database row");
   assert.equal(broadcastAttempts, 2, "retry must attempt realtime delivery even though the row already exists");
   assert.deepEqual(emitted, [{ id: "7001", recipientId: "2" }]);
 
   const repeatedRetry = await send();
   assert.equal(repeatedRetry.statusCode, 200);
+  assert.equal(repeatedRetry.body?.message?.clientMessageId, REQUEST_ID, "every idempotent replay must retain the original client ID");
   assert.equal(pool.messages.size, 1, "repeated retry must continue to preserve one canonical row");
   assert.equal(broadcastAttempts, 3);
   assert.deepEqual(emitted, [

@@ -29,7 +29,7 @@ object FynxProductionMessaging {
         val id: String, val senderId: String, val senderUsername: String? = null, val senderDisplayName: String? = null,
         val recipientId: String, val recipientUsername: String? = null, val recipientDisplayName: String? = null,
         val text: String, val timestamp: Long, val delivered: Boolean, val read: Boolean, val edited: Boolean, val deleted: Boolean,
-        val replyToId: String?, val reaction: String? = null, val messageType: String = "text", val messagePayload: Map<String, String> = emptyMap(), val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L, val pinned: Boolean = false
+        val replyToId: String?, val reaction: String? = null, val messageType: String = "text", val messagePayload: Map<String, String> = emptyMap(), val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L, val pinned: Boolean = false, val clientMessageId: String? = null
     )
 
     suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> {
@@ -189,7 +189,7 @@ object FynxProductionMessaging {
         val result = FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
         if (result.isSuccess) return result
         if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
-            val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType)
+            val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType, requestId)
             if (recovered != null) return Result.success(recovered)
             if (allowOfflineQueue) {
                 val localId = "offline-${System.currentTimeMillis()}-${UUID.randomUUID()}"
@@ -235,9 +235,24 @@ object FynxProductionMessaging {
         return message.contains("timeout") || message.contains("timed out") || message.contains("connection") || message.contains("network") || message.contains("socket") || message.contains("http 408") || message.contains("http 429") || message.contains("http 5") || message.contains("503") || message.contains("502")
     }
 
-    private fun List<RemoteMessage>.asReconciliationCandidate(currentUsername: String, text: String, replyToId: String?, mediaId: String?, mediaType: String?): RemoteMessage? {
-        val now = System.currentTimeMillis()
-        return asSequence().filter { it.senderUsername?.trim()?.removePrefix("@").orEmpty().lowercase() == currentUsername }.filter { it.text == text && it.replyToId == replyToId && it.mediaId == mediaId && it.mediaType == mediaType }.filter { it.timestamp == 0L || kotlin.math.abs(now - it.timestamp) <= 120_000L }.maxByOrNull { it.timestamp }
+    private fun List<RemoteMessage>.asReconciliationCandidate(
+        currentUsername: String,
+        text: String,
+        replyToId: String?,
+        mediaId: String?,
+        mediaType: String?,
+        requestId: String
+    ): RemoteMessage? {
+        // Content/time similarity is not proof that an ambiguously failed POST committed:
+        // a user can legitimately send the exact same text twice. Only the stable client
+        // request ID written by the server's idempotency key can recover this send.
+        val expectedRequestId = requestId.trim()
+        if (expectedRequestId.isBlank()) return null
+        return asSequence()
+            .filter { it.clientMessageId == expectedRequestId }
+            .filter { it.senderUsername?.trim()?.removePrefix("@").orEmpty().lowercase() == currentUsername }
+            .filter { it.text == text && it.replyToId == replyToId && it.mediaId == mediaId && it.mediaType == mediaType }
+            .singleOrNull()
     }
 
     suspend fun sendStructuredMessage(context: Context, recipientUsername: String, messageType: String, payload: Map<String, String>, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null, requestId: String = UUID.randomUUID().toString()): Result<RemoteMessage> {
@@ -341,7 +356,8 @@ object FynxProductionMessaging {
             mediaType = parsedMediaType,
             mediaUrl = parsedMediaUrl,
             voiceDurationMs = item.optLong("voiceDurationMs", 0L),
-            pinned = item.optBoolean("pinned", false)
+            pinned = item.optBoolean("pinned", false),
+            clientMessageId = item.optString("client_message_id", item.optString("clientMessageId")).trim().takeIf { it.isNotBlank() }
         )
     }
 
