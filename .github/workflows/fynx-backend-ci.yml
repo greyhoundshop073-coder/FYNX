@@ -58,6 +58,7 @@ jobs:
           node --check marketplaceProtectionResolution.js
           node --check marketplaceAdvertising.js
           node --check notificationPush.js
+          node --check statusManagementRoutes.js
           node --check notificationBootstrap.js
           node --check notificationBootstrapPatch.js
           node --check verify-notification-bootstrap-idempotency.mjs
