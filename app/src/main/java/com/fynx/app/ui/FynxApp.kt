@@ -411,7 +411,13 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }.semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
+                        if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(
+                            mediaId = remoteMyPhotoId,
+                            contentDescription = myProfile.displayName,
+                            modifier = Modifier.size(38.dp),
+                            ownerUsername = myProfile.username,
+                            allowImagePreview = false
+                        )
                         else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
                         else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
                     }
