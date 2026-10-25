@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt"
+REMOTE_MEDIA = ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt"
 PANEL = ROOT / "app/src/main/java/com/fynx/app/ui/HomePanel.kt"
 LIFECYCLE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt"
 MEDIA_CACHE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt"
@@ -13,6 +14,7 @@ VIEWER = ROOT / "app/src/main/java/com/fynx/app/ui/FynxPostMediaViewer.kt"
 RUNTIME_NAVIGATION = ROOT / "scripts/verify_authenticated_runtime_navigation.py"
 
 home = HOME.read_text(encoding="utf-8")
+remote_media = REMOTE_MEDIA.read_text(encoding="utf-8")
 panel = PANEL.read_text(encoding="utf-8")
 lifecycle = LIFECYCLE.read_text(encoding="utf-8")
 media_cache = MEDIA_CACHE.read_text(encoding="utf-8")
@@ -239,9 +241,9 @@ file_positions = [file_effect.find(token) for token in file_order]
 if any(position < 0 for position in file_positions) or file_positions != sorted(file_positions):
     raise SystemExit("HOME 4F MEDIA RED: player cleanup must detach output before stop/release")
 
-remote_media_start = home.index("DisposableEffect(resolvedUrl, type)")
-remote_media_end = home.index("when (kind)", remote_media_start)
-remote_media_cleanup = home[remote_media_start:remote_media_end]
+remote_media_start = remote_media.index("DisposableEffect(resolvedUrl, type)")
+remote_media_end = remote_media.index("when (kind)", remote_media_start)
+remote_media_cleanup = remote_media[remote_media_start:remote_media_end]
 remote_order = ["disposingView?.pause()", "disposingView?.setOnPreparedListener(null)", "disposingView?.stopPlayback()"]
 remote_positions = [remote_media_cleanup.find(token) for token in remote_order]
 if any(position < 0 for position in remote_positions) or remote_positions != sorted(remote_positions):
