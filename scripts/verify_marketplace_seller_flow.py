@@ -10,6 +10,7 @@ product_card = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferen
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
 app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 saved_products_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSavedMarketplaceProductsPanel.kt").read_text()
+storefront = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt").read_text()
 remote_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()
 marketplace_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt").read_text()
 discovery_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDiscoveryClient.kt").read_text()
@@ -130,6 +131,14 @@ checks = [
     ("buyer order delivery detail failures offer an explicit retry", 'deliveryDetailsError?.let' in order_lifecycle and 'Text("Retry delivery details")' in order_lifecycle and '.onFailure { deliveryDetailsError' in order_lifecycle),
     ("fallback Marketplace search matches shop name, location and category", all(term in social_routes for term in ("COALESCE(l.store_name", "COALESCE(l.location", "COALESCE(l.category")) and "COALESCE(l.store_name" in discovery_routes),
 ]
+
+checks.extend([
+    ("public seller storefront has an explicit loading state for its own listing request", "var storefrontLoading by remember(username)" in storefront and "Loading this seller’s products…" in storefront),
+    ("public seller storefront surfaces listing failures and provides a retry action", "storefrontError != null" in storefront and "Products could not load. Check your connection and try again." in storefront and "Retry products" in storefront and "storefrontReloadKey += 1" in storefront),
+    ("public seller storefront retries by restarting the seller-specific request", "LaunchedEffect(username, storefrontReloadKey)" in storefront and 'FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())' in storefront),
+    ("failed storefront requests do not silently substitute a partial Marketplace feed as the seller's complete catalogue", "storefrontListings.orEmpty()" in storefront and "storefrontListings ?: listings.filter" not in storefront),
+    ("public seller storefront distinguishes a successful empty catalogue from a failed request", "else if (storefrontLoading)" in storefront and "else if (storefrontError != null)" in storefront and "else if (sellerListings.isEmpty())" in storefront),
+])
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
