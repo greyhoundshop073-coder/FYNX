@@ -8,7 +8,7 @@ picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt").read_
 guidelines = (ROOT / "docs/FYNX_MASTER_UI_GUIDELINES.md").read_text(encoding="utf-8")
 
 checks = [
-    ("default blue accent is the approved Cobalt Blue", "Blue(Color(0xFF0047AB), Color(0xFF3C73BD), Color(0xFF008000))" in design),
+    ("default blue accent uses approved Cobalt Blue and the shared Classic Green token", "Blue(Color(0xFF0047AB), Color(0xFF3C73BD), FynxDesign.ClassicGreen)" in design),
     ("success token is the exact Classic Green", "val ClassicGreen = Color(0xFF008000)" in design),
     ("brand error token is the exact Crimson Red", "val CrimsonRed = Color(0xFFDC143C)" in design),
     ("dark mode uses a contrast-safe red for error text", "error = FynxDesign.DarkModeError" in design and "val DarkModeError = Color(0xFFFF7086)" in design),
@@ -28,8 +28,10 @@ checks = [
      "val SlateGrey = Color(0xFF64748B)" in design and "val LightTextSecondary = SlateGrey" in design and "onSurfaceVariant = FynxDesign.LightTextSecondary" in design),
     ("Premium Gold is a named, exact semantic token",
      "val PremiumGold = Color(0xFFD4AF37)" in design),
-    ("Pale Cobalt is exact and wired to light selected containers",
-     "val PaleCobalt = Color(0xFFE8EEFA)" in design and "val LightSelectedContainer = PaleCobalt" in design),
+    ("Pale Cobalt is wired into the actual light-mode selection container",
+     "val PaleCobalt = Color(0xFFE8EEFA)" in design and "val LightSelectedContainer = PaleCobalt" in design and "FynxAccent.Blue -> FynxDesign.LightSelectedContainer" in design and "primaryContainer = when (effectiveAccent)" in design),
+    ("light/dark/Charcoal/AMOLED modes explicitly define readable selection containers",
+     "primaryContainer = when {" in design and "FynxDesign.AmoledSelectedContainer" in design and "FynxDesign.CharcoalSelectedContainer" in design and "onPrimaryContainer = FynxDesign.LightTextPrimary" in design),
     ("light theme uses shared neutral tokens rather than duplicate hard-coded colors",
      "background = FynxDesign.LightBackground" in design and "surface = FynxDesign.LightSurface" in design and "onSurface = FynxDesign.LightTextPrimary" in design),
     ("supporting palette usage rules are documented",
