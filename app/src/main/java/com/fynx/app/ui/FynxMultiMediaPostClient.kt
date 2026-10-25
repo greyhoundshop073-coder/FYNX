@@ -71,6 +71,7 @@ object FynxMultiMediaPostClient {
             // Previously a later oversized/unsupported asset could fail after earlier assets
             // had already been uploaded, leaving orphan media rows without a post.
             var totalBytes = 0L
+            var hasAudio = false
             val validated = selected.mapIndexed { index, uri ->
                 val mime = detectMimeType(context, uri)
                 val type = when {
@@ -79,8 +80,9 @@ object FynxMultiMediaPostClient {
                     mime.startsWith("audio/") -> "audio"
                     else -> throw IllegalArgumentException("FYNX supports images, videos and audio files only.")
                 }
-                if (type == "audio" && (selected.size != 1 || index != 0)) {
-                    throw IllegalArgumentException("Voice posts cannot be mixed with visual media")
+                if (type == "audio") hasAudio = true
+                if (hasAudio && (selected.size != 1 || index != 0)) {
+                    throw IllegalArgumentException("Voice posts cannot be mixed with visual media. Voice posts use one audio recording.")
                 }
 
                 val size = runCatching {
