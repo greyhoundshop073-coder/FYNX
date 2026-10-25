@@ -23,6 +23,7 @@ checks.extend([
     ("next-page retry keeps the existing continuation cursor", "fun loadMore(retry: Boolean = false)" in home and "beforeCursor = feedNextCursor" in home),
     ("Home presents a dedicated cursor-preserving pagination retry", 'item(key = "feed_pagination_error")' in home and 'loadMore(retry = true)' in home and 'Text("Retry loading posts")' in home),
 ])
-for name, ok in checks:    if not ok:
+for name, ok in checks:
+    if not ok:
         raise SystemExit(f"Home feed correctness gate FAILED: {name}")
 print("Home feed correctness/pagination gate: PASS")
