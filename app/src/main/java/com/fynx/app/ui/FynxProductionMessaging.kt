@@ -255,15 +255,97 @@ object FynxProductionMessaging {
             .singleOrNull()
     }
 
-    suspend fun sendStructuredMessage(context: Context, recipientUsername: String, messageType: String, payload: Map<String, String>, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null, requestId: String = UUID.randomUUID().toString()): Result<RemoteMessage> {
+    suspend fun sendStructuredMessage(
+        context: Context,
+        recipientUsername: String,
+        messageType: String,
+        payload: Map<String, String>,
+        replyToId: String? = null,
+        mediaId: String? = null,
+        mediaType: String? = null,
+        requestId: String = UUID.randomUUID().toString(),
+        allowOfflineQueue: Boolean = true
+    ): Result<RemoteMessage> {
         val allowed = setOf("location", "contact", "poll", "sticker", "gif")
         if (messageType !in allowed) return Result.failure(IllegalArgumentException("Unsupported message type."))
         if (payload.isEmpty()) return Result.failure(IllegalArgumentException("Message details are required."))
+        val normalizedRecipient = recipientUsername.trim().removePrefix("@").lowercase()
+        val currentUsername = (FynxAuthStore.load(context).username ?: "").trim().removePrefix("@").lowercase()
+        if (normalizedRecipient.isBlank()) return Result.failure(IllegalArgumentException("A recipient is required."))
+        if (currentUsername.isNotBlank() && normalizedRecipient == currentUsername) {
+            return Result.failure(IllegalArgumentException("You cannot send a message to your own account."))
+        }
         val normalizedPayload = if (messageType == "poll") {
-            payload.mapValues { (key, value) -> if (key == "options") value.replace("\\u001F", "\u001F") else value }
+            payload.mapValues { (key, value) -> if (key == "options") value.replace("\\\\u001F", "\\u001F") else value }
         } else payload
-        val body = JSONObject().apply { put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase()); put("text", ""); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("messageType", messageType); put("messagePayload", JSONObject(normalizedPayload)); put("clientMessageId", requestId) }
-        return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
+        val body = JSONObject().apply {
+            put("recipientUsername", normalizedRecipient)
+            put("text", "")
+            put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL)
+            put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL)
+            put("mediaType", mediaType ?: JSONObject.NULL)
+            put("messageType", messageType)
+            put("messagePayload", JSONObject(normalizedPayload))
+            put("clientMessageId", requestId)
+        }
+        val result = FynxBackendClient.postJson(context, "/api/messages", body.toString())
+            .mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
+        if (result.isSuccess) return result
+        if (!allowOfflineQueue || !isAmbiguousTransportFailure(result.exceptionOrNull())) return result
+
+        // Only the server's stable clientMessageId proves that an ambiguously failed POST committed.
+        val recovered = history(context, normalizedRecipient).getOrNull()?.asSequence()
+            ?.filter { it.clientMessageId == requestId }
+            ?.filter { it.senderUsername?.trim()?.removePrefix("@").orEmpty().lowercase() == currentUsername }
+            ?.filter {
+                it.messageType == messageType &&
+                    it.messagePayload == normalizedPayload &&
+                    it.replyToId == replyToId &&
+                    it.mediaId == mediaId &&
+                    it.mediaType == mediaType
+            }
+            ?.singleOrNull()
+        if (recovered != null) return Result.success(recovered)
+
+        val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
+        if (currentUserId.isBlank()) return result
+        val createdAt = System.currentTimeMillis()
+        val localId = "offline-$createdAt-${UUID.randomUUID()}"
+        val item = FynxOfflineOutbox.Item(
+            id = localId,
+            requestId = requestId,
+            recipient = normalizedRecipient,
+            text = "",
+            replyToId = replyToId,
+            mediaId = mediaId,
+            mediaType = mediaType,
+            voiceDurationMs = 0L,
+            createdAt = createdAt,
+            messageType = messageType,
+            messagePayload = normalizedPayload
+        )
+        if (!FynxOfflineOutbox.enqueue(context, item)) return result
+        return Result.success(
+            RemoteMessage(
+                id = localId,
+                senderId = currentUserId,
+                senderUsername = currentUsername.ifBlank { null },
+                recipientId = "local-peer:$normalizedRecipient",
+                recipientUsername = normalizedRecipient,
+                text = "",
+                timestamp = createdAt,
+                delivered = false,
+                read = false,
+                edited = false,
+                deleted = false,
+                replyToId = replyToId,
+                messageType = messageType,
+                messagePayload = normalizedPayload,
+                mediaId = mediaId,
+                mediaType = mediaType,
+                clientMessageId = requestId
+            )
+        )
     }
 
     suspend fun votePoll(context: Context, messageId: String, optionIndex: Int): Result<List<Pair<Int, Int>>> {
