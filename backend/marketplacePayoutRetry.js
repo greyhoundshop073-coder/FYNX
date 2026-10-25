@@ -33,12 +33,14 @@ export function registerMarketplacePayoutRetryRoutes({ app }) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const order = (await client.query(`SELECT id,seller_id,seller_net_amount,total_amount,currency,marketplace_fee,marketplace_fee_buyer,marketplace_fee_seller,fee_policy,fee_policy_version FROM marketplace_orders WHERE id=$1 FOR UPDATE`, [orderId])).rows[0];
+      const order = (await client.query(`SELECT id,seller_id,status,seller_net_amount,total_amount,currency,marketplace_fee,marketplace_fee_buyer,marketplace_fee_seller,fee_policy,fee_policy_version FROM marketplace_orders WHERE id=$1 FOR UPDATE`, [orderId])).rows[0];
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (String(order.seller_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the seller can retry this payout' }); }
+      if (order.status !== 'COMPLETED') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'payout retry requires a completed order' }); }
 
       const escrow = (await client.query(`SELECT * FROM marketplace_escrows WHERE order_id=$1 FOR UPDATE`, [orderId])).rows[0];
       if (!escrow || escrow.status !== 'RELEASE_ELIGIBLE') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'payout is not currently eligible for retry' }); }
+      if (String(order.currency || '').toUpperCase() !== String(escrow.currency || '').toUpperCase()) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order and escrow currency do not match' }); }
 
       const payoutAccount = (await client.query(`SELECT recipient_code,verified,active,currency FROM marketplace_payout_accounts WHERE seller_id=$1 AND active=TRUE AND verified=TRUE AND UPPER(currency)=UPPER($2) FOR UPDATE`, [req.user.sub, order.currency])).rows[0];
       if (!payoutAccount || !payoutAccount.verified || !payoutAccount.active || !payoutAccount.recipient_code) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'verified active payout account is required' }); }
