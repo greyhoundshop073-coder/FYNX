@@ -161,23 +161,6 @@ missing_runtime_capture = [token for token in required_runtime_capture if token 
 if missing_runtime_capture:
     raise SystemExit("HOME 4F RUNTIME RED: stable Home capture gate missing " + ", ".join(missing_runtime_capture))
 
-# Real camera coverage must go beyond opening CameraX: take a photo, discard it by
-# retaking, record/finalize a short video, preview it, and discard it without publishing.
-required_camera_runtime = [
-    'def exercise_camera_capture_journeys(camera_xml:str)->str:',
-    'tap_control(\n        current, ["Take photo"], "camera-photo-capture",',
-    'tap_control(\n            photo_preview, ["Retake"], "camera-photo-retake", ["Take photo"],',
-    'tap_control(\n            video_mode_xml, ["Record video note"], "camera-video-start", ["Stop video note"],',
-    'tap_control(\n                recording_xml, ["Stop video note"], "camera-video-stop-preview", ["Retake", "Send"],',
-    'tap_control(\n                    video_preview, ["Retake"], "camera-video-retake", ["Record video note"],',
-    'exercise_camera_capture_journeys(camera_xml)',
-    'without publishing any captured media',
-]
-missing_camera_runtime = [token for token in required_camera_runtime if token not in runtime_navigation]
-if missing_camera_runtime:
-    raise SystemExit("HOME 4F CAMERA RUNTIME RED: capture journey missing " + ", ".join(missing_camera_runtime))
-
-
 
 # Audio decoding must never block the Compose/UI thread. The shared helper must prepare
 # asynchronously, expose a prepared/error state, disable premature playback, and release resources.

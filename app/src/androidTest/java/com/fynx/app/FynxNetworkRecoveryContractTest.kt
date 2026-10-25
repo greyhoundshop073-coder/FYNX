@@ -122,9 +122,18 @@ class FynxNetworkRecoveryContractTest {
             val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
             if (isDebuggable) {
                 FynxBackendClient.configureBaseUrl(context, "https://fynx-backend-testing-testing.up.railway.app")
-                val result = FynxBackendClient.health(context)
+                // The hosted Railway service can briefly return a gateway 502 while waking
+                // or recycling. Retry only this live-service smoke check; keep a hard
+                // failure if the service remains unavailable after the bounded window.
+                var result = FynxBackendClient.health(context)
+                var attempt = 1
+                while (result.isFailure && attempt < 3) {
+                    kotlinx.coroutines.delay(attempt * 2_000L)
+                    result = FynxBackendClient.health(context)
+                    attempt += 1
+                }
                 assertTrue(
-                    "Android runtime could not reach Railway backend: ${result.exceptionOrNull()?.message}",
+                    "Android runtime could not reach Railway backend after $attempt attempts: ${result.exceptionOrNull()?.message}",
                     result.isSuccess
                 )
             }
