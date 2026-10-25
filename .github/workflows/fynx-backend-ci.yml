@@ -2,6 +2,8 @@ name: FYNX Backend CI
 
 on:
   push:
+    branches-ignore:
+      - "fix/chat-groups-*"
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   pull_request:
     branches: [ "main", "integration/fynx-single-apk-20261013" ]

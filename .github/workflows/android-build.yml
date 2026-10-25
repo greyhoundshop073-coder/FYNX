@@ -3,6 +3,8 @@ name: FYNX Android Build # APK + authenticated runtime certification
 
 on:
   push:
+    branches-ignore:
+      - "fix/chat-groups-*"
     paths:
       - "app/**"
       - "backend/**"

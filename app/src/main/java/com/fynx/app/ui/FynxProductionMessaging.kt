@@ -357,7 +357,7 @@ object FynxProductionMessaging {
             mediaUrl = parsedMediaUrl,
             voiceDurationMs = item.optLong("voiceDurationMs", 0L),
             pinned = item.optBoolean("pinned", false),
-            clientMessageId = item.optString("client_message_id", item.optString("clientMessageId")).trim().takeIf { it.isNotBlank() }
+            clientMessageId = if (item.isNull("client_message_id") && item.isNull("clientMessageId")) null else item.optString("client_message_id", item.optString("clientMessageId")).trim().takeIf { it.isNotBlank() }
         )
     }
 
