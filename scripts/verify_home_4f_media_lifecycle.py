@@ -307,4 +307,21 @@ if 'input", "tap", str(sx), str(sy)' not in camera_journey:
 if 'tap_control(video_preview, ["Send"]' in camera_journey or 'tap_control(photo_preview, ["Send"]' in camera_journey:
     raise SystemExit("HOME 4F RUNTIME RED: runtime camera journey must never publish test media")
 
+# Protect the runtime harness's permission and backend-outage boundaries.
+tap_start = runtime_navigation.index("def tap_control(")
+tap_end = runtime_navigation.index("\ndef backend_real_chat_target", tap_start)
+tap_control_source = runtime_navigation[tap_start:tap_end]
+if 'find_control(next_xml,["Allow camera"])' not in tap_control_source:
+    raise SystemExit("HOME 4F RUNTIME RED: camera destination must handle FYNX's in-app Allow camera screen")
+for token, label in (
+    ("def railway_gateway_502()", "independent Railway health probe"),
+    ('base + "/health"', "backend health endpoint probe"),
+    ("failure.code == 502", "specific gateway status check"),
+    ('"application failed to respond" in body.casefold()', "specific gateway response check"),
+    ('and railway_gateway_502()', "local UI fallback gated by the independent health probe"),
+    ("_enter_debug_local_ui_after_gateway_502", "clearly separated local-only UI fallback"),
+):
+    if token not in runtime_navigation:
+        raise SystemExit("HOME 4F RUNTIME RED: missing " + label)
+
 print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")

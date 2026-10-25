@@ -695,6 +695,15 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
             run("adb","shell","input","tap",str(px),str(py))
             time.sleep(1)
             continue
+        if expected_labels and "switch front/back camera" in [label.casefold() for label in expected_labels]:
+            # FYNX first shows its own Allow camera screen on a fresh install; tap
+            # that action, then the loop above handles Android's CAMERA/AUDIO dialogs.
+            app_camera_permission=find_control(next_xml,["Allow camera"])
+            if app_camera_permission:
+                _,cx,cy=app_camera_permission
+                run("adb","shell","input","tap",str(cx),str(cy))
+                time.sleep(.6)
+                continue
         if expected_labels and any(find_control(next_xml,[wanted]) for wanted in expected_labels):
             break
     screenshot(f"authenticated-{name}.png")
@@ -1038,9 +1047,6 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         FAILURES.append("camera capture runtime: video Retake did not return to the live camera")
         return current
 
-    if "Send" in current and False:
-        # Deliberate guard: publish actions are never invoked by this runtime journey.
-        raise AssertionError("The camera certification must never publish its test captures.")
     report.append("- PASS photo and video capture/preview/retake journeys completed; no media was sent or published")
     screenshot("authenticated-camera-after-retakes.png")
     return current
