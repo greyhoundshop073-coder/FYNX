@@ -32,6 +32,14 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
   const cleanText = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
   const validPostId = (value) => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
   const validListingId = (value) => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
+  const marketplaceMediaTypesProjection = `ARRAY(
+    SELECT COALESCE(mm.mime_type, '')
+    FROM jsonb_array_elements_text(
+      CASE WHEN jsonb_typeof(l.media_ids) = 'array' THEN l.media_ids ELSE '[]'::jsonb END
+    ) WITH ORDINALITY AS listing_media(media_id, ord)
+    LEFT JOIN message_media mm ON CAST(mm.id AS TEXT) = listing_media.media_id
+    ORDER BY listing_media.ord
+  ) AS media_types`;
 
   app.post("/api/discovery/events", auth, async (req, res) => {
     try {
@@ -136,7 +144,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const limitPlaceholder = "$" + (params.length - 1);
       const offsetPlaceholder = "$" + params.length;
       const result = await pool.query(`
-        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.created_at,
+        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,${marketplaceMediaTypesProjection},l.created_at,
           (COALESCE((SELECT COUNT(*) FROM marketplace_orders o WHERE o.listing_id=l.id AND o.status IN ('PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED')),0)*8
            + COALESCE((SELECT COUNT(*) FROM fynx_discovery_events e WHERE e.listing_id=l.id AND e.event_type='PRODUCT_CLICK' AND e.created_at>NOW()-INTERVAL '14 days'),0)*2
            + GREATEST(0, 72-EXTRACT(EPOCH FROM (NOW()-l.created_at))/3600.0)) AS discovery_score
@@ -147,7 +155,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       `, params);
       const hasMore = result.rows.length > limit;
       const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
-      return res.json({ listings: rows.map((row) => ({ ...row, id:String(row.id), seller_id:String(row.seller_id), price:Number(row.price), delivery_fee:row.delivery_fee==null?null:Number(row.delivery_fee), media_ids:Array.isArray(row.media_ids)?row.media_ids.map(String):[], discovery_score:Number(row.discovery_score||0) })), hasMore });
+      return res.json({ listings: rows.map((row) => ({ ...row, id:String(row.id), seller_id:String(row.seller_id), price:Number(row.price), delivery_fee:row.delivery_fee==null?null:Number(row.delivery_fee), media_ids:Array.isArray(row.media_ids)?row.media_ids.map(String):[], media_types:Array.isArray(row.media_types)?row.media_types.map(String):[], discovery_score:Number(row.discovery_score||0) })), hasMore });
     } catch (error) {
       console.error("marketplace discovery", error);
       return res.status(500).json({ error: "marketplace discovery unavailable" });
@@ -160,7 +168,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const listingId = validListingId(req.params?.id);
       if (!listingId) return res.status(400).json({ error: "invalid listing id" });
       const result = await pool.query(`
-        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.active,l.created_at
+        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,${marketplaceMediaTypesProjection},l.active,l.created_at
         FROM marketplace_listings l
         JOIN users u ON u.id=l.seller_id
         LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id=l.seller_id
@@ -178,7 +186,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         condition:row.condition, quantity:Number(row.quantity), location:row.location,
         delivery_available:Boolean(row.delivery_available), pickup_available:Boolean(row.pickup_available),
         delivery_fee:row.delivery_fee == null ? null : Number(row.delivery_fee),
-        media_ids:Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], active:Boolean(row.active)
+        media_ids:Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types:Array.isArray(row.media_types) ? row.media_types.map(String) : [], active:Boolean(row.active)
       }});
     } catch (error) {
       console.error("marketplace exact listing", error);
