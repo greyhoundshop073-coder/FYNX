@@ -5,6 +5,14 @@ const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PAYSTACK_TIMEOUT_MS = Math.max(5_000, Number(process.env.PAYSTACK_REQUEST_TIMEOUT_MS || 15_000));
 const RECOVERY_AGE_MINUTES = 2;
+const RECOVERY_INTERVAL_MS = 30_000;
+const MAX_RECOVERY_BACKOFF_MS = 5 * 60_000;
+
+export function marketplaceRecoveryRetryDelayMs(failureCount) {
+  const retries = Math.max(0, Math.trunc(Number(failureCount) || 0));
+  if (retries === 0) return RECOVERY_INTERVAL_MS;
+  return Math.min(MAX_RECOVERY_BACKOFF_MS, RECOVERY_INTERVAL_MS * (2 ** Math.min(retries, 4)));
+}
 const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, max: 2, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000, statement_timeout: 15_000, query_timeout: 20_000, keepAlive: true }) : null;
 let fetchInstalled = false;
 
@@ -327,7 +335,19 @@ async function reconcilePostSuccessPayoutReversals({ logger = console } = {}) {
 
 async function auditCompletedRecovery({ logger = console } = {}) {
   if (!pool) return;
-  const rows = await pool.query(`SELECT f.id,f.order_id,f.operation_type,f.provider_reference,f.amount,f.currency,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.status='SUCCEEDED' AND ((f.operation_type='PAYOUT_RELEASE' AND e.status='RELEASED') OR (f.operation_type='REFUND' AND e.status='REFUNDED')) AND f.updated_at >= NOW() - INTERVAL '24 hours' ORDER BY f.updated_at DESC LIMIT 100`);
+  const rows = await pool.query(`SELECT f.id,f.order_id,f.operation_type,f.provider_reference,f.amount,f.currency,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.status='SUCCEEDED' AND ((f.operation_type='PAYOUT_RELEASE' AND e.status='RELEASED') OR (f.operation_type='REFUND' AND e.status='REFUNDED')) AND f.updated_at >= NOW() - INTERVAL '24 hours'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM marketplace_order_events ev
+      WHERE ev.order_id=f.order_id
+        AND ev.event_type = CASE
+          WHEN f.operation_type='PAYOUT_RELEASE' THEN 'PAYOUT_RECOVERY_RECONCILED'
+          ELSE 'REFUND_RECOVERY_RECONCILED'
+        END
+        AND ev.metadata->>'operationId'=f.id::text
+    )
+  ORDER BY f.updated_at DESC
+  LIMIT 100`);
   for (const row of rows.rows) {
     const action = row.operation_type === 'PAYOUT_RELEASE' ? 'PAYOUT_RECOVERY_RECONCILED' : 'REFUND_RECOVERY_RECONCILED';
     const client = await pool.connect();
@@ -338,7 +358,32 @@ async function auditCompletedRecovery({ logger = console } = {}) {
 export function registerMarketplaceBatch2FinalHardening({ logger = console } = {}) {
   installPaystackTimeoutGuard();
   if (!pool) return;
-  const run = async () => { await recoverPaymentWithoutLocalReference({ logger }); await reconcilePendingRefunds({ logger }); await reconcileRefundRecovery({ logger }); await reconcilePostSuccessPayoutReversals({ logger }); await auditCompletedRecovery({ logger }); };
-  const timer = setInterval(() => { void run(); }, 30_000); timer.unref(); void run();
+  let recoveryInFlight = false;
+  let consecutiveFailures = 0;
+  const run = async () => {
+    if (recoveryInFlight) return;
+    recoveryInFlight = true;
+    let failed = false;
+    try {
+      await recoverPaymentWithoutLocalReference({ logger });
+      await reconcilePendingRefunds({ logger });
+      await reconcileRefundRecovery({ logger });
+      await reconcilePostSuccessPayoutReversals({ logger });
+      await auditCompletedRecovery({ logger });
+    } catch (error) {
+      failed = true;
+      consecutiveFailures = Math.min(consecutiveFailures + 1, 4);
+      logger.error('[fynx-marketplace] Batch 2 recovery worker failed; retrying with backoff', error?.message || error);
+    } finally {
+      recoveryInFlight = false;
+      if (!failed) consecutiveFailures = 0;
+      const delayMs = failed
+        ? marketplaceRecoveryRetryDelayMs(consecutiveFailures)
+        : RECOVERY_INTERVAL_MS;
+      const timer = setTimeout(() => { void run(); }, delayMs);
+      timer.unref();
+    }
+  };
+  void run();
   logger.log(`[fynx-marketplace] Batch 2 final hardening active; Paystack timeout=${PAYSTACK_TIMEOUT_MS}ms`);
 }
