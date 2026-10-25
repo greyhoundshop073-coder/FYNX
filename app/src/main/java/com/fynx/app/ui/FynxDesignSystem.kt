@@ -180,7 +180,7 @@ fun FynxTheme(
                 else -> FynxDesign.TextPrimary
             },
             error = FynxDesign.DarkModeError,
-            onError = Color.White,
+            onError = FynxDesign.Background,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
             tertiary = effectiveAccent.companion,
