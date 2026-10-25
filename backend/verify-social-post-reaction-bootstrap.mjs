@@ -11,7 +11,7 @@ assert.ok(route.includes("where.push('r.reaction_type=$2')"),
   "reaction filtering must use the schema's reaction_type column");
 assert.ok(route.includes("r.reaction_type AS reaction,r.created_at"),
   "the selected reaction must use reaction_type and retain the API's reaction alias");
-assert.ok(route.includes("WHERE \${where.join(' AND ')}"),
+assert.ok(route.includes("WHERE \\${where.join(' AND ')}"),
   "the generated SQL template must preserve WHERE interpolation until the route runs");
 assert.ok(!route.includes("r.reaction=$2") && !route.includes("r.reaction,r.created_at"),
   "the reaction-users route must not reference the nonexistent reaction column");
