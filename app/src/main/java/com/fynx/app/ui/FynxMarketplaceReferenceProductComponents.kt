@@ -58,7 +58,7 @@ internal fun MarketplaceReferenceProductCard(
         Column {
             Box {
                 if (listing.mediaIds.isNotEmpty()) {
-                    RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.92f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)))
+                    RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.92f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)), listing.mediaTypes.firstOrNull())
                 } else {
                     Box(Modifier.fillMaxWidth().aspectRatio(0.92f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)), Alignment.Center) {
                         Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(42.dp), tint = FynxMarketplaceReferenceStyle.primarySoft)
@@ -174,7 +174,7 @@ internal fun MarketplaceReferenceDealBanner(
     Surface(onClick = onOpen, modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = FynxMarketplaceReferenceStyle.surfaceRaised) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             if (listing.mediaIds.isNotEmpty()) {
-                RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.size(112.dp).clip(RoundedCornerShape(14.dp)))
+                RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.size(112.dp).clip(RoundedCornerShape(14.dp)), listing.mediaTypes.firstOrNull())
             } else {
                 Box(Modifier.size(112.dp).clip(RoundedCornerShape(14.dp)), Alignment.Center) { Icon(Icons.Default.ShoppingBag, "Deal", Modifier.size(38.dp), tint = FynxMarketplaceReferenceStyle.primarySoft) }
             }
@@ -190,7 +190,7 @@ internal fun MarketplaceReferenceDealBanner(
 }
 
 @Composable
-private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier) {
+private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier, mimeType: String? = null) {
     val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }
-    FynxRemoteMedia(mediaUrl, "auto", modifier)
+    FynxRemoteMedia(mediaUrl, FynxMarketplaceClient.mediaDisplayType(mimeType), modifier)
 }
