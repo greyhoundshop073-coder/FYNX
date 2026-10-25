@@ -24,6 +24,19 @@ Use the approved FYNX master reference image as the visual source of truth for l
 - Light mode must remain a genuine light theme; do not force the dark palette into light mode.
 - Black AMOLED remains available where already supported.
 
+
+## Supporting palette
+
+These tones support the three official FYNX brand colors; they are not additional primary brand colors.
+
+- Soft Cloud White (`#F5F7FA`): the light-mode page background. Keep surfaces clean and content contrast high.
+- Midnight Slate (`#1C2434`): raised dark-mode surfaces and panels, used over the deeper navy background.
+- Slate Grey (`#64748B`): secondary text and quiet icons in light mode; never use it for essential text on a dark surface.
+- Pale Cobalt (`#E8EEFA`): gentle light-mode selection/focus containers. Keep primary actions solid Cobalt Blue.
+- Premium Gold (`#D4AF37`): reserved for premium/verified/reward details only. Do not use it for success/error states, large backgrounds, or small text on its own; pair it with a readable dark foreground.
+
+Use semantic tokens from `FynxDesign` instead of repeating raw hex values. Preserve the existing deep-navy, Charcoal Black and Black AMOLED appearance options. Do not scatter every palette color across every screen.
+
 ## Welcome / Sign In
 
 Match the approved reference composition:

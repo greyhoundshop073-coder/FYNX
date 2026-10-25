@@ -33,20 +33,27 @@ enum class FynxAccent(
 }
 
 object FynxDesign {
+    // Supporting palette: neutral surfaces, secondary content and premium-only details.
+    val SoftCloudWhite = Color(0xFFF5F7FA)
+    val MidnightSlate = Color(0xFF1C2434)
+    val SlateGrey = Color(0xFF64748B)
+    val PremiumGold = Color(0xFFD4AF37)
+    val PaleCobalt = Color(0xFFE8EEFA)
+
     val Background = Color(0xFF071326)
     val Surface = Color(0xFF0D1B2E)
-    val SurfaceRaised = Color(0xFF15263D)
+    val SurfaceRaised = MidnightSlate
     val TextPrimary = Color(0xFFF5F8FF)
     val TextSecondary = Color(0xFFB9C6D8)
     val Outline = Color(0xFF31445F)
     val SelectedContainer = Color(0xFF132B49)
-    val LightBackground = Color(0xFFF5F7FB)
+    val LightBackground = SoftCloudWhite
     val LightSurface = Color(0xFFFFFFFF)
     val LightSurfaceRaised = Color(0xFFEAF0F7)
     val LightTextPrimary = Color(0xFF17202A)
-    val LightTextSecondary = Color(0xFF5E6B78)
+    val LightTextSecondary = SlateGrey
     val LightOutline = Color(0xFFD2DAE5)
-    val LightSelectedContainer = Color(0xFFE4EFFC)
+    val LightSelectedContainer = PaleCobalt
     // Subtle neutral/reflective tones: deliberately restrained so light mode stays white.
     val BlueLightCompanionContainer = Color(0xFFE6F4EA)
     val BlueDarkCompanionContainer = Color(0xFF153A27)
@@ -216,13 +223,13 @@ fun FynxTheme(
                 FynxAccent.Charcoal -> FynxDesign.CharcoalLightCompanionContainer
             },
             onTertiaryContainer = Color(0xFF20252A),
-            background = Color(0xFFF8F9FB),
-            onBackground = Color(0xFF11161B),
-            surface = Color.White,
-            onSurface = Color(0xFF11161B),
+            background = FynxDesign.LightBackground,
+            onBackground = FynxDesign.LightTextPrimary,
+            surface = FynxDesign.LightSurface,
+            onSurface = FynxDesign.LightTextPrimary,
             surfaceVariant = Color(0xFFF0F2F5),
-            onSurfaceVariant = Color(0xFF59636D),
-            outline = Color(0xFFD5DBE1),
+            onSurfaceVariant = FynxDesign.LightTextSecondary,
+            outline = FynxDesign.LightOutline,
             surfaceContainerLowest = Color.White,
             surfaceContainerLow = Color.White,
             surfaceContainer = Color.White,

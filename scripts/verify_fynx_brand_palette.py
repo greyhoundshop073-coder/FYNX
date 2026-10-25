@@ -19,6 +19,21 @@ checks = [
      all(f'Triple("{mode}"' in picker for mode in ("System", "Light", "Dark"))),
     ("master UI guidelines document the approved three-color palette",
      all(token in guidelines for token in ("#0047AB", "#008000", "#DC143C"))),
+
+    ("Soft Cloud White token is exact and wired to light background",
+     "val SoftCloudWhite = Color(0xFFF5F7FA)" in design and "val LightBackground = SoftCloudWhite" in design and "background = FynxDesign.LightBackground" in design),
+    ("Midnight Slate token is exact and wired to raised surfaces",
+     "val MidnightSlate = Color(0xFF1C2434)" in design and "val SurfaceRaised = MidnightSlate" in design),
+    ("Slate Grey token is exact and wired to secondary light-theme text",
+     "val SlateGrey = Color(0xFF64748B)" in design and "val LightTextSecondary = SlateGrey" in design and "onSurfaceVariant = FynxDesign.LightTextSecondary" in design),
+    ("Premium Gold is a named, exact semantic token",
+     "val PremiumGold = Color(0xFFD4AF37)" in design),
+    ("Pale Cobalt is exact and wired to light selected containers",
+     "val PaleCobalt = Color(0xFFE8EEFA)" in design and "val LightSelectedContainer = PaleCobalt" in design),
+    ("light theme uses shared neutral tokens rather than duplicate hard-coded colors",
+     "background = FynxDesign.LightBackground" in design and "surface = FynxDesign.LightSurface" in design and "onSurface = FynxDesign.LightTextPrimary" in design),
+    ("supporting palette usage rules are documented",
+     all(token in guidelines for token in ("#F5F7FA", "#1C2434", "#64748B", "#D4AF37", "#E8EEFA"))),
 ]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
