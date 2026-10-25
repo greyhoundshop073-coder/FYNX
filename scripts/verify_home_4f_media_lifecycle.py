@@ -167,7 +167,7 @@ required_camera_runtime = [
     'def exercise_camera_capture_journeys(camera_xml:str)->str:',
     'tap_control(\n        current, ["Take photo"], "camera-photo-capture",',
     'tap_control(\n            photo_preview, ["Retake"], "camera-photo-retake", ["Take photo"],',
-    'tap_control(\n        video_mode_xml, ["Record video note"], "camera-video-start", ["Stop video note"],',
+    'tap_control(\n            video_mode_xml, ["Record video note"], "camera-video-start", ["Stop video note"],',
     'tap_control(\n                recording_xml, ["Stop video note"], "camera-video-stop-preview", ["Retake", "Send"],',
     'tap_control(\n                    video_preview, ["Retake"], "camera-video-retake", ["Record video note"],',
     'exercise_camera_capture_journeys(camera_xml)',
