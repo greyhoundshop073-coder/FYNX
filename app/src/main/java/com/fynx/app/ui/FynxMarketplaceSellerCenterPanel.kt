@@ -455,7 +455,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             if (listing.mediaIds.isNotEmpty()) {
                                 FynxRemoteMedia(
                                     mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
-                                    type = "auto",
+                                    type = FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
                                     modifier = Modifier.size(88.dp)
                                 )
                             } else {
@@ -526,7 +526,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             if (listing.mediaIds.isNotEmpty()) {
                                 FynxRemoteMedia(
                                     mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
-                                    type = "auto",
+                                    type = FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
                                     modifier = Modifier.size(72.dp)
                                 )
                             } else {
