@@ -130,6 +130,11 @@ jobs:
           node verify-media-route.mjs
           node test-media-route-db.mjs
 
+      - name: Verify notification bootstrap idempotency
+        run: node verify-notification-bootstrap-idempotency.mjs
+      - name: Verify Home post reaction SQL contract
+        run: node verify-social-post-reaction-bootstrap.mjs
+
       - name: Run Chat end-to-end integration gate
         working-directory: .
         run: python3 scripts/verify_chat_end_to_end.py

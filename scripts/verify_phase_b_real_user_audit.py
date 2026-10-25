@@ -36,6 +36,7 @@ critical_files = [
     "backend/notificationDevices.js",
     "backend/notificationPush.js",
     "backend/notificationBootstrap.js",
+    "backend/notificationBootstrapPatch.js",
     "backend/statusManagementRoutes.js",
     "backend/socialPostReactionBootstrap.js",
     "backend/marketplaceCompletion.js",
@@ -95,7 +96,7 @@ check("FCM token registration is authenticated and account-scoped", "hasAccessTo
 check("FCM service handles token refresh and incoming data", "onNewToken" in fcm_service and "onMessageReceived" in fcm_service)
 check("notification device storage is user-scoped", "user_id" in notification_devices and "REFERENCES users(id)" in notification_devices)
 check("notification sender keeps credentials server-side", "FIREBASE_SERVICE_ACCOUNT_JSON" in notification_push and "FIREBASE_PRIVATE_KEY" in notification_push and "firebase" in notification_push.lower())
-check("notification bootstrap is idempotent integration glue", "async function patchOnce" in notification_bootstrap and "changed = false" in notification_bootstrap and "patches" in notification_bootstrap and "source.includes(patch.replacement)" in notification_bootstrap and "Skip a patch once its complete replacement is already present" in notification_bootstrap)
+check("notification bootstrap is idempotent integration glue", "async function patchOnce" in notification_bootstrap and "changed = false" in notification_bootstrap and "applyNotificationBootstrapPatch(source, patch, fileName)" in notification_bootstrap and "source.includes(patch.replacement) || alreadyMarkerPresent" in read("backend/notificationBootstrapPatch.js") and "source.includes(patch.already)" in read("backend/notificationBootstrapPatch.js"))
 check("status archive route has valid media URL template syntax", "\\`" not in status_management and "mediaUrl:row.media_id == null ? null : `/api/media/${row.media_id}`" in status_management)
 check("database bootstrap parameterized update is outside schema batch", "UPDATE users SET verified = TRUE WHERE lower(username) = $1;" not in messages and 'await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);' in messages)
 check("database bootstrap SQL has no literal escaped newline", r"JSONB;\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction" not in messages)
