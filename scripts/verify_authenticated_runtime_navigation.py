@@ -129,6 +129,31 @@ def dump_ui(name:str)->str:
         return raw.decode("utf-8","replace")
     return ""
 
+def read_ui_unpersisted()->str:
+    """Read sensitive login UI in memory only; never place credentials in CI artifacts."""
+    result=run("adb","shell","uiautomator","dump","/sdcard/fynx-authenticated-login-live.xml")
+    if result.returncode != 0: return ""
+    raw=subprocess.run(["adb","exec-out","cat","/sdcard/fynx-authenticated-login-live.xml"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=False).stdout
+    return raw.decode("utf-8","replace") if raw.startswith(b"<?xml") else ""
+
+def backend_health_probe()->tuple[bool,str]:
+    """Distinguish a live-service outage from a rejected account without logging response bodies."""
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    request=urllib.request.Request(base+"/health",headers={"Accept":"application/json"},method="GET")
+    try:
+        with urllib.request.urlopen(request,timeout=12) as response:
+            payload=json.loads(response.read().decode("utf-8","replace"))
+        if payload.get("ok") is True and payload.get("service")=="fynx-backend" and payload.get("database")=="ready":
+            return True,""
+        return False,"health endpoint did not report a ready backend/database"
+    except urllib.error.HTTPError as exc:
+        return False,f"HTTP {exc.code}"
+    except (urllib.error.URLError,TimeoutError) as exc:
+        return False,type(exc).__name__
+    except (ValueError,TypeError):
+        return False,"invalid health response"
+
+
 def nodes(xml_text:str):
     if not xml_text: return []
     try: return list(ET.fromstring(xml_text).iter("node"))
@@ -500,65 +525,68 @@ def exercise_notification_route(route:str, name:str)->bool:
     return True
 
 def login():
-    global LOGIN_MODE
+    global LOGIN_MODE, BACKEND_BLOCKED_REASON
+    backend_ready, backend_reason = backend_health_probe()
+    BACKEND_BLOCKED_REASON = "" if backend_ready else backend_reason
+
     run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
-    xml=dump_ui("authenticated-before-login.xml"); screenshot("authenticated-before-login.png")
+    xml=read_ui_unpersisted()
     sign_in_gate=find_control(xml,["Sign In"])
     if not sign_in_gate: return xml,"authentication gate was not visible"
-    _,x,y=sign_in_gate; run("adb","shell","input","tap",str(x),str(y))
+    _,x,y=sign_in_gate
+    run("adb","shell","input","tap",str(x),str(y))
     xml=""
     for _ in range(12):
-        time.sleep(1); xml=dump_ui("authenticated-login-screen.xml")
+        time.sleep(1)
+        xml=read_ui_unpersisted()
         if find_control(xml,["Username"]) or len(find_edit_fields(xml))>=2: break
-    screenshot("authenticated-login-screen.png")
+
     user_control=find_control(xml,["Username"])
     if not user_control:
         fields=find_edit_fields(xml)
         if not fields: return xml,"username control was not visible"
         user_control=("username",fields[0][0],fields[0][1])
-    _,x,y=user_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
+    _,x,y=user_control
+    run("adb","shell","input","tap",str(x),str(y))
+    time.sleep(.3)
     result=input_text(USERNAME)
     if result.returncode!=0: return xml,"adb input text failed for username"
-    run("adb","shell","input","keyevent","4"); time.sleep(.5)
-    xml=dump_ui("authenticated-after-username.xml")
-    # Debug APKs intentionally expose a passwordless local UI-entry path when no
-    # local account is stored. On a fresh debug emulator, entering a username
-    # reveals this path and hides Password even when CI credentials are present.
-    # Prefer the explicit debug path and label it honestly; do not misreport it
-    # as server authentication or fail on a Password field the UI no longer shows.
-    if find_control(xml,["Saved-device login for this debug APK"]):
-        LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
-        home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
-        if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
-            return home_xml,""
-        return home_xml or xml,"debug saved-device entry did not reach Home"
+    run("adb","shell","input","keyevent","4")
+    time.sleep(.5)
+    xml=read_ui_unpersisted()
+
+    debug_option=find_control(xml,["Leave password blank for quick local entry","Saved-device login for this debug APK"])
+    if not backend_ready and debug_option:
+        return enter_debug_local_ui(xml, "backend health preflight was unavailable ("+backend_reason+")", password_was_entered=False)
+
     pass_control=find_control(xml,["Password"])
     if not pass_control:
         fields=find_edit_fields(xml)
         if len(fields)<2: return xml,f"password control was not visible after username entry (edittexts found {len(fields)})"
         pass_control=("password",fields[1][0],fields[1][1])
-    _,x,y=pass_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
+    _,x,y=pass_control
+    run("adb","shell","input","tap",str(x),str(y))
+    time.sleep(.3)
     result=input_text(PASSWORD)
     if result.returncode!=0: return xml,"adb input text failed for password"
-    run("adb","shell","input","keyevent","4"); time.sleep(1)
-    xml=dump_ui("authenticated-login-filled.xml"); screenshot("authenticated-login-filled.png")
+    run("adb","shell","input","keyevent","4")
+    time.sleep(.7)
+    xml=read_ui_unpersisted()
     sign_in=find_control(xml,["Sign In"])
     if not sign_in: return xml,"Sign In control disappeared after credentials were entered"
     _,x,y=sign_in
     run("adb","shell","input","tap",str(x),str(y))
 
-    # A tapped Sign In button is not proof of authentication. The backend request
-    # is asynchronous and can take several seconds; wait until the actual Home
-    # controls appear, or return a specific authentication failure without running
-    # Home navigation checks on top of the login form.
+    # Credentials are never dumped or screenshotted after entry. A 502 is an
+    # external backend outage, not evidence that the account password is invalid.
     deadline=time.monotonic()+65.0
     last_xml=xml
     last_markers=""
     while time.monotonic()<deadline:
         time.sleep(1.0)
-        last_xml=dump_ui("authenticated-login-wait.xml")
+        last_xml=read_ui_unpersisted()
         if not last_xml:
             continue
         if (find_control(last_xml,["Open FYNX camera"])
@@ -574,22 +602,67 @@ def login():
                 return last_xml,"Home feed did not leave its loading state within 30 seconds after authenticated navigation"
             (ROOT/"authenticated-home.xml").write_text(last_xml,encoding="utf-8")
             screenshot("authenticated-home.png")
+            BACKEND_BLOCKED_REASON=""
             return last_xml,""
         last_markers=visible_marker_summary(last_xml)
         combined=" ".join((node.attrib.get("text") or "")+" "+(node.attrib.get("content-desc") or "") for node in nodes(last_xml)).casefold()
         login_form_visible=bool(find_control(last_xml,["Username"]) and find_control(last_xml,["Password"]))
         sign_in_visible=bool(find_control(last_xml,["Sign In"]))
         if time.monotonic() > deadline-60.0 and login_form_visible and sign_in_visible and "signing in" not in combined:
-            screenshot("authenticated-login-rejected.png")
-            if any(marker in combined for marker in ("invalid username","invalid password","incorrect password","invalid credentials")):
-                reason="the server rejected the supplied credentials"
-            elif any(marker in combined for marker in ("timeout","timed out","network","connection failed","fetch failed","unable to connect")):
-                reason="the login form returned a network/backend error"
-            else:
-                reason="the login form returned without opening authenticated Home"
-            return last_xml, f"{reason}; visible markers: {last_markers}"
-    screenshot("authenticated-home-timeout.png")
+            invalid_credentials=any(marker in combined for marker in ("invalid username","invalid password","incorrect password","invalid credentials"))
+            backend_unavailable=any(marker in combined for marker in ("application failed to respond","bad gateway","service unavailable","http 502",'"code":502',"502 bad gateway"))
+            if invalid_credentials:
+                return last_xml, f"the server rejected the supplied credentials; visible markers: {last_markers}"
+            if backend_unavailable:
+                BACKEND_BLOCKED_REASON="HTTP 502 from the backend login request"
+                if debug_option:
+                    return enter_debug_local_ui(last_xml, BACKEND_BLOCKED_REASON, password_was_entered=True)
+                return last_xml, "server authentication is blocked by an external HTTP 502; no debug-only local entry option was available"
+            if any(marker in combined for marker in ("timeout","timed out","network","connection failed","fetch failed","unable to connect")):
+                return last_xml, f"the login form returned a network/backend error; visible markers: {last_markers}"
+            return last_xml, f"the login form returned without opening authenticated Home; visible markers: {last_markers}"
     return last_xml, "login did not reach authenticated Home within 65 seconds; last visible markers: " + (last_markers or visible_marker_summary(last_xml))
+
+
+def enter_debug_local_ui(xml:str, reason:str, password_was_entered:bool)->tuple[str,str]:
+    """Use only the app's explicit existing debug-only path when the live backend is blocked."""
+    global LOGIN_MODE, BACKEND_BLOCKED_REASON
+    helper=find_control(xml,["Leave password blank for quick local entry","Saved-device login for this debug APK"])
+    if not helper:
+        return xml,"backend is unavailable and the app did not expose its explicit debug-only local-entry option"
+    if password_was_entered:
+        password_control=find_control(xml,["Password"])
+        if not password_control:
+            return xml,"backend returned HTTP 502 after credential entry; could not safely clear the password field for local-only fallback"
+        _,px,py=password_control
+        run("adb","shell","input","tap",str(px),str(py))
+        run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+        run("adb","shell","input","keyevent","KEYCODE_DEL")
+        run("adb","shell","input","keyevent","4")
+        time.sleep(.4)
+        xml=read_ui_unpersisted()
+        if not find_control(xml,["Leave password blank for quick local entry","Saved-device login for this debug APK"]):
+            return xml,"backend returned HTTP 502, but the existing local-only option was no longer available after clearing password"
+    sign_in=find_control(xml,["Sign In"])
+    if not sign_in:
+        return xml,"the existing debug-only local-entry Sign In button was not available"
+    _,x,y=sign_in
+    run("adb","shell","input","tap",str(x),str(y))
+    deadline=time.monotonic()+35.0
+    latest=""
+    while time.monotonic()<deadline:
+        time.sleep(.7)
+        latest=read_ui_unpersisted()
+        if (find_control(latest,["Open FYNX camera"])
+                and find_control(latest,["Chat"])
+                and find_control(latest,["Friends"])):
+            LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
+            BACKEND_BLOCKED_REASON=reason
+            (ROOT/"authenticated-home.xml").write_text(latest,encoding="utf-8")
+            screenshot("authenticated-home.png")
+            return latest,""
+    return latest,"explicit debug-only local entry did not reach Home after the backend outage"
+
 
 def dismiss_runtime_permission_prompt()->str:
     for _ in range(6):
@@ -645,12 +718,15 @@ if install.returncode!=0:
     report.append("- "+install.stdout.strip().replace("\n"," | ")); raise SystemExit(1)
 
 xml,error=login()
+if BACKEND_BLOCKED_REASON:
+    report.append("- BLOCKED live backend authentication: " + BACKEND_BLOCKED_REASON + ".")
+    report.append("- This run may certify only the explicitly debug-only local UI journey; it does not certify server-backed Status publishing, retrieval, reactions, or music playback.")
 if error: FAILURES.append("real account sign-in: "+error)
 else:
     if find_control(xml,["Sign In"]) and find_control(xml,["Create Account"]): FAILURES.append("authentication did not leave the login gate")
     else:
         if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
-            report.append("- PASS debug-only saved-device UI entry; this does not certify server authentication")
+            report.append("- PASS debug-only local UI entry; this does not certify server authentication")
         else:
             report.append("- PASS real account authenticated through the FYNX login flow")
 

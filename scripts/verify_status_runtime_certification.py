@@ -7,14 +7,17 @@ runtime = (ROOT / "scripts/verify_authenticated_status_lifecycle.py").read_text(
 runtime_script = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
 network_test = (ROOT / "app/src/androidTest/java/com/fynx/app/FynxNetworkRecoveryContractTest.kt").read_text(encoding="utf-8")
+navigation = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
-def syntax_check(source):
+def syntax_check(source, filename="scripts/verify_authenticated_status_lifecycle.py"):
     try:
-        compile(source, "scripts/verify_authenticated_status_lifecycle.py", "exec")
+        compile(source, filename, "exec")
         return True
     except SyntaxError as exc:
-        print(f"Python syntax error in Status lifecycle test at line {exc.lineno}: {exc.msg}")
+        print(f"Python syntax error in {filename} at line {exc.lineno}: {exc.msg}")
         return False
+
+login_section = navigation.split("def login():", 1)[1].split("def dismiss_runtime_permission_prompt()", 1)[0] if "def login():" in navigation and "def dismiss_runtime_permission_prompt()" in navigation else ""
 
 checks = {
     "Status lifecycle certification defaults to the active Railway backend, not retired Render":
@@ -59,6 +62,25 @@ checks = {
         'latest = read_ui_unpersisted()' in runtime and
         'dump_ui("authenticated-server-status-login-filled.xml")' not in runtime and
         'dump_ui("authenticated-server-status-login-wait.xml")' not in runtime,
+    "debug UI navigation uses a memory-only login hierarchy and never exports credential-stage XML or screenshots":
+        "def read_ui_unpersisted()->str:" in navigation and
+        "read_ui_unpersisted()" in login_section and
+        "dump_ui(" not in login_section and
+        "authenticated-login-filled.xml" not in navigation and
+        "authenticated-login-wait.xml" not in navigation and
+        "authenticated-login-filled.png" not in navigation and
+        "authenticated-login-rejected.png" not in navigation and
+        "authenticated-home-timeout.png" not in navigation,
+    "HTTP 502 is classified as an external backend block, not invalid credentials, and debug fallback is explicit":
+        'application failed to respond' in navigation and
+        'backend_unavailable=any(' in navigation and
+        navigation.index('invalid_credentials=any(') < navigation.index('backend_unavailable=any(') and
+        'def enter_debug_local_ui(' in navigation and
+        'Leave password blank for quick local entry' in navigation and
+        'BACKEND_BLOCKED_REASON' in navigation and
+        'does not certify server-backed Status publishing' in navigation,
+    "runtime navigation verifier syntax is checked before emulator execution":
+        syntax_check(navigation, "scripts/verify_authenticated_runtime_navigation.py"),
     "long runtime script is syntax-compiled before expensive emulator certification":
         syntax_check(runtime),
     "existing debug login contract remains untouched":
