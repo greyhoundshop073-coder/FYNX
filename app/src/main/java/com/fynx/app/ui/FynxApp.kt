@@ -45,6 +45,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 
 private const val FYNX_PREVIEW_MODE = false
+private const val FYNX_NOTIFICATION_POLL_INTERVAL_MS = 60_000L
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
 private fun fynxBackDestination(
@@ -72,6 +73,9 @@ private fun fynxBackDestination(
 fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var appLifecycleIsResumed by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED)
+    }
     val appConnectionManager = remember(context) { FynxAppConnectionManager(context.applicationContext) }
     val appConnectionState by appConnectionManager.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -128,6 +132,20 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             appConnectionManager.stop()
             lifecycleOwner.lifecycle.removeObserver(appConnectionManager)
         }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> appLifecycleIsResumed = true
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE,
+                androidx.lifecycle.Lifecycle.Event.ON_STOP,
+                androidx.lifecycle.Lifecycle.Event.ON_DESTROY -> appLifecycleIsResumed = false
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     DisposableEffect(authSession.state, authSession.username) {
@@ -284,15 +302,22 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         }
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
-    LaunchedEffect(authSession.state, authSession.username) {
-        if (authSession.state != AuthState.SIGNED_IN || !FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
+    LaunchedEffect(authSession.state, authSession.username, appLifecycleIsResumed) {
+        if (authSession.state != AuthState.SIGNED_IN ||
+            !FynxBackendClient.hasAccessToken(context) ||
+            !appLifecycleIsResumed
+        ) return@LaunchedEffect
+
+        // Poll only while the app is visible. Background polling was needlessly keeping
+        // the shared Postgres service hot and generating repeated reads while the app
+        // was not in use. A foreground refresh still happens immediately on resume.
         while (true) {
             FynxNotificationRemoteClient.loadFeed(context).onSuccess { feed ->
                 remoteUnreadCount = feed.unreadCount
                 notifications = feed.notifications
                 FynxNotificationStore.save(context, feed.notifications)
             }
-            kotlinx.coroutines.delay(15_000L)
+            delay(FYNX_NOTIFICATION_POLL_INTERVAL_MS)
         }
     }
     LaunchedEffect(authSession.state, authSession.username, profileVersion) {

@@ -14,6 +14,10 @@ push = (ROOT / "backend/notificationPush.js").read_text(encoding="utf-8")
 bootstrap = (ROOT / "backend/notificationBootstrap.js").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 runtime_script = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
+app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+poll_start = app.index("LaunchedEffect(authSession.state, authSession.username, appLifecycleIsResumed)")
+poll_end = app.index("LaunchedEffect(authSession.state, authSession.username, profileVersion)", poll_start)
+notification_poll = app[poll_start:poll_end]
 
 checks = [
     ("notification preferences load uses authenticated backend route", '"/api/notification-preferences"' in client and "FynxBackendClient.get" in client),
@@ -36,6 +40,9 @@ checks = [
     ("notification route wiring covers real message/group/social events", "queueFynxNotification" in bootstrap and 'type: "MESSAGE"' in bootstrap and "type:'GROUP'" in bootstrap and "type:'COMMENT'" in bootstrap),
     ("existing notification verification gates remain in CI", "verify_notifications_settings_integration.py" in workflow),
     ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in runtime_script and "verify_authenticated_runtime_navigation.py" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow),
+    ("notification polling pauses while the app is backgrounded", "appLifecycleIsResumed" in notification_poll and "!appLifecycleIsResumed" in notification_poll and "Lifecycle.Event.ON_PAUSE" in app and "Lifecycle.Event.ON_RESUME" in app),
+    ("notification polling runs only while the app is resumed", "Lifecycle.State.RESUMED" in app and "LaunchedEffect(authSession.state, authSession.username, appLifecycleIsResumed)" in notification_poll),
+    ("notification polling is bounded to once per minute", "FYNX_NOTIFICATION_POLL_INTERVAL_MS = 60_000L" in app and "delay(FYNX_NOTIFICATION_POLL_INTERVAL_MS)" in notification_poll and "15_000L" not in notification_poll),
     ("no fake notification records are introduced", "mockNotification" not in backend and "fakeNotification" not in backend),
 ]
 failed=[]
