@@ -292,11 +292,11 @@ if camera_journey_start < 0 or runtime_navigation.count("exercise_camera_capture
     raise SystemExit("HOME 4F RUNTIME RED: real camera capture journey is not defined and called")
 camera_journey = runtime_navigation[camera_journey_start:runtime_navigation.find("\\ndef login(", camera_journey_start)]
 for token, label in (
-    ("[\\"Take photo\\"]", "photo capture action"),
-    ("[\\"Record video note\\"]", "video capture action"),
-    ("[\\"Stop video note\\"]", "video stop/finalization action"),
-    ("[\\"Retake\\"]", "photo/video retake actions"),
-    ("[\\"Send\\"]", "preview-only evidence for the never-publish contract"),
+    ('["Take photo"]', "photo capture action"),
+    ('["Record video note"]', "video capture action"),
+    ('["Stop video note"]', "video stop/finalization action"),
+    ('["Retake"]', "photo/video retake actions"),
+    ('["Send"]', "preview-only evidence for the never-publish contract"),
     ("authenticated-camera-photo-preview.png", "photo preview screenshot"),
     ("authenticated-camera-video-preview.png", "finalized video preview screenshot"),
 ):
@@ -304,7 +304,7 @@ for token, label in (
         raise SystemExit("HOME 4F RUNTIME RED: missing " + label)
 if 'input", "tap", str(sx), str(sy)' not in camera_journey:
     raise SystemExit("HOME 4F RUNTIME RED: camera record/stop touches are missing")
-if "tap_control(video_preview, [\\"Send\\"]" in camera_journey or "tap_control(photo_preview, [\\"Send\\"]" in camera_journey:
+if 'tap_control(video_preview, ["Send"]' in camera_journey or 'tap_control(photo_preview, ["Send"]' in camera_journey:
     raise SystemExit("HOME 4F RUNTIME RED: runtime camera journey must never publish test media")
 
 print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")
