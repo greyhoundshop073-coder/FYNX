@@ -47,9 +47,9 @@ for (const [name, moduleSource, route, method] of [
   ["remove saved product", listings, "/api/marketplace/listings/:id/saved", "delete"],
   ["seller listing reactivation", listings, "/api/marketplace/listings/:id/reactivate", "post"]
 ]) {
-  const escapedRoute = route.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&");
-  const routePattern = new RegExp("app\\\\." + method + "\\\\([\\\"\\\']" + escapedRoute + "[\\\"\\\'],\\\\s*auth");
-  assert.ok(routePattern.test(moduleSource), name + " must require auth middleware");
+  const singleQuotedRoute = "app." + method + "(\x27" + route + "\x27, auth";
+  const doubleQuotedRoute = "app." + method + "(\"" + route + "\", auth";
+  assert.ok(moduleSource.includes(singleQuotedRoute) || moduleSource.includes(doubleQuotedRoute), name + " must require auth middleware");
 }
 assert.ok(shop.includes("seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE"),
   "shop identity must be keyed to the authenticated seller");
