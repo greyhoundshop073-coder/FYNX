@@ -15,17 +15,31 @@ object FynxOfflineSync {
         var completed = 0
         val items = FynxOfflineOutbox.load(context)
         for (item in items) {
-            val result = FynxProductionMessaging.sendText(
-                context = context,
-                recipientUsername = item.recipient,
-                text = item.text,
-                requestId = item.requestId,
-                replyToId = item.replyToId,
-                mediaId = item.mediaId,
-                mediaType = item.mediaType,
-                voiceDurationMs = item.voiceDurationMs,
-                allowOfflineQueue = false
-            )
+            val result = if (item.messageType == "text") {
+                FynxProductionMessaging.sendText(
+                    context = context,
+                    recipientUsername = item.recipient,
+                    text = item.text,
+                    requestId = item.requestId,
+                    replyToId = item.replyToId,
+                    mediaId = item.mediaId,
+                    mediaType = item.mediaType,
+                    voiceDurationMs = item.voiceDurationMs,
+                    allowOfflineQueue = false
+                )
+            } else {
+                FynxProductionMessaging.sendStructuredMessage(
+                    context = context,
+                    recipientUsername = item.recipient,
+                    messageType = item.messageType,
+                    payload = item.messagePayload,
+                    requestId = item.requestId,
+                    replyToId = item.replyToId,
+                    mediaId = item.mediaId,
+                    mediaType = item.mediaType,
+                    allowOfflineQueue = false
+                )
+            }
             if (result.isSuccess) {
                 val remote = result.getOrThrow()
                 val currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
