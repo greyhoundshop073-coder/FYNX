@@ -46,7 +46,9 @@ await patchOnce("groupRoutes.js", [
 await patchOnce("socialRoutes.js", [
   {
     marker: 'export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {',
-    replacement: 'import { queueFynxNotification } from "./notificationPush.js";\n\nexport function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {'
+    replacement: 'import { queueFynxNotification } from "./notificationPush.js";\n\nexport function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {',
+    already: 'import { queueFynxNotification, notifyCommentMentions } from "./notificationPush.js";',
+    required: true
   },
   {
     marker: "      return res.status(201).json({ request: result.rows[0] });",

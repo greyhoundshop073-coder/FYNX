@@ -42,4 +42,13 @@ assert.ok(reactionBootstrapSource.includes("r.reaction_type AS reaction"), "reac
 assert.ok(reactionBootstrapSource.includes("where.push('r.reaction_type=$2')"), "reaction-users filter must use the schema's reaction_type column");
 assert.equal(reactionBootstrapSource.includes("r.reaction=$2"), false, "reaction-users query must not reference a nonexistent reaction column");
 
-console.log("Notification bootstrap idempotency and reaction route contracts: PASS");
+
+const socialImportMarker = 'export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {';
+const existingNotificationImport = 'import { queueFynxNotification, notifyCommentMentions } from "./notificationPush.js";';
+const socialImportPatch = { marker: socialImportMarker, replacement: 'import { queueFynxNotification } from "./notificationPush.js";\n\n' + socialImportMarker, already: existingNotificationImport, required: true };
+const existingSocialModule = existingNotificationImport + "\n\n" + socialImportMarker + "\n";
+assert.equal(applyNotificationBootstrapPatch(existingSocialModule, socialImportPatch, "socialRoutes.js"), existingSocialModule, "bootstrap must preserve an existing notificationPush import instead of duplicating queueFynxNotification");
+const notificationBootstrapSource = await readFile(new URL("./notificationBootstrap.js", import.meta.url), "utf8");
+assert.ok(notificationBootstrapSource.includes("already: 'import { queueFynxNotification, notifyCommentMentions } from"), "social-route bootstrap must declare the existing import marker");
+
+console.log("Notification bootstrap idempotency, reaction route, and existing-import contracts: PASS");
