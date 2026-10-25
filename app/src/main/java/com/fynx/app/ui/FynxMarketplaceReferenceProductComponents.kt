@@ -129,7 +129,13 @@ internal fun MarketplaceReferenceProductCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FynxRemoteProfileAvatar(sellerPhotoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(24.dp).clip(CircleShape), ownerUsername = listing.sellerUsername)
                     Spacer(Modifier.width(6.dp))
-                    Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, modifier = Modifier.weight(1f), color = FynxMarketplaceReferenceStyle.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        val sellerLabel = listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }
+                        Text(listing.storeName.ifBlank { sellerLabel }, color = FynxMarketplaceReferenceStyle.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
+                        if (listing.storeName.isNotBlank() && !listing.storeName.equals(sellerLabel, ignoreCase = true)) {
+                            Text("by " + sellerLabel, color = FynxMarketplaceReferenceStyle.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+                        }
+                    }
                     sellerRating?.takeIf { it.reviewCount > 0 }?.let {
                         Icon(Icons.Default.Star, null, Modifier.size(14.dp), tint = androidx.compose.material3.MaterialTheme.colorScheme.tertiary)
                         Spacer(Modifier.width(2.dp))
