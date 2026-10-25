@@ -276,7 +276,7 @@ object FynxProductionMessaging {
             return Result.failure(IllegalArgumentException("You cannot send a message to your own account."))
         }
         val normalizedPayload = if (messageType == "poll") {
-            payload.mapValues { (key, value) -> if (key == "options") value.replace("\\\\u001F", "\\u001F") else value }
+            payload.mapValues { (key, value) -> if (key == "options") value.replace("\\u001F", "\u001F") else value }
         } else payload
         val body = JSONObject().apply {
             put("recipientUsername", normalizedRecipient)
