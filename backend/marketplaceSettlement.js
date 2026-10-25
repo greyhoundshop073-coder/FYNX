@@ -277,7 +277,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           sellerNetAmount: Number(row.seller_net_amount || 0),
           marketplaceFee: Number(row.marketplace_fee || 0),
           funds: String(row.funds || 'UNKNOWN'),
-          payoutStatus: row.payout_status ? String(row.payout_status) : null,
+          payoutStatus: String(row.payout_status || row.funds || 'UNKNOWN'),
           updatedAt: row.updated_at
         }))
       });
