@@ -289,12 +289,11 @@ fun FynxCameraCapturePanel(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    // Bound the editor controls on short screens and let them scroll.
+                    // Editing tools stay above a dedicated bottom action dock.
+                    .padding(bottom = 104.dp)
                     .fillMaxHeight(0.62f)
                     .verticalScroll(rememberScrollState())
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-                    .imePadding()
-                    .padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 12.dp)
+                    .padding(start = 18.dp, end = 18.dp, top = 8.dp)
             ){
                 recordingNotice?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp)) }
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}
@@ -316,7 +315,20 @@ fun FynxCameraCapturePanel(
                         }
                     }
                     OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}}
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing)retake()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing)rotatePhoto()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing)onCaptured(previewUri,previewType)},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
+            }
+            Row(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .imePadding()
+                    .padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(onClick = { if (!enhancing) retake() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Retake") }
+                if (previewType == "image") OutlinedButton(onClick = { if (!enhancing) rotatePhoto() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.RotateRight, null); Spacer(Modifier.width(4.dp)); Text("Rotate") }
+                Button(onClick = { if (!enhancing) onCaptured(previewUri, previewType) }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(4.dp)); Text("Send") }
             }
         };return
     }
