@@ -18,7 +18,11 @@ checks = [
     ("feed cache is not shared through HTTP", "Cache-Control', 'private, no-store'" in routes),
     ("matching feed index exists", "social_posts_created_id_idx" in routes),
 ]
-for name, ok in checks:
-    if not ok:
+checks.extend([
+    ("failed next-page requests stop automatic re-fetch loops", "var paginationError by remember" in home and "paginationError == null" in home and "paginationError != null && !retry" in home),
+    ("next-page retry keeps the existing continuation cursor", "fun loadMore(retry: Boolean = false)" in home and "beforeCursor = feedNextCursor" in home),
+    ("Home presents a dedicated cursor-preserving pagination retry", 'item(key = "feed_pagination_error")' in home and 'loadMore(retry = true)' in home and 'Text("Retry loading posts")' in home),
+])
+for name, ok in checks:    if not ok:
         raise SystemExit(f"Home feed correctness gate FAILED: {name}")
 print("Home feed correctness/pagination gate: PASS")

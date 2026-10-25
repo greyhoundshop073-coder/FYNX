@@ -75,6 +75,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var hasMore by remember { mutableStateOf(false) }
     var feedNextCursor by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var paginationError by remember { mutableStateOf<String?>(null) }
     var feedRequestInFlight by remember { mutableStateOf(false) }
     var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
@@ -331,6 +332,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                     postMedia = emptyMap()
                 }
                 error = if (posts.isEmpty()) "You're offline. Connect to a network to load your feed." else null
+                paginationError = null
                 loading = false
                 feedRequestInFlight = false
                 return@launch
@@ -339,7 +341,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             var cachedRevalidationStarted = false
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
                 .onSuccess { page ->
-                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null
+                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; paginationError = null
                     interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
                     resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
                     discoveryOffset = 0; discoveryHasMore = false
@@ -351,7 +353,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                         scope.launch {
                             try {
                                 FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
-                                    .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
+                                    .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; paginationError = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
                                     .onFailure { /* Keep the valid cached snapshot visible. */ }
                             } finally {
                                 feedRequestInFlight = false
@@ -378,10 +380,37 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         onInitialPostConsumed()
     }
 
-    fun loadMore() {
-        if (loading || loadingMore || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
+    fun loadMore(retry: Boolean = false) {
+        // Stop automatic pagination after a failed page. The error card below offers
+        // an explicit retry using the same continuation cursor instead of reloading page 1.
+        if (loading || loadingMore || !hasMore || feedRequestInFlight || (paginationError != null && !retry)) return
+        if (retry) paginationError = null
         feedRequestInFlight = true
-        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
+        scope.launch {
+            loadingMore = true
+            try {
+                FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor)
+                    .onSuccess { page ->
+                        val existing = posts.map { it.id }.toSet()
+                        val additions = page.posts.filterNot { it.id in existing }
+                        posts = posts + additions
+                        hasMore = page.hasMore
+                        feedNextCursor = page.nextCursor
+                        paginationError = null
+                        error = null
+                        resolveAuthorPhotos(additions)
+                        hydrateInteractionStates(additions)
+                        hydrateReactionStates(additions)
+                        hydratePostMedia(additions)
+                        if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset)
+                    }.onFailure { failure ->
+                        paginationError = failure.message ?: "Unable to load more posts."
+                    }
+            } finally {
+                loadingMore = false
+                feedRequestInFlight = false
+            }
+        }
     }
     fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, count: (FynxRemoteSocialClient.SocialInteractionState) -> Int, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
@@ -436,10 +465,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
-    LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
+    LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight, paginationError) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
             .collect { (lastVisibleIndex, totalItems) ->
-                if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight) {
+                if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight && paginationError == null) {
                     if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)
                 }
             }
@@ -532,6 +561,16 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                             onLoadMore = { loadDiscoveryVideos() },
                             onOpenVideo = { index -> openHomeDiscoveryViewer(index) }
                         )
+                    }
+                }
+            }
+        }
+        paginationError?.let { message ->
+            item(key = "feed_pagination_error") {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                        TextButton(onClick = { loadMore(retry = true) }, enabled = !loadingMore && !feedRequestInFlight) { Text("Retry loading posts") }
                     }
                 }
             }
