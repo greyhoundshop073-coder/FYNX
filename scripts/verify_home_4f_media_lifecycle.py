@@ -269,4 +269,20 @@ for token, label in (
     if token not in full_player:
         raise SystemExit("HOME 4F MEDIA RED: missing " + label)
 
+
+# The Android accessibility tree may expose a button label on a non-clickable Text
+# child while Compose puts clickability/enabled state on its ancestor View. The runtime
+# selector must promote the label to that ancestor, otherwise the real voice-post flow
+# falsely fails even though the enabled Use recording action is visible.
+selector_start = runtime_navigation.index("def find_enabled_control(")
+selector_end = runtime_navigation.index("\\ndef exercise_voice_post_preview", selector_start)
+selector = runtime_navigation[selector_start:selector_end]
+for token, label in (
+    ("parents={id(child): parent", "accessibility parent mapping"),
+    ("current=parents.get(id(current))", "label-to-click-target ancestor traversal"),
+    ('target.attrib.get("enabled","true").lower()=="false"', "enabled-state check on the actual click target"),
+):
+    if token not in selector:
+        raise SystemExit("HOME 4F RUNTIME SELECTOR RED: missing " + label)
+
 print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")

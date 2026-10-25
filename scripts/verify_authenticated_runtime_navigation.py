@@ -233,22 +233,41 @@ def capture_home_feed_evidence(xml_text: str) -> str:
 
 
 def find_enabled_control(xml_text:str, labels:list[str]):
-    """Find a visible, enabled control by its actual UI hierarchy state."""
+    """Find a labeled control through its real clickable, enabled Compose ancestor."""
+    if not xml_text:
+        return None
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
     wanted=[label.casefold() for label in labels]
-    for node in nodes(xml_text):
+    parents={id(child): parent for parent in root.iter("node") for child in list(parent)}
+    for node in root.iter("node"):
         if node.attrib.get("visible-to-user","true").lower()=="false":
-            continue
-        if node.attrib.get("enabled","true").lower()=="false":
-            continue
-        if node.attrib.get("clickable","false").lower()!="true":
             continue
         hay=" | ".join(((node.attrib.get("text") or "").strip().casefold(),
                         (node.attrib.get("content-desc") or "").strip().casefold()))
         if not any(label in hay for label in wanted):
             continue
-        center=_center(node)
+        # Compose commonly puts the human-readable Text in a non-clickable child,
+        # while the parent View owns enabled/clickable semantics. Resolve that
+        # ancestor rather than incorrectly concluding the action is unavailable.
+        target=node
+        current=node
+        while current is not None:
+            if (current.attrib.get("clickable","false").lower()=="true"
+                    and _center(current)):
+                target=current
+                break
+            current=parents.get(id(current))
+        if (target.attrib.get("visible-to-user","true").lower()=="false"
+                or target.attrib.get("enabled","true").lower()=="false"
+                or target.attrib.get("clickable","false").lower()!="true"):
+            continue
+        center=_center(target)
         if center:
-            return (node.attrib.get("text") or node.attrib.get("content-desc") or labels[0],center[0],center[1])
+            return (node.attrib.get("text") or node.attrib.get("content-desc") or labels[0],
+                    center[0],center[1])
     return None
 
 
