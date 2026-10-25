@@ -1578,7 +1578,7 @@ if not FAILURES:
                 if real_chat_target:
                     restore_home_after_restart("private-chat-real-target-home")
                     clear_runtime_log()
-                    started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+real_chat_target,PACKAGE,timeout=30)
+                    started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+real_chat_target,timeout=30)
                     time.sleep(.5)
                     conversation_after=wait_for_conversation_ui("private-chat-inside.xml")
                     alive, crashlog = capture_runtime_log("private-chat-process.log")
@@ -1587,7 +1587,7 @@ if not FAILURES:
                         conversation_after=""
                     elif not (find_control(conversation_after,["Message composer","Edit message composer","Chat message composer area"])
                               or find_control(conversation_after,["No messages here yet"])):
-                        FAILURES.append("real private-chat deep link did not enter ConversationPanel")
+                        FAILURES.append("real private-chat deep link did not enter ConversationPanel; intent dispatch: "+((started.stdout or "").strip().replace("\n"," | ") or "no ActivityManager output")+"; visible markers: "+visible_marker_summary(conversation_after))
                         conversation_after=""
                     else:
                         screenshot("private-chat-inside.png")
