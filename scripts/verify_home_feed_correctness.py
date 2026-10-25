@@ -4,6 +4,9 @@ from pathlib import Path
 client = Path("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()
 home = Path("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text()
 routes = Path("backend/socialRoutes.js").read_text()
+reload_start = home.index("fun reload(forceRefresh: Boolean = false)")
+reload_end = home.index("\\n    LaunchedEffect(publishRefreshKey)", reload_start)
+reload = home[reload_start:reload_end]
 
 checks = [
     ("feed page exposes a continuation cursor", "val nextCursor: String? = null" in client),
