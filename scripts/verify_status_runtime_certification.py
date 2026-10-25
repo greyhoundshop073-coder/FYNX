@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 runtime = (ROOT / "scripts/verify_authenticated_status_lifecycle.py").read_text(encoding="utf-8")
+runtime_script = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
 network_test = (ROOT / "app/src/androidTest/java/com/fynx/app/FynxNetworkRecoveryContractTest.kt").read_text(encoding="utf-8")
 
