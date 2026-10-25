@@ -20,7 +20,9 @@ object FynxOfflineOutbox {
         val mediaId: String?,
         val mediaType: String?,
         val voiceDurationMs: Long,
-        val createdAt: Long
+        val createdAt: Long,
+        val messageType: String = "text",
+        val messagePayload: Map<String, String> = emptyMap()
     )
 
     private fun preferencesName(context: Context): String? {
@@ -55,7 +57,28 @@ object FynxOfflineOutbox {
             buildList {
                 for (i in 0 until array.length()) {
                     val o = array.getJSONObject(i)
-                    add(Item(o.getString("id"), o.optString("requestId").takeIf { it.isNotBlank() && it != "null" } ?: UUID.nameUUIDFromBytes(o.getString("id").toByteArray(Charsets.UTF_8)).toString(), o.getString("recipient"), o.optString("text"), o.optString("replyToId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optLong("voiceDurationMs"), o.optLong("createdAt")))
+                    add(Item(
+                        id = o.getString("id"),
+                        requestId = o.optString("requestId").takeIf { it.isNotBlank() && it != "null" }
+                            ?: UUID.nameUUIDFromBytes(o.getString("id").toByteArray(Charsets.UTF_8)).toString(),
+                        recipient = o.getString("recipient"),
+                        text = o.optString("text"),
+                        replyToId = o.optString("replyToId").takeIf { it.isNotBlank() && it != "null" },
+                        mediaId = o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" },
+                        mediaType = o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" },
+                        voiceDurationMs = o.optLong("voiceDurationMs"),
+                        createdAt = o.optLong("createdAt"),
+                        messageType = o.optString("messageType").takeIf { it.isNotBlank() && it != "null" } ?: "text",
+                        messagePayload = o.optJSONObject("messagePayload")?.let { payload ->
+                            buildMap {
+                                val keys = payload.keys()
+                                while (keys.hasNext()) {
+                                    val key = keys.next()
+                                    put(key, payload.optString(key))
+                                }
+                            }
+                        } ?: emptyMap()
+                    ))
                 }
             }
         }.getOrDefault(emptyList())
@@ -68,6 +91,7 @@ object FynxOfflineOutbox {
                 put("id", item.id); put("requestId", item.requestId); put("recipient", item.recipient); put("text", item.text)
                 put("replyToId", item.replyToId ?: JSONObject.NULL); put("mediaId", item.mediaId ?: JSONObject.NULL)
                 put("mediaType", item.mediaType ?: JSONObject.NULL); put("voiceDurationMs", item.voiceDurationMs); put("createdAt", item.createdAt)
+                put("messageType", item.messageType); put("messagePayload", JSONObject(item.messagePayload))
             })
         }
         context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
