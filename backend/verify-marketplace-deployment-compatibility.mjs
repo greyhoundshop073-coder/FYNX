@@ -47,7 +47,7 @@ for (const [name, moduleSource, route, method] of [
   ["remove saved product", listings, "/api/marketplace/listings/:id/saved", "delete"],
   ["seller listing reactivation", listings, "/api/marketplace/listings/:id/reactivate", "post"]
 ]) {
-  assert.ok(moduleSource.includes(\`app.\${method}("\${route}", auth\`), \`\${name} must require auth middleware\`);
+  assert.ok(moduleSource.includes("app." + method + "(\"" + route + "\", auth"), name + " must require auth middleware");
 }
 assert.ok(shop.includes("seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE"),
   "shop identity must be keyed to the authenticated seller");
@@ -84,7 +84,7 @@ for (const path of [
   "/api/marketplace/listings/:id/reactivate",
   "/api/marketplace/my-shop",
   "/api/marketplace/shops/:username"
-]) assert.ok(!social.includes(path), \`new runtime route \${path} must not duplicate a route in the existing social module\`);
+]) assert.ok(!social.includes(path), "new runtime route " + path + " must not duplicate a route in the existing social module");
 
 const registered = [];
 const app = {
@@ -108,7 +108,7 @@ for (const expected of [
   ["post", "/api/marketplace/listings/:id/reactivate"]
 ]) {
   const route = registered.find((candidate) => candidate.method === expected[0] && candidate.path === expected[1]);
-  assert.ok(route, \`registration missing \${expected[0].toUpperCase()} \${expected[1]}\`);
-  assert.equal(route.handlers[0], auth, \`\${expected[1]} must start with auth middleware\`);
+  assert.ok(route, "registration missing " + expected[0].toUpperCase() + " " + expected[1]);
+  assert.equal(route.handlers[0], auth, expected[1] + " must start with auth middleware");
 }
-console.log(\`Railway Marketplace deploy compatibility passed: \${registered.length} authenticated route registrations plus provenance\`);
+console.log("Railway Marketplace deploy compatibility passed: " + registered.length + " authenticated route registrations plus provenance");
