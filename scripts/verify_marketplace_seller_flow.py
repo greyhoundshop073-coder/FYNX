@@ -143,6 +143,11 @@ checks.extend([
     ("public seller storefront distinguishes a successful empty catalogue from a failed request", "else if (storefrontLoading)" in storefront and "else if (storefrontError != null)" in storefront and "else if (sellerListings.isEmpty())" in storefront),
 ])
 
+checks.extend([
+    ("seller earnings endpoint computes currency totals without applying the 100-row history cap to the aggregate", "FROM seller_settlements" in settlement_routes and "GROUP BY currency" in settlement_routes and "AS available_for_payout" in settlement_routes and "LIMIT 100" in settlement_routes),
+    ("My Shop reads authoritative seller totals and warns when the backend only has a limited summary", "moneyTotalsFromBackend" in seller_center and "totalsArray" in seller_center and "This backend only provides the latest 100 settlements. Totals below may not include older orders." in seller_center and "Recent earnings history (latest 100; showing 20)" in seller_center),
+])
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
