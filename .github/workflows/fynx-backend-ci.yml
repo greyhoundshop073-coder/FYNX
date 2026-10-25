@@ -103,6 +103,8 @@ jobs:
           node --check verify-stage15h-admin.mjs
           node --check verify-stage15d-advanced.mjs
           node --check verify-stage15d-jobs.mjs
+      - name: Verify Home post-reaction bootstrap builds valid scoped SQL routes
+        run: node verify-social-post-reaction-bootstrap.mjs
       - name: Verify notification bootstrap is idempotent across retries
         run: node verify-notification-bootstrap-idempotency.mjs
       - name: Run Chat end-to-end integration gate
