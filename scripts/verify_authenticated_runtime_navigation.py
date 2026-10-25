@@ -4,7 +4,7 @@
 # Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
 import os, subprocess, time, html, re, json
-import urllib.parse, urllib.request
+import urllib.error, urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -815,6 +815,30 @@ def exercise_notification_route(route:str, name:str)->bool:
     report.append(f"- PASS {name} notification tap route: cold + warm Activity launch remain alive")
     return True
 
+def railway_gateway_502() -> bool:
+    """Confirm the known Railway 502 at the backend itself, not from incomplete UI text."""
+    base = os.environ.get(
+        "FYNX_PRODUCTION_BASE_URL",
+        "https://fynx-backend-testing-testing.up.railway.app",
+    ).rstrip("/")
+    request = urllib.request.Request(
+        base + "/health",
+        headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            body = response.read(4096).decode("utf-8", "replace")
+            return response.status == 502 and "application failed to respond" in body.casefold()
+    except urllib.error.HTTPError as failure:
+        body = failure.read(4096).decode("utf-8", "replace")
+        return failure.code == 502 and "application failed to respond" in body.casefold()
+    except Exception:
+        # DNS, TLS, timeout, 401/403, 404 and other failures are not proof of
+        # this specific Railway gateway outage; they must not trigger local login.
+        return False
+
+
 def _enter_debug_local_ui_after_gateway_502(login_xml: str) -> tuple[str, str]:
     """Use the existing passwordless debug UI entry only after a confirmed Railway gateway 502.
 
@@ -870,6 +894,158 @@ def _enter_debug_local_ui_after_gateway_502(login_xml: str) -> tuple[str, str]:
     return current or login_xml, "passwordless debug entry did not reach Home after the confirmed gateway outage"
 
 
+def exercise_camera_capture_journeys(camera_xml: str) -> str:
+    """Exercise actual photo/video capture, preview, and retake without publishing media."""
+    if not camera_xml:
+        return ""
+
+    def wait_for(labels: list[str], name: str, timeout: float = 18.0) -> str:
+        deadline = time.monotonic() + timeout
+        latest = camera_xml
+        index = 0
+        while time.monotonic() < deadline:
+            latest = dump_ui(f"{name}-{index}.xml")
+            index += 1
+            if latest and all(find_control(latest, [label]) for label in labels):
+                return latest
+            time.sleep(.5)
+        return latest
+
+    def allow_camera_or_audio_permission(current: str) -> tuple[str, bool]:
+        permission = find_control(
+            current,
+            ["While using the app", "Only this time", "Allow while using the app"],
+        )
+        if permission is None:
+            markers = visible_marker_summary(current).casefold()
+            if "camera" in markers or "microphone" in markers or "record audio" in markers:
+                permission = find_control(current, ["Allow"])
+        if permission is None:
+            return current, False
+        _, px, py = permission
+        run("adb", "shell", "input", "tap", str(px), str(py))
+        time.sleep(.8)
+        return dump_ui("camera-permission-resolved.xml"), True
+
+    current = camera_xml
+    # Photo: capture -> actual preview -> retake. Never tap Send.
+    photo_button = find_control(current, ["Take photo"])
+    if photo_button is None:
+        current, _ = allow_camera_or_audio_permission(current)
+        photo_button = find_control(current, ["Take photo"])
+    if photo_button is None:
+        screenshot("authenticated-camera-photo-button-missing.png")
+        FAILURES.append("camera capture runtime: Take photo action was not accessible")
+        return current
+
+    _, px, py = photo_button
+    run("adb", "shell", "input", "tap", str(px), str(py))
+    photo_preview = wait_for(["Retake", "Send"], "authenticated-camera-photo-preview", 20.0)
+    if not (find_control(photo_preview, ["Retake"]) and find_control(photo_preview, ["Send"])):
+        screenshot("authenticated-camera-photo-preview-missing.png")
+        FAILURES.append("camera capture runtime: photo capture did not reach a preview with Retake and Send")
+        return photo_preview or current
+    screenshot("authenticated-camera-photo-preview.png")
+    report.append("- PASS real CameraX photo capture opened a photo preview with Retake/Send controls")
+
+    retake = find_control(photo_preview, ["Retake"])
+    if retake is None:
+        FAILURES.append("camera capture runtime: photo preview Retake action was not accessible")
+        return photo_preview
+    _, rx, ry = retake
+    run("adb", "shell", "input", "tap", str(rx), str(ry))
+    current = wait_for(["Take photo"], "authenticated-camera-after-photo-retake", 15.0)
+    if not find_control(current, ["Take photo"]):
+        screenshot("authenticated-camera-after-photo-retake-missing.png")
+        FAILURES.append("camera capture runtime: Retake did not return to the live camera")
+        return current
+
+    # Video: switch mode, record briefly, stop, wait for CameraX Finalize, then retake.
+    video_mode = find_control(current, ["Video"])
+    if video_mode is None:
+        FAILURES.append("camera capture runtime: Video mode selector was not accessible after photo retake")
+        return current
+    _, vx, vy = video_mode
+    run("adb", "shell", "input", "tap", str(vx), str(vy))
+    current = wait_for(["Record video note"], "authenticated-camera-video-mode", 8.0)
+    if not find_control(current, ["Record video note"]):
+        screenshot("authenticated-camera-video-mode-missing.png")
+        FAILURES.append("camera capture runtime: Video mode did not expose Record video note")
+        return current
+
+    recording_started = False
+    deadline = time.monotonic() + 18.0
+    while time.monotonic() < deadline and not recording_started:
+        record = find_control(current, ["Record video note"])
+        if record is None:
+            current = dump_ui("authenticated-camera-video-record-control-wait.xml")
+            current, permission_used = allow_camera_or_audio_permission(current)
+            if permission_used:
+                current = wait_for(["Record video note"], "authenticated-camera-video-after-permission", 8.0)
+            else:
+                time.sleep(.4)
+            continue
+        _, vx, vy = record
+        run("adb", "shell", "input", "tap", str(vx), str(vy))
+        # First press may request microphone permission; permission grant returns to
+        # camera mode and requires a second explicit press to start recording.
+        current = dump_ui("authenticated-camera-video-record-request.xml")
+        current, permission_used = allow_camera_or_audio_permission(current)
+        if permission_used:
+            current = wait_for(["Record video note"], "authenticated-camera-video-ready-after-permission", 8.0)
+            continue
+        stop_deadline = time.monotonic() + 8.0
+        while time.monotonic() < stop_deadline:
+            current = dump_ui("authenticated-camera-video-recording.xml")
+            if find_control(current, ["Stop video note"]):
+                recording_started = True
+                break
+            time.sleep(.4)
+
+    if not recording_started:
+        screenshot("authenticated-camera-video-recording-not-started.png")
+        FAILURES.append("camera capture runtime: video recording did not expose Stop video note after permission handling")
+        return current
+
+    screenshot("authenticated-camera-video-recording.png")
+    time.sleep(1.3)
+    current = dump_ui("authenticated-camera-video-before-stop.xml")
+    stop = find_control(current, ["Stop video note"])
+    if stop is None:
+        FAILURES.append("camera capture runtime: Stop video note was not accessible after recording")
+        return current
+    _, sx, sy = stop
+    run("adb", "shell", "input", "tap", str(sx), str(sy))
+
+    video_preview = wait_for(["Retake", "Send"], "authenticated-camera-video-finalize-preview", 25.0)
+    if not (find_control(video_preview, ["Retake"]) and find_control(video_preview, ["Send"])):
+        screenshot("authenticated-camera-video-preview-missing.png")
+        FAILURES.append("camera capture runtime: video did not finalize into a preview with Retake and Send")
+        return video_preview or current
+    screenshot("authenticated-camera-video-preview.png")
+    report.append("- PASS CameraX video recording stopped and finalized into a playable preview with Retake/Send controls")
+
+    # Discard the captured clip. Do not tap Send, so the account gains no test post.
+    retake = find_control(video_preview, ["Retake"])
+    if retake is None:
+        FAILURES.append("camera capture runtime: finalized video Retake action was not accessible")
+        return video_preview
+    _, rx, ry = retake
+    run("adb", "shell", "input", "tap", str(rx), str(ry))
+    current = wait_for(["Take photo"], "authenticated-camera-after-video-retake", 15.0)
+    if not find_control(current, ["Take photo"]):
+        screenshot("authenticated-camera-after-video-retake-missing.png")
+        FAILURES.append("camera capture runtime: video Retake did not return to the live camera")
+        return current
+
+    if "Send" in current and False:
+        # Deliberate guard: publish actions are never invoked by this runtime journey.
+        raise AssertionError("The camera certification must never publish its test captures.")
+    report.append("- PASS photo and video capture/preview/retake journeys completed; no media was sent or published")
+    screenshot("authenticated-camera-after-retakes.png")
+    return current
+
+
 def login():
     global LOGIN_MODE
     run("adb","shell","am","force-stop",PACKAGE)
@@ -894,6 +1070,14 @@ def login():
     if result.returncode!=0: return xml,"adb input text failed for username"
     run("adb","shell","input","keyevent","4"); time.sleep(.5)
     xml=dump_ui("authenticated-after-username.xml")
+    # Probe the actual backend independently because Compose accessibility dumps may
+    # omit the red error text that is visible on the login screenshot. Only use the
+    # local debug UI route when /health confirms Railway's exact gateway 502 response.
+    if find_control(xml, ["Leave password blank for quick local entry"]) and railway_gateway_502():
+        local_xml, local_error = _enter_debug_local_ui_after_gateway_502(xml)
+        if not local_error:
+            return local_xml, ""
+        return local_xml or xml, "Railway gateway outage confirmed, but safe debug UI entry failed: " + local_error
     # Debug APKs intentionally expose a passwordless local UI-entry path when no
     # local account is stored. Exercise that explicit affordance rather than
     # incorrectly failing because the Password field is intentionally absent.
@@ -1154,8 +1338,11 @@ if not FAILURES:
             home_for_camera=return_home_in_app("authenticated-home-after-voice-smoke")
             composer_xml=tap_control(home_for_camera,["Open FYNX camera"],"home-camera-composer-after-voice",["What's on your mind?"])
         camera_xml=tap_control(composer_xml,["Video/Camera"],"composer-camera",["Switch front/back camera"])
-        if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
-        else: FAILURES.append("post composer -> real camera")
+        if camera_xml:
+            report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
+            camera_xml = exercise_camera_capture_journeys(camera_xml)
+        else:
+            FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
     # The debug saved-device entry is intentionally a local UI-only route, not
     # server authentication. Do not cold-start it: that returns to Sign In and

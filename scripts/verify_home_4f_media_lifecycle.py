@@ -285,4 +285,26 @@ for token, label in (
     if token not in selector:
         raise SystemExit("HOME 4F RUNTIME SELECTOR RED: missing " + label)
 
+# Runtime certification must actually exercise photo and video capture/retake,
+# not merely open the camera preview. Captures are discarded and never published.
+camera_journey_start = runtime_navigation.find("def exercise_camera_capture_journeys(")
+if camera_journey_start < 0 or runtime_navigation.count("exercise_camera_capture_journeys(") < 2:
+    raise SystemExit("HOME 4F RUNTIME RED: real camera capture journey is not defined and called")
+camera_journey = runtime_navigation[camera_journey_start:runtime_navigation.find("\\ndef login(", camera_journey_start)]
+for token, label in (
+    ("[\\"Take photo\\"]", "photo capture action"),
+    ("[\\"Record video note\\"]", "video capture action"),
+    ("[\\"Stop video note\\"]", "video stop/finalization action"),
+    ("[\\"Retake\\"]", "photo/video retake actions"),
+    ("[\\"Send\\"]", "preview-only evidence for the never-publish contract"),
+    ("authenticated-camera-photo-preview.png", "photo preview screenshot"),
+    ("authenticated-camera-video-preview.png", "finalized video preview screenshot"),
+):
+    if token not in camera_journey:
+        raise SystemExit("HOME 4F RUNTIME RED: missing " + label)
+if 'input", "tap", str(sx), str(sy)' not in camera_journey:
+    raise SystemExit("HOME 4F RUNTIME RED: camera record/stop touches are missing")
+if "tap_control(video_preview, [\\"Send\\"]" in camera_journey or "tap_control(photo_preview, [\\"Send\\"]" in camera_journey:
+    raise SystemExit("HOME 4F RUNTIME RED: runtime camera journey must never publish test media")
+
 print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")
