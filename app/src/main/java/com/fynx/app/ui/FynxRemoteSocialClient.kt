@@ -163,7 +163,7 @@ object FynxRemoteSocialClient {
         val mediaIds = mediaUris.distinct().take(12).map { u -> val mime = mediaMimeType(context, u); require(mime.startsWith("image/") || mime.startsWith("video/")) { "Marketplace media must be an image or video." }; FynxProductionMessaging.uploadMedia(context, u, mime).getOrThrow().id }
         val raw = FynxBackendClient.postJson(context, "/api/marketplace/listings", JSONObject().apply { put("title", title.trim()); put("description", description.trim()); put("storeName", storeName.trim()); put("price", price); put("currency", currency.trim().uppercase()); put("category", category.trim()); put("condition", condition.trim().uppercase()); put("quantity", quantity); put("location", location.trim()); put("deliveryAvailable", deliveryAvailable); put("pickupAvailable", pickupAvailable); put("deliveryFee", deliveryFee ?: JSONObject.NULL); put("mediaIds", JSONArray(mediaIds)) }.toString()).getOrThrow()
         val id = JSONObject(raw).getJSONObject("listing").optString("id")
-        // General discovery deliberately excludes the signed-in seller's own products.
+        // Confirm the new row through the authenticated seller inventory, not a discovery-feed assumption.
         // Read the seller inventory endpoint after creation so a successful publish
         // can be confirmed from the same account instead of always returning null.
         myListings(context).getOrThrow().firstOrNull { it.id == id }
