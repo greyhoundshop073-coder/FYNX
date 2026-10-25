@@ -275,7 +275,7 @@ for token, label in (
 # selector must promote the label to that ancestor, otherwise the real voice-post flow
 # falsely fails even though the enabled Use recording action is visible.
 selector_start = runtime_navigation.index("def find_enabled_control(")
-selector_end = runtime_navigation.index("\\ndef exercise_voice_post_preview", selector_start)
+selector_end = runtime_navigation.index("\ndef exercise_voice_post_preview", selector_start)
 selector = runtime_navigation[selector_start:selector_end]
 for token, label in (
     ("parents={id(child): parent", "accessibility parent mapping"),
