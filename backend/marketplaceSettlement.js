@@ -287,13 +287,24 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           ) payout ON TRUE
           WHERE o.seller_id = $1
         )
+        , classified_settlements AS (
+          SELECT *,
+            CASE
+              WHEN funds IN ('HELD', 'DISPUTED', 'REFUND_PENDING') THEN 'protected'
+              WHEN funds = 'RELEASED' OR payout_status = 'SUCCEEDED' THEN 'paid'
+              WHEN funds = 'RELEASE_PENDING' OR payout_status = 'PENDING' THEN 'pending'
+              WHEN funds = 'RELEASE_ELIGIBLE' THEN 'available'
+              ELSE 'unclassified'
+            END AS summary_bucket
+          FROM seller_settlements
+        )
         SELECT
           currency,
-          COALESCE(SUM(CASE WHEN funds IN ('HELD', 'DISPUTED', 'REFUND_PENDING') THEN seller_net_amount ELSE 0 END), 0) AS protected_funds,
-          COALESCE(SUM(CASE WHEN funds = 'RELEASE_ELIGIBLE' THEN seller_net_amount ELSE 0 END), 0) AS available_for_payout,
-          COALESCE(SUM(CASE WHEN funds = 'RELEASE_PENDING' OR payout_status = 'PENDING' THEN seller_net_amount ELSE 0 END), 0) AS payout_pending,
-          COALESCE(SUM(CASE WHEN funds = 'RELEASED' OR payout_status = 'SUCCEEDED' THEN seller_net_amount ELSE 0 END), 0) AS paid_out
-        FROM seller_settlements
+          COALESCE(SUM(CASE WHEN summary_bucket = 'protected' THEN seller_net_amount ELSE 0 END), 0) AS protected_funds,
+          COALESCE(SUM(CASE WHEN summary_bucket = 'available' THEN seller_net_amount ELSE 0 END), 0) AS available_for_payout,
+          COALESCE(SUM(CASE WHEN summary_bucket = 'pending' THEN seller_net_amount ELSE 0 END), 0) AS payout_pending,
+          COALESCE(SUM(CASE WHEN summary_bucket = 'paid' THEN seller_net_amount ELSE 0 END), 0) AS paid_out
+        FROM classified_settlements
         GROUP BY currency
         ORDER BY currency
       `, [req.user.sub]);
