@@ -64,6 +64,154 @@ def wait_for_home_feed_settled(timeout:float=30.0)->tuple[str,bool]:
         time.sleep(.5)
     return latest,False
 
+def _node_bounds(node):
+    """Parse an Android UIAutomator bounds attribute as (left, top, right, bottom)."""
+    match = re.fullmatch(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", node.attrib.get("bounds", ""))
+    return tuple(map(int, match.groups())) if match else None
+
+
+def _home_surface_ready(xml_text: str) -> bool:
+    """Recognize the actual Home surface rather than any screen with a Home tab."""
+    return bool(
+        xml_text
+        and find_control(xml_text, ["Open FYNX camera"])
+        and find_control(xml_text, ["Chat"])
+        and find_control(xml_text, ["Friends"])
+    )
+
+
+def _feed_viewport(xml_text: str):
+    """Return the largest visible vertical scroll viewport from a real UI hierarchy."""
+    candidates = []
+    for node in nodes(xml_text):
+        bounds = _node_bounds(node)
+        if not bounds or node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        left, top, right, bottom = bounds
+        width, height = right - left, bottom - top
+        if width > 0 and height > 0:
+            candidates.append((width * height, bounds))
+    return max(candidates, default=(0, None), key=lambda item: item[0])[1]
+
+
+def _screen_extent(xml_text: str):
+    rightmost = bottommost = 0
+    for node in nodes(xml_text):
+        bounds = _node_bounds(node)
+        if bounds:
+            rightmost = max(rightmost, bounds[2])
+            bottommost = max(bottommost, bounds[3])
+    return rightmost, bottommost
+
+
+def _visible_home_post_media(xml_text: str) -> bool:
+    """Require a real, large feed-media surface below the 'Your feed' heading."""
+    heading_bottom = max(
+        (_node_bounds(node)[3] for node in nodes(xml_text)
+         if (node.attrib.get("text") or "").strip().casefold() == "your feed"
+         and _node_bounds(node)),
+        default=None,
+    )
+    viewport = _feed_viewport(xml_text)
+    screen_width, _ = _screen_extent(xml_text)
+    if heading_bottom is None or not viewport or screen_width <= 0:
+        return False
+    _, viewport_top, _, viewport_bottom = viewport
+    for node in nodes(xml_text):
+        bounds = _node_bounds(node)
+        if not bounds:
+            continue
+        left, top, right, bottom = bounds
+        width, height = right - left, bottom - top
+        if (
+            node.attrib.get("class") == "android.view.View"
+            and node.attrib.get("clickable", "false").lower() == "true"
+            and width >= screen_width * 0.70
+            and height >= 220
+            and top >= heading_bottom
+            and top < viewport_bottom
+            and bottom > viewport_top
+        ):
+            return True
+    return False
+
+
+def capture_home_feed_evidence(xml_text: str) -> str:
+    """Capture real Home media and action-row evidence, then restore Home's top position."""
+    settled_xml, settled = wait_for_home_feed_settled()
+    if settled_xml:
+        xml_text = settled_xml
+    if not settled:
+        FAILURES.append("Home feed did not leave its loading state within 30 seconds after returning from Profile")
+        return xml_text
+
+    (ROOT / "authenticated-home-after-profile.xml").write_text(xml_text, encoding="utf-8")
+    screenshot("authenticated-home-after-profile.png")
+    report.append("- PASS Home returned to its settled feed after opening Profile; captured authenticated-home-after-profile.png")
+
+    if _visible_home_post_media(xml_text):
+        report.append("- PASS real Home feed exposes a large post-media surface below 'Your feed'")
+    else:
+        FAILURES.append("Home feed settled, but the real UI hierarchy did not expose a visible post-media surface below 'Your feed'")
+
+    # Scroll the actual LazyColumn until its real accessible Like and Comment actions
+    # are in the viewport. This avoids treating an initial screenshot crop as proof
+    # that the controls are missing.
+    interaction_xml = xml_text
+    actions_visible = False
+    for attempt in range(5):
+        if find_control(interaction_xml, ["Like"]) and find_control(interaction_xml, ["Comment"]):
+            actions_visible = True
+            break
+        viewport = _feed_viewport(interaction_xml)
+        if not viewport:
+            break
+        left, top, right, bottom = viewport
+        x = (left + right) // 2
+        start_y = max(top + 80, bottom - 180)
+        end_y = min(bottom - 80, top + 260)
+        if start_y <= end_y:
+            break
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        time.sleep(0.7)
+        interaction_xml = dump_ui(f"authenticated-home-interactions-{attempt}.xml")
+
+    if actions_visible:
+        (ROOT / "authenticated-home-interactions.xml").write_text(interaction_xml, encoding="utf-8")
+        screenshot("authenticated-home-interactions.png")
+        report.append("- PASS actual Home post Like and Comment actions became accessible after feed scrolling; captured authenticated-home-interactions.png")
+    else:
+        FAILURES.append("Home feed did not expose both Like and Comment controls after five bounded real scroll gestures")
+
+    # Return the feed to the top after the interaction capture so subsequent header
+    # and camera tests run from Home's normal visible position.
+    top_xml = interaction_xml
+    for attempt in range(5):
+        if _home_surface_ready(top_xml):
+            return top_xml
+        viewport = _feed_viewport(top_xml)
+        if not viewport:
+            break
+        left, top, right, bottom = viewport
+        x = (left + right) // 2
+        start_y = min(bottom - 100, top + 180)
+        end_y = max(top + 100, bottom - 280)
+        if start_y >= end_y:
+            break
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        time.sleep(0.6)
+        top_xml = dump_ui(f"authenticated-home-return-to-top-{attempt}.xml")
+    if not _home_surface_ready(top_xml):
+        # Re-select the actual Home tab rather than force-stopping or resetting auth.
+        home_tab = find_control(top_xml, ["Home"])
+        if home_tab:
+            _, x, y = home_tab
+            run("adb", "shell", "input", "tap", str(x), str(y))
+            time.sleep(0.8)
+            top_xml = dump_ui("authenticated-home-return-to-top-tab.xml")
+    return top_xml or xml_text
+
+
 def clear_runtime_log():
     """Start a focused logcat window immediately before a Chat/Groups route."""
     run("adb","logcat","-c")
@@ -602,23 +750,70 @@ def dismiss_runtime_permission_prompt()->str:
     return dump_ui("authenticated-home-after-permission.xml")
 
 def restore_home_after_restart(name:str)->str:
-    """Restart Home and restore the approved debug-only local UI session when needed."""
-    run("adb","shell","am","force-stop",PACKAGE)
-    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2.5)
-    current=dismiss_runtime_permission_prompt() or dump_ui(name+"-initial.xml")
-    if find_control(current,["Sign In"]):
-        # This app intentionally keeps its debug-only saved-device UI session local.
-        # Restore it through the existing test path after process death; never alter
-        # production authentication or report a sign-in gate as a Chat/Groups failure.
-        current,error=login()
-        if error:
-            FAILURES.append(name+": could not restore Home after app restart: "+error)
+    """Return to Home through app navigation without killing the process or resetting authentication."""
+    current = dump_ui(name + "-current.xml")
+
+    for attempt in range(12):
+        if _home_surface_ready(current):
             return current
-    if find_control(current,["Sign In"]) or find_control(current,["Username"]):
-        FAILURES.append(name+": restart remained at the sign-in gate")
-        return current
+        if find_control(current, ["Sign In"]) or find_control(current, ["Username"]):
+            FAILURES.append(name + ": app navigation reached the sign-in gate; the certification will not re-login or change authentication state")
+            return current
+
+        # Prefer the live Home tab over force-stopping the process. Cold relaunches
+        # previously discarded the session and made unrelated navigation assertions
+        # fail at the login gate.
+        home_tab = find_control(current, ["Home"])
+        if home_tab:
+            _, x, y = home_tab
+            run("adb", "shell", "input", "tap", str(x), str(y))
+            time.sleep(0.7)
+            current = dump_ui(name + "-home-tab-" + str(attempt) + ".xml")
+            if _home_surface_ready(current):
+                return current
+
+            # Home may already be selected with its header collapsed by scrolling.
+            # Swipe down inside its actual scroll viewport to reveal the header.
+            for top_attempt in range(4):
+                if _home_surface_ready(current):
+                    return current
+                viewport = _feed_viewport(current)
+                if not viewport:
+                    break
+                left, top, right, bottom = viewport
+                x = (left + right) // 2
+                start_y = min(bottom - 100, top + 180)
+                end_y = max(top + 100, bottom - 280)
+                if start_y <= end_y:
+                    break
+                run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+                time.sleep(0.6)
+                current = dump_ui(name + "-scroll-home-top-" + str(top_attempt) + ".xml")
+            if _home_surface_ready(current):
+                return current
+        else:
+            # Secondary pages may hide the bottom bar. Exit them through Android's
+            # Back dispatch and keep polling the real UI hierarchy.
+            run("adb", "shell", "input", "keyevent", "4")
+            time.sleep(0.7)
+            current = dump_ui(name + "-back-" + str(attempt) + ".xml")
+            if _home_surface_ready(current):
+                return current
+            if find_control(current, ["Sign In"]) or find_control(current, ["Username"]):
+                FAILURES.append(name + ": in-app Back reached the sign-in gate; authentication was left untouched")
+                return current
+
+        # Handle only an empty transition frame. Relaunch the Home deep link once
+        # without force-stopping; never call login() from a navigation reset helper.
+        if not current and attempt >= 2:
+            run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://home", PACKAGE)
+            time.sleep(1.5)
+            current = dump_ui(name + "-home-deeplink.xml")
+
+    FAILURES.append(name + ": could not return to the authenticated Home surface through in-app navigation")
     return current
+
+
 
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
     # A failed tap must remain failed; returning the previous screen caused false GREEN results.
@@ -655,6 +850,7 @@ if not FAILURES:
     # Capture the real Settings home from the authenticated running APK.
     profile_xml=tap_control(xml,["Open FYNX profile"],"settings-open-profile",["Edit profile","Settings"])
     if profile_xml:
+        report.append("- PASS Home header avatar opened the real Profile screen; Profile controls were visible")
         settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
         if settings_xml:
             report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
@@ -675,6 +871,8 @@ if not FAILURES:
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
     if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
+    elif _home_surface_ready(xml):
+        xml = capture_home_feed_evidence(xml)
     composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
     if composer_xml:
         report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
