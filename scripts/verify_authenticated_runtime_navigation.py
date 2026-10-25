@@ -136,6 +136,26 @@ def _visible_home_post_media(xml_text: str) -> bool:
     return False
 
 
+def _feed_action_controls_visible(xml_text: str) -> bool:
+    """Require Like and Comment controls to be on-screen within the actual feed viewport."""
+    viewport = _feed_viewport(xml_text)
+    if not viewport:
+        return False
+    left, top, right, bottom = viewport
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    for label in ("Like", "Comment"):
+        node = _find_control_node(root, [label.casefold()])
+        if node is None or node.attrib.get("visible-to-user", "true").lower() == "false":
+            return False
+        center = _center(node)
+        if not center or not (left <= center[0] <= right and top <= center[1] <= bottom):
+            return False
+    return True
+
+
 def capture_home_feed_evidence(xml_text: str) -> str:
     """Capture real Home media and action-row evidence, then restore Home's top position."""
     settled_xml, settled = wait_for_home_feed_settled()
@@ -160,7 +180,7 @@ def capture_home_feed_evidence(xml_text: str) -> str:
     interaction_xml = xml_text
     actions_visible = False
     for attempt in range(5):
-        if find_control(interaction_xml, ["Like"]) and find_control(interaction_xml, ["Comment"]):
+        if _feed_action_controls_visible(interaction_xml):
             actions_visible = True
             break
         viewport = _feed_viewport(interaction_xml)
@@ -784,7 +804,7 @@ def return_home_in_app(name:str)->str:
                 x = (left + right) // 2
                 start_y = min(bottom - 100, top + 180)
                 end_y = max(top + 100, bottom - 280)
-                if start_y <= end_y:
+                if start_y >= end_y:
                     break
                 run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
                 time.sleep(0.6)
