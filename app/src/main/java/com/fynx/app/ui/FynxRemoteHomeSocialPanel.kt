@@ -370,6 +370,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                         loading = false
                         scope.launch {
                             try {
+                                // Revalidation is opportunistic; keep the cached snapshot visible on failure/timeout.
                                 val refreshedPage = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS) {
                                     FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
                                 }
