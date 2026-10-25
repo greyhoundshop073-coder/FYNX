@@ -7,7 +7,29 @@
 - Review PR: [#347 — Marketplace Pushes 1–20](https://github.com/greyhoundshop073-coder/FYNX/pull/347)
 - Integration target: `integration/fynx-single-apk-20261013`
 - This branch does not take ownership of Home/avatar or Chat/Groups files.
-- Do not merge or hand out an APK until the integration checks are green and the separate Chat/Groups workstream is complete.
+- Pull-request checks and source merges alone do not certify the final APK or live Marketplace payments. Require canonical-branch build/runtime certification and backend/provider verification before claiming end-to-end completion.
+
+
+## Final integration and release gate — 25 October 2026
+
+### Source and automated checks
+
+- Marketplace catalogue, My Shop, checkout, fulfillment, buyer protection, receipts, reconciliation, and seller-finance source changes are integrated through PR [#347](https://github.com/greyhoundshop073-coder/FYNX/pull/347) into `integration/fynx-single-apk-20261013`. The supporting payment/refund/payout batch from PR #348 was included as the second parent of integration merge commit [`ff84d6f`](https://github.com/greyhoundshop073-coder/FYNX/commit/ff84d6fe09a46f57c20e75ff412b7de5efb40d72); do not merge that supporting PR independently.
+- At audit time, the canonical integration branch resolved to `2c0864092c97ea63b2e9db31013d03124847b1b0`. The Marketplace seller-flow and financial/backend contract gates passed in the recorded green Backend CI run [40191310895](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40191310895). The related Android Build [40191310888](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40191310888) and Chat/Groups parity [40191310968](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40191310968) also completed green on the Marketplace feature head. The later canonical palette PR's Android, Backend CI and Chat/Groups pull-request checks likewise passed (runs 40201402827, 40201402872 and 40201402874).
+- **Do not call the APK certified yet:** the successful Android pull-request run used the feature branch `fix/marketplace-category-discovery-20261023` at `1d7a105ec2d4afa1dcbe7ffdbc00d52360781d9e`. It verified the APK against that exact checked-out commit and uploaded artifact 12598366479, but the full build/test/lint and Android emulator/instrumentation/screenshots steps were skipped on that pull-request run. That artifact is not evidence of a build from the exact canonical integration head.
+
+### Live backend blocker
+
+- Railway project `FYNX-Isolated-Testing`, environment `testing`, service `fynx-backend-testing` is currently unhealthy. The latest deployment, `e246f9c1-1d2e-4a1f-a75c-1c63637df81c`, failed during startup on 25 October 2026. Logs report Neon PostgreSQL SQLSTATE `53000`: “Your account or project has exceeded the quota”; the `/ready` health check never became healthy. The previously deployed integration commit `267cbc20915761e3a12d0bc7f8a33abf0705f0c3` is also crashed. This is an external database-availability blocker, not a new Marketplace code defect, and must not be “fixed” by silently changing database plans or moving user data.
+- Paystack-backed live payment, refund, and seller-payout transactions are **not certified**. Source-level retry/reconciliation tests passing does not prove provider-backed money movement; do not claim real-money readiness while the test service is unavailable and provider setup has not been verified.
+
+### Final acceptance sequence
+
+1. After this status record is integrated, inspect the workflow triggered by the canonical integration-branch push. Require the full Android build/test/lint and emulator/instrumentation gates to finish, and verify any APK artifact names the exact canonical commit SHA.
+2. Once the Railway/Neon service is restored through an authorized quota reset or other approved provider-side action, verify deployment provenance, `/health` and `/ready`, then exercise Marketplace discovery/product images, publish/edit/readback, public storefront versus private My Shop, cart/checkout, order/driver handoff, receipt and dispute/refund recovery against the running service.
+3. Keep real-money payment/refund/payout certification blocked until the test environment is healthy and Paystack-backed flows can be verified safely. Do not alter Avatar/Home or Chat/Groups implementation from this workstream.
+
+This is a release record, not a claim that the remaining runtime checks have already been completed.
 
 ## Push register
 
