@@ -208,6 +208,53 @@ for token, label in (
 ):
     if token not in video_player:
         raise SystemExit("HOME 4F MEDIA RED: missing " + label)
+
+# Native SurfaceTexture callbacks must synchronously detach the decoder before allowing
+# TextureView to release the underlying texture. Preserve ordering in both disposal paths.
+destroy_start = video_player.index("override fun onSurfaceTextureDestroyed")
+destroy_end = video_player.index("override fun onSurfaceTextureUpdated", destroy_start)
+destroy_callback = video_player[destroy_start:destroy_end]
+destroy_order = [
+    "player.pause()",
+    "player.setSurface(null)",
+    "textureState.value = null",
+    "return true",
+]
+destroy_positions = [destroy_callback.find(token) for token in destroy_order]
+if any(position < 0 for position in destroy_positions) or destroy_positions != sorted(destroy_positions):
+    raise SystemExit("HOME 4F MEDIA RED: SurfaceTexture destruction must pause/detach before texture release")
+
+surface_effect_start = video_player.index("DisposableEffect(surface)")
+surface_effect_end = video_player.index("\n    }\n\n    Box(Modifier.fillMaxSize())", surface_effect_start)
+surface_effect = video_player[surface_effect_start:surface_effect_end]
+surface_order = ["player.pause()", "player.setSurface(null)", "surface?.release()"]
+surface_positions = [surface_effect.find(token) for token in surface_order]
+if any(position < 0 for position in surface_positions) or surface_positions != sorted(surface_positions):
+    raise SystemExit("HOME 4F MEDIA RED: Surface cleanup must pause and detach before releasing the wrapper")
+
+file_effect_start = video_player.rindex("DisposableEffect(file)")
+file_effect = video_player[file_effect_start:]
+file_order = ["player.pause()", "player.setSurface(null)", "player.stop()", "player.release()"]
+file_positions = [file_effect.find(token) for token in file_order]
+if any(position < 0 for position in file_positions) or file_positions != sorted(file_positions):
+    raise SystemExit("HOME 4F MEDIA RED: player cleanup must detach output before stop/release")
+
+remote_media_start = home.index("DisposableEffect(resolvedUrl, type)")
+remote_media_end = home.index("when (kind)", remote_media_start)
+remote_media_cleanup = home[remote_media_start:remote_media_end]
+remote_order = ["disposingView?.pause()", "disposingView?.setOnPreparedListener(null)", "disposingView?.stopPlayback()"]
+remote_positions = [remote_media_cleanup.find(token) for token in remote_order]
+if any(position < 0 for position in remote_positions) or remote_positions != sorted(remote_positions):
+    raise SystemExit("HOME 4F MEDIA RED: remote VideoView cleanup must pause/clear callbacks before stopping playback")
+
+fullscreen_start = home.index("var fullscreenVideoView by remember(file)")
+fullscreen_dispose_start = home.index("DisposableEffect(file)", fullscreen_start)
+fullscreen_dispose_end = home.index("\n                    }\n                } else {", fullscreen_dispose_start)
+fullscreen_dispose = home[fullscreen_dispose_start:fullscreen_dispose_end]
+fullscreen_order = ["fullscreenVideoView?.pause()", "fullscreenVideoView?.setOnPreparedListener(null)", "fullscreenVideoView?.stopPlayback()"]
+fullscreen_positions = [fullscreen_dispose.find(token) for token in fullscreen_order]
+if any(position < 0 for position in fullscreen_positions) or fullscreen_positions != sorted(fullscreen_positions):
+    raise SystemExit("HOME 4F MEDIA RED: fullscreen VideoView cleanup must pause/clear callbacks before stopping playback")
 full_start = home.index("var fullscreenVideoView by remember(file)")
 full_end = home.index("DisposableEffect(file)", full_start)
 full_player = home[full_start:full_end]

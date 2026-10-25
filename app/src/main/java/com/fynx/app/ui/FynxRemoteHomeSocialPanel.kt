@@ -872,10 +872,16 @@ private fun FynxFeedTextureVideo(
     var playbackFailed by remember(file) { mutableStateOf(false) }
     var retryNonce by remember(file) { mutableIntStateOf(0) }
 
-    // A Surface wraps the TextureView's SurfaceTexture and must be released independently.
+    // Pause and detach the decoder synchronously before releasing its Surface wrapper.
+    // TextureView may destroy its SurfaceTexture before Compose disposes this effect.
     DisposableEffect(surface) {
         onDispose {
+            runCatching { if (player.isPlaying) player.pause() }
             runCatching { player.setSurface(null) }
+            if (playing) {
+                playing = false
+                onPlayingChanged(false)
+            }
             runCatching { surface?.release() }
         }
     }
@@ -889,7 +895,18 @@ private fun FynxFeedTextureVideo(
                     setSurfaceTextureListener(object : TextureView.SurfaceTextureListener {
                         override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) { textureState.value = texture }
                         override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) = Unit
-                        override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean { textureState.value = null; return true }
+                        override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean {
+                            // Detach while the texture is still valid; returning true lets
+                            // TextureView release it only after MediaPlayer no longer targets it.
+                            runCatching { if (player.isPlaying) player.pause() }
+                            runCatching { player.setSurface(null) }
+                            if (playing) {
+                                playing = false
+                                onPlayingChanged(false)
+                            }
+                            if (textureState.value === texture) textureState.value = null
+                            return true
+                        }
                         override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) = Unit
                     })
                 }
@@ -979,7 +996,20 @@ private fun FynxFeedTextureVideo(
         if (prepared) runCatching { player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f) }
     }
     DisposableEffect(file) {
-        onDispose { runCatching { player.stop() }; runCatching { player.release() }; textureState.value = null }
+        onDispose {
+            // Remove the output target before stop/release so the decoder cannot
+            // continue rendering into a SurfaceTexture that is being recycled.
+            runCatching { if (player.isPlaying) player.pause() }
+            runCatching { player.setSurface(null) }
+            runCatching { player.setOnPreparedListener(null) }
+            runCatching { player.setOnCompletionListener(null) }
+            runCatching { player.setOnErrorListener(null) }
+            runCatching { player.stop() }
+            runCatching { player.release() }
+            playing = false
+            onPlayingChanged(false)
+            textureState.value = null
+        }
     }
 }
 
@@ -1126,6 +1156,12 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     ) { Icon(if (fullscreenMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (fullscreenMuted) "Unmute full-screen video" else "Mute full-screen video", tint = Color.White) }
                     DisposableEffect(file) {
                         onDispose {
+                            // The full-screen VideoView owns its decoder: pause it and
+                            // clear callbacks before stopping playback during dialog teardown.
+                            runCatching { fullscreenVideoView?.pause() }
+                            runCatching { fullscreenVideoView?.setOnPreparedListener(null) }
+                            runCatching { fullscreenVideoView?.setOnCompletionListener(null) }
+                            runCatching { fullscreenVideoView?.setOnErrorListener(null) }
                             runCatching { fullscreenVideoView?.stopPlayback() }
                             fullscreenVideoView = null
                             fullscreenPlayer = null

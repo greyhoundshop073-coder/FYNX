@@ -137,8 +137,16 @@ fun FynxRemoteMedia(
     }
     DisposableEffect(resolvedUrl, type) {
         onDispose {
-            videoView?.stopPlayback()
+            val disposingView = videoView
+            // VideoView manages its own decoder. Stop future callbacks, pause and
+            // then stop playback before dropping the view/player references.
+            runCatching { disposingView?.pause() }
+            runCatching { disposingView?.setOnPreparedListener(null) }
+            runCatching { disposingView?.setOnCompletionListener(null) }
+            runCatching { disposingView?.setOnErrorListener(null) }
+            runCatching { disposingView?.stopPlayback() }
             preparedPlayer = null
+            videoPlaying = false
             videoView = null
         }
     }
