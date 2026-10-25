@@ -36,6 +36,18 @@ private data class SellerMoneyRecord(
     val updatedAt: String
 )
 
+private data class SellerMoneyTotals(
+    val protectedFunds: Double,
+    val availableForPayout: Double,
+    val payoutPending: Double,
+    val paidOut: Double
+)
+
+private data class SellerMoneySnapshot(
+    val records: List<SellerMoneyRecord>,
+    val totals: Map<String, SellerMoneyTotals>?
+)
+
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
 fun FynxMarketplaceSellerCenterPanel() {
@@ -72,6 +84,8 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyLoading by remember { mutableStateOf(true) }
     var moneyError by remember { mutableStateOf<String?>(null) }
     var moneyRecords by remember { mutableStateOf(emptyList<SellerMoneyRecord>()) }
+    var moneyTotals by remember { mutableStateOf(emptyMap<String, SellerMoneyTotals>()) }
+    var moneyTotalsFromBackend by remember { mutableStateOf(false) }
     var showDriverAssignments by remember { mutableStateOf(false) }
     var activeSection by rememberSaveable { mutableStateOf("Overview") }
     var shopName by rememberSaveable { mutableStateOf("") }
@@ -89,8 +103,23 @@ fun FynxMarketplaceSellerCenterPanel() {
             moneyError = null
             val result = FynxBackendClient.get(context, "/api/marketplace/settlement/seller/summary")
                 .mapCatching { raw ->
-                    val settlements = JSONObject(raw).optJSONArray("settlements")
+                    val root = JSONObject(raw)
+                    val settlements = root.optJSONArray("settlements")
                         ?: throw IllegalStateException("Seller earnings response was incomplete.")
+                    val totalsArray = root.optJSONArray("totals")
+                    val totals = mutableMapOf<String, SellerMoneyTotals>()
+                    if (totalsArray != null) {
+                        for (i in 0 until totalsArray.length()) {
+                            val row = totalsArray.optJSONObject(i) ?: continue
+                            val currency = row.optString("currency", "NGN").uppercase()
+                            totals[currency] = SellerMoneyTotals(
+                                protectedFunds = row.optDouble("protectedFunds", 0.0),
+                                availableForPayout = row.optDouble("availableForPayout", 0.0),
+                                payoutPending = row.optDouble("payoutPending", 0.0),
+                                paidOut = row.optDouble("paidOut", 0.0)
+                            )
+                        }
+                    }
                     val records = mutableListOf<SellerMoneyRecord>()
                     for (i in 0 until settlements.length()) {
                         val row = settlements.optJSONObject(i) ?: continue
@@ -109,10 +138,12 @@ fun FynxMarketplaceSellerCenterPanel() {
                             updatedAt = row.optString("updatedAt")
                         )
                     }
-                    records
+                    SellerMoneySnapshot(records, if (totalsArray != null) totals else null)
                 }
-            result.onSuccess { records ->
-                moneyRecords = records.sortedByDescending { it.updatedAt }
+            result.onSuccess { snapshot ->
+                moneyRecords = snapshot.records.sortedByDescending { it.updatedAt }
+                moneyTotals = snapshot.totals.orEmpty()
+                moneyTotalsFromBackend = snapshot.totals != null
             }.onFailure { failure ->
                 moneyError = failure.message ?: "Seller earnings could not load."
             }
@@ -311,15 +342,27 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     currencies.forEach { currency ->
                         val rows = moneyRecords.filter { it.currency == currency }
-                        val protected = rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet }
-                        val available = rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet }
-                        val pending = rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet }
-                        val paid = rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
+                        val serverTotals = moneyTotals[currency]
+                        val protected = if (moneyTotalsFromBackend) serverTotals?.protectedFunds ?: 0.0
+                            else rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet }
+                        val available = if (moneyTotalsFromBackend) serverTotals?.availableForPayout ?: 0.0
+                            else rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet }
+                        val pending = if (moneyTotalsFromBackend) serverTotals?.payoutPending ?: 0.0
+                            else rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet }
+                        val paid = if (moneyTotalsFromBackend) serverTotals?.paidOut ?: 0.0
+                            else rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
                         Text(currency, fontWeight = FontWeight.Bold)
                         MoneySummaryRow("Protected", protected, currency)
                         MoneySummaryRow("Available for payout", available, currency)
                         MoneySummaryRow("Payout pending", pending, currency)
                         MoneySummaryRow("Paid out", paid, currency)
+                    }
+                    if (!moneyLoading && moneyError == null && !moneyTotalsFromBackend) {
+                        Text(
+                            "This backend only provides the latest 100 settlements. Totals below may not include older orders.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -328,7 +371,7 @@ fun FynxMarketplaceSellerCenterPanel() {
         if (activeSection == "Earnings & payouts") item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Earnings history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("Recent earnings history (latest 100; showing 20)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     moneyError?.let { message ->
                         Text(message, color = MaterialTheme.colorScheme.error)
                         TextButton(onClick = { loadMoney() }, enabled = !moneyLoading) {
