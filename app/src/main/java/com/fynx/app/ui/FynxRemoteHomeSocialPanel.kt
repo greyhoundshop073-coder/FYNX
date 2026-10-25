@@ -316,74 +316,104 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
 
     fun reload(forceRefresh: Boolean = false) {
-        val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
-        feedRequestInFlight = true; lastFeedRequestAt = now
+        val now = System.currentTimeMillis()
+        if (feedRequestInFlight) return
+        if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
+        feedRequestInFlight = true
+        lastFeedRequestAt = now
         scope.launch {
-            loading = true
-            // Backend health is not the same as device connectivity. Keep attempting the
-            // real feed request when the backend probe is down, and use cached posts only
-            // when the phone itself is offline.
-            val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE
-            if (!activeNetworkReady) {
-                val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
-                if (posts.isEmpty() && cachedPage != null) {
-                    posts = cachedPage.posts
-                    hasMore = cachedPage.hasMore
-                    feedNextCursor = cachedPage.nextCursor
-                    interactionStates = emptyMap()
-                    reactionStates = emptyMap()
-                    postMedia = emptyMap()
+            var shouldRevalidateCache = false
+            try {
+                loading = true
+                // Backend health is not the same as device connectivity. Keep attempting the
+                // real feed request when the backend probe is down, and use cached posts only
+                // when the phone itself is offline.
+                val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE
+                if (!activeNetworkReady) {
+                    val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
+                    if (posts.isEmpty() && cachedPage != null) {
+                        posts = cachedPage.posts
+                        hasMore = cachedPage.hasMore
+                        feedNextCursor = cachedPage.nextCursor
+                        interactionStates = emptyMap()
+                        reactionStates = emptyMap()
+                        postMedia = emptyMap()
+                    }
+                    error = if (posts.isEmpty()) "You're offline. Connect to a network to load your feed." else null
+                    paginationError = null
+                    return@launch
                 }
-                error = if (posts.isEmpty()) "You're offline. Connect to a network to load your feed." else null
-                paginationError = null
-                loading = false
-                feedRequestInFlight = false
-                return@launch
-            }
-            val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
-            var cachedRevalidationStarted = false
-            val feedPageResult = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS) {
-                FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
-            }
-            if (feedPageResult == null) {
-                // A slow/unavailable backend must not leave the feed spinner running indefinitely.
-                // Preserve already-loaded content and expose a user-retryable state.
-                error = if (posts.isEmpty()) {
-                    "Your feed is taking too long to load. Check your connection and retry."
-                } else {
-                    "Could not refresh the feed. Showing the posts already loaded."
+
+                val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
+                val feedPageResult = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS) {
+                    FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
                 }
-                loading = false
-                feedRequestInFlight = false
-                return@launch
-            }
-            feedPageResult
-                .onSuccess { page ->
-                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; paginationError = null
-                    interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
-                    resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
-                    discoveryOffset = 0; discoveryHasMore = false
-                    if (hadFreshCache) {
-                        // Keep pagination locked until cache revalidation settles. Otherwise a
-                        // next-page request can race this response and use a stale cursor.
-                        cachedRevalidationStarted = true
-                        loading = false
-                        scope.launch {
-                            try {
-                                // Revalidation is opportunistic; keep the cached snapshot visible on failure/timeout.
-                                val refreshedPage = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS) {
-                                    FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
-                                }
-                                refreshedPage?.onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; paginationError = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
-                            } finally {
-                                feedRequestInFlight = false
-                            }
+                if (feedPageResult == null) {
+                    // A slow/unavailable backend must never leave the feed spinner running indefinitely.
+                    // Preserve any already-loaded content and expose a user-retryable state.
+                    error = if (posts.isEmpty()) {
+                        "Your feed is taking too long to load. Check your connection and retry."
+                    } else {
+                        "Could not refresh the feed. Showing the posts already loaded."
+                    }
+                    return@launch
+                }
+
+                feedPageResult
+                    .onSuccess { page ->
+                        posts = page.posts
+                        hasMore = page.hasMore
+                        feedNextCursor = page.nextCursor
+                        error = null
+                        paginationError = null
+                        interactionStates = emptyMap()
+                        reactionStates = emptyMap()
+                        reactionPickerPostId = null
+                        reactionUsersPostId = null
+                        resolveAuthorPhotos(page.posts)
+                        hydrateInteractionStates(page.posts)
+                        hydrateReactionStates(page.posts)
+                        postMedia = emptyMap()
+                        hydratePostMedia(page.posts)
+                        discoveryOffset = 0
+                        discoveryHasMore = false
+                        shouldRevalidateCache = hadFreshCache
+                    }
+                    .onFailure {
+                        error = if (it.message?.contains("HTTP 404", true) == true) {
+                            "Your FYNX feed service is temporarily unavailable."
+                        } else {
+                            it.message ?: "Unable to load your feed."
                         }
                     }
+
+                if (shouldRevalidateCache) {
+                    // Keep the cached snapshot visible while refreshing it in the same request
+                    // lifecycle. The in-flight lock stays set until this bounded attempt settles.
+                    loading = false
+                    val refreshedPage = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS) {
+                        FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
+                    }
+                    refreshedPage?.onSuccess { fresh ->
+                        posts = fresh.posts
+                        hasMore = fresh.hasMore
+                        feedNextCursor = fresh.nextCursor
+                        error = null
+                        paginationError = null
+                        resolveAuthorPhotos(fresh.posts)
+                        hydrateInteractionStates(fresh.posts)
+                        hydrateReactionStates(fresh.posts)
+                        hydratePostMedia(fresh.posts)
+                    }
                 }
-                .onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }
-            loading = false
-            if (!cachedRevalidationStarted) feedRequestInFlight = false
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                error = failure.message ?: "Unable to load your feed."
+            } finally {
+                loading = false
+                feedRequestInFlight = false
+            }
         }
     }
 

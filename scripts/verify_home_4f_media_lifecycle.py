@@ -56,9 +56,11 @@ if "MediaController" in home:
     raise SystemExit("HOME 4F MEDIA RED: legacy Android MediaController must not be present in the Home feed")
 
 required_camera_readiness = {
-    "CameraX readiness derives from the active bound use case":
-        "val captureReady = hasCamera && cameraControl != null" in camera_capture
-        and "(if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null)" in camera_capture,
+    "CameraX readiness requires the matching use-case mode to be bound":
+        "var boundMode by remember { mutableStateOf<CameraMode?>(null) }" in camera_capture
+        and "val captureReady = hasCamera && boundMode == mode && cameraControl != null" in camera_capture
+        and "boundMode = null" in camera_capture
+        and "boundMode = mode" in camera_capture,
     "capture control is disabled before CameraX is ready":
         "FilledIconButton(enabled = captureReady || recording != null, onClick={" in camera_capture,
     "user sees an explicit camera startup state":
@@ -309,6 +311,8 @@ camera_journey = runtime_navigation[camera_journey_start:runtime_navigation.find
 for token, label in (
     ('["Take photo"]', "photo capture action"),
     ("photo_ready_deadline = time.monotonic() + 25.0", "photo capture waits for CameraX binding before tapping"),
+    ('photo_button = find_enabled_control(current, ["Take photo"])', "camera capture harness waits for the enabled photo action"),
+    ('record = find_enabled_control(current, ["Record video note"])', "camera capture harness waits for the enabled video action"),
     ("def wait_for_enabled(labels: list[str]", "camera journey waits on an enabled-control helper"),
     ('photo_button = find_enabled_control(current, ["Take photo"])', "photo action must be enabled before tapping"),
     ('record = find_enabled_control(current, ["Record video note"])', "video recording action must be enabled before tapping"),

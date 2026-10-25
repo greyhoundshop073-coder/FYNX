@@ -107,6 +107,7 @@ fun FynxCameraCapturePanel(
     var cameraInfo by remember { mutableStateOf<androidx.camera.core.CameraInfo?>(null) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var bindGeneration by remember { mutableIntStateOf(0) }
+    var boundMode by remember { mutableStateOf<CameraMode?>(null) }
     var torchEnabled by remember { mutableStateOf(false) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var exposure by remember { mutableIntStateOf(0) }
@@ -137,7 +138,22 @@ fun FynxCameraCapturePanel(
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
         val generation = bindGeneration + 1; bindGeneration = generation
-        if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
+        if (!hasCamera || pendingUri != null) {
+            cameraProvider?.unbindAll()
+            imageCapture = null
+            videoCapture = null
+            cameraControl = null
+            cameraInfo = null
+            boundMode = null
+            return@LaunchedEffect
+        }
+        // A prior mode's capture use case can still be non-null while CameraX rebinds.
+        // Clear active references first so Photo/Video taps cannot use an unbound use case.
+        imageCapture = null
+        videoCapture = null
+        cameraControl = null
+        cameraInfo = null
+        boundMode = null
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             if (generation != bindGeneration || !hasCamera || pendingUri != null) return@addListener
@@ -163,7 +179,12 @@ fun FynxCameraCapturePanel(
                     .build()
                 provider.unbindAll(); if (generation != bindGeneration || pendingUri != null) return@runCatching
                 val camera = if (mode == CameraMode.PHOTO) provider.bindToLifecycle(lifecycleOwner, selector, preview, capture) else provider.bindToLifecycle(lifecycleOwner, selector, preview, video)
-                cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
+                cameraProvider = provider
+                imageCapture = capture
+                videoCapture = video
+                cameraControl = camera.cameraControl
+                cameraInfo = camera.cameraInfo
+                boundMode = mode
                 cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 4f)); val range = cameraInfo?.exposureState?.exposureCompensationRange
                 exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2); cameraControl?.setExposureCompensationIndex(exposure)
                 if (torchEnabled && cameraInfo?.hasFlashUnit() == true) cameraControl?.enableTorch(true) else if (torchEnabled) torchEnabled = false
@@ -202,7 +223,7 @@ fun FynxCameraCapturePanel(
 
     if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
-    val captureReady = hasCamera && cameraControl != null &&
+    val captureReady = hasCamera && boundMode == mode && cameraControl != null &&
         (if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null)
     if(previewUri!=null && previewType!=null){
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
