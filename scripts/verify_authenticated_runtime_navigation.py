@@ -690,6 +690,97 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         return ""
     return next_xml
 
+
+def exercise_camera_capture_journeys(camera_xml:str)->str:
+    """Exercise real photo/video capture, preview, retake and safe return without publishing."""
+    if not camera_xml:
+        return ""
+
+    current = camera_xml
+    photo_preview = tap_control(
+        current, ["Take photo"], "camera-photo-capture",
+        ["Edit photo", "Retake", "Send"],
+    )
+    if photo_preview:
+        required = ["Edit photo", "Retake", "Send"]
+        if all(find_control(photo_preview, [label]) for label in required):
+            report.append("- PASS camera photo capture produced a preview with Edit photo, Retake and Send; captured authenticated-camera-photo-capture.png")
+        else:
+            FAILURES.append("camera photo capture reached preview without all Edit photo, Retake and Send controls")
+        current = tap_control(
+            photo_preview, ["Retake"], "camera-photo-retake", ["Take photo"],
+        )
+        if current and find_control(current, ["Take photo"]):
+            report.append("- PASS camera photo Retake discarded the preview and returned to the live camera")
+        else:
+            FAILURES.append("camera photo Retake did not return to the live camera")
+            current = dump_ui("authenticated-camera-after-photo-retake.xml") or current
+    else:
+        # Preserve the rest of the independent navigation journey even when capture fails.
+        FAILURES.append("camera photo capture did not reach a real preview")
+        current = dump_ui("authenticated-camera-after-photo-capture-failed.xml") or current
+
+    video_mode_xml = tap_control(
+        current, ["Video"], "camera-video-mode", ["Record video note"],
+    )
+    if video_mode_xml:
+        recording_xml = tap_control(
+            video_mode_xml, ["Record video note"], "camera-video-start", ["Stop video note"],
+        )
+        if recording_xml:
+            # Allow enough real capture time for CameraX to create a non-empty MP4.
+            time.sleep(1.2)
+            video_preview = tap_control(
+                recording_xml, ["Stop video note"], "camera-video-stop-preview", ["Retake", "Send"],
+            )
+            if video_preview:
+                required = ["Retake", "Send"]
+                if all(find_control(video_preview, [label]) for label in required):
+                    report.append("- PASS camera video recording stopped, finalized and opened a preview with Retake and Send; captured authenticated-camera-video-stop-preview.png")
+                else:
+                    FAILURES.append("camera video preview did not expose both Retake and Send")
+                current = tap_control(
+                    video_preview, ["Retake"], "camera-video-retake", ["Record video note"],
+                )
+                if current and find_control(current, ["Record video note"]):
+                    report.append("- PASS camera video Retake discarded the finalized preview and returned to video capture")
+                else:
+                    FAILURES.append("camera video Retake did not return to video capture")
+                    current = dump_ui("authenticated-camera-after-video-retake.xml") or current
+            else:
+                FAILURES.append("camera video recording did not finalize into a usable preview")
+                current = dump_ui("authenticated-camera-after-video-finalize-failed.xml") or recording_xml
+        else:
+            FAILURES.append("camera Video mode did not start recording and expose Stop video note")
+            current = dump_ui("authenticated-camera-after-video-start-failed.xml") or video_mode_xml
+    else:
+        FAILURES.append("camera did not switch from Photo to Video capture mode")
+        current = dump_ui("authenticated-camera-after-video-mode-failed.xml") or current
+
+    # Exit without pressing Send, so these local capture checks never publish a post.
+    if current and find_control(current, ["Retake"]):
+        retake = tap_control(current, ["Retake"], "camera-preview-discard-recovery", ["Take photo", "Record video note"])
+        if retake:
+            current = retake
+    composer_xml = tap_control(
+        current, ["Close camera"], "camera-capture-return-to-composer", ["What's on your mind?"],
+    )
+    if composer_xml and find_control(composer_xml, ["What's on your mind?"]):
+        report.append("- PASS camera capture test returned to the existing New post composer without publishing any captured media")
+        return composer_xml
+
+    # A failed camera sub-journey must not strand later checks on the camera UI.
+    for attempt in range(3):
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.7)
+        recovered = dump_ui(f"authenticated-camera-return-recovery-{attempt}.xml")
+        if recovered and find_control(recovered, ["What's on your mind?"]):
+            report.append("- PASS camera Back recovery returned to the existing New post composer")
+            return recovered
+        current = recovered or current
+    FAILURES.append("camera capture flow could not return to the existing New post composer")
+    return current
+
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
     base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
@@ -1075,8 +1166,13 @@ if not FAILURES:
             home_for_camera=return_home_in_app("authenticated-home-after-voice-smoke")
             composer_xml=tap_control(home_for_camera,["Open FYNX camera"],"home-camera-composer-after-voice",["What's on your mind?"])
         camera_xml=tap_control(composer_xml,["Video/Camera"],"composer-camera",["Switch front/back camera"])
-        if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
-        else: FAILURES.append("post composer -> real camera")
+        if camera_xml:
+            report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
+            composer_after_camera = exercise_camera_capture_journeys(camera_xml)
+            if composer_after_camera and find_control(composer_after_camera, ["What's on your mind?"]):
+                composer_xml = composer_after_camera
+        else:
+            FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
     # The debug saved-device entry is intentionally a local UI-only route, not
     # server authentication. Do not cold-start it: that returns to Sign In and
