@@ -53,7 +53,9 @@ for (const [name, moduleSource, route, method] of [
 }
 assert.ok(shop.includes("seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE"),
   "shop identity must be keyed to the authenticated seller");
-assert.ok(shop.includes("ON CONFLICT (seller_id) DO UPDATE") && !/ON CONFLICT\\s*\\(seller_id\\)[\\s\\S]{0,400}seller_id\\s*=/.test(shop),
+const ownerUpsertStart = shop.indexOf("ON CONFLICT (seller_id) DO UPDATE");
+const ownerUpsertEnd = shop.indexOf("RETURNING shop_name", ownerUpsertStart);
+assert.ok(ownerUpsertStart >= 0 && ownerUpsertEnd > ownerUpsertStart && !shop.slice(ownerUpsertStart, ownerUpsertEnd).includes("seller_id ="),
   "shop edits cannot change shop ownership");
 assert.ok(shop.includes("NOT EXISTS") && shop.includes("SELECT 1 FROM blocks b")
   && shop.includes("b.blocker_id = $2 AND b.blocked_id = u.id")
