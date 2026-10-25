@@ -87,59 +87,35 @@ fun FynxMarketplaceSellerCenterPanel() {
         scope.launch {
             moneyLoading = true
             moneyError = null
-            FynxBackendClient.get(context, "/api/marketplace/seller/orders")
-                .onSuccess { raw ->
-                    val orders = JSONObject(raw).optJSONArray("orders")
+            val result = FynxBackendClient.get(context, "/api/marketplace/settlement/seller/summary")
+                .mapCatching { raw ->
+                    val settlements = JSONObject(raw).optJSONArray("settlements")
+                        ?: throw IllegalStateException("Seller earnings response was incomplete.")
                     val records = mutableListOf<SellerMoneyRecord>()
-                    var settlementFailures = 0
-                    if (orders != null) {
-                        for (i in 0 until orders.length()) {
-                            val order = orders.optJSONObject(i) ?: continue
-                            val orderId = order.optString("id")
-                            if (orderId.isBlank()) continue
-                            FynxBackendClient.get(context, "/api/marketplace/settlement/order/$orderId")
-                                .onSuccess { settlementRaw ->
-                                    val settlement = JSONObject(settlementRaw)
-                                    val accounting = settlement.optJSONObject("accounting") ?: run {
-                                        settlementFailures += 1
-                                        return@onSuccess
-                                    }
-                                    val protection = settlement.optJSONObject("protection")
-                                    val escrow = settlement.optJSONObject("escrow")
-                                    val funds = protection?.optString("funds").orEmpty().ifBlank { escrow?.optString("status").orEmpty() }.ifBlank { "UNKNOWN" }
-                                    val operations = settlement.optJSONArray("operations")
-                                    var payoutStatus = funds
-                                    var updatedAt = order.optString("updatedAt").ifBlank { order.optString("createdAt") }
-                                    if (operations != null) {
-                                        for (j in 0 until operations.length()) {
-                                            val op = operations.optJSONObject(j) ?: continue
-                                            if (op.optString("operation_type") == "PAYOUT_RELEASE") {
-                                                payoutStatus = op.optString("status").ifBlank { funds }
-                                                updatedAt = op.optString("updated_at").ifBlank { updatedAt }
-                                                break
-                                            }
-                                        }
-                                    }
-                                    records += SellerMoneyRecord(
-                                        orderId = orderId,
-                                        title = order.optJSONObject("product")?.optString("title").orEmpty().ifBlank { "FYNX order" },
-                                        currency = accounting.optString("currency", order.optString("currency", "NGN")).uppercase(),
-                                        sellerNet = accounting.optDouble("sellerNetAmount", 0.0),
-                                        marketplaceFee = accounting.optDouble("marketplaceFee", 0.0),
-                                        funds = funds,
-                                        payoutStatus = payoutStatus,
-                                        updatedAt = updatedAt
-                                    )
-                                }
-                                .onFailure { settlementFailures += 1 }
-                        }
+                    for (i in 0 until settlements.length()) {
+                        val row = settlements.optJSONObject(i) ?: continue
+                        val orderId = row.optString("orderId")
+                        if (orderId.isBlank()) continue
+                        val funds = row.optString("funds").ifBlank { "UNKNOWN" }
+                        val payoutStatus = row.optString("payoutStatus").ifBlank { funds }
+                        records += SellerMoneyRecord(
+                            orderId = orderId,
+                            title = row.optString("title").ifBlank { "FYNX order" },
+                            currency = row.optString("currency", "NGN").uppercase(),
+                            sellerNet = row.optDouble("sellerNetAmount", 0.0),
+                            marketplaceFee = row.optDouble("marketplaceFee", 0.0),
+                            funds = funds,
+                            payoutStatus = payoutStatus,
+                            updatedAt = row.optString("updatedAt")
+                        )
                     }
-                    moneyRecords = records.sortedByDescending { it.updatedAt }
-                    if (settlementFailures > 0) {
-                        moneyError = "Some settlement records could not load. Refresh My Shop to retry."
-                    }
+                    records
                 }
-                .onFailure { moneyError = it.message ?: "Seller earnings could not load." }
+            result.onSuccess { records ->
+                moneyRecords = records.sortedByDescending { it.updatedAt }
+            }.onFailure { failure ->
+                moneyError = failure.message ?: "Seller earnings could not load."
+            }
             moneyLoading = false
         }
     }

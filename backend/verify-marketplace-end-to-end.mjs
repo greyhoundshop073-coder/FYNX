@@ -15,6 +15,7 @@ const singleCheckoutUi = read('../app/src/main/java/com/fynx/app/ui/FynxMarketpl
 const paymentUi = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt');
 const lifecycle = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt');
 const seller = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt');
+const sellerCenter = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt');
 const socialRoutes = read('./socialRoutes.js');
 
 const checks = [
@@ -37,6 +38,9 @@ const checks = [
   ['protection can freeze the order before completion', protection.includes("status IN ('OPEN','UNDER_REVIEW')")],
   ['refund and dispute routes are available', protection.includes("/api/marketplace/protection/order/:id/dispute") && protection.includes("/api/marketplace/protection/order/:id/refund-request")],
   ['completion makes escrow payout-eligible only after protected completion', completion.includes("ORDER_COMPLETED") && completion.includes("payout: 'eligible_for_release'")],
+  ['seller earnings summary is authenticated and restricted to the signed-in seller', settlement.includes("app.get('/api/marketplace/settlement/seller/summary', auth") && settlement.includes('WHERE o.seller_id = $1') && settlement.includes('LIMIT 100')],
+  ['seller earnings summary preserves payout status and accounting fields', settlement.includes("f.operation_type = 'PAYOUT_RELEASE'") && settlement.includes('seller_net_amount') && settlement.includes('marketplace_fee') && settlement.includes('AS funds')],
+  ['My Shop loads earnings from one batch summary instead of N+1 per-order settlement requests', sellerCenter.includes('/api/marketplace/settlement/seller/summary') && !sellerCenter.includes('/api/marketplace/settlement/order/$orderId')],
   ['settlement release is completion-gated', settlement.includes("/api/marketplace/settlement/release/:id") && settlement.includes("order.status !== 'COMPLETED'")],
   ['payout worker verifies provider result', worker.includes("/transfer/verify/") && worker.includes("markPayoutSucceeded")],
   ['payout worker keeps operation idempotent', worker.includes("status !== 'PENDING'") && worker.includes("FOR UPDATE")],

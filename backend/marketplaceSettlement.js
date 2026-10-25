@@ -241,6 +241,52 @@ export function registerMarketplaceSettlementRoutes({ app }) {
     }
   });
 
+  // Seller-facing summary avoids one authenticated settlement request per order.
+  // Restrict every row to the signed-in seller and return only dashboard summary fields.
+  app.get('/api/marketplace/settlement/seller/summary', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const result = await pool.query(`
+        SELECT
+          o.id AS order_id,
+          COALESCE(NULLIF(o.product_snapshot->>'title', ''), 'FYNX order') AS title,
+          UPPER(COALESCE(o.currency, 'NGN')) AS currency,
+          COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
+          COALESCE(o.marketplace_fee, 0) AS marketplace_fee,
+          COALESCE(e.status, 'UNKNOWN') AS funds,
+          payout.status AS payout_status,
+          COALESCE(payout.updated_at, o.updated_at, o.created_at) AS updated_at
+        FROM marketplace_orders o
+        LEFT JOIN marketplace_escrows e ON e.order_id = o.id
+        LEFT JOIN LATERAL (
+          SELECT f.status, f.updated_at
+          FROM marketplace_financial_operations f
+          WHERE f.order_id = o.id AND f.operation_type = 'PAYOUT_RELEASE'
+          ORDER BY f.updated_at DESC, f.created_at DESC
+          LIMIT 1
+        ) payout ON TRUE
+        WHERE o.seller_id = $1
+        ORDER BY COALESCE(payout.updated_at, o.updated_at, o.created_at) DESC
+        LIMIT 100
+      `, [req.user.sub]);
+      return res.json({
+        settlements: result.rows.map((row) => ({
+          orderId: String(row.order_id),
+          title: String(row.title || 'FYNX order'),
+          currency: String(row.currency || 'NGN').toUpperCase(),
+          sellerNetAmount: Number(row.seller_net_amount || 0),
+          marketplaceFee: Number(row.marketplace_fee || 0),
+          funds: String(row.funds || 'UNKNOWN'),
+          payoutStatus: row.payout_status ? String(row.payout_status) : null,
+          updatedAt: row.updated_at
+        }))
+      });
+    } catch (error) {
+      console.error('marketplace seller settlement summary', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500).json({ error: 'seller earnings could not load' });
+    }
+  });
+
   app.get('/api/marketplace/settlement/payout-account', auth, async (req, res) => {
     try {
       await ensureSchema();
