@@ -167,7 +167,7 @@ private fun MarketplaceSmartDealsHero(
                         Surface(onClick = { onOpenListing(listing) }, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.width(116.dp)) {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(7.dp)) {
                                 if (listing.mediaIds.isNotEmpty()) {
-                                    RemoteMarketMedia(LocalContext.current, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)))
+                                    RemoteMarketMedia(LocalContext.current, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)), listing.mediaTypes.firstOrNull())
                                 } else {
                                     Box(Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) {
                                         Icon(Icons.Default.ShoppingBag, contentDescription = "Product image unavailable", modifier = Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
@@ -975,7 +975,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
                     Text(l.storeName.ifBlank { "FYNX seller" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
-            if (l.mediaIds.isNotEmpty()) RemoteMarketMedia(context, l.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
+            if (l.mediaIds.isNotEmpty()) RemoteMarketMedia(context, l.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)), l.mediaTypes.firstOrNull())
             else Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(42.dp), tint = MaterialTheme.colorScheme.primary) }
             Text(l.title, fontWeight = FontWeight.Bold, maxLines = 2, minLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
             Text(l.currency.uppercase() + " " + String.format(Locale.US, "%,.2f", l.price), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -1027,7 +1027,7 @@ private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceLis
     }
 }
 @Composable
-private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier) { val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }; FynxRemoteMedia(mediaUrl, "auto", modifier) }
+private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier, mimeType: String? = null) { val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }; FynxRemoteMedia(mediaUrl, FynxMarketplaceClient.mediaDisplayType(mimeType), modifier) }
 
 @Composable
 private fun MarketplaceDetails(
@@ -1051,7 +1051,7 @@ private fun MarketplaceDetails(
 ) {
     val context = LocalContext.current
     AlertDialog(onDismissRequest = onClose, title = { Text("Product details", maxLines = 1) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12)) { mediaId -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp))) } }
+        if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12).mapIndexed { index, mediaId -> mediaId to l.mediaTypes.getOrNull(index) }) { (mediaId, mimeType) -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp)), mimeType) } }
         MarketplaceReferenceProductSummary(
             listing = l,
             onMessageSeller = onContact,
@@ -1534,7 +1534,7 @@ private fun FynxMarketplaceMultiCheckoutDialog(context: android.content.Context,
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                 if (listing?.mediaIds?.isNotEmpty() == true) {
-                    RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)))
+                    RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)), listing.mediaTypes.firstOrNull())
                 } else {
                     Box(Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) {
                         Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(36.dp), tint=MaterialTheme.colorScheme.primary)
