@@ -232,6 +232,121 @@ def capture_home_feed_evidence(xml_text: str) -> str:
     return top_xml or xml_text
 
 
+def find_enabled_control(xml_text:str, labels:list[str]):
+    """Find a visible, enabled control by its actual UI hierarchy state."""
+    wanted=[label.casefold() for label in labels]
+    for node in nodes(xml_text):
+        if node.attrib.get("visible-to-user","true").lower()=="false":
+            continue
+        if node.attrib.get("enabled","true").lower()=="false":
+            continue
+        if node.attrib.get("clickable","false").lower()!="true":
+            continue
+        hay=" | ".join(((node.attrib.get("text") or "").strip().casefold(),
+                        (node.attrib.get("content-desc") or "").strip().casefold()))
+        if not any(label in hay for label in wanted):
+            continue
+        center=_center(node)
+        if center:
+            return (node.attrib.get("text") or node.attrib.get("content-desc") or labels[0],center[0],center[1])
+    return None
+
+
+def exercise_voice_post_preview(composer_xml:str)->str:
+    """Record a short real microphone clip, preview it, attach it, and never publish it."""
+    def recover(current:str, reason:str)->str:
+        FAILURES.append("Home voice-post runtime: "+reason)
+        if current and find_control(current,["Cancel"]):
+            control=find_control(current,["Cancel"])
+            if control:
+                _,cx,cy=control
+                run("adb","shell","input","tap",str(cx),str(cy))
+        for attempt in range(12):
+            time.sleep(.4)
+            candidate=dump_ui("authenticated-voice-recorder-recovery-"+str(attempt)+".xml")
+            if candidate and find_control(candidate,["What's on your mind?"]):
+                return candidate
+        return ""
+
+    voice_xml=tap_control(composer_xml,["Voice"],"home-composer-voice-recorder",["Start recording"])
+    if not voice_xml:
+        return recover(dump_ui("authenticated-voice-recorder-open-failed.xml"),"the real composer did not open the voice recorder")
+
+    start=find_control(voice_xml,["Start recording"])
+    if not start:
+        return recover(voice_xml,"Start recording was not accessible")
+    _,sx,sy=start
+    run("adb","shell","input","tap",str(sx),str(sy))
+
+    recording_xml=""
+    recording_started=False
+    for attempt in range(30):
+        time.sleep(.4)
+        recording_xml=dump_ui("authenticated-voice-recording-wait-"+str(attempt)+".xml")
+        if recording_xml and find_control(recording_xml,["Stop"]) and find_control(recording_xml,["Recording your voice"]):
+            recording_started=True
+            break
+        permission=find_control(recording_xml,["While using the app","Only this time","Allow while using the app"])
+        markers=visible_marker_summary(recording_xml).casefold()
+        if not permission and "record audio" in markers:
+            permission=find_control(recording_xml,["Allow"])
+        if permission:
+            _,px,py=permission
+            run("adb","shell","input","tap",str(px),str(py))
+            time.sleep(.6)
+            continue
+        if find_control(recording_xml,["Microphone permission is required","Microphone could not start"]):
+            break
+
+    if not recording_started:
+        screenshot("authenticated-voice-recording-not-started.png")
+        return recover(recording_xml or voice_xml,"recording did not start after the permission decision")
+
+    screenshot("authenticated-voice-recording.png")
+    time.sleep(1.5)
+    recording_xml=dump_ui("authenticated-voice-before-stop.xml")
+    stop=find_control(recording_xml,["Stop"])
+    if not stop:
+        return recover(recording_xml,"Stop was missing after a short recording")
+    _,sx,sy=stop
+    run("adb","shell","input","tap",str(sx),str(sy))
+
+    preview_xml=""
+    usable=None
+    for attempt in range(40):
+        time.sleep(.35)
+        preview_xml=dump_ui("authenticated-voice-preview-wait-"+str(attempt)+".xml")
+        usable=find_enabled_control(preview_xml,["Use recording"])
+        if usable and find_control(preview_xml,["Voice post preview"]):
+            break
+        if preview_xml and find_control(preview_xml,["The recording could not be saved","The recording could not be played"]):
+            break
+    if not usable:
+        screenshot("authenticated-voice-preview-unavailable.png")
+        return recover(preview_xml,"the recorded clip did not reach a decoded, enabled Use recording state")
+
+    screenshot("authenticated-voice-preview-ready.png")
+    _,ux,uy=usable
+    run("adb","shell","input","tap",str(ux),str(uy))
+    attachment_xml=""
+    for attempt in range(16):
+        time.sleep(.4)
+        attachment_xml=dump_ui("authenticated-voice-post-attachment-"+str(attempt)+".xml")
+        if (attachment_xml and find_control(attachment_xml,["What's on your mind?"])
+                and find_control(attachment_xml,["item ready"])
+                and find_control(attachment_xml,["audio"])):
+            break
+    if not (attachment_xml and find_control(attachment_xml,["What's on your mind?"])
+            and find_control(attachment_xml,["item ready"]) and find_control(attachment_xml,["audio"])):
+        screenshot("authenticated-voice-post-attachment-missing.png")
+        return recover(attachment_xml or preview_xml,"Use recording returned without a visible audio attachment in the real composer")
+
+    screenshot("authenticated-voice-post-attachment.png")
+    report.append("- PASS Home composer recorded a real short voice clip and asynchronous preview became playable; captured authenticated-voice-preview-ready.png")
+    report.append("- PASS Use recording attached the clip to the composer without publishing it; captured authenticated-voice-post-attachment.png")
+    return attachment_xml
+
+
 def clear_runtime_log():
     """Start a focused logcat window immediately before a Chat/Groups route."""
     run("adb","logcat","-c")
@@ -933,6 +1048,13 @@ if not FAILURES:
     composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
     if composer_xml:
         report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
+        voice_composer_xml=exercise_voice_post_preview(composer_xml)
+        if voice_composer_xml:
+            composer_xml=voice_composer_xml
+        else:
+            # A failed voice smoke remains RED, but do not let a stale screen block the independent camera check.
+            home_for_camera=return_home_in_app("authenticated-home-after-voice-smoke")
+            composer_xml=tap_control(home_for_camera,["Open FYNX camera"],"home-camera-composer-after-voice",["What's on your mind?"])
         camera_xml=tap_control(composer_xml,["Video/Camera"],"composer-camera",["Switch front/back camera"])
         if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
         else: FAILURES.append("post composer -> real camera")
@@ -1338,7 +1460,8 @@ else:
     
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png","",
+           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png",
+           "- authenticated-voice-preview-ready.png","- authenticated-voice-post-attachment.png","",
            f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")

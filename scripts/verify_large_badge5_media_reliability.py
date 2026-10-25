@@ -12,6 +12,10 @@ home_media = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomePostMediaClient.
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 runtime_script = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 
+voice_recorder = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxVoicePostRecorder.kt").read_text(encoding="utf-8")
+viewer = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxPostMediaViewer.kt").read_text(encoding="utf-8")
+media_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt").read_text(encoding="utf-8")
+
 remote_checks = {
     "authenticated backend media download": "FynxBackendClient.downloadToFile" in remote,
     "account-scoped media cache": "FynxAuthStore.accountStorageKey" in remote,
@@ -25,6 +29,13 @@ remote_checks = {
     "inline video is released by AndroidView": "onRelease = { view ->" in remote and "view.stopPlayback()" in remote,
     "Home audio prepares asynchronously and can seek": "player.prepareAsync()" in home_panel and "onValueChangeFinished =" in home_panel,
     "runtime login detection distinguishes username search": "_is_sign_in_gate(current)" in navigation_script and 'if find_control(current, ["Sign In"]) or find_control(current, ["Username"])' not in navigation_script,
+    "voice preview prepares asynchronously": "prepareAsync()" in voice_recorder and "MediaPlayer().apply { setDataSource(file.absolutePath); prepare() }" not in voice_recorder,
+    "voice publication waits for a decoded nonempty preview": "previewReady && !previewLoading && previewPlayer != null" in voice_recorder and "previewDurationMs > 0L" in voice_recorder and "enabled = previewReady" in voice_recorder,
+    "failed voice recorder start cleans up partial files and recorder": "candidate?.runCatching { reset() }" in voice_recorder and "candidate?.runCatching { release() }" in voice_recorder and "file.delete()" in voice_recorder,
+    "stop failure invalidates the recording": "stopSucceeded && file?.isFile == true" in voice_recorder,
+    "audio media opens with the shared audio player in the post viewer": 'item.mediaType.equals("audio", true) ->' in viewer and "FynxRemoteAudio(item.mediaUrl" in viewer,
+    "viewer video tears down at AndroidView release": "onRelease = { view ->" in viewer and "view.stopPlayback()" in viewer,
+    "multi-media selection validates before upload begins": "val validated = selected.mapIndexed" in media_client and media_client.index("val validated = selected.mapIndexed") < media_client.index("FynxProductionMessaging.uploadMedia"),
 }
 camera_checks = {
     "CameraX capture": "ImageCapture" in camera and "VideoCapture<Recorder>" in camera,

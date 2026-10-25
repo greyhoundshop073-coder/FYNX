@@ -106,11 +106,17 @@ fun FynxPostMediaViewer(
 
 @Composable private fun FynxViewerMediaPage(context: Context, item: FynxPostViewerItem) {
     var file by remember(item.mediaUrl) { mutableStateOf<File?>(null) }
-    var loading by remember(item.mediaUrl) { mutableStateOf(true) }
+    var loading by remember(item.mediaUrl) { mutableStateOf(!item.mediaType.equals("audio", true)) }
     var failed by remember(item.mediaUrl) { mutableStateOf(false) }
     var reloadNonce by remember(item.mediaUrl) { mutableIntStateOf(0) }
 
-    LaunchedEffect(item.mediaUrl, reloadNonce) {
+    LaunchedEffect(item.mediaUrl, item.mediaType, reloadNonce) {
+        if (item.mediaType.equals("audio", true)) {
+            file = null
+            failed = false
+            loading = false
+            return@LaunchedEffect
+        }
         loading = true
         failed = false
         file = withContext(Dispatchers.IO) {
@@ -122,6 +128,15 @@ fun FynxPostMediaViewer(
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when {
+            item.mediaType.equals("audio", true) -> {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(Icons.Default.GraphicEq, contentDescription = "Audio post", tint = Color.White)
+                    FynxRemoteAudio(item.mediaUrl, modifier = Modifier.fillMaxWidth())
+                }
+            }
             loading -> CircularProgressIndicator(color = Color.White)
             failed -> Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -132,25 +147,25 @@ fun FynxPostMediaViewer(
                 TextButton(onClick = { reloadNonce++ }) { Text("Retry", color = Color.White) }
             }
             item.mediaType.equals("video", true) && file != null -> {
-                var videoView by remember(file) { mutableStateOf<VideoView?>(null) }
                 AndroidView(
                     factory = { ctx ->
                         VideoView(ctx).apply {
-                            videoView = this
                             layoutParams = ViewGroup.LayoutParams(-1, -1)
                             setMediaController(MediaController(ctx))
                             setVideoURI(Uri.fromFile(file))
-                            setOnPreparedListener { it.isLooping = true; start() }
+                            setOnPreparedListener { player -> player.isLooping = true; start() }
                         }
                     },
-                    modifier = Modifier.fillMaxSize()
-                )
-                DisposableEffect(videoView) {
-                    onDispose {
-                        videoView?.stopPlayback()
-                        videoView = null
+                    modifier = Modifier.fillMaxSize(),
+                    onRelease = { view ->
+                        runCatching { view.pause() }
+                        runCatching { view.setOnPreparedListener(null) }
+                        runCatching { view.setOnCompletionListener(null) }
+                        runCatching { view.setOnErrorListener(null) }
+                        runCatching { view.setMediaController(null) }
+                        runCatching { view.stopPlayback() }
                     }
-                }
+                )
             }
             file != null -> {
                 var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
