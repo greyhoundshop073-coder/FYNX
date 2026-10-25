@@ -4,6 +4,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 remote = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
+home_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text(encoding="utf-8")
+navigation_script = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 camera = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
 status = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt").read_text(encoding="utf-8")
 home_media = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomePostMediaClient.kt").read_text(encoding="utf-8")
@@ -18,7 +20,11 @@ remote_checks = {
     "audio rendering": "FynxRemoteAudio" in remote and "MediaPlayer" in remote,
     "retry state": "TextButton(onClick = { reloadNonce++ })" in remote,
     "video cleanup": "stopPlayback()" in remote,
-    "audio cleanup": "player?.release()" in remote,
+    "audio cleanup is bound to the live player": "DisposableEffect(resolvedUrl, player)" in remote and "activePlayer?.release()" in remote,
+    "remote audio seek and replay": "onValueChangeFinished =" in remote and "player?.seekTo(positionMs" in remote and "completed.seekTo(0)" in remote,
+    "inline video is released by AndroidView": "onRelease = { view ->" in remote and "view.stopPlayback()" in remote,
+    "Home audio prepares asynchronously and can seek": "player.prepareAsync()" in home_panel and "onValueChangeFinished =" in home_panel,
+    "runtime login detection distinguishes username search": "_is_sign_in_gate(current)" in navigation_script and 'if find_control(current, ["Sign In"]) or find_control(current, ["Username"])' not in navigation_script,
 }
 camera_checks = {
     "CameraX capture": "ImageCapture" in camera and "VideoCapture<Recorder>" in camera,

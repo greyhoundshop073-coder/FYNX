@@ -834,7 +834,7 @@ def return_home_in_app(name:str)->str:
             current = dump_ui(name + "-back-" + str(attempt) + ".xml")
             if _home_surface_ready(current):
                 return current
-            if find_control(current, ["Sign In"]) or find_control(current, ["Username"]):
+            if _is_sign_in_gate(current):
                 FAILURES.append(name + ": in-app Back reached the sign-in gate; authentication was left untouched")
                 return current
 
@@ -857,7 +857,7 @@ def restore_home_after_restart(name:str)->str:
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
     current=dismiss_runtime_permission_prompt() or dump_ui(name+"-initial.xml")
-    if find_control(current,["Sign In"]):
+    if _is_sign_in_gate(current):
         # Some test paths deliberately exercise a cold start. Restore through the
         # approved existing login path, but do not use this helper for normal
         # in-app Home navigation.
@@ -865,7 +865,7 @@ def restore_home_after_restart(name:str)->str:
         if error:
             FAILURES.append(name+": could not restore Home after cold start: "+error)
             return current
-    if find_control(current,["Sign In"]) or find_control(current,["Username"]):
+    if _is_sign_in_gate(current):
         FAILURES.append(name+": cold-start recovery remained at the sign-in gate")
         return current
     return current
@@ -926,7 +926,7 @@ if not FAILURES:
         run("adb","shell","input","keyevent","4")
         time.sleep(0.8)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
-    if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
+    if _is_sign_in_gate(xml):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
     elif _home_surface_ready(xml):
         xml = capture_home_feed_evidence(xml)

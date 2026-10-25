@@ -1110,7 +1110,14 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                                 setVideoPath(file!!.absolutePath)
                             }
                         },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        onRelease = { view ->
+                            runCatching { view.pause() }
+                            runCatching { view.setOnPreparedListener(null) }
+                            runCatching { view.setOnCompletionListener(null) }
+                            runCatching { view.setOnErrorListener(null) }
+                            runCatching { view.stopPlayback() }
+                        }
                     )
                     if (fullscreenVideoLoading && !fullscreenVideoFailed) {
                         CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
@@ -1315,13 +1322,22 @@ private fun AudioPostPlayer(file: File) {
         color = MaterialTheme.colorScheme.secondaryContainer,
         tonalElevation = 0.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .heightIn(min = 82.dp)
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
+            var playbackProgress by remember(file) { mutableFloatStateOf(0f) }
+            var seeking by remember(file) { mutableStateOf(false) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             IconButton(
                 enabled = playback.prepared && !playback.failed,
                 onClick = playback.togglePlayback,
@@ -1337,7 +1353,6 @@ private fun AudioPostPlayer(file: File) {
             Spacer(Modifier.width(4.dp))
 
             val waveformHeights = listOf(12, 18, 24, 15, 28, 20, 32, 17, 25, 13, 22, 30, 18, 26, 15, 23, 12, 20)
-            var playbackProgress by remember(file) { mutableFloatStateOf(0f) }
             val waveTransition = rememberInfiniteTransition(label = "voice_wave")
             val wavePhase by waveTransition.animateFloat(
                 initialValue = 0f,
@@ -1345,20 +1360,22 @@ private fun AudioPostPlayer(file: File) {
                 animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart),
                 label = "voice_wave_phase"
             )
-            LaunchedEffect(playback.playing, playback.prepared, playback.failed, player) {
+            LaunchedEffect(playback.playing, playback.prepared, playback.failed, player, seeking) {
                 if (!playback.prepared || playback.failed) {
-                    playbackProgress = 0f
+                    if (!seeking) playbackProgress = 0f
                     return@LaunchedEffect
                 }
-                while (playback.playing && playback.prepared && !playback.failed) {
+                while (playback.playing && playback.prepared && !playback.failed && !seeking) {
                     playbackProgress = if (player.duration > 0) {
                         (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
                     } else 0f
                     delay(80L)
                 }
-                playbackProgress = if (playback.prepared && !playback.failed && player.duration > 0) {
-                    (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
-                } else 0f
+                if (!seeking) {
+                    playbackProgress = if (playback.prepared && !playback.failed && player.duration > 0) {
+                        (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
+                    } else 0f
+                }
             }
             if (playback.failed) {
                 Text("Voice note unavailable", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, maxLines = 2)
@@ -1408,6 +1425,25 @@ private fun AudioPostPlayer(file: File) {
                     color = if (playback.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                 )
             }
+        }
+            Slider(
+                value = playbackProgress.coerceIn(0f, 1f),
+                onValueChange = { value ->
+                    seeking = true
+                    playbackProgress = value
+                },
+                onValueChangeFinished = {
+                    if (playback.durationMs > 0L) {
+                        runCatching {
+                            player.seekTo((playback.durationMs * playbackProgress).toLong().coerceIn(0L, playback.durationMs).toInt())
+                        }.onFailure { seeking = false }
+                    }
+                    seeking = false
+                },
+                valueRange = 0f..1f,
+                enabled = playback.prepared && !playback.failed && playback.durationMs > 0L,
+                modifier = Modifier.fillMaxWidth().height(24.dp).padding(horizontal = 12.dp)
+            )
         }
     }
 }
