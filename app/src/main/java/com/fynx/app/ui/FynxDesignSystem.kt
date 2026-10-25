@@ -27,7 +27,7 @@ enum class FynxAccent(
     val companion: Color
 ) {
     // Keep the established FYNX identity colors unchanged.
-    Blue(Color(0xFF2F8CFF), Color(0xFF22C7F2), Color(0xFFB7A36A)),
+    Blue(Color(0xFF0047AB), Color(0xFF3C73BD), Color(0xFF008000)),
     Purple(Color(0xFF7C5CFF), Color(0xFFB18CFF), Color(0xFFA4778A)),
     Charcoal(Color(0xFF37474F), Color(0xFF607D8B), Color(0xFF8A9499))
 }
@@ -48,8 +48,13 @@ object FynxDesign {
     val LightOutline = Color(0xFFD2DAE5)
     val LightSelectedContainer = Color(0xFFE4EFFC)
     // Subtle neutral/reflective tones: deliberately restrained so light mode stays white.
-    val BlueLightCompanionContainer = Color(0xFFF2EBDD)
-    val BlueDarkCompanionContainer = Color(0xFF3A3324)
+    val BlueLightCompanionContainer = Color(0xFFE6F4EA)
+    val BlueDarkCompanionContainer = Color(0xFF153A27)
+    /** Exact user-approved success and brand-error colors. */
+    val ClassicGreen = Color(0xFF008000)
+    val CrimsonRed = Color(0xFFDC143C)
+    /** Brighter counterpart used for error text on dark surfaces to preserve contrast. */
+    val DarkModeError = Color(0xFFFF7086)
     val PurpleLightCompanionContainer = Color(0xFFF3E7EC)
     val PurpleDarkCompanionContainer = Color(0xFF3A2B32)
     val CharcoalLightCompanionContainer = Color(0xFFE7EBED)
@@ -155,6 +160,8 @@ fun FynxTheme(
         darkColorScheme(
             primary = effectiveAccent.primary,
             onPrimary = onAccent,
+            error = FynxDesign.DarkModeError,
+            onError = Color.White,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
             tertiary = effectiveAccent.companion,
@@ -197,6 +204,8 @@ fun FynxTheme(
         lightColorScheme(
             primary = effectiveAccent.primary,
             onPrimary = onAccent,
+            error = FynxDesign.CrimsonRed,
+            onError = Color.White,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
             tertiary = effectiveAccent.companion,

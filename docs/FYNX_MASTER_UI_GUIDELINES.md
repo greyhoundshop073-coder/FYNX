@@ -5,9 +5,11 @@ This document is the visual contract for all existing and future FYNX screens. I
 ## Visual identity
 - Primary background: dark navy / blue-black.
 - Main surfaces: deep navy cards and raised navy surfaces.
-- Primary action/accent: FYNX blue.
-- Secondary accent: FYNX purple/violet.
-- Important branded actions may use a blue-to-purple gradient.
+- Primary action/accent: Cobalt Blue (`#0047AB`).
+- Successful and confirmed states: Classic Green (`#008000`).
+- Error and failed states: Crimson Red (`#DC143C`); dark-mode error text may use the brighter contrast-safe red token.
+- Purple remains an optional user-selected accent, not the default brand color for controls.
+- Use solid Cobalt Blue for primary actions; do not introduce new blue-to-purple action gradients.
 - Primary text: white / very light blue-white.
 - Secondary text: muted cool grey-blue.
 - Borders: subtle blue-grey, never heavy.
