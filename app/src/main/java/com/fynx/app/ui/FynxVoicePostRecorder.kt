@@ -69,7 +69,7 @@ fun FynxVoicePostRecorder(onRecorded: (Uri) -> Unit, onDismiss: () -> Unit) {
             return
         }
 
-        val file = File(context.cacheDir, "fynx_voice_\${System.currentTimeMillis()}.m4a")
+        val file = File(context.cacheDir, "fynx_voice_${System.currentTimeMillis()}.m4a")
         var candidate: MediaRecorder? = null
         try {
             candidate = MediaRecorder()
@@ -287,7 +287,7 @@ fun FynxVoicePostRecorder(onRecorded: (Uri) -> Unit, onDismiss: () -> Unit) {
                     }
                 )
                 if (recording) {
-                    Text("\${formatVoiceTime(elapsedMs)} / \${formatVoiceTime(MAX_VOICE_POST_DURATION_MS)}")
+                    Text("${formatVoiceTime(elapsedMs)} / ${formatVoiceTime(MAX_VOICE_POST_DURATION_MS)}")
                     LinearProgressIndicator(
                         progress = { elapsedMs.toFloat() / MAX_VOICE_POST_DURATION_MS.toFloat() },
                         modifier = Modifier.fillMaxWidth()
@@ -305,7 +305,7 @@ fun FynxVoicePostRecorder(onRecorded: (Uri) -> Unit, onDismiss: () -> Unit) {
                         Button(onClick = { stopRecording() }, modifier = Modifier.weight(1f)) { Text("Stop") }
                     }
                 } else if (hasRecording) {
-                    Text("Voice recording • \${formatVoiceTime(previewDurationMs)}")
+                    Text("Voice recording • ${formatVoiceTime(previewDurationMs)}")
                     if (previewLoading) {
                         CircularProgressIndicator()
                     } else if (previewReady && previewDurationMs > 0L) {
@@ -323,7 +323,7 @@ fun FynxVoicePostRecorder(onRecorded: (Uri) -> Unit, onDismiss: () -> Unit) {
                             valueRange = 0f..previewDurationMs.toFloat(),
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Text("\${formatVoiceTime(previewPositionMs)} / \${formatVoiceTime(previewDurationMs)}")
+                        Text("${formatVoiceTime(previewPositionMs)} / ${formatVoiceTime(previewDurationMs)}")
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(

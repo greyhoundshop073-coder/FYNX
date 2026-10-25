@@ -30,6 +30,8 @@ remote_checks = {
     "Home audio prepares asynchronously and can seek": "player.prepareAsync()" in home_panel and "onValueChangeFinished =" in home_panel,
     "runtime login detection distinguishes username search": "_is_sign_in_gate(current)" in navigation_script and 'if find_control(current, ["Sign In"]) or find_control(current, ["Username"])' not in navigation_script,
     "voice preview prepares asynchronously": "prepareAsync()" in voice_recorder and "MediaPlayer().apply { setDataSource(file.absolutePath); prepare() }" not in voice_recorder,
+    "voice Kotlin strings keep interpolation active": r"\${" not in voice_recorder,
+    "mixed voice/visual exclusion preserves its public contract": "Voice posts cannot be mixed with visual media" in media_client,
     "voice publication waits for a decoded nonempty preview": "previewReady && !previewLoading && previewPlayer != null" in voice_recorder and "previewDurationMs > 0L" in voice_recorder and "enabled = previewReady" in voice_recorder,
     "failed voice recorder start cleans up partial files and recorder": "candidate?.runCatching { reset() }" in voice_recorder and "candidate?.runCatching { release() }" in voice_recorder and "file.delete()" in voice_recorder,
     "stop failure invalidates the recording": "stopSucceeded && file?.isFile == true" in voice_recorder,

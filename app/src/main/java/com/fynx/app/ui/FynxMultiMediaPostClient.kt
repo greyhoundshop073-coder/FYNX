@@ -80,7 +80,7 @@ object FynxMultiMediaPostClient {
                     else -> throw IllegalArgumentException("FYNX supports images, videos and audio files only.")
                 }
                 if (type == "audio" && (selected.size != 1 || index != 0)) {
-                    throw IllegalArgumentException("Voice posts use one audio recording. Use photos/videos for a multi-media post.")
+                    throw IllegalArgumentException("Voice posts cannot be mixed with visual media")
                 }
 
                 val size = runCatching {
