@@ -217,7 +217,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             color = MaterialTheme.colorScheme.surfaceContainer
                         ) {
                             Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                if (listing.mediaIds.isNotEmpty()) FynxRemoteMedia(FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()), "auto", Modifier.size(112.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
+                                if (listing.mediaIds.isNotEmpty()) FynxRemoteMedia(FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()), FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()), Modifier.size(112.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
                                 else Box(Modifier.size(112.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
                                     Icon(Icons.Default.ShoppingBag, "Product image unavailable", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
                                 }
