@@ -9,9 +9,11 @@ Use the approved FYNX master reference image as the visual source of truth for l
 ## Core visual language
 
 - Primary background: deep navy / blue-black.
-- Primary accent: FYNX blue.
-- Secondary accent: purple/violet.
-- Important actions may use a blue-to-purple visual treatment when it matches the reference.
+- Primary accent: Cobalt Blue (`#0047AB`).
+- Successful and confirmed actions: Classic Green (`#008000`).
+- Errors and failed actions: Crimson Red (`#DC143C`); use a brighter contrast-safe red for error text on dark surfaces.
+- Purple remains available as an optional user-selected accent, not the default brand control color.
+- Use solid Cobalt Blue for primary actions; do not add blue-to-purple gradients to actions.
 - Surfaces/cards: slightly raised dark navy surfaces with subtle separation.
 - Primary text: white / near-white.
 - Secondary text: muted light grey-blue.

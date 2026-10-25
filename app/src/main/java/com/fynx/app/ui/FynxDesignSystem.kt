@@ -26,7 +26,7 @@ enum class FynxAccent(
     /** Mature companion tone used sparingly for tertiary accents and reflective depth. */
     val companion: Color
 ) {
-    // Keep the established FYNX identity colors unchanged.
+    // Default FYNX brand palette: Cobalt Blue primary, blue companion, Classic Green tertiary.
     Blue(Color(0xFF0047AB), Color(0xFF3C73BD), Color(0xFF008000)),
     Purple(Color(0xFF7C5CFF), Color(0xFFB18CFF), Color(0xFFA4778A)),
     Charcoal(Color(0xFF37474F), Color(0xFF607D8B), Color(0xFF8A9499))
