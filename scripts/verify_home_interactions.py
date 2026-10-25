@@ -57,6 +57,12 @@ require(home, 'LazyColumn(state = feedListState', "single feed state owns vertic
 require(home, 'snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }', "automatic near-bottom feed pagination")
 for needle in ('onOpenAuthorProfile','FynxRemoteSocialClient.follow','FynxDiscoveryClient.recordEngagement','Intent.ACTION_SEND'):
     require(home, needle, f"identity/share behavior {needle}")
+require(home, "FynxSafetyRemoteClient.submitReport(", "Home post reports use the durable safety-report endpoint")
+require(home, "val reportReasons = listOf(", "Home report sheet offers selectable reasons")
+require(home, "Post ID: ${post.id}. Reported from Home feed.", "Home reports preserve the exact post reference")
+require(home, "ignoreCase = true", "Home does not offer reporting for the current user own posts")
+if (home.includes("FynxDiscoveryClient.recordEvent(context, \"REPORT\"")):
+    raise SystemExit("HOME INTERACTIONS RED: reporting must not be recorded as analytics only")
 require(home, 'hydrateInteractionStates(page.posts)', "interaction state re-entry hydration")
 require(home, 'interactionStates = emptyMap()', "interaction state reset before re-hydration")
 if "CommentsDialog" in home:

@@ -97,6 +97,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var reportPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var reportBusy by remember { mutableStateOf(false) }
     var reportNotice by remember { mutableStateOf<String?>(null) }
+    var reportReason by remember { mutableStateOf("Spam or misleading") }
     var discoveryLoadingMore by remember { mutableStateOf(false) }
     var discoveryHasMore by remember { mutableStateOf(false) }
     var discoveryOffset by remember { mutableIntStateOf(0) }
@@ -519,7 +520,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         posts.forEachIndexed { postIndex, post ->
             item(key = post.id) {
             val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]; val state = interactionStates[post.id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0); val reaction = reactionStates[post.id] ?: FynxHomePostReactionsClient.ReactionState(); val busy = post.id in interactionBusy || "follow:${post.authorUsername.removePrefix("@").trim().lowercase()}" in interactionBusy
-            RemotePostCard(post, currentUsername, photoId, activeStatusOwners.contains(post.authorUsername.removePrefix("@").trim().lowercase()), state, reaction, busy, postMedia[post.id].orEmpty(), playbackActive = focusedVideoPostId == post.id && !feedListState.isScrollInProgress, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onOpenStatus = { openAuthorStatus(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onOpenAudienceEditor = { audiencePost = post }, onReport = { reportPost = post }, onInterested = { id -> scope.launch { FynxDiscoveryClient.recordInterested(context, id) } }, onNotInterested = { id -> scope.launch { FynxDiscoveryClient.recordNotInterested(context, id) } }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenReactionUsers = { reactionUsersPostId = post.id }, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) }, onOpenMediaViewer = { items, index -> mediaViewerPost = post; mediaViewerItems = items; mediaViewerIndex = index })
+            RemotePostCard(post, currentUsername, photoId, activeStatusOwners.contains(post.authorUsername.removePrefix("@").trim().lowercase()), state, reaction, busy, postMedia[post.id].orEmpty(), playbackActive = focusedVideoPostId == post.id && !feedListState.isScrollInProgress, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onOpenStatus = { openAuthorStatus(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onOpenAudienceEditor = { audiencePost = post }, onReport = { reportReason = "Spam or misleading"; reportNotice = null; reportPost = post }, onInterested = { id -> scope.launch { FynxDiscoveryClient.recordInterested(context, id) } }, onNotInterested = { id -> scope.launch { FynxDiscoveryClient.recordNotInterested(context, id) } }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenReactionUsers = { reactionUsersPostId = post.id }, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) }, onOpenMediaViewer = { items, index -> mediaViewerPost = post; mediaViewerItems = items; mediaViewerIndex = index })
             if (post.id != posts.lastOrNull()?.id) {
                 HorizontalDivider(
                     modifier = Modifier.fillMaxWidth(),
@@ -577,7 +578,60 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
         if (loadingMore) item(key = "feed_loading_more") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
     }
-    reportPost?.let { post -> AlertDialog(onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } }, title = { Text("Report post") }, text = { Text(reportNotice ?: "Report this post to FYNX for review.") }, confirmButton = { TextButton(enabled = !reportBusy, onClick = { reportBusy = true; reportNotice = "Sending report…"; scope.launch { FynxDiscoveryClient.recordEvent(context, "REPORT", postId = post.id, metadata = JSONObject().put("reason", "user_report")).onSuccess { reportNotice = "Report submitted."; reportBusy = false; delay(700L); reportPost = null; reportNotice = null }.onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false } } }) { Text("Report post") } }, dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }) }
+    reportPost?.let { post ->
+        val reportReasons = listOf(
+            "Spam or misleading",
+            "Harassment or hate",
+            "Violence or dangerous content",
+            "Nudity or sexual content",
+            "Scam or impersonation",
+            "Other"
+        )
+        AlertDialog(
+            onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } },
+            title = { Text("Report post") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(reportNotice ?: "Choose the reason that best describes this post.")
+                    if (reportNotice == null) {
+                        reportReasons.forEach { reason ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable(enabled = !reportBusy) { reportReason = reason }.padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = reportReason == reason, onClick = { reportReason = reason }, enabled = !reportBusy)
+                                Text(reason, Modifier.padding(start = 4.dp))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !reportBusy && reportNotice == null, onClick = {
+                    reportBusy = true
+                    reportNotice = "Sending report…"
+                    scope.launch {
+                        FynxSafetyRemoteClient.submitReport(
+                            context = context,
+                            targetUsername = post.authorUsername,
+                            reason = reportReason,
+                            details = "Post ID: ${post.id}. Reported from Home feed."
+                        ).onSuccess {
+                            reportNotice = "Report submitted to FYNX Safety for review."
+                            reportBusy = false
+                            delay(700L)
+                            reportPost = null
+                            reportNotice = null
+                        }.onFailure { failure ->
+                            reportNotice = failure.message ?: "Report could not be submitted."
+                            reportBusy = false
+                        }
+                    }
+                }) { Text("Submit report") }
+            },
+            dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }
+        )
+    }
     commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, initialCommentId = initialCommentId, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }) }
     reactionUsersPostId?.let { postId -> ReactionUsersDialog(context = context, postId = postId, onDismiss = { reactionUsersPostId = null }) }
     authorStatusViewer?.let { HomeAuthorStatusDialog(it, onDismiss = { authorStatusViewer = null }) }
@@ -818,7 +872,9 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                             DropdownMenuItem(text = { Text("I'm interested") }, onClick = { menuOpen = false; onInterested(post.id) })
                             DropdownMenuItem(text = { Text("Share post") }, onClick = { menuOpen = false; onShare() }, leadingIcon = { Icon(Icons.Default.Share, null) })
                             DropdownMenuItem(text = { Text("I'm not interested") }, onClick = { menuOpen = false; onNotInterested(post.id) })
-                            DropdownMenuItem(text = { Text("Report post") }, onClick = { menuOpen = false; onReport() })
+                            if (!post.authorUsername.removePrefix("@").trim().equals(currentUsername.removePrefix("@").trim(), ignoreCase = true)) {
+                                DropdownMenuItem(text = { Text("Report post") }, onClick = { menuOpen = false; onReport() })
+                            }
                         }
                     }
                 }
