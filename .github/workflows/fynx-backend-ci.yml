@@ -236,6 +236,14 @@ jobs:
         run: node verify-marketplace-batch2.mjs
       - name: Verify Marketplace recovery worker load and failure safety
         run: node verify-marketplace-recovery-worker-safety.mjs
+      - name: Verify privacy-settings update SQL and field preservation
+        run: node verify-privacy-settings-upsert.mjs
+      - name: Verify private-message retry idempotency against the registered route
+        run: node verify-private-message-idempotency.mjs
+      - name: Verify group-send retry idempotency against the registered route
+        run: node verify-group-message-idempotency.mjs
+      - name: Verify persistent group member add/remove lifecycle against the registered route
+        run: node verify-group-membership-sync.mjs
       - name: Verify group permission enforcement contract
         run: python3 ../scripts/verify_group_permissions_contract.py
       - name: Verify backend package metadata

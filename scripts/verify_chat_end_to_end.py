@@ -34,6 +34,8 @@ conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 groups = read("app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt")
 realtime = read("app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt")
 messaging = read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt")
+offline_sync = read("app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt")
+runtime_certification = read("scripts/verify_authenticated_runtime_navigation.py")
 backend = read("backend/server.js")
 isolation = read("backend/realtimeIsolationBootstrap.js")
 compat = read("backend/chatRealtimeCompatibility.js")
@@ -65,6 +67,37 @@ require(conversation, r"FynxProductionMessaging\.markRead\(context,", "Conversat
 require(conversation, r"realtimeClient\.acknowledgeMessage\(", "ConversationPanel must acknowledge received messages")
 require(conversation, r"realtimeClient\.sendRead\(", "ConversationPanel must send realtime read acknowledgements")
 require(conversation, r"realtimeClient\.sendTyping\(", "ConversationPanel must use the realtime typing transport")
+
+# 1b. Both group text-send entry points must remain pending until the server returns its
+# canonical message. An optimistic bubble is not evidence of delivery or read receipt.
+optimistic_group_send_states = re.findall(
+    r"val optimistic = ChatMessage\(text\.trim\(\), true, UUID\.randomUUID\(\)\.toString\(\), delivered = (true|false), read = (true|false), replyToId = replyToId\)",
+    groups,
+)
+if len(optimistic_group_send_states) != 2:
+    fail("Group keyboard-send and composer-button callbacks must both be covered by the optimistic delivery-state regression gate")
+elif any(delivered != "false" or read != "false" for delivered, read in optimistic_group_send_states):
+    fail("Group text messages must stay pending/unread until the backend confirms delivery; optimistic UI must not claim delivery or read state")
+
+# 1c. Runtime certification must exercise the real group voice-recording/send route,
+# then confirm a newly persisted audio media ID/type across force-stop and reopening.
+require(runtime_certification, r"def certify_group_voice_message\(group_id:str\)->None:", "Runtime certification must include real group voice-message capture")
+require(runtime_certification, r"certify_group_voice_message\(group_id\)", "Runtime certification must invoke the group voice-message journey")
+require(runtime_certification, r"Stop recording and send", "Group voice journey must stop/send through the actual composer control")
+require(runtime_certification, r"attachmentType.*audio", "Group voice journey must verify the backend audio attachment type")
+require(runtime_certification, r"force-stop/relaunch and reopening the same group", "Group voice journey must verify persistence after app restart")
+
+# 1d. If no preconfigured peer secrets exist, the runtime may provision a dedicated
+# run-scoped account only on the explicitly isolated HTTPS Railway testing host.
+require(runtime_certification, r"def provision_isolated_runtime_peer\(", "Runtime certification must have a dedicated isolated peer provisioning helper")
+require(runtime_certification, r'parsed\.scheme!="https"', "Automatic peer provisioning must require HTTPS")
+require(runtime_certification, r'not host\.endswith\("\.up\.railway\.app"\)', "Automatic peer provisioning must be limited to Railway test hosts")
+require(runtime_certification, r'"testing" not in host', "Automatic peer provisioning must explicitly reject non-testing hosts")
+require(runtime_certification, r'base\+"/api/auth/register"', "Automatic peer provisioning must use the existing backend registration endpoint")
+peer_guard_at = runtime_certification.find('if parsed.scheme!="https" or not host.endswith(".up.railway.app") or "testing" not in host:')
+peer_register_at = runtime_certification.find('base+"/api/auth/register"')
+if not (0 <= peer_guard_at < peer_register_at):
+    fail("Automatic peer provisioning must reject non-testing hosts before sending a registration request")
 
 # 2. Realtime client contract: authenticated websocket, message/status/typing handling.
 require(realtime, r"/realtime", "FynxRealtimeClient must target the backend realtime endpoint")
@@ -98,6 +131,15 @@ require(conversation, r"setMaxDuration\(120_000\)", "Voice recorder must enforce
 require(conversation, r"MEDIA_RECORDER_INFO_MAX_DURATION_REACHED", "Voice recorder must handle the maximum-duration callback")
 require(conversation, r"stopRecordingAction\s*=\s*::stopRecording", "Voice maximum-duration callback must terminate through the production stop/send path")
 require(conversation, r"voiceDurationMs = duration", "ConversationPanel must send the actual recorded voice duration to the production API")
+
+# 5b. Offline send reconciliation: never discard the durable request mapping until the
+# server-accepted message can replace its local pending bubble with a canonical server ID.
+guard_at = offline_sync.find("if (currentUserId.isNullOrBlank()) {")
+break_at = offline_sync.find("break", guard_at) if guard_at >= 0 else -1
+replace_at = offline_sync.find("FynxChatStore.replaceMessage")
+remove_at = offline_sync.find("FynxOfflineOutbox.remove")
+if not (0 <= guard_at < break_at < replace_at < remove_at):
+    fail("Offline outbox must retain a server-accepted message when current-user identity cannot be resolved; retry must keep its stable request ID")
 
 # 6. Backend message data model and API path.
 require(backend, r"CREATE TABLE IF NOT EXISTS messages", "Backend must own the production messages table")

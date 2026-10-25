@@ -20,7 +20,7 @@ realtime = read('app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt')
 group_panel = read('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
 client = read('app/src/main/java/com/fynx/app/ui/FynxGroupsBatch3.kt')
 
-check('group routes authenticate requests', "const auth = (req,res,next)" in group and "jwt.verify(token,JWT_SECRET)" in group)
+check('group routes authenticate requests', "const auth = (req,res,next)" in group and "jwt.verify(token,signingSecret)" in group and "if(!token||!signingSecret)" in group and "const signingSecret = providedJwtSecret || JWT_SECRET" in group)
 check('group membership is required to read messages', "group membership required" in group and "if(!(await member(groupId,req.user.sub)))" in group)
 check('group message sender owns attachments', "message_media WHERE id=$1 AND owner_id=$2" in group)
 check('group messages respect account safety state', "account_status" in group and "ACCOUNT_LOCKED" in group and "ACCOUNT_LIMITED" in group)
