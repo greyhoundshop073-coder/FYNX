@@ -166,7 +166,7 @@ object FynxRemoteSocialClient {
         // Confirm the new row through the authenticated seller inventory, not a discovery-feed assumption.
         // Read the seller inventory endpoint after creation so a successful publish
         // can be confirmed from the same account instead of always returning null.
-        myListings(context).getOrThrow().firstOrNull { it.id == id }
+        myListings(context).getOrNull()?.firstOrNull { it.id == id }
     }
     suspend fun deleteMarketplaceListing(context: Context, id: String): Result<Unit> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id")); return FynxBackendClient.delete(context, "/api/marketplace/listings/$numericId").map { Unit } }
     suspend fun createMarketplaceOrder(context: Context, listingId: String, quantity: Int): Result<MarketplaceOrder> { val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id")); require(quantity > 0) { "Quantity must be at least 1." }; return FynxBackendClient.postJson(context, "/api/marketplace/orders", JSONObject().apply { put("listingId", numericId); put("quantity", quantity); put("orderId", java.util.UUID.randomUUID().toString()) }.toString()).mapCatching { parseOrder(JSONObject(it).getJSONObject("order")) } }
