@@ -290,7 +290,7 @@ for token, label in (
 camera_journey_start = runtime_navigation.find("def exercise_camera_capture_journeys(")
 if camera_journey_start < 0 or runtime_navigation.count("exercise_camera_capture_journeys(") < 2:
     raise SystemExit("HOME 4F RUNTIME RED: real camera capture journey is not defined and called")
-camera_journey = runtime_navigation[camera_journey_start:runtime_navigation.find("\\ndef login(", camera_journey_start)]
+camera_journey = runtime_navigation[camera_journey_start:runtime_navigation.find("\ndef login(", camera_journey_start)]
 for token, label in (
     ('["Take photo"]', "photo capture action"),
     ('["Record video note"]', "video capture action"),
