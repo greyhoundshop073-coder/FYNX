@@ -924,6 +924,19 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
             time.sleep(.5)
         return latest
 
+    def wait_for_enabled(labels: list[str], name: str, timeout: float = 18.0) -> str:
+        """Wait for a usable control, not merely its visible-but-disabled Compose label."""
+        deadline = time.monotonic() + timeout
+        latest = camera_xml
+        index = 0
+        while time.monotonic() < deadline:
+            latest = dump_ui(f"{name}-{index}.xml")
+            index += 1
+            if latest and all(find_enabled_control(latest, [label]) for label in labels):
+                return latest
+            time.sleep(.4)
+        return latest
+
     def allow_camera_or_audio_permission(current: str) -> tuple[str, bool]:
         permission = find_control(
             current,
@@ -942,10 +955,10 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
 
     current = camera_xml
     # Photo: capture -> actual preview -> retake. Never tap Send.
-    photo_button = find_control(current, ["Take photo"])
+    photo_button = find_enabled_control(current, ["Take photo"])
     if photo_button is None:
         current, _ = allow_camera_or_audio_permission(current)
-        photo_button = find_control(current, ["Take photo"])
+        photo_button = find_enabled_control(current, ["Take photo"])
 
     # CameraX can show PreviewView and its control row before ImageCapture finishes binding.
     # Wait for the real Compose click target to become enabled before attempting a capture.
@@ -955,7 +968,7 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         current = dump_ui(f"authenticated-camera-photo-action-ready-{photo_ready_attempt}.xml")
         photo_ready_attempt += 1
         current, permission_used = allow_camera_or_audio_permission(current)
-        photo_button = find_control(current, ["Take photo"])
+        photo_button = find_enabled_control(current, ["Take photo"])
         if photo_button is None:
             time.sleep(.4)
 
@@ -984,8 +997,8 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         return photo_preview
     _, rx, ry = retake
     run("adb", "shell", "input", "tap", str(rx), str(ry))
-    current = wait_for(["Take photo"], "authenticated-camera-after-photo-retake", 15.0)
-    if not find_control(current, ["Take photo"]):
+    current = wait_for_enabled(["Take photo"], "authenticated-camera-after-photo-retake", 20.0)
+    if not find_enabled_control(current, ["Take photo"]):
         screenshot("authenticated-camera-after-photo-retake-missing.png")
         FAILURES.append("camera capture runtime: Retake did not return to the live camera")
         return current
@@ -997,8 +1010,8 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         return current
     _, vx, vy = video_mode
     run("adb", "shell", "input", "tap", str(vx), str(vy))
-    current = wait_for(["Record video note"], "authenticated-camera-video-mode", 8.0)
-    if not find_control(current, ["Record video note"]):
+    current = wait_for_enabled(["Record video note"], "authenticated-camera-video-mode", 20.0)
+    if not find_enabled_control(current, ["Record video note"]):
         screenshot("authenticated-camera-video-mode-missing.png")
         FAILURES.append("camera capture runtime: Video mode did not expose Record video note")
         return current
@@ -1006,12 +1019,12 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
     recording_started = False
     deadline = time.monotonic() + 18.0
     while time.monotonic() < deadline and not recording_started:
-        record = find_control(current, ["Record video note"])
+        record = find_enabled_control(current, ["Record video note"])
         if record is None:
             current = dump_ui("authenticated-camera-video-record-control-wait.xml")
             current, permission_used = allow_camera_or_audio_permission(current)
             if permission_used:
-                current = wait_for(["Record video note"], "authenticated-camera-video-after-permission", 8.0)
+                current = wait_for_enabled(["Record video note"], "authenticated-camera-video-after-permission", 20.0)
             else:
                 time.sleep(.4)
             continue
@@ -1022,12 +1035,12 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         current = dump_ui("authenticated-camera-video-record-request.xml")
         current, permission_used = allow_camera_or_audio_permission(current)
         if permission_used:
-            current = wait_for(["Record video note"], "authenticated-camera-video-ready-after-permission", 8.0)
+            current = wait_for_enabled(["Record video note"], "authenticated-camera-video-ready-after-permission", 20.0)
             continue
         stop_deadline = time.monotonic() + 8.0
         while time.monotonic() < stop_deadline:
             current = dump_ui("authenticated-camera-video-recording.xml")
-            if find_control(current, ["Stop video note"]):
+            if find_enabled_control(current, ["Stop video note"]):
                 recording_started = True
                 break
             time.sleep(.4)
@@ -1040,7 +1053,7 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
     screenshot("authenticated-camera-video-recording.png")
     time.sleep(1.3)
     current = dump_ui("authenticated-camera-video-before-stop.xml")
-    stop = find_control(current, ["Stop video note"])
+    stop = find_enabled_control(current, ["Stop video note"])
     if stop is None:
         FAILURES.append("camera capture runtime: Stop video note was not accessible after recording")
         return current
@@ -1062,8 +1075,8 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         return video_preview
     _, rx, ry = retake
     run("adb", "shell", "input", "tap", str(rx), str(ry))
-    current = wait_for(["Take photo"], "authenticated-camera-after-video-retake", 15.0)
-    if not find_control(current, ["Take photo"]):
+    current = wait_for_enabled(["Take photo"], "authenticated-camera-after-video-retake", 20.0)
+    if not find_enabled_control(current, ["Take photo"]):
         screenshot("authenticated-camera-after-video-retake-missing.png")
         FAILURES.append("camera capture runtime: video Retake did not return to the live camera")
         return current

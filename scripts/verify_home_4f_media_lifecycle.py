@@ -309,6 +309,10 @@ camera_journey = runtime_navigation[camera_journey_start:runtime_navigation.find
 for token, label in (
     ('["Take photo"]', "photo capture action"),
     ("photo_ready_deadline = time.monotonic() + 25.0", "photo capture waits for CameraX binding before tapping"),
+    ("def wait_for_enabled(labels: list[str]", "camera journey waits on an enabled-control helper"),
+    ('photo_button = find_enabled_control(current, ["Take photo"])', "photo action must be enabled before tapping"),
+    ('record = find_enabled_control(current, ["Record video note"])', "video recording action must be enabled before tapping"),
+    ('stop = find_enabled_control(current, ["Stop video note"])', "video stop action must be enabled before tapping"),
     ('authenticated-camera-photo-action-ready-', "photo readiness hierarchy is captured while waiting"),
     ('["Record video note"]', "video capture action"),
     ('["Stop video note"]', "video stop/finalization action"),
