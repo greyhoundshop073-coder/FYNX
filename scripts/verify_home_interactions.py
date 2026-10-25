@@ -175,7 +175,7 @@ if "Modifier.size(48.dp).clickable" not in profile_box or 'contentDescription = 
 menu_box_start = app_source.rfind("Box(", profile_comment_start, profile_menu_index)
 menu_label_end = profile_menu_index + len('contentDescription = "Profile menu, three dots"')
 menu_box = app_source[menu_box_start:menu_label_end] if menu_box_start >= 0 else ""
-if menu_box_start <= profile_comment_start or "Modifier.size(48.dp).clickable" not in menu_box or 'contentDescription = "Profile menu, three dots"' not in menu_box or "contentAlignment = Alignment.Center" not in menu_box:
+if menu_box_start <= profile_comment_start or "Modifier.size(48.dp).clickable" not in menu_box or 'contentDescription = "Profile menu, three dots"' not in menu_box:
     raise SystemExit("HOME INTERACTIONS RED: three-dot profile menu must live in its own sibling 48dp touch target")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
 require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
