@@ -104,8 +104,13 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
         FROM users u
         LEFT JOIN marketplace_shop_profiles p ON p.seller_id = u.id
         WHERE lower(u.username) = lower($1)
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id = $2 AND b.blocked_id = u.id)
+               OR (b.blocker_id = u.id AND b.blocked_id = $2)
+          )
         LIMIT 1
-      `, [username]);
+      `, [username, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: 'seller not found' });
       return res.json({ shop: publicProfile(result.rows[0]) });
     } catch (error) {
