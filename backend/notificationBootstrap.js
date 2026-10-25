@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { applyNotificationBootstrapPatch } from "./notificationBootstrapPatch.js";
 
 const backendDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -9,12 +10,9 @@ async function patchOnce(fileName, patches) {
   let source = await readFile(filePath, "utf8");
   let changed = false;
   for (const patch of patches) {
-    if (source.includes(patch.marker)) {
-      source = source.replace(patch.marker, patch.replacement);
-      changed = true;
-    } else if (patch.required && !source.includes(patch.already)) {
-      throw new Error(`Notification bootstrap could not locate ${fileName} marker: ${patch.already}`);
-    }
+    const nextSource = applyNotificationBootstrapPatch(source, patch, fileName);
+    if (nextSource !== source) changed = true;
+    source = nextSource;
   }
   if (changed) await writeFile(filePath, source);
 }
