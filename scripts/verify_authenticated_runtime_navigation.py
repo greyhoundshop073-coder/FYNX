@@ -769,6 +769,21 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
+def _is_sign_in_gate(xml_text:str)->bool:
+    """Detect the actual login screen without mistaking a username search field for sign-in."""
+    exact=set()
+    for node in nodes(xml_text):
+        if node.attrib.get("visible-to-user","true").lower()=="false":
+            continue
+        exact.add((node.attrib.get("text") or "").strip().casefold())
+        exact.add((node.attrib.get("content-desc") or "").strip().casefold())
+    # "Username" alone is not sufficient: Friends/More discovery screens expose
+    # a "Search username or name" field, which previously caused false auth failures.
+    if "sign in" in exact or "log in" in exact:
+        return True
+    return "welcome back" in exact and "username" in exact and "password" in exact
+
+
 def return_home_in_app(name:str)->str:
     """Return to Home through app navigation without killing the process or resetting authentication."""
     current = dump_ui(name + "-current.xml")
@@ -776,7 +791,7 @@ def return_home_in_app(name:str)->str:
     for attempt in range(12):
         if _home_surface_ready(current):
             return current
-        if find_control(current, ["Sign In"]) or find_control(current, ["Username"]):
+        if _is_sign_in_gate(current):
             FAILURES.append(name + ": app navigation reached the sign-in gate; the certification will not re-login or change authentication state")
             return current
 
