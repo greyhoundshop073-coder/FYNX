@@ -14,6 +14,17 @@ internal data class FynxMarketplacePayment(
     val currency: String
 )
 
+internal fun marketplacePaymentFailureMessage(error: Throwable): String {
+    val details = generateSequence(error) { it.cause }
+        .mapNotNull { it.message }
+        .joinToString(" ")
+    return if (details.contains("marketplace payments are not configured yet", ignoreCase = true)) {
+        "Marketplace payments are not available yet. No payment was started, and your cart is unchanged. Please try again later."
+    } else {
+        error.message?.takeIf { it.isNotBlank() } ?: "Could not start protected payment."
+    }
+}
+
 internal suspend fun initializeMarketplacePayment(
     context: Context,
     orderId: String,

@@ -35,4 +35,10 @@ for label, filename, needle in checks:
     if needle not in text:
         raise SystemExit(f"CHAT CLOSURE RED: {label} missing expected implementation marker: {needle}")
 
-print("CHAT CLOSURE GREEN: required private/group chat surfaces and foundations are present")
+# User-facing recovery surfaces must not leak raw backend/exception messages.
+for label, filename in [("private conversation", "ConversationPanel.kt"), ("group conversation", "FynxGroupsPanel.kt")]:
+    source = (APP / filename).read_text(encoding="utf-8")
+    if "error.message" in source or "it.message" in source:
+        raise SystemExit(f"CHAT CLOSURE RED: {label} exposes raw exception text")
+
+print("CHAT CLOSURE GREEN: required private/group chat surfaces, foundations, and friendly recovery errors are present")

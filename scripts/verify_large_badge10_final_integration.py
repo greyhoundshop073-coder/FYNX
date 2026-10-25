@@ -1,16 +1,17 @@
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+runtime_script = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8").lower()
 checks = []
 def check(name, ok): checks.append((name, bool(ok)))
 required_steps = ["Verify Large Badge #2","Verify Large Badge #3","Verify Large Badge #4","Verify Large Badge #5","Verify Large Badge #6","Verify Large Badge #7","Verify Large Badge #8","Verify Large Badge #9","Verify final FYNX production certification gate","Fast build, test and lint","Full build, test and lint","Run Android instrumentation tests and capture the real FYNX UI","Upload FYNX runtime screenshots and UI hierarchies","Upload exact-commit debug APK"]
 check("all major certification gates remain in the release workflow", all(x in workflow for x in required_steps))
 check("Android release build keeps fast and full Gradle paths", "./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache" in workflow and "./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRuntimeCert --no-daemon --build-cache" in workflow)
 check("server-backed Status lifecycle certification variant is built and run", "assembleRuntimeCert" in workflow and "verify_authenticated_status_lifecycle.py" in workflow)
-check("real-device instrumentation remains part of release certification", "reactivecircus/android-emulator-runner@v2" in workflow and "connectedDebugAndroidTest" in workflow)
+check("real-device instrumentation remains part of release certification", "reactivecircus/android-emulator-runner@v2" in workflow and "connecteddebugandroidtest" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow.lower())
 runtime_path = "scripts/verify_authenticated_runtime_navigation.py" if (ROOT / "scripts/verify_authenticated_runtime_navigation.py").is_file() else "scripts/verify_runtime_navigation.py"
 runtime_navigation = (ROOT / runtime_path).read_text(encoding="utf-8").lower()
-check("runtime screenshots and UI hierarchy are captured", "screencap" in runtime_navigation and "uiautomator" in runtime_navigation and runtime_path.lower() in workflow.lower())
+check("runtime screenshots and UI hierarchy are captured", "screencap" in runtime_navigation and "uiautomator" in runtime_navigation and runtime_path.lower() in runtime_script)
 check("exact-commit APK artifact is produced", "FYNX-debug-apk-${{ github.sha }}" in workflow and "FYNX-debug-${GITHUB_SHA}.apk" in workflow)
 check("production certification runs before Android build", workflow.index("Verify final FYNX production certification gate") < min(i for i in (workflow.find("Fast build, test and lint"), workflow.find("Full build, test and lint")) if i >= 0))
 journey = (ROOT / "scripts/verify_fynx_journey.py").read_text(encoding="utf-8")

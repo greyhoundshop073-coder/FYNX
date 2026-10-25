@@ -5,6 +5,7 @@ gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 runtime = (ROOT / "scripts/verify_authenticated_status_lifecycle.py").read_text(encoding="utf-8")
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
+network_test = (ROOT / "app/src/androidTest/java/com/fynx/app/FynxNetworkRecoveryContractTest.kt").read_text(encoding="utf-8")
 
 def syntax_check(source):
     try:
@@ -15,15 +16,25 @@ def syntax_check(source):
         return False
 
 checks = {
+    "Status lifecycle certification defaults to the active Railway backend, not retired Render":
+        'https://fynx-backend-testing-testing.up.railway.app' in runtime and 'https://fynx-ai-backend.onrender.com' not in runtime,
+    "Live Railway reachability outage skips only the external probe instead of failing the Android UI suite":
+        'assumeTrue(' in network_test and 'FynxBackendClient.health(context)' in network_test and 'result.isSuccess' in network_test,
+    "Live production backend reachability remains a separate opt-in workflow probe":
+        'verify_production_backend_reachability.mjs' in workflow and 'inputs.run_live_backend_probe == true' in workflow,
     "runtime certification variant inherits debug dependencies without enabling the debug-only saved-device path":
         'create("runtimeCert")' in gradle and 'initWith(getByName("debug"))' in gradle and
         'isDebuggable = false' in gradle and 'signingConfig = signingConfigs.getByName("debug")' in gradle,
-    "runtime certification APK is built by the full Status/Stories CI job":
-        "assembleRuntimeCert" in workflow and "verify_authenticated_status_lifecycle.py" in workflow,
+    "runtime certification APK is built and server-backed Status lifecycle certification runs after navigation":
+        "assembleRuntimeCert" in workflow and
+        "bash scripts/run_android_runtime_certification.sh" in workflow and
+        "verify_authenticated_runtime_navigation.py" in runtime_script and
+        "verify_authenticated_status_lifecycle.py" in runtime_script and
+        runtime_script.index("verify_authenticated_runtime_navigation.py") < runtime_script.index("verify_authenticated_status_lifecycle.py"),
     "runtime certification uses the non-debuggable APK, real sign-in UI and real account credentials":
         'app/build/outputs/apk/runtimeCert/app-runtimeCert.apk' in runtime and
         'FYNX_E2E_USERNAME' in runtime and 'FYNX_E2E_PASSWORD' in runtime and 'fynx://home' in runtime,
-    "Status lifecycle preflight wakes Render and follows the repository health/readiness retry policy":
+    "Status lifecycle preflight checks active Railway health/readiness and follows the bounded retry policy":
         '"/health"' in runtime and '"/ready"' in runtime and
         'timeout=120' in runtime and 'retries=3' in runtime and 'retry_delay=10' in runtime,
     "environment-blocked Status journeys cannot be reported as a full GREEN certification":

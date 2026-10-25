@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
@@ -37,7 +38,7 @@ source = source.replace(
 );
 source = source.replace(
   'app.use(express.json({ limit: "18mb", strict: true }));',
-  'app.use(express.json({ limit: "18mb", strict: true, verify: (req, _res, buf) => { req.rawBody = Buffer.from(buf); } }));'
+  'app.use(express.json({ limit: "18mb", strict: true, verify: (req, _res, buf) => { if (String(req.originalUrl || "").split("?")[0] === "/api/marketplace/payments/paystack/webhook") req.rawBody = Buffer.from(buf); } }));'
 );
 
 // R3 private-message realtime helpers are defined in the production runtime,
@@ -107,6 +108,50 @@ source = source.replace(
   'await initDatabase();'
 );
 await writeFile(runtimePath, source, "utf8");
+const generatedRuntime = await readFile(runtimePath, "utf8");
+assert.ok(generatedRuntime.includes('app.get("/version"') || generatedRuntime.includes("app.get('/version'"),
+  "generated runtime must expose deployment provenance");
+assert.ok(generatedRuntime.includes("registerDiscoveryRoutes({ app, pool, auth })"),
+  "generated runtime must register Marketplace discovery");
+assert.ok(generatedRuntime.includes('app.get("/api/media/:id"') || generatedRuntime.includes("app.get('/api/media/:id'"),
+  "generated runtime must contain authenticated media retrieval");
+for (const contract of [
+  'app.post("/api/auth/login"',
+  'app.get("/api/me", auth',
+  'app.get("/api/statuses", auth'
+]) {
+  assert.ok(generatedRuntime.includes(contract), `generated runtime missing core API contract: ${contract}`);
+}
+// Keep safe auth diagnostics in generated runtime; never log credentials or bearer tokens.
+assert.ok(generatedRuntime.includes('[fynx-auth] rejected request: bearer token missing'),
+  "generated runtime must retain safe auth failure diagnostics");
+assert.ok(generatedRuntime.includes("JWT_SECRET is not configured"),
+  "generated runtime must diagnose missing JWT configuration");
+assert.ok(generatedRuntime.includes("await initDatabase();"),
+  "generated runtime must await database initialization before accepting traffic");
+assert.ok(!generatedRuntime.includes('initDatabase().catch((error) => { console.error("database initialization failed"'),
+  "generated runtime must not silently continue after database initialization failure");
+
+// Guard every route family injected by the compatibility bootstrap. A successful
+// source check is insufficient if a future edit changes a replacement marker.
+for (const contract of [
+  "registerBusinessRoutes({ app, auth })",
+  "startMarketplaceInspectionReconciliation({ pool })",
+  "registerMarketplacePaystackWebhook({ app, pool })",
+  "registerMarketplaceCheckoutRoutes({ app, pool, auth })",
+  "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
+  "registerMarketplaceShippingRoutes({ app, pool, auth })",
+  "registerMarketplaceCompletionRoutes({ app, pool, auth })"
+]) {
+  assert.ok(generatedRuntime.includes(contract), `generated runtime missing route registration: ${contract}`);
+}
+const generatedSocial = await readFile(runtimeSocialPath, "utf8");
+assert.ok(generatedSocial.includes("/api/social/feed"),
+  "generated social runtime must preserve the authenticated Home feed");
+assert.ok(generatedSocial.includes("/api/social/posts/multi"),
+  "generated social runtime must preserve multi-media post creation");
+assert.ok(generatedSocial.includes("/api/social/posts/:id/media"),
+  "generated social runtime must preserve post media retrieval");
 
 await import("./scalability.js");
 await new Promise((resolve) => setImmediate(resolve));

@@ -167,7 +167,7 @@ private fun MarketplaceSmartDealsHero(
                         Surface(onClick = { onOpenListing(listing) }, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.width(116.dp)) {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(7.dp)) {
                                 if (listing.mediaIds.isNotEmpty()) {
-                                    RemoteMarketMedia(LocalContext.current, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)))
+                                    RemoteMarketMedia(LocalContext.current, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)), listing.mediaTypes.firstOrNull())
                                 } else {
                                     Box(Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) {
                                         Icon(Icons.Default.ShoppingBag, contentDescription = "Product image unavailable", modifier = Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
@@ -296,7 +296,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
-    val categories = listOf("All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services")
+    val categories = listOf("All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other")
     var sellerReputations by remember { mutableStateOf<Map<String, FynxMarketplaceClient.SellerReputation>>(emptyMap()) }
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
 
@@ -789,8 +789,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     selected?.let { listing ->
         val sellerKey = listing.sellerUsername.removePrefix("@").trim().lowercase()
+        val viewerUsername = currentUsername.removePrefix("@").trim()
+        val isOwnListing = viewerUsername.isNotBlank() && listing.sellerUsername.removePrefix("@").trim().equals(viewerUsername, ignoreCase = true)
         MarketplaceDetails(
             l = listing,
+            canPurchase = !isOwnListing,
             sellerReputation = sellerReputations[sellerKey],
             onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null },
             onContact = { contactSeller(listing.sellerUsername, listing.id) },
@@ -844,7 +847,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         )
     }
     checkoutListing?.let { listing -> FynxMarketplaceCheckoutDialog(context = context, listing = listing, onProtectedOrder = { order -> checkoutListing = null; orders = listOf(order) + orders.filterNot { it.id == order.id }; paymentOrder = order }, onClose = { checkoutListing = null }) }
-    paymentOrder?.let { order -> MarketplacePaymentDialog(context = context, order = order, onPaid = { paymentOrder = null; protectedOrder = order; reload() }, onClose = { paymentOrder = null }) }
+    paymentOrder?.let { order -> MarketplacePaymentDialog(context = context, order = order, onPaid = { paymentOrder = null; cart = cart.filterNot { it.id == order.listingId }; cartQuantities = cartQuantities.filterKeys { it != order.listingId }; protectedOrder = order; reload() }, onClose = { paymentOrder = null }) }
     protectedOrder?.let { order -> MarketplaceProtectedOrderDialog(order = order, onViewOrder = { protectedOrder = null; showOrders = true }, onContinue = { protectedOrder = null }) }
     if (showCart) MarketplaceCartDialog(items = cart, quantities = cartQuantities, onQuantityChange = { id, value -> cartQuantities = cartQuantities + (id to value) }, onRemove = { item -> cart = cart.filterNot { it.id == item.id }; cartQuantities = cartQuantities - item.id }, onCheckout = { selectedItems -> showCart = false; multiCheckoutItems = selectedItems }, onClose = { showCart = false })
     multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities, onPaymentReady = { id, total, currency -> multiPaymentListingIds = selectedItems.map { it.id }.toSet(); multiCheckoutItems = null; multiPayment = Triple(id, total, currency) }, onClose = { multiCheckoutItems = null }) }
@@ -972,7 +975,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
                     Text(l.storeName.ifBlank { "FYNX seller" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
-            if (l.mediaIds.isNotEmpty()) RemoteMarketMedia(context, l.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
+            if (l.mediaIds.isNotEmpty()) RemoteMarketMedia(context, l.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)), l.mediaTypes.firstOrNull())
             else Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(42.dp), tint = MaterialTheme.colorScheme.primary) }
             Text(l.title, fontWeight = FontWeight.Bold, maxLines = 2, minLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
             Text(l.currency.uppercase() + " " + String.format(Locale.US, "%,.2f", l.price), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -1024,11 +1027,12 @@ private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceLis
     }
 }
 @Composable
-private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier) { val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }; FynxRemoteMedia(mediaUrl, "auto", modifier) }
+private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier, mimeType: String? = null) { val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }; FynxRemoteMedia(mediaUrl, FynxMarketplaceClient.mediaDisplayType(mimeType), modifier) }
 
 @Composable
 private fun MarketplaceDetails(
     l: FynxRemoteSocialClient.MarketplaceListing,
+    canPurchase: Boolean = true,
     sellerReputation: FynxMarketplaceClient.SellerReputation?,
     onProfile: () -> Unit,
     onContact: () -> Unit,
@@ -1047,13 +1051,17 @@ private fun MarketplaceDetails(
 ) {
     val context = LocalContext.current
     AlertDialog(onDismissRequest = onClose, title = { Text("Product details", maxLines = 1) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12)) { mediaId -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp))) } }
+        if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12).mapIndexed { index, mediaId -> mediaId to l.mediaTypes.getOrNull(index) }) { (mediaId, mimeType) -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp)), mimeType) } }
         MarketplaceReferenceProductSummary(
             listing = l,
             onMessageSeller = onContact,
             onBuyNow = onBuyNow,
-            onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }
+            onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) },
+            canPurchase = canPurchase
         )
+        if (!canPurchase) {
+            Text("This is your listing. Buyers can see it in Marketplace, but you cannot buy your own product.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
         // Put seller and fulfillment facts immediately after the price summary,
         // before the long description, matching the product-detail hierarchy.
         Surface(
@@ -1137,10 +1145,10 @@ private fun MarketplaceDetails(
             onOpenAssistant = { listingId -> onOpenAssistant(listingId) }
         )
     } }, confirmButton = {
-        Button(onClick = onAddToCart, enabled = l.quantity > 0, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onAddToCart, enabled = canPurchase && l.quantity > 0, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Add to cart")
+            Text(if (!canPurchase) "Your listing" else if (l.quantity > 0) "Add to cart" else "Out of stock")
         }
     }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
 }
@@ -1256,7 +1264,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("1. Product basics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(title, { title = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) }, label = { Text("Product name") }, supportingText = { Text("Use a clear name buyers can search for.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Category", style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }) } }
         Text("Condition", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }) } }
         Text("2. Price and stock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -1305,7 +1313,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         OutlinedTextField(location, { location = it.take(160) }, label = { Text("Listing area") }, supportingText = { Text("Use a town, city, or state buyers recognise.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedButton(onClick = { useCurrentListingLocation() }, enabled = !busy && !locationLoading, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (locationLoading) "Finding your area..." else "Use my current area") }
         Text("FYNX uses a human-readable area for discovery; your exact GPS coordinates are not published with the listing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services").forEach { item -> FilterChip(category == item, { category = item }, label = { Text(item) }) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other").forEach { item -> FilterChip(category == item, { category = item }, label = { Text(item) }) } }
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delivery, { delivery = it }); Text("Delivery") }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(pickup, { pickup = it }); Text("Pickup") }; error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { onPublished() }.onFailure { error = it.message ?: "Listing could not be published."; busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") } })
     if (showCamera) Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, _ -> media = FynxMarketplaceSellerFlowSupport.addMedia(context, media, uri); showCamera = false }, onDismiss = { showCamera = false }) } } }
@@ -1318,7 +1326,8 @@ private fun MarketplaceCartDialog(items: List<FynxRemoteSocialClient.Marketplace
     var selectedIds by remember(items) { mutableStateOf(items.map { it.id }.toSet()) }
     val selected = items.filter { it.id in selectedIds }
     val mixed = selected.map { it.currency.trim().uppercase(Locale.US) }.distinct().size > 1
-    AlertDialog(onDismissRequest = onClose, title = { Text("Shopping cart") }, text = { if (items.isEmpty()) { Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(48.dp)); Spacer(Modifier.height(8.dp)); Text("Your cart is empty."); Text("Add products from the marketplace to start checkout.", style = MaterialTheme.typography.bodySmall) } } else { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(selected.size.toString()+" of "+items.size+" selected • maximum 20 products per checkout", style = MaterialTheme.typography.bodySmall); LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 300.dp)) { items(items, key = { it.id }) { item -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(item.id in selectedIds, { checked -> selectedIds = if (checked) selectedIds + item.id else selectedIds - item.id }); Column(Modifier.weight(1f)) { Text(item.title, style = MaterialTheme.typography.titleMedium); Text(item.currency+" "+String.format(Locale.US, "%,.2f", item.price), style = MaterialTheme.typography.bodySmall) }; TextButton(onClick = { onRemove(item) }) { Text("Remove") } }; Row(verticalAlignment = Alignment.CenterVertically) { Text("Qty"); TextButton(onClick = { onQuantityChange(item.id, ((quantities[item.id] ?: 1)-1).coerceAtLeast(1)) }, enabled = (quantities[item.id] ?: 1) > 1) { Text("−") }; Text((quantities[item.id] ?: 1).toString()); TextButton(onClick = { onQuantityChange(item.id, ((quantities[item.id] ?: 1)+1).coerceAtMost(item.quantity)) }, enabled = (quantities[item.id] ?: 1) < item.quantity) { Text("+") } } } } } }; if (mixed) Text("A single checkout cannot mix NGN and USD. Select one currency.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } } }, confirmButton = { Button(enabled = selected.isNotEmpty() && !mixed, onClick = { onCheckout(selected) }) { Text("Checkout "+selected.size.toString()+" product"+if (selected.size == 1) "" else "s") } }, dismissButton = { TextButton(onClick = onClose) { Text("Close") } })
+    val unavailable = selected.any { it.quantity <= 0 || (quantities[it.id] ?: 1) > it.quantity }
+    AlertDialog(onDismissRequest = onClose, title = { Text("Shopping cart") }, text = { if (items.isEmpty()) { Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(48.dp)); Spacer(Modifier.height(8.dp)); Text("Your cart is empty."); Text("Add products from the marketplace to start checkout.", style = MaterialTheme.typography.bodySmall) } } else { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(selected.size.toString()+" of "+items.size+" selected • maximum 20 products per checkout", style = MaterialTheme.typography.bodySmall); LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 300.dp)) { items(items, key = { it.id }) { item -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(item.id in selectedIds, { checked -> selectedIds = if (checked) selectedIds + item.id else selectedIds - item.id }); Column(Modifier.weight(1f)) { Text(item.title, style = MaterialTheme.typography.titleMedium); Text(item.currency+" "+String.format(Locale.US, "%,.2f", item.price), style = MaterialTheme.typography.bodySmall) }; TextButton(onClick = { onRemove(item) }) { Text("Remove") } }; Row(verticalAlignment = Alignment.CenterVertically) { Text("Qty"); TextButton(onClick = { onQuantityChange(item.id, ((quantities[item.id] ?: 1)-1).coerceAtLeast(1)) }, enabled = (quantities[item.id] ?: 1) > 1) { Text("−") }; Text((quantities[item.id] ?: 1).toString()); TextButton(onClick = { onQuantityChange(item.id, ((quantities[item.id] ?: 1)+1).coerceAtMost(item.quantity)) }, enabled = (quantities[item.id] ?: 1) < item.quantity) { Text("+") } } } } } }; if (mixed) Text("A single checkout cannot mix NGN and USD. Select one currency.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall); if (unavailable) Text("Some selected products no longer have enough stock. Remove them or reduce their quantities before checkout.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } } }, confirmButton = { Button(enabled = selected.isNotEmpty() && !mixed && !unavailable, onClick = { onCheckout(selected) }) { Text("Checkout "+selected.size.toString()+" product"+if (selected.size == 1) "" else "s") } }, dismissButton = { TextButton(onClick = onClose) { Text("Close") } })
 }
 
 @Composable
@@ -1525,7 +1534,7 @@ private fun FynxMarketplaceMultiCheckoutDialog(context: android.content.Context,
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                 if (listing?.mediaIds?.isNotEmpty() == true) {
-                    RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)))
+                    RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)), listing.mediaTypes.firstOrNull())
                 } else {
                     Box(Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) {
                         Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(36.dp), tint=MaterialTheme.colorScheme.primary)
@@ -1553,7 +1562,7 @@ private fun FynxMarketplaceMultiCheckoutDialog(context: android.content.Context,
     Text("FYNX fee: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.fee))
     Text("Total: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.total),style=MaterialTheme.typography.titleLarge)
     Text("The amount above is the server-authoritative quote. FYNX will revalidate inventory and totals before creating the protected checkout.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-};message?.let{Text(it,color=MaterialTheme.colorScheme.error)}}},confirmButton={Button(enabled=quote!=null&&!busy,onClick={val q=quote?:return@Button;if(marketplaceQuoteExpired(q.expiresAt)){quote=null;message="This quote has expired. Review the exact total again.";return@Button};busy=true;scope.launch{createMultiOrder(context,lines(),q.id).onSuccess{created->val c=created.getJSONObject("checkout");val serverId=c.optString("id").ifBlank{q.id};val serverTotal=c.optDouble("buyer_total",q.total);val serverCurrency=c.optString("currency",q.currency).uppercase(Locale.US);onPaymentReady(serverId,serverTotal,serverCurrency);busy=false}.onFailure{message=it.message?:"Protected checkout could not be created.";busy=false}}}){Text("Place order & pay")}},dismissButton={TextButton(onClick=onClose,enabled=!busy){Text("Cancel")}})
+};message?.let{Text(it,color=MaterialTheme.colorScheme.error)}}},confirmButton={Button(enabled=quote!=null&&!busy,onClick={val q=quote?:return@Button;if(marketplaceQuoteExpired(q.expiresAt)){quote=null;message="This quote has expired. Review the exact total again.";return@Button};busy=true;scope.launch{createMultiOrder(context,lines(),q.id).onSuccess{created->val c=created.getJSONObject("checkout");val serverId=c.optString("id").ifBlank{q.id};val serverTotal=c.optDouble("buyer_total",q.total);val serverCurrency=c.optString("currency",q.currency).uppercase(Locale.US);onPaymentReady(serverId,serverTotal,serverCurrency);busy=false}.onFailure{message=marketplacePaymentFailureMessage(it);busy=false}}}){Text("Place order & pay")}},dismissButton={TextButton(onClick=onClose,enabled=!busy){Text("Cancel")}})
 }
 @Composable
 private fun MarketplaceMultiProductPaymentDialog(
@@ -1628,7 +1637,7 @@ private fun MarketplaceMultiProductPaymentDialog(
                                     message = it.message ?: "Could not open Paystack checkout."
                                 }
                             }
-                        }.onFailure { message = it.message ?: "Could not start protected payment." }
+                        }.onFailure { message = marketplacePaymentFailureMessage(it) }
                         busy = false
                     }
                 }) {

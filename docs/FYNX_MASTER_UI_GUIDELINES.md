@@ -5,15 +5,30 @@ This document is the visual contract for all existing and future FYNX screens. I
 ## Visual identity
 - Primary background: dark navy / blue-black.
 - Main surfaces: deep navy cards and raised navy surfaces.
-- Primary action/accent: FYNX blue.
-- Secondary accent: FYNX purple/violet.
-- Important branded actions may use a blue-to-purple gradient.
+- Primary action/accent: Cobalt Blue (`#0047AB`).
+- Successful and confirmed states: Classic Green (`#008000`).
+- Error and failed states: Crimson Red (`#DC143C`); dark-mode error text may use the brighter contrast-safe red token.
+- Purple remains an optional user-selected accent, not the default brand color for controls.
+- Use solid Cobalt Blue for primary actions; do not introduce new blue-to-purple action gradients.
 - Primary text: white / very light blue-white.
 - Secondary text: muted cool grey-blue.
 - Borders: subtle blue-grey, never heavy.
 - Cards: rounded, clean, consistent corner radius.
 - Controls: rounded/pill-like where appropriate.
 - Icons: professional Material/outline icons; do not use emoji as feature icons.
+
+
+## Supporting palette
+
+These tones support the three official FYNX brand colors; they are not additional primary brand colors.
+
+- Soft Cloud White (`#F5F7FA`): the light-mode page background. Keep surfaces clean and content contrast high.
+- Midnight Slate (`#1C2434`): raised dark-mode surfaces and panels, used over the deeper navy background.
+- Slate Grey (`#64748B`): secondary text and quiet icons in light mode; never use it for essential text on a dark surface.
+- Pale Cobalt (`#E8EEFA`): gentle light-mode selection/focus containers. Keep primary actions solid Cobalt Blue.
+- Premium Gold (`#D4AF37`): reserved for premium/verified/reward details only. Do not use it for success/error states, large backgrounds, or small text on its own; pair it with a readable dark foreground.
+
+Use semantic tokens from `FynxDesign` instead of repeating raw hex values. Preserve the existing deep-navy, Charcoal Black and Black AMOLED appearance options. Do not scatter every palette color across every screen.
 
 ## Layout language
 - Keep screens uncluttered and mobile-first.

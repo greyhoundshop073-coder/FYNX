@@ -38,8 +38,10 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
 
     fun finish(result: Result<FynxRemoteAuthClient.ResultData>, allowOfflineEntry: Boolean = false) {
         result.onSuccess { account ->
-            FynxBackendClient.saveAccessToken(context, account.token)
+            // Account switching can clear the previous session, including its token.
+            // Persist the new account identity first, then store the token issued for it.
             FynxAuthStore.saveAccount(context, account.displayName.ifBlank { displayName.trim() }, account.username, account.phone.ifBlank { phone.trim() })
+            FynxBackendClient.saveAccessToken(context, account.token)
             scope.launch { FynxNotificationDeviceManager.registerCurrentToken(context) }
             busy = false
             error = null
@@ -170,12 +172,12 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(18.dp))
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
+                            FynxAuthField(password, { password = it }, "Password (optional for saved-device entry)", keyboardType = KeyboardType.Password, password = true)
+                            Spacer(Modifier.height(6.dp))
                             if (localDebugLoginAvailable) {
-                                Text("Saved-device login for this debug APK", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
-                            } else {
-                                FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
-                                Spacer(Modifier.height(10.dp))
+                                Text("Leave password blank for quick local entry. Enter it to connect this account to the live FYNX backend.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
                             }
+                            Spacer(Modifier.height(10.dp))
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
@@ -183,14 +185,17 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
                                 when {
                                     requestedUsername.isBlank() -> error = "Enter your username."
-                                    savedLocalUsername != null -> {
-                                        // Use the saved-device path immediately: no remote request or timeout.
+                                    savedLocalUsername != null && password.isBlank() -> {
+                                        // Preserve instant saved-device entry when no password is supplied.
+                                        // This local session does not manufacture a backend token.
                                         FynxAuthStore.save(context, savedLocalUsername)
                                         error = null
                                         onAuthenticated(savedLocalUsername)
                                     }
                                     password.isBlank() -> error = "Enter your username and password."
                                     else -> {
+                                        // A password explicitly requests a real backend session, even for a
+                                        // saved local debug account, so protected APIs receive a server token.
                                         busy = true
                                         error = null
                                         scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }

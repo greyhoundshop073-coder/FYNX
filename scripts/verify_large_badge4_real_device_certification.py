@@ -15,17 +15,19 @@ workflow = read(".github/workflows/android-build.yml")
 app = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 runtime_path = "scripts/verify_authenticated_runtime_navigation.py" if (ROOT / "scripts/verify_authenticated_runtime_navigation.py").is_file() else "scripts/verify_runtime_navigation.py"
 runtime = read(runtime_path).lower()
+runtime_script = read("scripts/run_android_runtime_certification.sh").lower()
 
 check("real emulator runner is configured", "reactivecircus/android-emulator-runner@v2" in workflow)
-normalized_workflow = "".join(ch for ch in workflow.lower() if ch.isalnum())
 check(
-    "connected Android instrumentation is executed",
-    "connecteddebugandroidtest" in normalized_workflow
-    or "connecteddebugandroidtest" in "".join(
-        ch for ch in read(".github/workflows/android-build.yml").lower() if ch.isalnum()
-    ),
+    "connected Android instrumentation is executed by the extracted runner",
+    "connecteddebugandroidtest" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow.lower(),
 )
-check("authenticated runtime navigation verification is executed", runtime_path.lower() in workflow.lower())
+check("authenticated runtime navigation verification is executed", runtime_path.lower() in runtime_script)
+check(
+    "Status lifecycle certification runs after authenticated runtime navigation",
+    "python3 scripts/verify_authenticated_status_lifecycle.py" in runtime_script and
+    runtime_script.index("verify_authenticated_runtime_navigation.py") < runtime_script.index("verify_authenticated_status_lifecycle.py"),
+)
 check("runtime screenshots and UI hierarchies are uploaded", "fynx-runtime-visual-check-" in workflow.lower() and "fynx-runtime-screenshots/" in workflow.lower())
 check("Home, Chat, Friends, Stories and Features are reachable", all(x in app for x in ['"Home"', '"Chats"', '"Friends"', '"Stories"', '"Features"']))
 check("major secondary surfaces have real navigation routes", all(x in app for x in ['"Marketplace"', '"Calls"', '"Groups"', '"Notifications"', '"Privacy"', '"Money Tools"', '"AI"']))

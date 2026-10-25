@@ -37,6 +37,7 @@ internal fun MarketplaceReferenceProductSummary(
     onMessageSeller: () -> Unit,
     onBuyNow: () -> Unit,
     onShare: () -> Unit,
+    canPurchase: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -68,10 +69,10 @@ internal fun MarketplaceReferenceProductSummary(
                 Spacer(Modifier.width(6.dp))
                 Text("Message seller")
             }
-            Button(onClick = onBuyNow, modifier = Modifier.weight(1f)) {
+            Button(onClick = onBuyNow, enabled = canPurchase && listing.quantity > 0, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Default.ShoppingBag, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Buy now")
+                Text(if (!canPurchase) "Your listing" else if (listing.quantity > 0) "Buy now" else "Out of stock")
             }
         }
     }

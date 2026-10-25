@@ -16,6 +16,9 @@ checks = [
     ("sendText does not claim queued success if account-scoped persistence is unavailable", "if (!FynxOfflineOutbox.enqueue(context, item)) return result" in production),
     ("sync does not recursively requeue", "allowOfflineQueue = false" in sync),
     ("successful sync replaces pending local message", "FynxChatStore.replaceMessage" in sync),
+    ("offline outbox persists stable request IDs", "requestId = requestId" in production and 'put("requestId", item.requestId)' in outbox and "requestId = item.requestId" in sync),
+    ("backend makes message retries idempotent", "client_message_id TEXT" in (ROOT / "backend/server.js").read_text() and "ON CONFLICT (sender_id, client_message_id)" in (ROOT / "backend/server.js").read_text()),
+    ("structured messages carry idempotency keys", "requestId: String = UUID.randomUUID().toString()" in production and '"clientMessageId", requestId' in production),
     ("local replacement exists", "fun replaceMessage" in store),
 ]
 for label, ok in checks:

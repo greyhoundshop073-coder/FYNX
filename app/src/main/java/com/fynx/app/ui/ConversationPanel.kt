@@ -56,6 +56,8 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -98,7 +100,20 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     }
     val fallbackMessage = remember(chat.lastMessage, resolvedAvatarUri) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true, senderName = chat.name, senderUsername = chat.username, senderAvatarUri = resolvedAvatarUri) } }
     var text by remember(chat.username) { mutableStateOf("") }
-    var messages by remember(chat.username) { mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage)) }
+    var messages by remember(chat.username) { mutableStateOf(emptyList<ChatMessage>()) }
+    var messagesLoaded by remember(chat.username) { mutableStateOf(false) }
+    LaunchedEffect(chat.username) {
+        // Message history and JSON-backed SharedPreferences can grow large. Keep the
+        // UI unblocked while loading and never persist the initial empty placeholder
+        // before the existing conversation has finished restoring. Do not reload an
+        // active conversation when only the recipient's remote avatar resolves.
+        messagesLoaded = false
+        val localMessages = withContext(Dispatchers.IO) {
+            FynxChatStore.load(context, chat.username, fallbackMessage)
+        }
+        messages = localMessages
+        messagesLoaded = true
+    }
     var replyToId by remember { mutableStateOf<String?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
@@ -174,27 +189,33 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             attachmentMessageType = null
         }
     }
-    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(maxItems = 1)) { uris ->
-        val uri = uris.firstOrNull() ?: return@rememberLauncherForActivityResult
-        val mimeType = context.contentResolver.getType(uri)
+    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val selectedUri = uri ?: return@rememberLauncherForActivityResult
+        val mimeType = context.contentResolver.getType(selectedUri)
         if (mimeType.isNullOrBlank() || (!mimeType.startsWith("image/") && !mimeType.startsWith("video/"))) {
             networkError = "Choose a photo or video from Gallery."
             return@rememberLauncherForActivityResult
         }
-        attachment = uri
+        attachment = selectedUri
         attachmentType = mimeType
         attachmentMessageType = null
     }
     var stopRecordingAction: (() -> Unit)? = null
 
-    val realtimeClient = remember(chat.username, currentUserId, recipientUserId, resolvedAvatarUri) {
+    // A transport instance belongs to this conversation, not to mutable identity/avatar
+    // state. Those values are resolved below; including them as remember keys used to close
+    // and recreate the socket repeatedly while the same LaunchedEffect was still initializing.
+    val currentUserIdLatest by rememberUpdatedState(currentUserId)
+    val recipientUserIdLatest by rememberUpdatedState(recipientUserId)
+    val resolvedAvatarUriLatest by rememberUpdatedState(resolvedAvatarUri)
+    val realtimeClient = remember(chat.username) {
         FynxRealtimeClient(
             context = context,
             onMessage = { remote ->
-                val myId = currentUserId ?: return@FynxRealtimeClient
+                val myId = currentUserIdLatest ?: return@FynxRealtimeClient
                 if (remote.senderId != myId && remote.recipientId != myId) return@FynxRealtimeClient
                 val converted = FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                    if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                    if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUriLatest)
                 }
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
@@ -206,15 +227,15 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             },
             onStateChanged = { state ->
                 realtimeState = state
-                if (state == FynxRealtimeClient.State.CONNECTED && !currentUserId.isNullOrBlank()) {
+                if (state == FynxRealtimeClient.State.CONNECTED && !currentUserIdLatest.isNullOrBlank()) {
                     conversationScope.launch {
                         FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
                             .onSuccess { remoteMessages ->
-                                val myId = currentUserId ?: return@onSuccess
+                                val myId = currentUserIdLatest ?: return@onSuccess
                                 val authoritative = remoteMessages.mapIndexedNotNull { index, remote ->
                                     runCatching {
                                         FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUriLatest)
                                         }
                                     }.getOrNull()?.let { message ->
                                         if (message.id.isBlank()) message.copy(id = "remote-" + index + "-" + message.timestamp) else message
@@ -224,7 +245,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 messages = byId.values.sortedBy { it.timestamp }
                                 networkError = null
                             }
-                            .onFailure { error -> networkError = error.message ?: "Conversation refresh failed" }
+                            .onFailure { networkError = "Messages could not refresh yet. Your saved conversation is still here; check your connection and retry." }
                     }
                 }
             },
@@ -239,8 +260,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             }
                         }
                     }
-                    is FynxRealtimeClient.Event.Typing -> if (event.userId == recipientUserId) otherIsTyping = event.isTyping
-                    is FynxRealtimeClient.Event.Presence -> if (event.userId == recipientUserId) isOnline = event.online
+                    is FynxRealtimeClient.Event.Typing -> if (event.userId == recipientUserIdLatest) otherIsTyping = event.isTyping
+                    is FynxRealtimeClient.Event.Presence -> if (event.userId == recipientUserIdLatest) isOnline = event.online
                 }
             }
         )
@@ -272,54 +293,77 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     isRecordingPaused = false
                     isRecording = true
                 }
-            }.onFailure { networkError = it.message ?: "Unable to start recording" }
+            }.onFailure { networkError = "Could not start voice recording. Check microphone permission and try again." }
         }
     }
 
-    LaunchedEffect(chat.username, currentUserId, recipientUserId, resolvedAvatarUri) {
+    // Resolve identity, profile and history exactly once per conversation. Previously
+    // this effect was keyed by currentUserId, recipientUserId and resolvedAvatarUri —
+    // values that the effect itself mutates — so Compose cancelled and restarted it
+    // mid-request, repeatedly recreating the realtime socket and interrupting setup.
+    LaunchedEffect(chat.username) {
         val normalizedUsername = chat.username.removePrefix("@").trim()
         if (normalizedUsername.isBlank()) {
             networkError = "This conversation has no valid username."
             return@LaunchedEffect
         }
         try {
-            currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
+            val loadedCurrentUserId = FynxBackendClient.currentUserId(context).getOrNull()
+            currentUserId = loadedCurrentUserId
+
             val searchedUser = FynxSocialClient.searchUsers(context, normalizedUsername)
                 .getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalizedUsername, true) }
-            recipientUserId = searchedUser?.id
+            val loadedRecipientUserId = searchedUser?.id
+            recipientUserId = loadedRecipientUserId
             recipientCreatedAt = searchedUser?.createdAt
-            FynxProfileRemoteClient.get(context, normalizedUsername)
-                .onSuccess { profile ->
-                    recipientProfile = profile
-                    remoteProfileLoaded = true
-                }
+
+            val profileResult = FynxProfileRemoteClient.get(context, normalizedUsername)
+            profileResult.onSuccess { profile ->
+                recipientProfile = profile
+                remoteProfileLoaded = true
+            }
+            val historyAvatarUri = profileResult.getOrNull()
+                ?.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }
+                ?.let { "/api/media/$it" }
+                ?: if (profileResult.isFailure) chat.avatarUri else null
+
             FynxProductionMessaging.history(context, normalizedUsername)
                 .onSuccess { remoteMessages ->
                     isNewConversation = remoteMessages.isEmpty()
-                    val myId = currentUserId
-                    if (myId != null) messages = remoteMessages.map { remote ->
-                        FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                    if (loadedCurrentUserId != null) {
+                        messages = remoteMessages.map { remote ->
+                            FynxProductionMessaging.toChatMessage(remote, loadedCurrentUserId).let { message ->
+                                if (message.fromMe) message else message.copy(senderAvatarUri = historyAvatarUri)
+                            }
                         }
                     }
-                    val unread = remoteMessages.filter { it.recipientId == myId && !it.read }.map { it.id }
+                    val unread = remoteMessages
+                        .filter { it.recipientId == loadedCurrentUserId && !it.read }
+                        .map { it.id }
                     if (unread.isNotEmpty()) {
+                        // The stable connection effect can connect while history is loading;
+                        // send the realtime acknowledgement and retain HTTP as the durable path.
                         realtimeClient.sendRead(unread)
                         conversationScope.launch { FynxProductionMessaging.markRead(context, unread) }
                     }
                 }
                 .onFailure {
                     isNewConversation = false
-                    networkError = it.message ?: "Unable to load messages"
+                    networkError = "Messages could not load yet. Check your connection and retry."
                 }
-            if (!recipientUserId.isNullOrBlank() && !currentUserId.isNullOrBlank()) {
-                realtimeClient.connect()
-            }
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
-            networkError = error.message ?: "Unable to initialize this conversation."
+            networkError = "This conversation could not connect yet. Check your connection and try again."
             isNewConversation = false
+        }
+    }
+
+    // Connect only after identity resolution has completed. This effect is keyed by the
+    // resolved IDs, but never changes those IDs itself, so it cannot cancel its own setup.
+    LaunchedEffect(chat.username, currentUserId, recipientUserId) {
+        if (!currentUserId.isNullOrBlank() && !recipientUserId.isNullOrBlank()) {
+            realtimeClient.connect()
         }
     }
 
@@ -343,16 +387,24 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
-    LaunchedEffect(messages) {
-        FynxChatStore.save(context, chat.username, messages)
-        val latest = messages.maxByOrNull { it.timestamp }
-        if (latest != null) {
-            val previewText = when {
-                latest.voiceUri != null -> "Voice message"
-                latest.attachmentUri != null && latest.text.isBlank() -> when (latest.attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "audio" -> "Voice message"; else -> "Photo" }
-                else -> latest.text
+    LaunchedEffect(messagesLoaded, messages) {
+        if (!messagesLoaded) return@LaunchedEffect
+        // Store.save() parses the previous JSON history and serializes the full
+        // conversation; savePreview() also reads message history to compute unread
+        // counts. Keep both operations off the UI thread so opening a long chat
+        // cannot monopolize Main and trigger an input-dispatch ANR.
+        val snapshot = messages
+        withContext(Dispatchers.IO) {
+            FynxChatStore.save(context, chat.username, snapshot)
+            val latest = snapshot.maxByOrNull { it.timestamp }
+            if (latest != null) {
+                val previewText = when {
+                    latest.voiceUri != null -> "Voice message"
+                    latest.attachmentUri != null && latest.text.isBlank() -> when (latest.attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "audio" -> "Voice message"; else -> "Photo" }
+                    else -> latest.text
+                }
+                FynxChatStore.savePreview(context, chat.copy(lastMessage = previewText, time = formatChatTime(latest.timestamp)))
             }
-            FynxChatStore.savePreview(context, chat.copy(lastMessage = previewText, time = formatChatTime(latest.timestamp)))
         }
     }
 
@@ -385,7 +437,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             runCatching { r.pause() }.onSuccess {
                 recordingPausedAt = System.currentTimeMillis()
                 isRecordingPaused = true
-            }.onFailure { networkError = it.message ?: "Recording could not be paused" }
+            }.onFailure { networkError = "Voice recording could not be paused. Please try again." }
         }
     }
     fun resumeRecording() {
@@ -395,7 +447,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 recordingPausedTotalMs += (System.currentTimeMillis() - recordingPausedAt).coerceAtLeast(0L)
                 recordingPausedAt = 0L
                 isRecordingPaused = false
-            }.onFailure { networkError = it.message ?: "Recording could not be resumed" }
+            }.onFailure { networkError = "Voice recording could not be resumed. Please try again." }
         }
     }
     fun retryVoiceMessage() {
@@ -419,9 +471,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             pendingVoiceRetry = null
                             uploadedVoiceCache = null
                         }
-                        .onFailure { networkError = it.message ?: "Voice message could not be sent. Tap Retry voice message." }
+                        .onFailure { networkError = "Voice message not sent yet. Your recording is saved; tap Retry voice message." }
                 }
-                .onFailure { networkError = it.message ?: "Voice recording upload failed. Tap Retry voice message." }
+                .onFailure { networkError = "Voice recording could not upload yet. Your recording is saved; tap Retry voice message." }
             sending = false
         }
     }
@@ -506,7 +558,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         editingId = null
                         replyToId = null
                     }
-                    .onFailure { networkError = it.message ?: "Message could not be edited" }
+                    .onFailure { networkError = "Message could not be edited yet. Please try again." }
             } else {
                 val selectedAttachment = attachment
                 val selectedMessageType = attachmentMessageType
@@ -550,7 +602,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
                             FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
                                 .onSuccess { marketplaceContextAttached = true }
-                                .onFailure { networkError = it.message ?: "Marketplace listing could not be attached to this message" }
+                                .onFailure { networkError = "The listing could not be attached to this message. Please try again." }
                         }
                         text = ""
                         editingId = null
@@ -561,7 +613,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         uploadedAttachmentCache = null
                         composerVideoMode = false
                     }
-                    .onFailure { networkError = it.message ?: "Message could not be sent" }
+                    .onFailure { networkError = "Message not sent yet. Your message is saved; check your connection and retry." }
             }
             sending = false
         }
@@ -664,7 +716,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 sending = true
                                 FynxSocialClient.sendRequest(context, chat.username.removePrefix("@"))
                                     .onSuccess { networkError = "Contact request sent." }
-                                    .onFailure { networkError = it.message ?: "Contact request could not be sent." }
+                                    .onFailure { networkError = "Contact request could not be sent yet. Please try again." }
                                 sending = false
                             }
                         }
@@ -677,7 +729,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 sending = true
                                 FynxSocialClient.block(context, chat.username.removePrefix("@"))
                                     .onSuccess { networkError = "User blocked."; onBack() }
-                                    .onFailure { networkError = it.message ?: "User could not be blocked." }
+                                    .onFailure { networkError = "This user could not be blocked yet. Please try again." }
                                 sending = false
                             }
                         }
@@ -864,7 +916,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                         conversationScope.launch {
                                                             FynxProductionMessaging.votePoll(context, message.id, optionIndex)
                                                                 .onSuccess { pollVoteNotice = "Vote recorded" }
-                                                                .onFailure { pollVoteNotice = it.message ?: "Vote failed" }
+                                                                .onFailure { pollVoteNotice = "Your vote could not be saved yet. Please try again." }
                                                         }
                                                     }, modifier = Modifier.fillMaxWidth()) { Text(option) }
                                                 }
@@ -911,7 +963,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                         }
                                                     }
                                                 }
-                                                .onFailure { networkError = it.message ?: "Reaction could not be removed" }
+                                                .onFailure { networkError = "Reaction could not be removed yet. Please try again." }
                                         }
                                     },
                                     shape = RoundedCornerShape(14.dp),
@@ -958,7 +1010,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                     if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing
                                                 }
                                             }
-                                        }.onFailure { networkError = it.message ?: "Reaction could not be saved" }
+                                        }.onFailure { networkError = "Reaction could not be saved yet. Please try again." }
                                     }
                                 },
                                 modifier = Modifier.size(56.dp),
@@ -1000,7 +1052,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                             }
                                         }
                                     }
-                                    .onFailure { networkError = it.message ?: "Message pin state could not be changed" }
+                                    .onFailure { networkError = "Message pin could not be updated yet. Please try again." }
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -1030,7 +1082,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                         }
                                         menuMessageId = null
                                     }
-                                    .onFailure { networkError = it.message ?: "Message could not be deleted" }
+                                    .onFailure { networkError = "Message could not be deleted yet. Please try again." }
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -1219,7 +1271,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     sending = true
                     FynxProductionMessaging.sendStructuredMessage(context, chat.username, "location", mapOf("latitude" to location.latitude.toString(), "longitude" to location.longitude.toString()))
                         .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
-                        .onFailure { networkError = it.message ?: "Location could not be sent" }
+                        .onFailure { networkError = "Location could not be sent yet. Check your connection and retry." }
                     sending = false
                 }
             }) { Text("Share") } },
@@ -1258,7 +1310,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 pendingContactPhone = ""
                                 pendingContactUsername = ""
                             }
-                            .onFailure { networkError = it.message ?: "Contact could not be sent" }
+                            .onFailure { networkError = "Contact could not be sent yet. Please try again." }
                         sending = false
                     }
                 }) { Text("Send") }
@@ -1283,7 +1335,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     sending = true
                     FynxProductionMessaging.sendStructuredMessage(context, chat.username, "poll", mapOf("question" to question, "options" to cleanOptions.joinToString("\\u001F")))
                         .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
-                        .onFailure { networkError = it.message ?: "Poll could not be sent" }
+                        .onFailure { networkError = "Poll could not be sent yet. Please try again." }
                     sending = false
                 }
             }) { Text("Send poll") } },
@@ -1378,7 +1430,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     forwardMessageId = null
                                     forwardUsername = ""
                                 }
-                                .onFailure { networkError = it.message ?: "Message could not be forwarded" }
+                                .onFailure { networkError = "Message could not be forwarded yet. Please try again." }
                             sending = false
                         }
                     },

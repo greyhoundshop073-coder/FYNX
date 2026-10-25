@@ -20,7 +20,7 @@ for path in ROOT.rglob("*.kt"):
 backend = Path("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_text(encoding="utf-8")
 currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").read_text(encoding="utf-8")
 required = [
-    'PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"',
+    'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
     'requiresAuthentication = !isPublicAuthPath(path)',
     'FynxSecureTokenStore',
 ]
@@ -30,6 +30,15 @@ for needle in required:
 for needle in ['FynxBackendClient.get(context, path)', '/api/money-planner/rates']:
     if needle not in currency:
         violations.append(f"currency backend routing invariant missing: {needle}")
+app_shell = Path("app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+connection_start = app_shell.find("DisposableEffect(lifecycleOwner, authSession.state)")
+connection_end = app_shell.find("DisposableEffect(authSession.state, authSession.username", connection_start)
+connection_effect = app_shell[connection_start:connection_end] if connection_start >= 0 and connection_end > connection_start else ""
+if "if (authSession.state == AuthState.SIGNED_IN)" not in connection_effect:
+    violations.append("app-level backend health indicator must start for every signed-in session, including tokenless debug saved-device entry")
+if "FynxBackendClient.hasAccessToken(context)" in connection_effect:
+    violations.append("public backend health probe must not be gated on an access token")
+
 network_settings = Path("app/src/main/java/com/fynx/app/ui/DataNetworkSettingsPanel.kt").read_text(encoding="utf-8")
 remote_auth = Path("app/src/main/java/com/fynx/app/ui/FynxRemoteAuthClient.kt").read_text(encoding="utf-8")
 for needle in ['"FYNX backend connection"', 'FynxBackendClient.health(context)', 'FynxBackendClient.get(context, "/api/me")', 'FynxRemoteAuthClient.connectSavedAccount(context, backendPassword)']:

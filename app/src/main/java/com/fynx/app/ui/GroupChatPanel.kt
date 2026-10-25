@@ -12,6 +12,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -101,16 +102,21 @@ fun GroupChatPanel(
         runCatching { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 60).startTone(ToneGenerator.TONE_PROP_ACK, 70) }
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
-            attachment = uri
-            val mime = context.contentResolver.getType(uri).orEmpty()
-            attachmentType = when {
+            val mime = context.contentResolver.getType(uri)?.trim()?.lowercase().orEmpty()
+            val selectedType = when {
+                mime.startsWith("image/") -> "image"
                 mime.startsWith("video/") -> "video"
-                mime.startsWith("audio/") -> "audio"
-                else -> "image"
+                else -> null
             }
-            attachmentName = null
+            if (selectedType == null) {
+                error = "Choose a photo or video from Gallery. Use the document or voice controls for other files."
+            } else {
+                attachment = uri
+                attachmentType = selectedType
+                attachmentName = null
+            }
         }
     }
 
@@ -519,7 +525,7 @@ fun GroupChatPanel(
                         }
                     } else {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { picker.launch("image/* video/* audio/*") }, modifier = Modifier.size(48.dp)) {
+                            IconButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.Add, "Attachments", tint = glassPalette.messageText)
                             }
                             IconButton(onClick = { documentPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }, modifier = Modifier.size(48.dp)) {

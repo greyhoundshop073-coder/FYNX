@@ -19,6 +19,7 @@ client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
 token = read("app/src/main/java/com/fynx/app/ui/FynxSecureTokenStore.kt")
 auth = read("app/src/main/java/com/fynx/app/ui/FynxAuthStore.kt")
 workflow = read(".github/workflows/android-build.yml")
+runtime_script = read("scripts/run_android_runtime_certification.sh")
 gradle = read("app/build.gradle.kts")
 manifest = read("app/src/main/AndroidManifest.xml")
 
@@ -36,7 +37,10 @@ check("release hardening files exist", all(exists(p) for p in required))
 check("backend secrets remain environment-backed",
       all(x in server for x in ["process.env.JWT_SECRET", "process.env.DATABASE_URL", "process.env.OPENAI_API_KEY"]))
 check("JWT authentication fails closed",
-      "jwt.verify(token, JWT_SECRET)" in server and 'if (!token || !JWT_SECRET) return res.status(401)' in server)
+      "jwt.verify(token, JWT_SECRET)" in server and
+      "if (!JWT_SECRET)" in server and
+      "if (!token)" in server and
+      "return res.status(401).json({ error: \"authentication required\" })" in server)
 check("HTTP transport requires HTTPS",
       'startsWith("https://")' in client or 'startsWith("https://")' in client)
 check("trusted backend media host is enforced",
@@ -70,9 +74,9 @@ check("CI keeps the major badge gates before artifact publication",
           "Large Badge #9",
           "verify_large_badge11_product_completeness.py"]))
 check("authenticated visual certification remains mandatory",
-      "verify_authenticated_runtime_navigation.py" in workflow and "FYNX_E2E_USERNAME" in workflow and "FYNX_E2E_PASSWORD" in workflow)
+      "verify_authenticated_runtime_navigation.py" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow and "FYNX_E2E_USERNAME" in workflow and "FYNX_E2E_PASSWORD" in workflow)
 check("instrumentation remains mandatory before APK publication",
-      "connectedDebugAndroidTest" in workflow and
+      "connectedDebugAndroidTest" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow and
       "github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true'" in workflow and
       "Upload exact-commit debug APK" in workflow and
       "if-no-files-found: error" in workflow)

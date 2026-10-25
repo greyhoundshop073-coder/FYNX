@@ -28,21 +28,96 @@ async function paystackJson(url, options = {}) {
   return { response, data };
 }
 
+export function payoutReferenceForOperation(operation) {
+  const orderId = String(operation?.order_id || '');
+  const operationId = String(operation?.id || '');
+  if (!orderId || !operationId) throw new Error('payout operation requires order and operation IDs');
+  // Preserve the original first-attempt reference for in-flight payouts from
+  // older deployments. Each subsequent operation gets a separate provider ref.
+  return String(operation?.idempotency_key || '') === `PAYOUT-${orderId}`
+    ? `fynx-payout-${orderId}`
+    : `fynx-payout-${operationId}`;
+}
+export function classifyPaystackTransferVerification(response, data, expectedReference) {
+  // Verify Transfer is keyed by reference; only HTTP 404 means it was not found.
+  if (response?.status === 404) return { found: false, response, data };
+  if (response?.ok && data?.status === true && data?.data) {
+    if (String(data.data.reference || '') !== String(expectedReference || '')) {
+      throw new Error('Paystack transfer verification returned a different reference');
+    }
+    return { found: true, response, data };
+  }
+  throw new Error(data?.message || 'Paystack transfer verification failed (' + String(response?.status ?? 'unknown') + ')');
+}
+
+export function classifyPaystackTransferFetch(response, data, expectedIdentifier) {
+  // Legacy FYNX releases accidentally persisted transfer_code as provider_reference.
+  // Fetch Transfer accepts an ID or code, so recovery may resolve that exact code
+  // to the canonical reference without treating a different transfer as a match.
+  if (response?.status === 404) return { found: false, response, data };
+  if (response?.ok && data?.status === true && data?.data) {
+    const transfer = data.data;
+    const matchesReference = String(transfer.reference || '') === String(expectedIdentifier || '');
+    const matchesCode = String(transfer.transfer_code || '') === String(expectedIdentifier || '');
+    if (!matchesReference && !matchesCode) throw new Error('Paystack transfer fetch returned a different transfer ID or code');
+    return { found: true, response, data };
+  }
+  throw new Error(data?.message || 'Paystack transfer fetch failed (' + String(response?.status ?? 'unknown') + ')');
+}
+
 async function verifyTransferByReference(reference) {
   const cleanReference = String(reference || '').trim();
   if (!cleanReference) return { found: false };
-  const { response, data } = await paystackJson(`https://api.paystack.co/transfer/verify/${encodeURIComponent(cleanReference)}`, { headers: providerHeaders() });
-  if (response.ok && data?.status === true && data?.data) return { found: true, response, data };
-  if (response.status === 404 || data?.status === false) return { found: false, response, data };
-  throw new Error(data?.message || `Paystack transfer verification failed (${response.status})`);
+  const verifyUrl = 'https://api.paystack.co/transfer/verify/' + encodeURIComponent(cleanReference);
+  const verifyResult = await paystackJson(verifyUrl, { headers: providerHeaders() });
+  const verified = classifyPaystackTransferVerification(verifyResult.response, verifyResult.data, cleanReference);
+  if (verified.found) return verified;
+  // Migrate old rows which incorrectly stored Paystack's transfer_code in the
+  // provider_reference column. The second lookup still checks exact identifier.
+  const fetchUrl = 'https://api.paystack.co/transfer/' + encodeURIComponent(cleanReference);
+  const fetchResult = await paystackJson(fetchUrl, { headers: providerHeaders() });
+  return classifyPaystackTransferFetch(fetchResult.response, fetchResult.data, cleanReference);
 }
 
-function transferMatchesOperation(transfer, operation) {
+export function nextPayoutVerificationProgress(metadata = {}) {
+  const rawAttempts = Number(metadata?.verificationAttempts || 0);
+  const priorAttempts = Number.isFinite(rawAttempts) ? Math.max(0, Math.trunc(rawAttempts)) : 0;
+  const nextAttempt = priorAttempts + 1;
+  const cycleComplete = nextAttempt >= 12;
+  return {
+    attempt: nextAttempt,
+    shouldContinue: !cycleComplete,
+    verificationAttempts: cycleComplete ? 0 : nextAttempt,
+    verificationCycles: (Number.isFinite(Number(metadata?.verificationCycles)) ? Math.max(0, Math.trunc(Number(metadata?.verificationCycles))) : 0) + (cycleComplete ? 1 : 0)
+  };
+}
+
+export function payoutSweepIdempotencyKey(kind, operationId, nowMs = Date.now()) {
+  const bucket = Math.floor(Number(nowMs) / 120_000);
+  return `${String(kind)}-SWEEP-${String(operationId)}-${bucket}`;
+}
+
+export function payoutVerificationJobIdempotencyKey(operationId, cycle, attempt) {
+  const cleanCycle = String(cycle || 'initial').slice(0, 100);
+  const cleanAttempt = Math.max(0, Math.trunc(Number(attempt) || 0));
+  return `VERIFY-CYCLE-${String(operationId)}-${cleanCycle}-${cleanAttempt}`;
+}
+export function payoutInitializationOutcomeIsUncertain(response, data) {
+  const status = Number(response?.status);
+  const message = String(data?.message || '').trim().toLowerCase();
+  if (status === 408 || status === 409 || status === 425 || status === 429 || status >= 500) return true;
+  if (!Number.isFinite(status) || status < 100) return true;
+  return /duplicate|reference.{0,20}(already|used|exists)|already.{0,20}reference|timeout|temporar|try again/.test(message)
+    || Boolean(response?.ok && data?.status === true && !data?.data);
+}
+export function transferMatchesOperation(transfer, operation, expectedReference = payoutReferenceForOperation(operation)) {
   const expectedAmount = Math.round(Number(operation.amount) * 100);
   const providerAmount = Number(transfer?.amount);
   const expectedCurrency = String(operation.currency || '').toUpperCase();
   const providerCurrency = String(transfer?.currency || '').toUpperCase();
-  return Number.isFinite(expectedAmount) && expectedAmount > 0 && providerAmount === expectedAmount && providerCurrency === expectedCurrency;
+  const providerReference = String(transfer?.reference || '').trim();
+  const referenceMatches = Boolean(String(expectedReference || '').trim()) && providerReference === String(expectedReference).trim();
+  return referenceMatches && Number.isFinite(expectedAmount) && expectedAmount > 0 && providerAmount === expectedAmount && providerCurrency === expectedCurrency;
 }
 
 async function markPayoutFailed(client, operation, reason) {
@@ -109,9 +184,21 @@ async function initiatePayout(payload) {
       return;
     }
 
-    const refundConflict = (await client.query(`SELECT 1 FROM marketplace_financial_operations WHERE order_id=$1 AND operation_type='REFUND' AND status IN ('PENDING','SUCCEEDED') LIMIT 1`, [operation.order_id])).rowCount > 0;
+    const refundConflict = (await client.query(`
+      SELECT 1 FROM marketplace_financial_operations
+      WHERE order_id=$1 AND operation_type='REFUND'
+        AND (
+          status IN ('PENDING','SUCCEEDED','BLOCKED')
+          OR (
+            status='FAILED'
+            AND COALESCE(metadata->>'refundEvent','') <> 'refund.failed'
+            AND COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'
+          )
+        )
+      LIMIT 1
+    `, [operation.order_id])).rowCount > 0;
     if (refundConflict) {
-      await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, ['refund financial operation is active for this order', operation.id]);
+      await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, ['refund financial operation is unresolved for this order', operation.id]);
       await client.query('COMMIT');
       return;
     }
@@ -133,7 +220,7 @@ async function initiatePayout(payload) {
     // If Paystack accepted the previous attempt but FYNX crashed before saving the
     // provider reference, this discovers the existing transfer instead of creating a
     // second transfer. Paystack explicitly recommends retrying with the same reference.
-    const reference = `fynx-payout-${operation.order_id}`;
+    const reference = payoutReferenceForOperation(operation);
     let existingTransfer = await verifyTransferByReference(reference);
     let response;
     let data;
@@ -146,13 +233,30 @@ async function initiatePayout(payload) {
         headers: providerHeaders(),
         body: JSON.stringify({ source: 'balance', amount: Math.round(operationAmount * 100), recipient: recipientCode, currency: String(operation.currency).toUpperCase(), reason: `FYNX marketplace payout ${operation.order_id}`, reference })
       }));
+      // The provider can accept a transfer even if the create request returns an
+      // error response. Re-check this operation's unique reference before treating
+      // any rejection as terminal or releasing the escrow back to eligibility.
+      if (!(response.ok && data?.status === true && data?.data)) {
+        const afterCreateCheck = await verifyTransferByReference(reference);
+        if (afterCreateCheck.found) {
+          existingTransfer = afterCreateCheck;
+          response = afterCreateCheck.response;
+          data = afterCreateCheck.data;
+        } else if (payoutInitializationOutcomeIsUncertain(response, data)) {
+          // Leave operation PENDING/escrow RELEASE_PENDING. The job retry and
+          // stale-operation scan will check the same reference again.
+          throw new Error('Paystack payout initialization outcome is unresolved; retry verification before another state change');
+        }
+      }
     }
 
-    const providerReference = String(data?.data?.reference || data?.data?.transfer_code || reference);
+    const providerReference = String(data?.data?.reference || reference);
     const providerStatus = String(data?.data?.status || '').toLowerCase();
-    const providerDataMatches = transferMatchesOperation(data?.data, operation);
+    const providerDataMatches = transferMatchesOperation(data?.data, operation, reference);
     const success = response.ok && data?.status === true && providerDataMatches && ['success', 'successful'].includes(providerStatus);
+    const terminalFailure = response.ok && data?.status === true && providerDataMatches && ['failed', 'reversed', 'rejected'].includes(providerStatus);
     const accepted = response.ok && data?.status === true && providerDataMatches && ['pending', 'otp', 'queued', 'processing'].includes(providerStatus);
+    const unresolvedProviderState = response.ok && data?.status === true && providerDataMatches && !success && !terminalFailure;
 
     const finishClient = await pool.connect();
     try {
@@ -160,14 +264,18 @@ async function initiatePayout(payload) {
       const current = (await finishClient.query(`SELECT * FROM marketplace_financial_operations WHERE id=$1 FOR UPDATE`, [operation.id])).rows[0];
       if (!current || current.status !== 'PENDING') { await finishClient.query('COMMIT'); return; }
       if (!providerDataMatches && response.ok && data?.status === true) {
-        await finishClient.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['Paystack payout amount or currency does not match the protected operation', JSON.stringify({ providerReference, providerStatus, providerAmount: data?.data?.amount ?? null, providerCurrency: data?.data?.currency ?? null }), current.id]);
+        await finishClient.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['Paystack payout reference, amount, or currency does not match the protected operation', JSON.stringify({ providerReference, providerStatus, providerAmount: data?.data?.amount ?? null, providerCurrency: data?.data?.currency ?? null }), current.id]);
         await finishClient.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [current.order_id]);
       } else if (success) {
         await markPayoutSucceeded(finishClient, current, providerReference, providerStatus);
-      } else if (accepted) {
-        await finishClient.query(`UPDATE marketplace_financial_operations SET provider_reference=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [providerReference, JSON.stringify({ providerStatus, initiatedAt: new Date().toISOString(), recoveryCheckedFirst: existingTransfer.found }), current.id]);
-      } else {
+      } else if (accepted || unresolvedProviderState) {
+        await finishClient.query(`UPDATE marketplace_financial_operations SET provider_reference=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [providerReference, JSON.stringify({ providerStatus: providerStatus || 'unknown', initiatedAt: new Date().toISOString(), recoveryCheckedFirst: existingTransfer.found }), current.id]);
+      } else if (terminalFailure || (data?.status !== true && !payoutInitializationOutcomeIsUncertain(response, data)) || (!response.ok && !payoutInitializationOutcomeIsUncertain(response, data))) {
         await markPayoutFailed(finishClient, current, data?.message || `Paystack transfer failed (${response.status})`);
+      } else {
+        // A successful HTTP envelope with a malformed transfer payload is not
+        // proof of failure. Keep the operation and escrow pending for reconciliation.
+        await finishClient.query(`UPDATE marketplace_financial_operations SET metadata=metadata || $1::jsonb,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [JSON.stringify({ providerOutcome: 'unresolved', providerMessage: String(data?.message || 'transfer response lacked a verifiable state').slice(0, 500), lastVerifiedAt: new Date().toISOString() }), current.id]);
       }
       await finishClient.query('COMMIT');
     } catch (error) {
@@ -193,32 +301,40 @@ async function verifyPayout(payload) {
   try {
     const operation = (await client.query(`SELECT * FROM marketplace_financial_operations WHERE id=$1`, [operationId])).rows[0];
     if (!operation || operation.status !== 'PENDING' || !operation.provider_reference) return false;
-    const { response, data } = await paystackJson(`https://api.paystack.co/transfer/verify/${encodeURIComponent(operation.provider_reference)}`, { headers: providerHeaders() });
-    const providerStatus = String(data?.data?.status || '').toLowerCase();
+    const verification = await verifyTransferByReference(operation.provider_reference);
+    const verifiedTransfer = verification.found ? verification.data.data : null;
+    const providerStatus = String(verifiedTransfer?.status || '').toLowerCase();
     await client.query('BEGIN');
     const current = (await client.query(`SELECT * FROM marketplace_financial_operations WHERE id=$1 FOR UPDATE`, [operation.id])).rows[0];
     if (!current || current.status !== 'PENDING') { await client.query('COMMIT'); return false; }
-    if (response.ok && data?.status === true && !transferMatchesOperation(data?.data, current)) {
+    if (verification.found) {
+      const canonicalReference = String(verifiedTransfer?.reference || '').trim();
+      if (canonicalReference && canonicalReference !== String(current.provider_reference || '')) {
+        await client.query(`UPDATE marketplace_financial_operations SET provider_reference=$1,metadata=metadata || $2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [canonicalReference, JSON.stringify({ legacyTransferCode: String(current.provider_reference || ''), providerReferenceRecovered: true }), current.id]);
+        current.provider_reference = canonicalReference;
+      }
+    }
+    if (verification.found && !transferMatchesOperation(verifiedTransfer, current)) {
       await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, ['Paystack verified payout amount or currency does not match the protected operation', current.id]);
       await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [current.order_id]);
       await client.query('COMMIT');
       return false;
     }
-    if (response.ok && data?.status === true && ['success', 'successful'].includes(providerStatus)) {
+    if (verification.found && ['success', 'successful'].includes(providerStatus)) {
       await markPayoutSucceeded(client, current, current.provider_reference, providerStatus);
       await client.query('COMMIT');
       return false;
     }
-    if (response.ok && data?.status === true && ['failed', 'reversed', 'rejected'].includes(providerStatus)) {
+    if (verification.found && ['failed', 'reversed', 'rejected'].includes(providerStatus)) {
       await markPayoutFailed(client, current, `Paystack transfer status: ${providerStatus}`);
       await client.query('COMMIT');
       return false;
     }
-    if (response.ok && data?.status === true) {
-      const attempts = Number(current.metadata?.verificationAttempts || 0) + 1;
-      await client.query(`UPDATE marketplace_financial_operations SET metadata=metadata || $1::jsonb,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [JSON.stringify({ providerStatus, verificationAttempts: attempts, lastVerifiedAt: new Date().toISOString() }), current.id]);
+    if (verification.found) {
+      const progress = nextPayoutVerificationProgress(current.metadata || {});
+      await client.query(`UPDATE marketplace_financial_operations SET metadata=metadata || $1::jsonb,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [JSON.stringify({ providerStatus, verificationAttempts: progress.verificationAttempts, verificationCycles: progress.verificationCycles, lastVerifiedAt: new Date().toISOString() }), current.id]);
       await client.query('COMMIT');
-      return attempts < 12;
+      return progress.shouldContinue;
     }
     await client.query('COMMIT');
     return true;
@@ -230,12 +346,108 @@ async function verifyPayout(payload) {
   }
 }
 
+async function recoverBlockedPayoutAfterRefundResolution(operationId, { logger = console } = {}) {
+  if (!pool) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Read the relationship first, then lock order -> operation -> escrow to
+    // avoid reversing the order used by dispute/refund transactions.
+    const identity = (await client.query(
+      "SELECT order_id FROM marketplace_financial_operations WHERE id=$1 AND operation_type='PAYOUT_RELEASE'",
+      [operationId]
+    )).rows[0];
+    if (!identity) { await client.query('COMMIT'); return null; }
+
+    const order = (await client.query(
+      "SELECT id,status FROM marketplace_orders WHERE id=$1 FOR UPDATE",
+      [identity.order_id]
+    )).rows[0];
+    const operation = (await client.query(
+      "SELECT * FROM marketplace_financial_operations WHERE id=$1 AND operation_type='PAYOUT_RELEASE' FOR UPDATE",
+      [operationId]
+    )).rows[0];
+    if (!order || order.status !== 'COMPLETED'
+      || !operation
+      || operation.status !== 'BLOCKED'
+      || operation.failure_reason !== 'refund financial operation is unresolved for this order') {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const escrow = (await client.query(
+      "SELECT * FROM marketplace_escrows WHERE order_id=$1 FOR UPDATE",
+      [operation.order_id]
+    )).rows[0];
+    if (!escrow || escrow.status !== 'RELEASE_PENDING') {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const unresolvedRefund = (await client.query(`
+      SELECT 1 FROM marketplace_financial_operations
+      WHERE order_id=$1 AND operation_type='REFUND'
+        AND (
+          status IN ('PENDING','SUCCEEDED','BLOCKED')
+          OR (
+            status='FAILED'
+            AND COALESCE(metadata->>'refundEvent','') <> 'refund.failed'
+            AND COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'
+          )
+        )
+      LIMIT 1
+    `, [operation.order_id])).rowCount > 0;
+    if (unresolvedRefund) {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const operationAmount = Number(operation.amount);
+    const escrowAmount = Number(escrow.amount);
+    const marketplaceFee = Number(operation.metadata?.marketplaceFee || 0);
+    const currency = String(operation.currency || '').toUpperCase();
+    const recipientCode = String(operation.metadata?.recipientCode || '').trim();
+    if (!Number.isFinite(operationAmount) || !Number.isFinite(escrowAmount)
+      || !Number.isFinite(marketplaceFee) || operationAmount <= 0 || marketplaceFee < 0
+      || Math.round((operationAmount + marketplaceFee) * 100) / 100 !== escrowAmount
+      || currency !== String(escrow.currency || '').toUpperCase()
+      || !['NGN','USD'].includes(currency)
+      || !recipientCode) {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const resumed = (await client.query(`
+      UPDATE marketplace_financial_operations
+      SET status='PENDING',failure_reason=NULL,
+          metadata=COALESCE(metadata,'{}'::jsonb) || $1::jsonb,
+          updated_at=NOW()
+      WHERE id=$2 AND operation_type='PAYOUT_RELEASE' AND status='BLOCKED'
+        AND failure_reason='refund financial operation is unresolved for this order'
+      RETURNING id
+    `, [JSON.stringify({ payoutResumedAfterRefundResolutionAt: new Date().toISOString() }), operation.id])).rows[0];
+    await client.query('COMMIT');
+    return resumed ? String(resumed.id) : null;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error('[fynx-marketplace] blocked payout recovery failed', error?.message || error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export function registerMarketplaceSettlementWorker({ jobs, logger = console }) {
   if (!jobs?.enabled || typeof jobs.enqueue !== 'function') return;
   globalThis.__fynxJobHandlers = globalThis.__fynxJobHandlers || {};
   globalThis.__fynxJobHandlers['marketplace.payout.release'] = async (payload) => {
     await initiatePayout(payload);
-    if (payload?.operationId) await jobs.enqueue('marketplace.payout.verify', { operationId: String(payload.operationId) }, { idempotencyKey: `VERIFY-${String(payload.operationId)}-0`, delayMs: 5_000, maxAttempts: 5 });
+    if (payload?.operationId) {
+      const operationId = String(payload.operationId);
+      const verificationCycle = String(payload?.verificationCycle || 'initial').slice(0, 100);
+      await jobs.enqueue('marketplace.payout.verify', { operationId, attempt: 0, verificationCycle }, { idempotencyKey: payoutVerificationJobIdempotencyKey(operationId, verificationCycle, 0), delayMs: 5_000, maxAttempts: 5 });
+    }
   };
   globalThis.__fynxJobHandlers['marketplace.payout.verify'] = async (payload) => {
     const operationId = String(payload?.operationId || '');
@@ -244,23 +456,67 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
     if (!shouldContinue) return;
     const attempt = Math.max(0, Number(payload?.attempt || 0)) + 1;
     if (attempt > 11) return;
-    await jobs.enqueue('marketplace.payout.verify', { operationId, attempt }, { idempotencyKey: `VERIFY-${operationId}-${attempt}`, delayMs: 10_000, maxAttempts: 3 });
+    const verificationCycle = String(payload?.verificationCycle || 'initial').slice(0, 100);
+    await jobs.enqueue('marketplace.payout.verify', { operationId, attempt, verificationCycle }, { idempotencyKey: payoutVerificationJobIdempotencyKey(operationId, verificationCycle, attempt), delayMs: 10_000, maxAttempts: 3 });
   };
 
   const scan = async () => {
     if (!pool) return;
     try {
-      const pending = await pool.query(`
+      const bucketTime = Date.now();
+      const blocked = await pool.query(`
         SELECT fo.id
+        FROM marketplace_financial_operations fo
+        JOIN marketplace_escrows e ON e.order_id=fo.order_id
+        JOIN marketplace_orders o ON o.id=fo.order_id
+        WHERE fo.operation_type='PAYOUT_RELEASE'
+          AND fo.status='BLOCKED'
+          AND fo.failure_reason='refund financial operation is unresolved for this order'
+          AND o.status='COMPLETED'
+          AND e.status='RELEASE_PENDING'
+        ORDER BY fo.updated_at ASC
+        LIMIT 20
+      `);
+      for (const row of blocked.rows) {
+        try {
+          const operationId = await recoverBlockedPayoutAfterRefundResolution(String(row.id), { logger });
+          if (operationId) {
+            const verificationCycle = payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime);
+            await jobs.enqueue('marketplace.payout.release', { operationId, verificationCycle }, {
+              idempotencyKey: verificationCycle,
+              maxAttempts: 5
+            });
+          }
+        } catch (error) {
+          logger.error('[fynx-marketplace] blocked payout recovery enqueue failed', error?.message || error);
+        }
+      }
+
+      const pending = await pool.query(`
+        SELECT fo.id,fo.provider_reference,fo.updated_at
         FROM marketplace_financial_operations fo
         JOIN marketplace_escrows e ON e.order_id=fo.order_id
         WHERE fo.operation_type='PAYOUT_RELEASE'
           AND fo.status='PENDING'
           AND e.status='RELEASE_PENDING'
-        ORDER BY fo.created_at ASC
+          AND fo.updated_at <= NOW() - INTERVAL '2 minutes'
+        ORDER BY fo.updated_at ASC
         LIMIT 20`);
       for (const row of pending.rows) {
-        await jobs.enqueue('marketplace.payout.release', { operationId: String(row.id) }, { idempotencyKey: `RELEASE-${String(row.id)}`, maxAttempts: 5 });
+        const operationId = String(row.id);
+        if (row.provider_reference) {
+          // A verification chain can exhaust its finite queue attempts while the
+          // provider transfer is still pending. Enqueue a fresh bounded sweep
+          // after inactivity; the same bucket is idempotent across scan ticks.
+          const verificationCycle = payoutSweepIdempotencyKey('VERIFY', operationId, bucketTime);
+          await jobs.enqueue('marketplace.payout.verify', { operationId, attempt: 0, verificationCycle }, { idempotencyKey: verificationCycle, maxAttempts: 5 });
+        } else {
+          // A previous release job may be completed/dead while the operation
+          // remains pending. Time-bucketed keys allow safe re-reconciliation;
+          // initiatePayout verifies the deterministic provider reference first.
+          const verificationCycle = payoutSweepIdempotencyKey('RELEASE', operationId, bucketTime);
+          await jobs.enqueue('marketplace.payout.release', { operationId, verificationCycle }, { idempotencyKey: verificationCycle, maxAttempts: 5 });
+        }
       }
     } catch (error) {
       logger.error('[fynx-marketplace] payout reconciliation failed', error?.message || error);

@@ -71,9 +71,22 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var shopContactPhone by remember(username) { mutableStateOf("") }
     var profileLoading by remember(username) { mutableStateOf(true) }
     var storefrontListings by remember(username) { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>?>(null) }
-    LaunchedEffect(username) {
+    var storefrontLoading by remember(username) { mutableStateOf(true) }
+    var storefrontError by remember(username) { mutableStateOf<String?>(null) }
+    var storefrontReloadKey by remember(username) { mutableStateOf(0) }
+    LaunchedEffect(username, storefrontReloadKey) {
+        storefrontLoading = true
+        storefrontError = null
         FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())
-            .onSuccess { fetched -> storefrontListings = fetched.filter { it.active && it.quantity > 0 } }
+            .onSuccess { fetched ->
+                storefrontListings = fetched.filter { it.active && it.quantity > 0 }
+                storefrontError = null
+            }
+            .onFailure {
+                storefrontListings = null
+                storefrontError = "Products could not load. Check your connection and try again."
+            }
+        storefrontLoading = false
         FynxProfileRemoteClient.get(context, username.removePrefix("@").trim()).onSuccess { profile ->
             profileName = profile.displayName.orEmpty()
             profileBio = profile.bio.orEmpty()
@@ -91,10 +104,8 @@ internal fun FynxMarketplaceSellerStoreDialog(
             }
         profileLoading = false
     }
-    val sellerListings = remember(listings, username, storefrontListings) {
-        (storefrontListings ?: listings.filter { it.active && it.sellerUsername.removePrefix("@").trim().equals(username.removePrefix("@").trim(), ignoreCase = true) })
-            .filter { it.active && it.quantity > 0 }
-            .distinctBy { it.id }
+    val sellerListings = remember(storefrontListings) {
+        storefrontListings.orEmpty().filter { it.active && it.quantity > 0 }.distinctBy { it.id }
     }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Column(
@@ -179,6 +190,23 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             }
                         }
                     }
+                } else if (storefrontLoading) {
+                    item {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("Loading this seller’s products…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                } else if (storefrontError != null) {
+                    item {
+                        Card(shape = RoundedCornerShape(18.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(storefrontError ?: "Products could not load.", color = MaterialTheme.colorScheme.error)
+                                TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading) { Text("Retry products") }
+                            }
+                        }
+                    }
                 } else if (sellerListings.isEmpty()) {
                     item { Text("This seller has no active products available right now.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else {
@@ -189,7 +217,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             color = MaterialTheme.colorScheme.surfaceContainer
                         ) {
                             Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                if (listing.mediaIds.isNotEmpty()) FynxRemoteMedia(FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()), "auto", Modifier.size(112.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
+                                if (listing.mediaIds.isNotEmpty()) FynxRemoteMedia(FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()), FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()), Modifier.size(112.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
                                 else Box(Modifier.size(112.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
                                     Icon(Icons.Default.ShoppingBag, "Product image unavailable", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
                                 }

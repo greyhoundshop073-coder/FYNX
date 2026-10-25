@@ -19,6 +19,7 @@ object FynxOfflineSync {
                 context = context,
                 recipientUsername = item.recipient,
                 text = item.text,
+                requestId = item.requestId,
                 replyToId = item.replyToId,
                 mediaId = item.mediaId,
                 mediaType = item.mediaType,

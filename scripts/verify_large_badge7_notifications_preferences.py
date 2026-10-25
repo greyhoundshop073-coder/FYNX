@@ -13,6 +13,7 @@ devices = (ROOT / "backend/notificationDevices.js").read_text(encoding="utf-8")
 push = (ROOT / "backend/notificationPush.js").read_text(encoding="utf-8")
 bootstrap = (ROOT / "backend/notificationBootstrap.js").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+runtime_script = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 
 checks = [
     ("notification preferences load uses authenticated backend route", '"/api/notification-preferences"' in client and "FynxBackendClient.get" in client),
@@ -34,7 +35,7 @@ checks = [
     ("push delivery has retry and invalid-token handling", "attempt < 3" in push and "UNREGISTERED" in push and "status='SENT'" in push),
     ("notification route wiring covers real message/group/social events", "queueFynxNotification" in bootstrap and 'type: "MESSAGE"' in bootstrap and "type:'GROUP'" in bootstrap and "type:'COMMENT'" in bootstrap),
     ("existing notification verification gates remain in CI", "verify_notifications_settings_integration.py" in workflow),
-    ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in workflow and ("verify_runtime_navigation.py" in workflow or "verify_authenticated_runtime_navigation.py" in workflow)),
+    ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in runtime_script and "verify_authenticated_runtime_navigation.py" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow),
     ("no fake notification records are introduced", "mockNotification" not in backend and "fakeNotification" not in backend),
 ]
 failed=[]

@@ -59,7 +59,10 @@ internal fun FynxMarketplaceReferenceProductDetails(
             Surface(Modifier.fillMaxWidth(), shape = FynxMarketplaceReferenceStyle.radius, color = FynxMarketplaceReferenceStyle.surface) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Seller", color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.Bold)
-                    Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, color = FynxMarketplaceReferenceStyle.text)
+                    Text(listing.storeName.ifBlank { listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") } }, color = FynxMarketplaceReferenceStyle.text)
+                    if (listing.storeName.isNotBlank() && !listing.storeName.equals(listing.sellerDisplayName, ignoreCase = true)) {
+                        Text("Seller account: " + listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, color = FynxMarketplaceReferenceStyle.textMuted)
+                    }
                     TextButton(onClick = onSeller) { Text("View seller") }
                 }
             }
@@ -130,7 +133,10 @@ internal fun FynxMarketplaceReferenceSearch(
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(listing.title, color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text("${listing.currency} ${String.format(Locale.US, "%,.2f", listing.price)}", color = FynxMarketplaceReferenceStyle.primarySoft, fontWeight = FontWeight.Bold)
-                            Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, color = FynxMarketplaceReferenceStyle.textMuted)
+                            Text(listing.storeName.ifBlank { listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") } }, color = FynxMarketplaceReferenceStyle.textMuted)
+                            if (listing.storeName.isNotBlank() && !listing.storeName.equals(listing.sellerDisplayName, ignoreCase = true)) {
+                                Text("by " + listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, color = FynxMarketplaceReferenceStyle.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }

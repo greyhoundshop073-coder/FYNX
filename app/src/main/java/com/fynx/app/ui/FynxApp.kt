@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,7 +39,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 
 private const val FYNX_PREVIEW_MODE = false
@@ -117,7 +120,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         onDispose { appConnectionManager.dispose() }
     }
     DisposableEffect(lifecycleOwner, authSession.state) {
-        if (authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
+        // Backend reachability is a public health probe, so the app-level connection
+        // indicator must run for the supported debug saved-device session too.
+        // Requiring a bearer token here leaves that session stuck at "Waiting for network".
+        if (authSession.state == AuthState.SIGNED_IN) {
             lifecycleOwner.lifecycle.addObserver(appConnectionManager)
         }
         onDispose {
@@ -190,7 +196,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 openChatMarketplaceListingId = destination.marketplaceListingId
                 val normalized = destination.username.removePrefix("@").trim()
                 if (normalized.isNotBlank()) {
-                    val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                    val local = withContext(Dispatchers.IO) {
+                        FynxChatStore.loadPreviews(context).firstOrNull {
+                            it.username.removePrefix("@").equals(normalized, true)
+                        }
+                    }
                     val selfUsername = authSession.username?.removePrefix("@")?.trim()
                     val isSelfTarget = authSession.state == AuthState.SIGNED_IN &&
                         !selfUsername.isNullOrBlank() && selfUsername.equals(normalized, true)
@@ -204,7 +214,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     } else null
                     openGroup = null
                     profileUser = null
-                    openChat = local ?: remote?.let { user ->
+                    val resolvedChat = local ?: remote?.let { user ->
                         ChatPreview(
                             name = user.displayName.ifBlank { normalized },
                             username = user.username.removePrefix("@").let { "@$it" },
@@ -215,7 +225,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     } ?: selfUsername?.takeIf { isSelfTarget }?.let {
                         ChatPreview(name = it, username = "@$it", lastMessage = "Start a conversation", time = "Now")
                     }
-                    if (openChat != null) FynxChatStore.savePreview(context, openChat!!)
+                    openChat = resolvedChat
+                    if (resolvedChat != null) {
+                        withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, resolvedChat) }
+                    }
                 }
             }
             is FynxDeepLinkDestination.Call -> {
@@ -312,7 +325,19 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         selected = fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)
         if (notificationPreferencesOnly) notificationPreferencesOnly = false
     }
-    if (profileUser != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onOpenStatus = { statusUsername -> profileUser = null; statusOpenOwner = statusUsername; selected = "Stories" }, onMessage = { username -> openChatMarketplaceListingId = null; val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }; openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) } ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX user" }, normalized, "Start a conversation", "Now"); FynxChatStore.savePreview(context, openChat!!); profileUser = null }) }; return }
+    if (profileUser != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onOpenStatus = { statusUsername -> profileUser = null; statusOpenOwner = statusUsername; selected = "Stories" }, onMessage = { username ->
+        val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }
+        openChatMarketplaceListingId = null
+        scope.launch {
+            val local = withContext(Dispatchers.IO) {
+                FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) }
+            }
+            val chat = local ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX user" }, normalized, "Start a conversation", "Now")
+            withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, chat) }
+            openChat = chat
+            profileUser = null
+        }
+    }) }; return }
     if (openChat != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { ConversationPanel(chat = openChat!!, marketplaceListingId = openChatMarketplaceListingId, onBack = { openChat = null; openChatMarketplaceListingId = null }, onOpenProfile = { profileUser = it; openChat = null }, onVoiceCall = { callTarget = openChat!!.username; callVideo = false; openChat = null; selected = "Calls" }, onVideoCall = { callTarget = openChat!!.username; callVideo = true; openChat = null; selected = "Calls" }) }; return }
     if (openGroup != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) }; return }
     FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) {
@@ -376,73 +401,78 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         .graphicsLayer { alpha = 1f - homeChromeProgress },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(
+                        Modifier.size(48.dp).clickable {
+                            selected = "Profile"
+                            openProfileSettings = false
+                        }.semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(
+                            mediaId = remoteMyPhotoId,
+                            contentDescription = myProfile.displayName,
+                            modifier = Modifier.size(38.dp),
+                            ownerUsername = myProfile.username,
+                            allowImagePreview = false
+                        )
+                        else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
+                        else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
+                    }
+                    // The avatar and overflow menu are fixed-width siblings. Keep the
+                    // brand label in the remaining space; nesting another weighted Row
+                    // here makes Compose allocate overlapping bounds on narrow screens.
+                    Box(
+                        Modifier.size(48.dp).clickable { profileAvatarMenuOpen = true }
+                            .semantics(mergeDescendants = true) { contentDescription = "Profile menu, three dots" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        DropdownMenu(
+                            expanded = profileAvatarMenuOpen,
+                            onDismissRequest = { profileAvatarMenuOpen = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Open profile") },
+                                onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = false },
+                                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Profile settings") },
+                                onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = true },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
+                            )
+                        }
+                    }
                     Row(
                         Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            IconButton(
-                                onClick = { selected = "Profile"; openProfileSettings = false },
-                                modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" }
-                            ) {
-                                if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
-                                else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
-                                else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
-                            }
-                            Box(Modifier.align(Alignment.BottomEnd)) {
-                                IconButton(
-                                    onClick = { profileAvatarMenuOpen = true },
-                                    modifier = Modifier.size(22.dp).semantics { contentDescription = "Profile menu, three dots" }
-                                ) {
-                                    Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        if (appConnectionState == FynxAppConnectionManager.State.CONNECTED) {
+                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
+                        } else {
+                            var connectingDotCount by remember { mutableIntStateOf(1) }
+                            LaunchedEffect(appConnectionState) {
+                                if (appConnectionState != FynxAppConnectionManager.State.CONNECTING) {
+                                    connectingDotCount = 1
+                                    return@LaunchedEffect
                                 }
-                                DropdownMenu(
-                                    expanded = profileAvatarMenuOpen,
-                                    onDismissRequest = { profileAvatarMenuOpen = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Open profile") },
-                                        onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = false },
-                                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Profile settings") },
-                                        onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = true },
-                                        leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
-                                    )
+                                while (true) {
+                                    delay(450L)
+                                    connectingDotCount = connectingDotCount % 3 + 1
                                 }
                             }
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (appConnectionState == FynxAppConnectionManager.State.CONNECTED) {
-                                Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                Spacer(Modifier.width(4.dp))
-                                Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
-                            } else {
-                                var connectingDotCount by remember { mutableIntStateOf(1) }
-                                LaunchedEffect(appConnectionState) {
-                                    if (appConnectionState != FynxAppConnectionManager.State.CONNECTING) {
-                                        connectingDotCount = 1
-                                        return@LaunchedEffect
-                                    }
-                                    while (true) {
-                                        delay(450L)
-                                        connectingDotCount = connectingDotCount % 3 + 1
-                                    }
-                                }
-                                Text(
-                                    if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
-                                        "Waiting for network..."
-                                    } else {
-                                        "Connecting" + ".".repeat(connectingDotCount)
-                                    },
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleLarge
-                                )
-                            }
+                            Text(
+                                if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
+                                    "Waiting for network..."
+                                } else {
+                                    "Connecting" + ".".repeat(connectingDotCount)
+                                },
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleLarge
+                            )
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -651,24 +681,35 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 onOpenChat = { username ->
                     val normalized = username.removePrefix("@").trim()
                     if (normalized.isNotBlank()) {
+                        // Render immediately; do not parse persisted chat history on the UI thread.
+                        val initialChat = ChatPreview(normalized, "@" + normalized, "Start a conversation", "Now")
+                        openChatMarketplaceListingId = null
+                        openChat = initialChat
                         scope.launch {
-                            val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
-                            val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
-                            val chat = local ?: remote?.let { user ->
-                                ChatPreview(
-                                    name = user.displayName.ifBlank { normalized },
-                                    username = user.username.removePrefix("@").let { "@$it" },
-                                    lastMessage = "Start a conversation",
-                                    time = "Now",
-                                    avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
-                                )
-                            } ?: ChatPreview(normalized, "@$normalized", "Start a conversation", "Now")
-                            FynxChatStore.savePreview(context, chat)
-                            openChat = chat
+                            val local = withContext(Dispatchers.IO) {
+                                FynxChatStore.loadPreviews(context).firstOrNull {
+                                    it.username.removePrefix("@").equals(normalized, true)
+                                }
+                            }
+                            val baseChat = local ?: initialChat
+                            if (local != null && openChat?.username.equals(initialChat.username, true)) openChat = local
+                            withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, baseChat) }
+                            if (local == null) {
+                                val user = FynxSocialClient.searchUsers(context, normalized).getOrNull()
+                                    ?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                                if (user != null) {
+                                    val resolvedChat = baseChat.copy(
+                                        name = user.displayName.ifBlank { normalized },
+                                        username = "@" + user.username.removePrefix("@"),
+                                        avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
+                                    )
+                                    withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, resolvedChat) }
+                                    if (openChat?.username.equals(initialChat.username, true)) openChat = resolvedChat
+                                }
+                            }
                         }
                     }
-                }
-            )
+                }            )
             "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" })
             "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenSavedProducts = { selected = "Saved Products" }, initialListingId = marketplaceListingId)
             "Money Tools" -> MoneyCenterPanel()
@@ -686,8 +727,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 onOpenMessage = { username ->
                     val normalized = username.removePrefix("@").trim()
                     if (normalized.isNotBlank()) scope.launch {
-                        val local = FynxChatStore.loadPreviews(context).firstOrNull {
-                            it.username.removePrefix("@").equals(normalized, true)
+                        val local = withContext(Dispatchers.IO) {
+                            FynxChatStore.loadPreviews(context).firstOrNull {
+                                it.username.removePrefix("@").equals(normalized, true)
+                            }
                         }
                         val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()
                             ?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
@@ -703,7 +746,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         // Do not manufacture a conversation when lookup fails (for example,
                         // while the backend is unavailable). Only navigate to a verified user.
                         if (chat != null) {
-                            FynxChatStore.savePreview(context, chat)
+                            withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, chat) }
                             openGroup = null
                             profileUser = null
                             openChat = chat
@@ -735,10 +778,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             val normalized = destination.username.removePrefix("@").trim()
                             if (normalized.isNotBlank()) {
                                 scope.launch {
-                                    val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                                    val local = withContext(Dispatchers.IO) {
+                                        FynxChatStore.loadPreviews(context).firstOrNull {
+                                            it.username.removePrefix("@").equals(normalized, true)
+                                        }
+                                    }
                                     val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
-                                    openChat = local ?: remote?.let { user -> ChatPreview(name = user.displayName.ifBlank { normalized }, username = "@" + user.username.removePrefix("@"), lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.let { "/api/media/" + it }) }
-                                    if (openChat != null) FynxChatStore.savePreview(context, openChat!!)
+                                    val resolvedChat = local ?: remote?.let { user ->
+                                        ChatPreview(name = user.displayName.ifBlank { normalized }, username = "@" + user.username.removePrefix("@"), lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.let { "/api/media/" + it })
+                                    }
+                                    openChat = resolvedChat
+                                    if (resolvedChat != null) withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, resolvedChat) }
                                 }
                             }
                         }

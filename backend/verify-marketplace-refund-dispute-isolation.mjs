@@ -5,6 +5,8 @@ const read = (file) => fs.readFileSync(new URL(file, import.meta.url), 'utf8');
 const protection = read('./marketplaceProtection.js');
 const resolution = read('./marketplaceProtectionResolution.js');
 const webhook = read('./marketplacePaystackWebhook.js');
+const server = read('./server.js');
+const bootstrap = read('./serverBootstrap.js');
 const settlement = read('./marketplaceSettlementWorker.js');
 const checkout = read('./marketplaceCheckoutOrder.js');
 
@@ -14,8 +16,18 @@ const checks = [
   ['active protection lookup is child-order scoped', protection.includes("WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW')")],
   ['refund requests are buyer-scoped to the child order', protection.includes("if (caseType === 'REFUND_REQUEST' && !isBuyer)")],
   ['refund operations use a child-order idempotency key', resolution.includes('REFUND-${row.order_id}')],
+  ['blocked payouts prevent refund approval or seller-resolution cancellation', resolution.includes("operation_type='PAYOUT_RELEASE'") && resolution.includes("status IN ('PENDING','SUCCEEDED','BLOCKED')")],
+  ['blocked and unverified failed refunds prevent seller release/cancellation', resolution.includes("status IN ('PENDING','SUCCEEDED','BLOCKED')") && resolution.includes("COALESCE(metadata->>'refundEvent','') <> 'refund.failed'") && resolution.includes("COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'")],
+  ['blocked refund operations cannot start a duplicate refund attempt', resolution.includes("existing?.status === 'BLOCKED'") && resolution.includes('no new refund attempt was created')],
   ['refund resolution creates a child-order financial operation', resolution.includes('INSERT INTO marketplace_financial_operations') && resolution.includes('row.order_id') && resolution.includes("'REFUND'")],
-  ['refund webhook reconciliation resolves the child financial operation', webhook.includes("WHERE f.operation_type='REFUND' AND o.payment_reference=$1") && webhook.includes('operation.order_id')],
+  ['refund resolution can fall back to the verified parent checkout reference for a child order', resolution.includes('resolveOrderPaymentReference(client, row.order_id, row.payment_reference)') && resolution.includes('marketplace_checkout_group_items') && resolution.includes('g.payment_reference')],
+  ['refund webhook maps a group transaction to the correct child financial operation', webhook.includes('async function findRefundOperation') && webhook.includes('resolved_payment_reference') && webhook.includes('f.provider_reference=ANY($1::text[])') && webhook.includes('marketplace_checkout_group_items')],
+  ['Paystack webhook route is registered by the actual generated-runtime bootstrap', bootstrap.includes('import { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";') && bootstrap.includes('if (pool) registerMarketplacePaystackWebhook({ app, pool });') && webhook.includes("app.post('/api/marketplace/payments/paystack/webhook'")],
+  ['raw Paystack JSON bytes are preserved only for signature verification', bootstrap.includes('"/api/marketplace/payments/paystack/webhook"') && bootstrap.includes('req.rawBody = Buffer.from(buf)') && webhook.includes('Buffer.isBuffer(req.rawBody)')],
+  ['shared-reference ambiguity counts succeeded refunds before selecting a child', (() => { const start = webhook.indexOf('const candidates = await client.query'); const end = webhook.indexOf('[transactionReference]);', start); const query = start >= 0 && end > start ? webhook.slice(start, end) : ''; return query.includes("f.operation_type='REFUND'") && query.includes('${effectiveReference}=$1') && !query.includes("f.status IN ('PENDING','FAILED')") && webhook.includes('candidates.rows.length === 1 && refundOperationCanApply(candidates.rows[0], eventName)'); })()],
+  ['terminal succeeded refunds ignore stale non-processed webhook events', webhook.includes('function refundOperationCanApply') && webhook.includes("if (currentStatus === 'SUCCEEDED') return eventName === 'refund.processed'") && webhook.includes('findRefundOperation(client, transactionReference, refund, eventName)')],
+  ['duplicate processed-refund webhooks do not repeat reservation release', webhook.includes("operation.status === 'SUCCEEDED' && eventName === 'refund.processed'")],
+  ['refund inventory release only applies when the order still held a reservation', webhook.includes('inventoryWasStillReserved') && webhook.includes("['PAID', 'SHIPPED', 'DELIVERED', 'INSPECTION'].includes(previousOrderStatus)")],
   ['refund webhook releases only the refunded child inventory', webhook.includes('operation.quantity') && webhook.includes('operation.listing_id') && webhook.includes('operation.order_id')],
   ['payout refund conflict is child-order scoped', settlement.includes("operation_type='REFUND'") && settlement.includes('WHERE order_id=$1')],
   ['multi-product checkout maps each child order exactly once', checkout.includes('order_id UUID NOT NULL UNIQUE REFERENCES marketplace_orders(id)')],
