@@ -749,7 +749,7 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
-def restore_home_after_restart(name:str)->str:
+def return_home_in_app(name:str)->str:
     """Return to Home through app navigation without killing the process or resetting authentication."""
     current = dump_ui(name + "-current.xml")
 
@@ -811,6 +811,28 @@ def restore_home_after_restart(name:str)->str:
             current = dump_ui(name + "-home-deeplink.xml")
 
     FAILURES.append(name + ": could not return to the authenticated Home surface through in-app navigation")
+    return current
+
+
+
+
+def restore_home_after_restart(name:str)->str:
+    """Cold-start Home restoration for explicit deep-link recovery journeys."""
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+    time.sleep(2.5)
+    current=dismiss_runtime_permission_prompt() or dump_ui(name+"-initial.xml")
+    if find_control(current,["Sign In"]):
+        # Some test paths deliberately exercise a cold start. Restore through the
+        # approved existing login path, but do not use this helper for normal
+        # in-app Home navigation.
+        current,error=login()
+        if error:
+            FAILURES.append(name+": could not restore Home after cold start: "+error)
+            return current
+    if find_control(current,["Sign In"]) or find_control(current,["Username"]):
+        FAILURES.append(name+": cold-start recovery remained at the sign-in gate")
+        return current
     return current
 
 
@@ -919,7 +941,7 @@ if not FAILURES:
         print("\n".join(report))
         raise SystemExit(1 if FAILURES else 0)
 
-    xml=restore_home_after_restart("authenticated-home-camera-reset") or xml
+    xml=return_home_in_app("authenticated-home-camera-reset") or xml
 
     for name,labels,expected in (
         ("chat",["Chat"],["Messages and groups in one place"]),
@@ -928,7 +950,7 @@ if not FAILURES:
     ):
         # Recover Home after the preceding journey instead of reusing stale coordinates.
         if name != "chat":
-            xml=restore_home_after_restart("authenticated-home-before-"+name) or xml
+            xml=return_home_in_app("authenticated-home-before-"+name) or xml
         after=capture_surface(name,labels,xml,expected)
         if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
@@ -966,7 +988,7 @@ if not FAILURES:
                 conversation_after=""
                 conversation_ui_opened=False
                 if real_chat_target:
-                    restore_home_after_restart("private-chat-real-target-home")
+                    return_home_in_app("private-chat-real-target-home")
                     clear_runtime_log()
                     started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+real_chat_target,PACKAGE,timeout=30)
                     time.sleep(.5)
@@ -986,7 +1008,7 @@ if not FAILURES:
                 else:
                     # Use the production Friends discovery UI as the fallback. This
                     # exercises the same real-user search and Chat action a user uses.
-                    home_for_chat=restore_home_after_restart("private-chat-fallback-home")
+                    home_for_chat=return_home_in_app("private-chat-fallback-home")
                     friends_surface=tap_control(
                         home_for_chat,
                         ["Friends"],
@@ -1096,7 +1118,7 @@ if not FAILURES:
                         exercise_notification_route("fynx://chat/" + route_username, "private-chat")
                 else:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
-                reset=restore_home_after_restart("authenticated-home-chat-group-reset") or xml
+                reset=return_home_in_app("authenticated-home-chat-group-reset") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 if groups_xml:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
@@ -1164,7 +1186,7 @@ if not FAILURES:
                 else:
                     FAILURES.append("group-chat entry certification blocked because the authenticated Chat surface was unavailable after Home reset")
         else: FAILURES.append("authenticated Home -> "+name)
-        xml=restore_home_after_restart("authenticated-home-reset") or xml
+        xml=return_home_in_app("authenticated-home-reset") or xml
 
 def find_feature_entry(xml_text:str, labels:list[str]):
     """Find an actual clickable feature card, not the search field or its text."""
@@ -1201,7 +1223,7 @@ def find_feature_entry(xml_text:str, labels:list[str]):
     return None
 
 def open_features(target_labels:list[str]|None=None):
-    home_xml=restore_home_after_restart("authenticated-home-features") or xml
+    home_xml=return_home_in_app("authenticated-home-features") or xml
     feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
     if not feature_xml: return ""
     if target_labels is None: return feature_xml
@@ -1266,7 +1288,7 @@ def open_features(target_labels:list[str]|None=None):
 # Certify the actual Marketplace destination in the same exact-commit APK.
 # This is a UI/runtime assertion only; the screen must remain navigable when the
 # live service is unavailable, and no sample listing data is fabricated.
-marketplace_home = restore_home_after_restart("authenticated-home-marketplace-entry")
+marketplace_home = return_home_in_app("authenticated-home-marketplace-entry")
 marketplace_xml = tap_control(
     marketplace_home,
     ["Marketplace"],
