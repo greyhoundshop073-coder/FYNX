@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const sharedModules = [
-  "server.js", "followRoutes.js", "businessRoutes.js", "presencePrivacy.js",
+  "server.js", "adminRoutes.js", "followRoutes.js", "businessRoutes.js", "presencePrivacy.js",
   "monetizationRoutes.js", "notificationDevices.js", "aiConversationRoutes.js",
   "socialHardening.js", "marketplaceProtection.js", "marketplacePayoutRetry.js",
   "statusManagementRoutes.js", "groupContentRoutes.js", "marketplaceMediaPrivacy.js",
@@ -13,6 +13,7 @@ const sharedModules = [
   "marketplaceInspectionExpiry.js", "marketplaceSettlementWorker.js", "fynxAiToolRegistry.js",
   "marketplaceProtectionResolution.js", "marketplaceAdvertising.js", "statusInteractionRoutes.js",
   "mediaPrivacy.js", "r6gIntegrationRoutes.js", "marketplaceBatch2FinalHardening.js",
+  "groupRoutes.js", "groupInviteRoutes.js", "notificationPreferences.js", "privacyRoutes.js", "profileRoutes.js",
   "marketplacePaymentExpiry.js"
 ];
 
