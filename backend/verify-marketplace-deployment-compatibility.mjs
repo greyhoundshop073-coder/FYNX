@@ -51,6 +51,17 @@ for (const [name, moduleSource, route, method] of [
   const doubleQuotedRoute = "app." + method + "(\"" + route + "\", auth";
   assert.ok(moduleSource.includes(singleQuotedRoute) || moduleSource.includes(doubleQuotedRoute), name + " must require auth middleware");
 }
+assert.ok(shop.includes("Object.prototype.hasOwnProperty.call(body, field)"),
+  "shop PATCH must distinguish omitted fields from explicit empty values");
+assert.ok(shop.includes("COALESCE($2, marketplace_shop_profiles.shop_name)")
+  && shop.includes("COALESCE($3, marketplace_shop_profiles.description)")
+  && shop.includes("COALESCE($4, marketplace_shop_profiles.location)")
+  && shop.includes("COALESCE($5, marketplace_shop_profiles.contact_phone)"),
+  "partial shop edits must preserve every field the caller omitted");
+assert.ok(shop.includes("at least one shop field must be provided")
+  && shop.includes("shop name is required when creating a shop"),
+  "shop PATCH must reject empty updates and require a name for first-time shop creation");
+
 assert.ok(shop.includes("seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE"),
   "shop identity must be keyed to the authenticated seller");
 const ownerUpsertStart = shop.indexOf("ON CONFLICT (seller_id) DO UPDATE");
