@@ -889,7 +889,7 @@ def _enter_debug_local_ui_after_backend_outage(
     run("adb", "shell", "input", "keyevent", "KEYCODE_CTRL_A")
     run("adb", "shell", "input", "keyevent", "KEYCODE_DEL")
     run("adb", "shell", "input", "keyevent", "KEYCODE_MOVE_END")
-    run("adb", "shell", "input", *(["KEYCODE_DEL"] * 128))
+    run("adb", "shell", "input", "keyevent", *(["KEYCODE_DEL"] * 128))
     run("adb", "shell", "input", "keyevent", "4")
     time.sleep(.8)
     cleared_xml = dump_ui("authenticated-login-local-entry-cleared.xml")
@@ -1160,7 +1160,7 @@ def login():
     xml=dump_ui("authenticated-after-username.xml")
     # Probe the actual backend independently because Compose accessibility dumps may
     # omit the red error text that is visible on the login screenshot. Only use the
-    # local debug UI route when /health confirms Railway's exact gateway 502 response.
+    # local debug UI route when /health confirms one of the known platform-level Railway outages.
     backend_outage_reason = (
         railway_backend_outage_reason()
         if find_control(xml, ["Leave password blank for quick local entry"])

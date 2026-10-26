@@ -344,6 +344,7 @@ tap_control_source = runtime_navigation[tap_start:tap_end]
 if 'find_control(next_xml,["Allow camera"])' not in tap_control_source:
     raise SystemExit("HOME 4F RUNTIME RED: camera destination must handle FYNX's in-app Allow camera screen")
 for token, label in (
+    ('run("adb", "shell", "input", "keyevent", *(["KEYCODE_DEL"] * 128))', "valid repeated password-clearing keyevent command"),
     ("def known_railway_backend_outage(status: int, body: str)", "specific external Railway outage classifier"),
     ('status == 502 and "application failed to respond" in normalized', "specific gateway 502 response check"),
     ('status == 404 and "application not found" in normalized', "specific unbound Railway application 404 check"),
