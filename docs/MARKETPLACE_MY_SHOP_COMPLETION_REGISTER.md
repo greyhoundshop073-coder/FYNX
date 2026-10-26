@@ -72,3 +72,26 @@ All Android Marketplace changes must land in the canonical integration branch ab
 - [ ] Update this register with exact PR/merge commit, workflow run URLs/results, APK artifact identity, and remaining verified blockers.
 
 **Completion rule:** a UI component, source-level assertion, passing unit/static test, green feature-branch workflow, deployed backend route, and final APK certification are different evidence states. Record each separately.
+
+
+## Current re-audit addendum — 2026-10-26 (supersedes stale pending statuses above)
+
+**Audited canonical head:** `b62b05918bfae55e1d16fa9f7db16720bb8565ce`  
+**Audit note:** the historical P2 status above predates later canonical changes and must not be read as the current state.
+
+- **Saved Products Android state hydration:** current canonical source in `FynxMarketplacePanel.kt` hydrates the signed-in account's saved products, resolves the authoritative state before a toggle when local state is unknown, blocks repeated taps for the same listing, and guards against stale initial reads overwriting a toggle. The matching checks in `scripts/verify_marketplace_seller_flow.py` are present on the audited head. This is source/contract evidence, not a live Saved Products API test.
+- **Latest canonical workflow — Android Build:** [run #40376673475](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40376673475), source SHA `b62b05918bfae55e1d16fa9f7db16720bb8565ce`, conclusion **failure**. Fast build/test/lint and full build/test/lint steps passed. The 43-test Android instrumentation run had one failure: `FynxNetworkRecoveryContractTest.debugAndroidRuntimeCanReachLiveRailwayBackend` received HTTP 404 with `Application not found` from the configured Railway URL. The emulator also briefly reported `device offline` during startup but proceeded to run the tests. The final recorded test failure is the backend reachability assertion, not a Marketplace assertion. Backend/network ownership is separate; this chat must not change backend configuration to mask it.
+- **Other workflows at the same canonical SHA:** [Backend CI #40376673468](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40376673468) passed; [Chat Group Parity + Layout Safety #40376673774](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40376673774) passed. These are workflow results only and do not certify Marketplace live runtime.
+- **APK artifact:** workflow run #40376673475 uploaded artifact `FYNX-debug-apk-b62b05918bfae55e1d16fa9f7db16720bb8565ce` (47,982,877 bytes; artifact archive digest `sha256:719f77cf0bd1713df36ca6b557088ec71cb90663cb57266c38d04451aab06f40`). This identifies an APK artifact built from the exact canonical SHA, but the workflow is red because instrumentation failed. The archive digest is not the APK file's own SHA-256. **Do not call this a fully certified final APK** until the relevant runtime gate is green and the APK file hash is independently recorded.
+- **Open backend dependency:** PR [#363](https://github.com/greyhoundshop073-coder/FYNX/pull/363) remains open against `main`, outside this Android Marketplace workstream. Its stated live DB verification blocker is Neon quota exhaustion. Do not claim its routes are deployed.
+- **Canonical source status:** saved-product state hydration and the sell-form single-category selector fix are present in the current canonical history. No new Marketplace code was changed by this evidence-only addendum. The next engineering batch must continue from this audited head and investigate any remaining concrete Android-side defects; it must not repeat P1/P2 as if those fixes were absent.
+
+### Re-audit acceptance status
+
+- [x] Canonical integration branch and exact current SHA confirmed.
+- [x] Saved Products state-hydration implementation and matching source-contract checks inspected.
+- [x] Latest Android workflow steps and failing instrumentation assertion inspected.
+- [x] Exact-commit APK artifact existence and artifact archive digest recorded.
+- [ ] Latest Android workflow green after the backend/network owner restores the configured endpoint.
+- [ ] APK binary SHA-256 and install/runtime verification recorded.
+- [ ] Live authenticated Marketplace flows verified against restored backend/database.
