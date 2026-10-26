@@ -178,7 +178,7 @@ internal fun FynxMarketplaceCheckoutDialog(
     var quote by remember { mutableStateOf<FynxMarketplaceCheckoutQuote?>(null) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    var quoteRequestGeneration by remember { mutableIntStateOf(0) }
+    var quoteRequestGeneration by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val quantity = quantityText.toIntOrNull() ?: 0
     val quantityError = when {
