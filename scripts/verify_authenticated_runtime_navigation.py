@@ -973,17 +973,28 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
             time.sleep(.4)
         return latest
 
-    def make_capture_button_available(current: str, name: str) -> tuple[str, bool]:
-        """Wake the live camera controls if their idle-hide timer elapsed during rebind."""
-        photo_button = find_enabled_control(current, ["Take photo"])
-        if photo_button is not None:
+    def make_capture_button_available(
+        current: str, name: str, capture_labels: list[str]
+    ) -> tuple[str, bool]:
+        """Wake the active camera's mode-specific capture control without a preview label."""
+        if find_enabled_control(current, capture_labels) is not None:
             return current, True
-        if not find_control(current, ["Live camera preview"]):
+        if find_control(current, ["Retake"]) or find_control(current, ["Edit photo"]):
             return current, False
-        run("adb", "shell", "input", "tap", "40", "600")
+
+        # The camera preview is an AndroidView and its description is not guaranteed
+        # to appear in UI Automator. Prefer the explicit overlay action when present;
+        # otherwise send a harmless tap to the known camera preview area to reveal
+        # controls, then poll the required enabled control in the hierarchy.
+        reveal = find_control(current, ["Show camera controls"])
+        if reveal is not None:
+            _, cx, cy = reveal
+            run("adb", "shell", "input", "tap", str(cx), str(cy))
+        else:
+            run("adb", "shell", "input", "tap", "40", "600")
         time.sleep(.25)
-        current = wait_for_enabled(["Take photo"], name, 12.0)
-        return current, find_enabled_control(current, ["Take photo"]) is not None
+        current = wait_for_enabled(capture_labels, name, 12.0)
+        return current, find_enabled_control(current, capture_labels) is not None
 
     def wait_for_enabled(labels: list[str], name: str, timeout: float = 18.0) -> str:
         """Wait for a usable control, not merely its visible-but-disabled Compose label."""
@@ -1104,7 +1115,7 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         FAILURES.append("camera capture runtime: photo Retake did not restore an enabled live capture action")
         return current
     current, photo_ready = make_capture_button_available(
-        current, "authenticated-camera-after-photo-retake"
+        current, "authenticated-camera-after-photo-retake", ["Take photo"]
     )
     if not photo_ready:
         screenshot("authenticated-camera-after-photo-retake-missing.png")
@@ -1184,15 +1195,15 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
     _, rx, ry = retake
     run("adb", "shell", "input", "tap", str(rx), str(ry))
     current = wait_for_live_camera("authenticated-camera-after-video-retake-live", 20.0)
-    live_capture_action = find_enabled_control(current, ["Take photo", "Record video note"])
+    live_capture_action = find_enabled_control(current, ["Record video note"])
     if (live_capture_action is None
             or find_control(current, ["Retake"])
             or find_control(current, ["Edit photo"])):
         screenshot("authenticated-camera-after-video-retake-missing.png")
-        FAILURES.append("camera capture runtime: video Retake did not restore an enabled live capture action")
+        FAILURES.append("camera capture runtime: video Retake did not restore the enabled video capture action")
         return current
     current, video_ready = make_capture_button_available(
-        current, "authenticated-camera-after-video-retake"
+        current, "authenticated-camera-after-video-retake", ["Record video note"]
     )
     if not video_ready:
         screenshot("authenticated-camera-after-video-retake-missing.png")
