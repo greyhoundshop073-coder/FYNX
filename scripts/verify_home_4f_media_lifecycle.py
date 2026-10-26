@@ -105,7 +105,7 @@ required_camera_readiness = {
     "the actual PreviewView exposes the live camera marker to the accessibility tree":
         'AndroidView(factory={previewView},modifier=Modifier.fillMaxSize().semantics { contentDescription = "Live camera preview" })' in camera_capture,
     "hidden camera controls can be restored above PreviewView touch handling":
-        camera_capture.index("AndroidView(factory={previewView},modifier=Modifier.fillMaxSize())")
+        camera_capture.index('AndroidView(factory={previewView},modifier=Modifier.fillMaxSize().semantics { contentDescription = "Live camera preview" })')
         < camera_capture.index('contentDescription = "Show camera controls"')
         < camera_capture.index("if (showGrid && pendingUri == null && recording == null)"),
 }
