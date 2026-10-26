@@ -58,8 +58,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                 error = null
                 onAuthenticated(localUsername)
             } else {
-                error = failure.message?.substringAfter(": ")?.trim()?.removePrefix("{")?.removeSuffix("}")
-                    ?: "FYNX could not complete the account request."
+                error = friendlyAuthFailureMessage(failure)
             }
         }
     }
@@ -258,6 +257,25 @@ private fun localDebugAccountForLogin(context: android.content.Context, requeste
         saved == null -> normalizedUsername
         saved.equals(normalizedUsername, ignoreCase = true) -> saved
         else -> null
+    }
+}
+
+
+private fun friendlyAuthFailureMessage(failure: Throwable): String {
+    val raw = failure.message.orEmpty().trim()
+    val payload = raw.substringAfter(": ", raw).trim()
+    val serverMessage = runCatching {
+        org.json.JSONObject(payload).optString("message").trim()
+    }.getOrDefault("")
+
+    return when {
+        raw.contains("Application not found", ignoreCase = true) ->
+            "FYNX's backend service is currently unavailable. Live sign-in cannot complete until the service is restored."
+        serverMessage.isNotBlank() -> serverMessage
+        payload.isNotBlank() && payload.length <= 180 && !payload.startsWith("{") ->
+            payload
+        else ->
+            "FYNX could not complete the account request. Check your connection and try again."
     }
 }
 
