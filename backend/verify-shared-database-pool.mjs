@@ -32,9 +32,9 @@ for (const file of runtimeFiles) {
 }
 
 const backgroundJobs = await readFile(path.join(directory, "backgroundJobs.js"), "utf8");
-assert.match(backgroundJobs, /import \{ getFynxDatabasePool \} from ["']\.\/databasePool\.js["'];/);
+assert.ok(!backgroundJobs.startsWith('import { getFynxDatabasePool }'), "shared pool import must remain lazy when jobs are disabled");
 assert.match(backgroundJobs, /const usesSharedPool = connectionString === \(process\.env\.DATABASE_URL \|\| ""\);/);
-assert.match(backgroundJobs, /poolPromise = Promise\.resolve\(getFynxDatabasePool\(\)\)/);
+assert.ok(backgroundJobs.includes('poolPromise = import("./databasePool.js").then(({ getFynxDatabasePool }) => getFynxDatabasePool());'), "default jobs must lazily load the shared pool");
 assert.match(backgroundJobs, /if \(pool && !usesSharedPool\) await pool\.end\(\)/,
   "stopping the job queue must not close the shared application pool");
 assert.match(backgroundJobs, /new pg\.Pool\(/,

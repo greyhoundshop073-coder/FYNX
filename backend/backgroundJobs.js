@@ -1,4 +1,3 @@
-import { getFynxDatabasePool } from "./databasePool.js";
 import { createHash } from "node:crypto";
 import { isTransientDatabaseError, retryWithBackoff } from "./reliability.js";
 
@@ -48,7 +47,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   async function getPool() {
     if (!poolPromise) {
       if (usesSharedPool) {
-        poolPromise = Promise.resolve(getFynxDatabasePool());
+        poolPromise = import("./databasePool.js").then(({ getFynxDatabasePool }) => getFynxDatabasePool());
       } else {
         poolPromise = import("pg").then(({ default: pg }) => new pg.Pool({
           connectionString,
