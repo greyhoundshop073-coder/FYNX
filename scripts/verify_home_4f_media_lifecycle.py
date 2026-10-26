@@ -344,12 +344,15 @@ tap_control_source = runtime_navigation[tap_start:tap_end]
 if 'find_control(next_xml,["Allow camera"])' not in tap_control_source:
     raise SystemExit("HOME 4F RUNTIME RED: camera destination must handle FYNX's in-app Allow camera screen")
 for token, label in (
-    ("def railway_gateway_502()", "independent Railway health probe"),
+    ("def known_railway_backend_outage(status: int, body: str)", "specific external Railway outage classifier"),
+    ('status == 502 and "application failed to respond" in normalized', "specific gateway 502 response check"),
+    ('status == 404 and "application not found" in normalized', "specific unbound Railway application 404 check"),
+    ("def railway_backend_outage_reason() -> str", "independent Railway health probe"),
     ('base + "/health"', "backend health endpoint probe"),
-    ("failure.code == 502", "specific gateway status check"),
-    ('"application failed to respond" in body.casefold()', "specific gateway response check"),
-    ('and railway_gateway_502()', "local UI fallback gated by the independent health probe"),
-    ("_enter_debug_local_ui_after_gateway_502", "clearly separated local-only UI fallback"),
+    ("known_railway_backend_outage(response.status, body)", "successful-response status classification"),
+    ("known_railway_backend_outage(failure.code, body)", "HTTP-error status classification"),
+    ("backend_outage_reason", "local UI fallback gated by a confirmed external outage"),
+    ("_enter_debug_local_ui_after_backend_outage", "clearly separated local-only UI fallback"),
 ):
     if token not in runtime_navigation:
         raise SystemExit("HOME 4F RUNTIME RED: missing " + label)

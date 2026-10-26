@@ -824,8 +824,28 @@ def exercise_notification_route(route:str, name:str)->bool:
     report.append(f"- PASS {name} notification tap route: cold + warm Activity launch remain alive")
     return True
 
-def railway_gateway_502() -> bool:
-    """Confirm the known Railway 502 at the backend itself, not from incomplete UI text."""
+def known_railway_backend_outage(status: int, body: str) -> str:
+    """Recognize only the two observed Railway platform responses, not arbitrary API errors."""
+    normalized = body.casefold()
+    if status == 502 and "application failed to respond" in normalized:
+        return "HTTP 502 (Application failed to respond)"
+    if status == 404 and "application not found" in normalized:
+        return "HTTP 404 (Application not found)"
+    return ""
+
+
+def known_railway_backend_outage_in_text(text: str) -> str:
+    """Recognize the same platform outage when the login screen exposes the response."""
+    normalized = text.casefold()
+    if "http 502" in normalized and "application failed to respond" in normalized:
+        return "HTTP 502 (Application failed to respond)"
+    if "http 404" in normalized and "application not found" in normalized:
+        return "HTTP 404 (Application not found)"
+    return ""
+
+
+def railway_backend_outage_reason() -> str:
+    """Confirm a known Railway platform outage independently through /health."""
     base = os.environ.get(
         "FYNX_PRODUCTION_BASE_URL",
         "https://fynx-backend-testing-testing.up.railway.app",
@@ -838,18 +858,19 @@ def railway_gateway_502() -> bool:
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
             body = response.read(4096).decode("utf-8", "replace")
-            return response.status == 502 and "application failed to respond" in body.casefold()
+            return known_railway_backend_outage(response.status, body)
     except urllib.error.HTTPError as failure:
         body = failure.read(4096).decode("utf-8", "replace")
-        return failure.code == 502 and "application failed to respond" in body.casefold()
+        return known_railway_backend_outage(failure.code, body)
     except Exception:
-        # DNS, TLS, timeout, 401/403, 404 and other failures are not proof of
-        # this specific Railway gateway outage; they must not trigger local login.
-        return False
+        # DNS, TLS, timeout, 401/403, and other failures still do not trigger local login.
+        return ""
 
 
-def _enter_debug_local_ui_after_gateway_502(login_xml: str) -> tuple[str, str]:
-    """Use the existing passwordless debug UI entry only after a confirmed Railway gateway 502.
+def _enter_debug_local_ui_after_backend_outage(
+    login_xml: str, outage_reason: str
+) -> tuple[str, str]:
+    """Use the existing passwordless debug UI only after a known Railway platform outage.
 
     This keeps Home UI certification useful while the external backend is unavailable,
     but never reports the local-only session as server-authenticated.
@@ -868,7 +889,7 @@ def _enter_debug_local_ui_after_gateway_502(login_xml: str) -> tuple[str, str]:
     run("adb", "shell", "input", "keyevent", "KEYCODE_CTRL_A")
     run("adb", "shell", "input", "keyevent", "KEYCODE_DEL")
     run("adb", "shell", "input", "keyevent", "KEYCODE_MOVE_END")
-    run("adb", "shell", "input", "keyevent", *(["KEYCODE_DEL"] * 128))
+    run("adb", "shell", "input", *(["KEYCODE_DEL"] * 128))
     run("adb", "shell", "input", "keyevent", "4")
     time.sleep(.8)
     cleared_xml = dump_ui("authenticated-login-local-entry-cleared.xml")
@@ -900,11 +921,15 @@ def _enter_debug_local_ui_after_gateway_502(login_xml: str) -> tuple[str, str]:
         current = dump_ui("authenticated-home-local-entry-wait.xml")
         if _home_surface_ready(current):
             LOGIN_MODE = "debug-only local UI entry (not server-authenticated)"
-            report.append("- NOTE server authentication was unavailable: Railway returned HTTP 502 (Application failed to respond) after retries.")
+            report.append(
+                "- NOTE server authentication was unavailable because the Railway deployment "
+                "returned " + outage_reason + ". This run does not certify server authentication."
+            )
             report.append("- PASS continued Home UI checks through the existing passwordless debug entry; this session does not certify backend authentication or live feed data.")
             screenshot("authenticated-home-local-ui-entry.png")
             return current, ""
-    return current or login_xml, "passwordless debug entry did not reach Home after the confirmed gateway outage"
+    return current or login_xml, "passwordless debug entry did not reach Home after confirmed backend outage (" + outage_reason + ")"
+
 
 
 def exercise_camera_capture_journeys(camera_xml: str) -> str:
@@ -1136,11 +1161,22 @@ def login():
     # Probe the actual backend independently because Compose accessibility dumps may
     # omit the red error text that is visible on the login screenshot. Only use the
     # local debug UI route when /health confirms Railway's exact gateway 502 response.
-    if find_control(xml, ["Leave password blank for quick local entry"]) and railway_gateway_502():
-        local_xml, local_error = _enter_debug_local_ui_after_gateway_502(xml)
+    backend_outage_reason = (
+        railway_backend_outage_reason()
+        if find_control(xml, ["Leave password blank for quick local entry"])
+        else ""
+    )
+    if backend_outage_reason:
+        local_xml, local_error = _enter_debug_local_ui_after_backend_outage(
+            xml, backend_outage_reason
+        )
         if not local_error:
             return local_xml, ""
-        return local_xml or xml, "Railway gateway outage confirmed, but safe debug UI entry failed: " + local_error
+        return (
+            local_xml or xml,
+            f"Railway backend outage confirmed ({backend_outage_reason}), "
+            "but safe debug UI entry failed: " + local_error,
+        )
     # Debug APKs intentionally expose a passwordless local UI-entry path when no
     # local account is stored. Exercise that explicit affordance rather than
     # incorrectly failing because the Password field is intentionally absent.
@@ -1204,11 +1240,17 @@ def login():
             # The single explicit Railway gateway 502 is an external outage; when
             # the existing passwordless debug entry is offered, continue UI-only
             # Home checks and label them accurately rather than falsely certifying auth.
-            if "502" in combined and "application failed to respond" in combined:
-                local_xml, local_error = _enter_debug_local_ui_after_gateway_502(last_xml)
+            backend_outage_reason = known_railway_backend_outage_in_text(combined)
+            if backend_outage_reason:
+                local_xml, local_error = _enter_debug_local_ui_after_backend_outage(
+                    last_xml, backend_outage_reason
+                )
                 if not local_error:
                     return local_xml, ""
-                return last_xml, f"Railway returned HTTP 502 and the safe local UI fallback failed: {local_error}; visible markers: {last_markers}"
+                return last_xml, (
+                    f"Railway returned {backend_outage_reason} and the safe local UI fallback "
+                    f"failed: {local_error}; visible markers: {last_markers}"
+                )"
             if any(marker in combined for marker in ("timeout","timed out","network","connection failed","fetch failed","unable to connect")):
                 reason="the login form returned a network/backend error"
             else:
