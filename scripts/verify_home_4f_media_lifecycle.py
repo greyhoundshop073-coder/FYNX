@@ -92,8 +92,11 @@ required_camera_readiness = {
         'Text("Starting camera…"' in camera_capture,
     "Retake restores live camera capture controls":
         "showCaptureControls = true" in camera_capture.split("fun retake()", 1)[1].split("fun rotatePhoto()", 1)[0],
-    "captured photo/video preview controls reserve bottom safe space":
+    "captured photo preview controls retain their bottom safe-area spacing":
         ".padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp)" in camera_capture,
+    "live camera capture row is not pushed outside the safe-area viewport":
+        "if (showCaptureControls || recording != null) Column(" in camera_capture
+        and "if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=0.dp)" in camera_capture,
     "live camera surface exposes an accessible marker for runtime recovery":
         'contentDescription = "Live camera preview"' in camera_capture,
     "hidden camera controls can be restored above PreviewView touch handling":
