@@ -24,6 +24,15 @@ required = [
     'requiresAuthentication = !isPublicAuthPath(path)',
     'FynxSecureTokenStore',
 ]
+
+for needle in [
+    "private fun safeHttpErrorMessage(status: Int, body: String): String",
+    'serverMessage.equals("Application not found", ignoreCase = true)',
+    '"The FYNX service is temporarily unavailable."',
+    '"FYNX backend returned HTTP $status: ${safeHttpErrorMessage(status, body)}"',
+]:
+    if needle not in backend:
+        violations.append(f"backend error presentation invariant missing: {needle}")
 for needle in required:
     if needle not in backend:
         violations.append(f"central transport invariant missing: {needle}")
