@@ -96,7 +96,7 @@ required_camera_readiness = {
         ".padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp)" in camera_capture,
     "live camera capture row is not pushed outside the safe-area viewport":
         "if (showCaptureControls || recording != null) Column(" in camera_capture
-        and "if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=0.dp)" in camera_capture,
+        and "if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=32.dp)" in camera_capture,
     "camera settings keep both sliders compact above the pinned capture row":
         'Text("Zoom", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(40.dp))' in camera_capture
         and 'Text("Exposure", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(58.dp))' in camera_capture
