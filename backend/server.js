@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
 import { registerSocialRoutes } from "./socialRoutes.js";
+import { registerPrivateMessageRoutes } from "./privateMessageRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
 import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
@@ -629,10 +630,10 @@ app.get("/api/media/:id", auth, async (req, res) => {
 });
 
 function messageProjection() {
-  return `SELECT m.id, m.sender_id, sender.username AS sender_username, sender.display_name AS sender_display_name, m.recipient_id, recipient.username AS recipient_username, recipient.display_name AS recipient_display_name, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id, m.media_id, m.media_type, m.voice_duration_ms, m.message_type, m.message_payload, m.reaction, m.pinned FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id`;
+  return `SELECT m.id, m.sender_id, sender.username AS sender_username, sender.display_name AS sender_display_name, m.recipient_id, recipient.username AS recipient_username, recipient.display_name AS recipient_display_name, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id, m.client_message_id, m.media_id, m.media_type, m.voice_duration_ms, m.message_type, m.message_payload, m.reaction, m.pinned FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id`;
 }
 function rowToMessage(row) {
-  return { id: String(row.id), senderId: String(row.sender_id), senderUsername: row.sender_username || null, senderDisplayName: row.sender_display_name || null, recipientId: String(row.recipient_id), recipientUsername: row.recipient_username || null, recipientDisplayName: row.recipient_display_name || null, text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0), messageType: row.message_type || 'text', messagePayload: row.message_payload || null, reaction: row.reaction || null, pinned: Boolean(row.pinned) };
+  return { id: String(row.id), senderId: String(row.sender_id), senderUsername: row.sender_username || null, senderDisplayName: row.sender_display_name || null, recipientId: String(row.recipient_id), recipientUsername: row.recipient_username || null, recipientDisplayName: row.recipient_display_name || null, text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), clientMessageId: row.client_message_id == null ? null : String(row.client_message_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0), messageType: row.message_type || 'text', messagePayload: row.message_payload || null, reaction: row.reaction || null, pinned: Boolean(row.pinned) };
 }
 
 app.get("/api/messages/:username", auth, async (req, res) => {
@@ -703,54 +704,14 @@ app.post("/api/assistant/message-cancel", auth, async (req, res) => {
   }
 });
 
-app.post("/api/messages", auth, async (req, res) => {
-  try {
-    const recipientUsername = typeof req.body?.recipientUsername === "string" ? req.body.recipientUsername.trim().toLowerCase() : "";
-    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
-    const replyToId = req.body?.replyToId == null ? null : Number(req.body.replyToId);
-    const mediaId = req.body?.mediaId == null ? null : Number(req.body.mediaId);
-    const mediaType = typeof req.body?.mediaType === "string" ? req.body.mediaType.trim().toLowerCase() : null;
-    const voiceDurationMs = req.body?.voiceDurationMs == null ? 0 : Number(req.body.voiceDurationMs);
-    const messageType = typeof req.body?.messageType === 'string' ? req.body.messageType.trim().toLowerCase() : 'text';
-    const messagePayload = req.body?.messagePayload && typeof req.body.messagePayload === 'object' && !Array.isArray(req.body.messagePayload) ? req.body.messagePayload : null;
-    const clientMessageId = typeof req.body?.clientMessageId === 'string' ? req.body.clientMessageId.trim().toLowerCase() : null;
-    if (clientMessageId != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(clientMessageId)) return res.status(400).json({ error: "invalid client message id" });
-    if (!/^(text|location|contact|poll|sticker|gif)$/.test(messageType)) return res.status(400).json({ error: 'invalid message type' });
-    if (messageType !== 'text' && !messagePayload) return res.status(400).json({ error: 'message payload is required' });
-    if (!recipientUsername || text.length > 4000 || (!text && !Number.isInteger(mediaId))) return res.status(400).json({ error: "valid recipientUsername and message content are required" });
-    if (mediaId != null && (!Number.isInteger(mediaId) || mediaId < 1)) return res.status(400).json({ error: "invalid media id" });
-    if (mediaId != null && (!mediaType || !/^(image|video|video_note|audio|document)$/.test(mediaType))) return res.status(400).json({ error: "invalid media type" });
-    if (!Number.isFinite(voiceDurationMs) || voiceDurationMs < 0 || voiceDurationMs > 120000) return res.status(400).json({ error: "invalid voice duration" });
-    const recipient = await findUserByUsername(recipientUsername);
-    if (!recipient || String(recipient.id) === String(req.user.sub)) return res.status(400).json({ error: "invalid recipient" });
-    const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [req.user.sub, recipient.id]);
-    if (blocked.rowCount) return res.status(403).json({ error: "conversation unavailable" });
-    if (mediaId != null) {
-      const media = await pool.query("SELECT id, mime_type FROM message_media WHERE id = $1 AND owner_id = $2", [mediaId, req.user.sub]);
-      if (!media.rows[0]) return res.status(403).json({ error: "media is not owned by this account" });
-    }
-    if (replyToId != null) {
-      if (!Number.isInteger(replyToId) || replyToId < 1) return res.status(400).json({ error: "invalid reply id" });
-      const reply = await pool.query("SELECT id FROM messages WHERE id = $1 AND ((sender_id = $2 AND recipient_id = $3) OR (sender_id = $3 AND recipient_id = $2))", [replyToId, req.user.sub, recipient.id]);
-      if (!reply.rows[0]) return res.status(400).json({ error: "invalid reply target" });
-    }
-    const insert = await pool.query(
-      "INSERT INTO messages (sender_id, recipient_id, text, reply_to_id, media_id, media_type, voice_duration_ms, message_type, message_payload, client_message_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (sender_id, client_message_id) WHERE client_message_id IS NOT NULL DO NOTHING RETURNING id",
-      [req.user.sub, recipient.id, text, replyToId, mediaId, mediaType, voiceDurationMs, messageType, messagePayload, clientMessageId]
-    );
-    let messageId = insert.rows[0]?.id;
-    const created = Boolean(messageId);
-    if (!created && clientMessageId) {
-      const existing = await pool.query("SELECT id FROM messages WHERE sender_id=$1 AND client_message_id=$2 LIMIT 1", [req.user.sub, clientMessageId]);
-      messageId = existing.rows[0]?.id;
-    }
-    if (!messageId) return res.status(500).json({ error: "message persistence failed" });
-    const full = await pool.query(messageProjection() + " WHERE m.id=$1 LIMIT 1", [messageId]);
-    if (!full.rows[0]) return res.status(500).json({ error: "message persistence failed" });
-    const message = rowToMessage(full.rows[0]);
-    if (created) await broadcastMessage(message);
-    return res.status(created ? 201 : 200).json({ message });
-  } catch (error) { console.error("send message", error); return res.status(500).json({ error: "message send failed" }); }
+registerPrivateMessageRoutes({
+  app,
+  auth,
+  pool,
+  findUserByUsername,
+  messageProjection,
+  rowToMessage,
+  broadcastMessage,
 });
 
 app.post("/api/messages/:id/read", auth, async (req, res) => {

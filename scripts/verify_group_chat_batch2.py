@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 groups = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text()
 models = (ROOT / "app/src/main/java/com/fynx/app/ui/ChatModels.kt").read_text()
 remote = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt").read_text()
+store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsStore.kt").read_text()
 
 checks = []
 def check(name, condition):
@@ -18,7 +19,8 @@ check("group voice message model is supported", 'attachmentType: String? = null'
 check("group reply/media payload reaches backend client", "replyToId" in remote and "attachmentMediaId" in remote)
 check("group plus menu contains camera gallery files", 'Text("Camera")' in groups and 'Text("Gallery")' in groups and 'Text("Files")' in groups)
 check("group plus menu contains location contact poll", 'Text("Location")' in groups and 'Text("Contact")' in groups and 'Text("Poll")' in groups)
-check("group composer keeps microphone at the right edge", 'Icons.Default.Mic' in groups and 'Color(0xFF7C3AED)' in groups)
+check("group composer keeps microphone at the right edge and follows the selected theme accent", 'Icons.Default.Mic' in groups and 'background(MaterialTheme.colorScheme.primary)' in groups and 'Color(0xFF7C3AED)' not in groups)
+check("group store permits same-name groups and upserts by stable group ID", "groups.filterNot { it.id == valid.id } + valid" in store and "it.name.equals(valid.name, ignoreCase = true)" not in store)
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

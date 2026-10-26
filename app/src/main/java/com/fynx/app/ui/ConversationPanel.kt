@@ -173,19 +173,20 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var pollQuestion by remember { mutableStateOf("") }
     var pollOptions by remember { mutableStateOf(listOf("", "")) }
     var showPollDialog by remember { mutableStateOf(false) }
-    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+    // The composer currently sends one attachment per message. Use the single-document
+    // contract so users cannot select several files and have all but the first silently lost.
+    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
         val purpose = mediaPickerPurpose
         mediaPickerPurpose = null
         if (purpose == "sticker" || purpose == "gif") {
-            val uri = uris.first()
             attachment = uri
             attachmentType = if (purpose == "gif") "gif" else "sticker"
             attachmentMessageType = if (purpose == "gif") "gif" else "sticker"
             showEmojiPanel = false
         } else {
-            attachment = uris.first()
-            attachmentType = context.contentResolver.getType(uris.first())?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
+            attachment = uri
+            attachmentType = context.contentResolver.getType(uri)?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
             attachmentMessageType = null
         }
     }
@@ -1196,7 +1197,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             Modifier
                                 .size(46.dp)
                                 .clip(androidx.compose.foundation.shape.CircleShape)
-                                .background(if (voiceMode) Color(0xFF7C3AED) else glassPalette.outgoingStart)
+                                .background(if (voiceMode) MaterialTheme.colorScheme.primary else glassPalette.outgoingStart)
                                 .semantics {
                                     contentDescription = when {
                                         !voiceMode -> "Send message"

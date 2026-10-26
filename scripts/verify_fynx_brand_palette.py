@@ -6,6 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 design = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt").read_text(encoding="utf-8")
 picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt").read_text(encoding="utf-8")
 guidelines = (ROOT / "docs/FYNX_MASTER_UI_GUIDELINES.md").read_text(encoding="utf-8")
+chats = (ROOT / "app/src/main/java/com/fynx/app/ui/ChatsPanel.kt").read_text(encoding="utf-8")
+conversation = (ROOT / "app/src/main/java/com/fynx/app/ui/ConversationPanel.kt").read_text(encoding="utf-8")
+groups = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
 
 checks = [
     ("default blue accent uses approved Cobalt Blue and the shared Classic Green token", "Blue(Color(0xFF0047AB), Color(0xFF3C73BD), FynxDesign.ClassicGreen)" in design),
@@ -35,6 +38,10 @@ checks = [
      "primaryContainer = when {" in design and "FynxDesign.AmoledSelectedContainer" in design and "FynxDesign.CharcoalSelectedContainer" in design and "onPrimaryContainer = FynxDesign.LightTextPrimary" in design),
     ("light theme uses shared neutral tokens rather than duplicate hard-coded colors",
      "background = FynxDesign.LightBackground" in design and "surface = FynxDesign.LightSurface" in design and "onSurface = FynxDesign.LightTextPrimary" in design),
+    ("private chat voice/send control uses the selected theme primary rather than hard-coded purple", "background(if (voiceMode) MaterialTheme.colorScheme.primary else glassPalette.outgoingStart)" in conversation and "Color(0xFF7C3AED)" not in conversation),
+    ("group composer uses the selected theme primary rather than hard-coded purple", "background(MaterialTheme.colorScheme.primary)" in groups and "Color(0xFF7C3AED)" not in groups),
+    ("Groups landing page follows the selected light/dark background", "background(MaterialTheme.colorScheme.background)" in groups),
+    ("contacts FAB uses primary action color, not success green", "containerColor = MaterialTheme.colorScheme.primary" in chats and "Color(0xFF25D366)" not in chats),
     ("supporting palette usage rules are documented",
      all(token in guidelines for token in ("#F5F7FA", "#1C2434", "#64748B", "#D4AF37", "#E8EEFA"))),
 ]

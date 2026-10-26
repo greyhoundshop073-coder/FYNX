@@ -37,7 +37,9 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val deepLinkDestinationState = mutableStateOf<FynxDeepLinkDestination?>(null)
-    private var lastHandledDeepLink: String? = null
+    // A URI is a navigation event, not a unique key. Notifications can legitimately
+    // deliver the same Chat/Group URI again after the user has left that destination.
+    private val deepLinkRequestIdState = mutableLongStateOf(0L)
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) registerNotificationTokenIfSignedIn()
     }
@@ -59,7 +61,10 @@ class MainActivity : ComponentActivity() {
                 FynxLaunchScreen()
             } else {
                 FynxTheme {
-                    FynxApp(deepLinkDestination = deepLinkDestinationState.value)
+                    FynxApp(
+                        deepLinkDestination = deepLinkDestinationState.value,
+                        deepLinkRequestId = deepLinkRequestIdState.longValue
+                    )
                 }
             }
         }
@@ -73,9 +78,10 @@ class MainActivity : ComponentActivity() {
 
     private fun updateDeepLink(rawUri: String?) {
         val normalized = rawUri?.trim()?.takeIf { it.isNotEmpty() }
-        if (normalized == lastHandledDeepLink) return
-        lastHandledDeepLink = normalized
         deepLinkDestinationState.value = FynxDeepLinkParser.parse(normalized?.let(android.net.Uri::parse))
+        // Compose State suppresses equal values. Increment a separate event id so
+        // an identical URI can reopen a destination after Back/navigation away.
+        deepLinkRequestIdState.longValue++
     }
 
     override fun onDestroy() {

@@ -5,10 +5,16 @@ UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 
 PRIVATE = (UI / "ConversationPanel.kt").read_text(encoding="utf-8")
 ACTIVE_GROUP = (UI / "FynxGroupsPanel.kt").read_text(encoding="utf-8")
+CHATS = (UI / "ChatsPanel.kt").read_text(encoding="utf-8")
+GROUPS_LANDING = ACTIVE_GROUP.split("@Composable\nprivate fun FynxGroupPulseSheet", 1)[0]
 APP = (UI / "FynxApp.kt").read_text(encoding="utf-8")
+MAIN_ACTIVITY = (ROOT / "app/src/main/java/com/fynx/app/MainActivity.kt").read_text(encoding="utf-8")
+RUNTIME_CERTIFICATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 CALLS = (UI / "FynxCallsPanel.kt").read_text(encoding="utf-8")
 REALTIME = (UI / "FynxRealtimeClient.kt").read_text(encoding="utf-8")
 MODELS = (UI / "ChatModels.kt").read_text(encoding="utf-8")
+GROUP_REMOTE = (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
+GROUP_REMOTE_COMPACT = "".join(GROUP_REMOTE.split())
 
 checks = []
 def require(label, condition):
@@ -16,8 +22,27 @@ def require(label, condition):
 
 # The route check prevents a green gate from certifying an unused legacy screen.
 require("app routes group conversations to the active FynxGroupConversationPanel", "FynxGroupConversationPanel(groupId = openGroup!!" in APP)
+require(
+    "singleTop navigation delivers a fresh event even when the incoming Chat/Group URI is identical",
+    "private val deepLinkRequestIdState = mutableLongStateOf(0L)" in MAIN_ACTIVITY
+    and "deepLinkRequestIdState.longValue++" in MAIN_ACTIVITY
+    and "lastHandledDeepLink" not in MAIN_ACTIVITY
+    and "deepLinkRequestId = deepLinkRequestIdState.longValue" in MAIN_ACTIVITY
+)
+require(
+    "app route effect responds to repeated identical deep-link events",
+    "deepLinkRequestId: Long = 0L" in APP
+    and "LaunchedEffect(deepLinkDestination, deepLinkRequestId)" in APP
+)
+require(
+    "runtime certification leaves Chat/Groups then reopens the exact same notification URI",
+    'if name in {"private-chat", "group-chat"}:' in RUNTIME_CERTIFICATION
+    and "repeated identical notification route reopened after Back" in RUNTIME_CERTIFICATION
+)
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
 require("active group conversation has bottom content padding", "contentPadding = PaddingValues(bottom" in ACTIVE_GROUP)
+require("Chats and Groups lists reserve space below the bottom-right contacts FAB", CHATS.count("contentPadding = PaddingValues(bottom = 96.dp)") >= 2)
+require("Groups landing page follows the selected theme background", "background(MaterialTheme.colorScheme.background)" in GROUPS_LANDING and "background(FynxDesign.Background)" not in GROUPS_LANDING)
 require("active group conversation uses 48dp minimum touch targets", "Modifier.size(48.dp)" in ACTIVE_GROUP)
 require("active group conversation supports message search", "searchQuery" in ACTIVE_GROUP)
 require("active group conversation supports reply targets", "replyToId" in ACTIVE_GROUP)
@@ -25,8 +50,8 @@ require("active group conversation loads authenticated remote history", "FynxGro
 require("active group conversation handles realtime group-message events", "FynxRealtimeClient.Event.GroupMessage" in ACTIVE_GROUP and "realtime.connect()" in ACTIVE_GROUP)
 require("active group realtime connection is cancelled and closed with the screen", "awaitCancellation()" in ACTIVE_GROUP and "realtime.close()" in ACTIVE_GROUP)
 require("failed group messages remain visible instead of being silently deleted", "it.copy(delivered = false, read = false)" in ACTIVE_GROUP and "messages = messages.map" in ACTIVE_GROUP)
-require("active group conversation exposes a retry action for unsent messages", 'TextButton(enabled = !sending, onClick = {' in ACTIVE_GROUP and 'Text(if (unsentCount == 1) "Retry" else "Retry all")' in ACTIVE_GROUP)
-require("active group conversation retries every failed outgoing message, not only the last one", 'messages.filter { it.fromMe && !it.delivered }' in ACTIVE_GROUP and 'Text(if (unsentCount == 1) "Retry" else "Retry all")' in ACTIVE_GROUP and "for (failedMessage in pendingMessages)" in ACTIVE_GROUP)
+require("active group conversation exposes a permission-aware retry action for unsent messages", 'TextButton(enabled = !sending && retryablePendingMessages.isNotEmpty(), onClick = {' in ACTIVE_GROUP and 'if (!sending && retryablePendingMessages.isNotEmpty()) {' in ACTIVE_GROUP and 'Text(if (unsentCount == 1) "Retry" else "Retry all")' in ACTIVE_GROUP)
+require("active group conversation retries every permission-eligible unsent outgoing message, not only the last one", 'val pendingMessages = messages.filter { failedMessage ->' in ACTIVE_GROUP and 'failedMessage.fromMe && !failedMessage.delivered' in ACTIVE_GROUP and 'Text(if (unsentCount == 1) "Retry" else "Retry all")' in ACTIVE_GROUP and "for (failedMessage in pendingMessages)" in ACTIVE_GROUP)
 require("private and group Gallery avoid the crashing maxItems=1 multi-picker contract", "PickMultipleVisualMedia(maxItems = 1)" not in PRIVATE and "PickMultipleVisualMedia(maxItems = 1)" not in ACTIVE_GROUP)
 require("active group Gallery opens the device media picker with the valid single-item contract", "ActivityResultContracts.PickVisualMedia()" in ACTIVE_GROUP and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in ACTIVE_GROUP)
 require("active group Camera picker sends captured media through the authenticated group pipeline", "FynxGroupCameraPicker(context, onMediaSelected" in ACTIVE_GROUP and "sendGroupAttachment(uri, type)" in ACTIVE_GROUP)
@@ -36,9 +61,10 @@ require("group attachments remain retryable after send failure with clear user-f
 require("group attachments are copied into app-owned storage before upload so picker URIs survive screen exit", "stagePendingGroupAttachment(context, uri, type)" in ACTIVE_GROUP and "context.filesDir, \"fynx_group_pending_media\"" in ACTIVE_GROUP and "destination.outputStream()" in ACTIVE_GROUP)
 require("group attachment staging enforces bounded file sizes before filling app storage", "MAX_STAGED_GROUP_ATTACHMENT_BYTES = 12L * 1024 * 1024" in ACTIVE_GROUP and "MAX_STAGED_GROUP_IMAGE_BYTES = 64L * 1024 * 1024" in ACTIVE_GROUP and "totalBytes += read" in ACTIVE_GROUP and "totalBytes <= maxBytes" in ACTIVE_GROUP)
 require("successful group attachment sends clean up staged files while failures retain them for retry", "deletePendingGroupAttachment(context, stagedUri.toString())" in ACTIVE_GROUP and "failedMessage.attachmentUri?.let { deletePendingGroupAttachment(context, it) }" in ACTIVE_GROUP)
-require("group document retry does not default unknown attachment MIME to JPEG", "groupAttachmentMimeType(context,uri,mediaType)" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "\"application/octet-stream\"" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
+require("group document retry does not default unknown attachment MIME to JPEG", "groupAttachmentMimeType(context,uri,mediaType)" in GROUP_REMOTE_COMPACT and "\"application/octet-stream\"" in GROUP_REMOTE)
 require("staged group documents preserve their original filename extension", "OpenableColumns.DISPLAY_NAME" in ACTIVE_GROUP and "sourceExtension.ifBlank" in ACTIVE_GROUP)
-require("group attachment retry reuses an uploaded media ID instead of uploading duplicate media", "message.mediaId?:persisted?.mediaId" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "it.copy(mediaId=mediaId,attachmentType=mediaType)" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
+require("group attachment retry reuses an uploaded media ID instead of uploading duplicate media", "message.mediaId?:persisted?.mediaId" in GROUP_REMOTE_COMPACT and "it.copy(mediaId=mediaId,attachmentType=mediaType)" in GROUP_REMOTE_COMPACT)
+require("group composer exposes the right accessible action for text send versus voice recording", "text.isNotBlank() -> Icons.Default.Send" in ACTIVE_GROUP and 'text.isNotBlank() -> "Send message"' in ACTIVE_GROUP and '"Record voice message"' in ACTIVE_GROUP and '"Stop recording and send"' in ACTIVE_GROUP)
 require("active group microphone requests runtime permission before recording", "ActivityResultContracts.RequestPermission()" in ACTIVE_GROUP and "Manifest.permission.RECORD_AUDIO" in ACTIVE_GROUP)
 require("active group microphone records AAC audio and sends it through the attachment pipeline", "MediaRecorder.AudioEncoder.AAC" in ACTIVE_GROUP and "sendGroupAttachment(Uri.fromFile(file), \"audio\")" in ACTIVE_GROUP)
 require("active group microphone has a stop/send control and rejects empty recordings", "Icons.Default.Stop" in ACTIVE_GROUP and "duration < 500L" in ACTIVE_GROUP and "Voice message" in ACTIVE_GROUP)
@@ -51,14 +77,9 @@ require("active group Poll action opens the existing group content panel directl
 require("private chat protects top system inset", "statusBarsPadding" in PRIVATE)
 require("message model supports audio attachments", "attachmentType: String?" in MODELS and "audio" in MODELS and "ChatMessage" in MODELS)
 
-failed = [label for label, ok in checks if not ok]
-print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
-if failed:
-    raise SystemExit("GATE RED: " + "; ".join(failed))
-print("GATE GREEN: active Chat/Group route, realtime, and layout contracts are present")
 require("group Gallery uses the Android single-item photo picker for images and videos rather than a generic file picker", "ActivityResultContracts.PickVisualMedia()" in ACTIVE_GROUP and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in ACTIVE_GROUP and 'groupMediaPicker.launch("*/*")' not in ACTIVE_GROUP)
 require("private chat Gallery uses the Android single-item photo picker for images and videos while Files retains the document picker", "ActivityResultContracts.PickVisualMedia()" in PRIVATE and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in PRIVATE and 'galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))' in PRIVATE and 'Triple("Files", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf"' in PRIVATE)
-require("private chat maps selected MIME types to supported semantic media types and never guesses unknown files are images", 'attachmentType = context.contentResolver.getType(uris.first())?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "application/octet-stream"' in PRIVATE and 'attachmentType?.startsWith("image/") == true -> "image"' in PRIVATE and 'attachmentType?.startsWith("video/") == true -> "video"' in PRIVATE and 'attachmentType?.startsWith("audio/") == true -> "audio"' in PRIVATE and 'else -> "document"' in PRIVATE and 'val selectedType = attachmentType ?: "image"' not in PRIVATE)
+require("private chat maps selected MIME types to supported semantic media types and never guesses unknown files are images", 'attachmentType = context.contentResolver.getType(uri)?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "application/octet-stream"' in PRIVATE and 'attachmentType?.startsWith("image/") == true -> "image"' in PRIVATE and 'attachmentType?.startsWith("video/") == true -> "video"' in PRIVATE and 'attachmentType?.startsWith("audio/") == true -> "audio"' in PRIVATE and 'else -> "document"' in PRIVATE and 'val selectedType = attachmentType ?: "image"' not in PRIVATE)
 require("private chat retries reuse the uploaded media for the same attachment and clear the cache after successful send", "uploadedAttachmentCache?.takeIf { it.first == selectedAttachment.toString() }" in PRIVATE and "uploadedAttachmentCache = selectedAttachment.toString() to media" in PRIVATE and "uploadedAttachmentCache = null" in PRIVATE)
 require("private voice messages remain available for explicit retry after upload or send failure and reuse uploaded media", "pendingVoiceRetry = file to duration" in PRIVATE and "uploadedVoiceCache?.takeIf { it.first == pendingFile.absolutePath }?.second" in PRIVATE and "pendingVoiceRetry = null" in PRIVATE and '"Retry voice message"' in PRIVATE)
 require("declining an incoming call sends a reject signal rather than an ended signal", "if (incoming) realtimeClient.sendCallReject(current.id, it, video)" in CALLS and "else realtimeClient.sendCallEnd(current.id, it, video)" in CALLS)
@@ -75,8 +96,13 @@ require("video calls report missing cameras and camera capturer failures instead
 require("camera video setup cleans partial camera resources after initialization or capture errors", "runCatching { cameraCapturer?.stopCapture() }" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "runCatching { surfaceTextureHelper?.dispose() }" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "runCatching { eglBase?.release() }" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8"))
 require("failed local video-track attachment and camera startup exceptions release every partially created video resource", "releaseLocalVideoResources()" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "runCatching { videoTrack?.dispose() }" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "runCatching { videoSource?.dispose() }" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "You can continue with voice if available." in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8"))
 require("call disconnect continues releasing every resource even if one WebRTC dispose or audio-router stop operation throws", "releaseLocalVideoResources()" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "runCatching { peerConnection?.close() }" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "runCatching { peerConnection?.dispose() }" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "runCatching { audioTrack?.dispose() }" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "runCatching { audioRouter.stop() }" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8"))
-require("remote video surface is cleared when the WebRTC stream is removed", "callbacks.onRemoteVideoTrack(null)" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "onRemoteVideoTrack = { track: VideoTrack? -> remoteVideoTrack = track?.apply { setEnabled(true) } }" in PRIVATE)
-require("failed ICE calls reset session state and release call resources instead of leaving a stuck active call", "PeerConnection.IceConnectionState.FAILED -> scope.launch" in PRIVATE and "FynxCallsStore.updateStatus(context, failed.id, \"Failed\", missed = false)" in PRIVATE and "pendingIncomingAccept = false" in PRIVATE)
+require("remote video surface is cleared when the WebRTC stream is removed", "callbacks.onRemoteVideoTrack(null)" in (UI / "FynxWebRtcCallEngine.kt").read_text(encoding="utf-8") and "onRemoteVideoTrack = { track: VideoTrack? -> remoteVideoTrack = track?.apply { setEnabled(true) } }" in CALLS)
+require("failed ICE calls reset session state and release call resources instead of leaving a stuck active call", "PeerConnection.IceConnectionState.FAILED -> scope.launch" in CALLS and "FynxCallsStore.updateStatus(context, failed.id, \"Failed\", missed = false)" in CALLS and "pendingIncomingAccept = false" in CALLS)
 require("group attachment actions use distinct colors for quick recognition", "tint = Color(0xFF1685F8)" in ACTIVE_GROUP and "tint = Color(0xFF8B6FF7)" in ACTIVE_GROUP and "tint = Color(0xFF00C99A)" in ACTIVE_GROUP and "tint = Color(0xFF00A8E8)" in ACTIVE_GROUP and "tint = Color(0xFFFFB938)" in ACTIVE_GROUP)
 require("group composer exposes a dedicated video-note camera action and sends it through the group attachment pipeline", "FynxGroupCameraPicker(context, videoNoteMode = true" in ACTIVE_GROUP and 'Text("Video note", style = MaterialTheme.typography.labelMedium, color = Color(0xFFEF6C35))' in ACTIVE_GROUP and "sendGroupAttachment(uri, type)" in ACTIVE_GROUP)
 require("chat attachment sheet gives each action its own recognizable color", '"Camera" -> Color(0xFFE85D75)' in PRIVATE and '"Gallery" -> Color(0xFF1685F8)' in PRIVATE and '"Files" -> Color(0xFF8B6FF7)' in PRIVATE and '"Location" -> Color(0xFF00A879)' in PRIVATE and '"Contact" -> Color(0xFF00A8E8)' in PRIVATE and '"Poll" -> Color(0xFFFFB938)' in PRIVATE and '"Video note" -> Color(0xFFEF6C35)' in PRIVATE)
+failed = [label for label, ok in checks if not ok]
+print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
+if failed:
+    raise SystemExit("GATE RED: " + "; ".join(failed))
+print("GATE GREEN: active Chat/Group route, realtime, and layout contracts are present")
