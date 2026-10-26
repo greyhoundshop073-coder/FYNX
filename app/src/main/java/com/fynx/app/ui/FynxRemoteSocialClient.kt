@@ -147,6 +147,16 @@ object FynxRemoteSocialClient {
         val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
         return FynxBackendClient.delete(context, "/api/marketplace/listings/$numericId/saved").mapCatching { JSONObject(it).optBoolean("saved", false) }
     }
+    suspend fun toggleMarketplaceProductSaved(context: Context, listingId: String, knownSaved: Boolean? = null): Result<Boolean> {
+        val current = knownSaved?.let { Result.success(it) } ?: marketplaceProductSaved(context, listingId)
+        return current.fold(
+            onSuccess = { currentlySaved ->
+                if (currentlySaved) unsaveMarketplaceProduct(context, listingId)
+                else saveMarketplaceProduct(context, listingId)
+            },
+            onFailure = { Result.failure(it) }
+        )
+    }
 
     suspend fun watchMarketplacePrice(context: Context, listingId: String): Result<Boolean> {
         val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))

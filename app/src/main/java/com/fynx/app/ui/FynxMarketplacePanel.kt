@@ -247,15 +247,28 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var showCart by remember { mutableStateOf(false) }
     var priceWatchListingId by remember { mutableStateOf<String?>(null) }
     var priceWatchBusy by remember { mutableStateOf(false) }
-    var savedProductIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var savedProductBusy by remember { mutableStateOf(false) }
-    var savedProductBusyIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var savedProductIds by remember(cartOwnerKey) { mutableStateOf<Set<String>>(emptySet()) }
+    var savedProductKnownIds by remember(cartOwnerKey) { mutableStateOf<Set<String>>(emptySet()) }
+    var savedProductStateLoaded by remember(cartOwnerKey) { mutableStateOf(false) }
+    var savedProductStateGeneration by remember(cartOwnerKey) { mutableStateOf(0) }
+    var savedProductBusy by remember(cartOwnerKey) { mutableStateOf(false) }
+    var savedProductBusyIds by remember(cartOwnerKey) { mutableStateOf<Set<String>>(emptySet()) }
+    fun knownSavedProductState(listingId: String): Boolean? = when {
+        savedProductStateLoaded -> listingId in savedProductIds
+        listingId in savedProductKnownIds -> listingId in savedProductIds
+        else -> null
+    }
+    fun setSavedProductState(listingId: String, saved: Boolean) {
+        savedProductIds = if (saved) savedProductIds + listingId else savedProductIds - listingId
+        savedProductKnownIds = savedProductKnownIds + listingId
+    }
     fun toggleSavedProductFromCard(listingId: String) {
         if (listingId in savedProductBusyIds) return
         savedProductBusyIds = savedProductBusyIds + listingId
+        savedProductStateGeneration += 1
         scope.launch {
-            val result = if (listingId in savedProductIds) FynxRemoteSocialClient.unsaveMarketplaceProduct(context, listingId) else FynxRemoteSocialClient.saveMarketplaceProduct(context, listingId)
-            result.onSuccess { saved -> savedProductIds = if (saved) savedProductIds + listingId else savedProductIds - listingId }
+            FynxRemoteSocialClient.toggleMarketplaceProductSaved(context, listingId, knownSavedProductState(listingId))
+                .onSuccess { saved -> setSavedProductState(listingId, saved) }
                 .onFailure { error = it.message ?: "Saved Products could not be updated." }
             savedProductBusyIds = savedProductBusyIds - listingId
         }
@@ -397,6 +410,21 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     LaunchedEffect(cartOwnerKey, cart, cartQuantities) {
         writeFynxMarketplaceCart(context, cartOwnerKey, cart, cartQuantities)
+    }
+
+    LaunchedEffect(cartOwnerKey) {
+        val requestGeneration = savedProductStateGeneration
+        FynxRemoteSocialClient.savedMarketplaceProducts(context)
+            .onSuccess { savedProducts ->
+                if (savedProductStateGeneration == requestGeneration) {
+                    savedProductIds = savedProducts.map { it.id }.toSet()
+                    savedProductKnownIds = emptySet()
+                    savedProductStateLoaded = true
+                }
+            }
+            .onFailure {
+                if (savedProductStateGeneration == requestGeneration) savedProductStateLoaded = false
+            }
     }
 
     LaunchedEffect(query, category, nearbyMode, nearbyLabel) {
@@ -779,11 +807,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     if (showSell) MarketplaceSellDialog(context, onPublished = { showSell = false; reload() }, onCancel = { showSell = false })
     LaunchedEffect(selected?.id) {
         priceWatchListingId = null
+        val requestGeneration = savedProductStateGeneration
         selected?.id?.let { listingId ->
             FynxRemoteSocialClient.marketplacePriceWatchState(context, listingId)
                 .onSuccess { watched -> priceWatchListingId = if (watched) listingId else null }
             FynxRemoteSocialClient.marketplaceProductSaved(context, listingId)
-                .onSuccess { saved -> savedProductIds = if (saved) savedProductIds + listingId else savedProductIds - listingId }
+                .onSuccess { saved ->
+                    if (savedProductStateGeneration == requestGeneration) setSavedProductState(listingId, saved)
+                }
         }
     }
 
@@ -808,9 +839,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onToggleSavedProduct = { listingId ->
                 if (!savedProductBusy) {
                     savedProductBusy = true
+                    savedProductStateGeneration += 1
                     scope.launch {
-                        val result = if (listingId in savedProductIds) FynxRemoteSocialClient.unsaveMarketplaceProduct(context, listingId) else FynxRemoteSocialClient.saveMarketplaceProduct(context, listingId)
-                        result.onSuccess { saved -> savedProductIds = if (saved) savedProductIds + listingId else savedProductIds - listingId }
+                        FynxRemoteSocialClient.toggleMarketplaceProductSaved(context, listingId, knownSavedProductState(listingId))
+                            .onSuccess { saved -> setSavedProductState(listingId, saved) }
                             .onFailure { error = it.message ?: "Saved Products could not be updated." }
                         savedProductBusy = false
                     }
