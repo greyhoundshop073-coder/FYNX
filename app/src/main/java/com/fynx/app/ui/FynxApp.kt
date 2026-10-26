@@ -84,6 +84,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var openGroup by remember { mutableStateOf<String?>(null) }
     var profileUser by remember { mutableStateOf<String?>(null) }
     var statusOpenOwner by remember { mutableStateOf<String?>(null) }
+    var statusCreatorRequested by remember { mutableStateOf(false) }
+    var statusComposerImmersive by remember { mutableStateOf(false) }
     var statusOpenId by remember { mutableStateOf<String?>(null) }
     var postOpenId by remember { mutableStateOf<String?>(null) }
     var postOpenCommentId by remember { mutableStateOf<String?>(null) }
@@ -277,6 +279,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         if (selected != "Home") {
             postOpenId = null
             postOpenCommentId = null
+            statusCreatorRequested = false
+            statusComposerImmersive = false
         }
         if (selected != "Stories") {
             statusOpenOwner = null
@@ -377,9 +381,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
         Scaffold(
             modifier = Modifier.nestedScroll(homeScrollConnection),
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = if (statusCreatorRequested || statusComposerImmersive) Color.Black else MaterialTheme.colorScheme.background,
             topBar = {
-            if (selected == "Home") {
+            if (selected == "Home" && statusCreatorRequested) {
+                Spacer(Modifier.height(0.dp))
+            } else if (selected == "Home") {
                 // Home header is part of the normal top-bar flow, not a floating overlay.
                 // This keeps the feed clear while preserving the profile, FYNX title,
                 // camera, Settings and notification controls.
@@ -579,7 +585,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             // post/content is covered. It reappears when the keyboard closes.
             if (!isKeyboardVisible && selected in mainNav.map { it.key }) {
                 AnimatedVisibility(
-                    visible = selected != "Home" || !homeChromeHidden,
+                    visible = selected != "Home" || statusCreatorRequested || !homeChromeHidden,
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {
@@ -648,7 +654,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 // Individual screens own their intentional horizontal content spacing.
                 // Do not add a second global side gutter here: it was shrinking every
                 // screen and making phone controls/composers unnecessarily cramped.
-                .padding(vertical = 6.dp)
+                .padding(vertical = if (selected == "Home" && statusCreatorRequested) 0.dp else 6.dp)
                 .then(if (selected == "Home") Modifier else Modifier.navigationBarsPadding())
             Box(screenContentModifier) {
                 AnimatedContent(
@@ -661,7 +667,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     label = "FYNX page swipe"
                 ) { page ->
                     when (page) {
-            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusOpenOwner = null; selected = "Stories" }, onOpenStatusOwner = { statusOpenOwner = it; selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
+            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
             "Search" -> FynxUniversalSearchPanel(
                 onOpenProfile = { username -> profileUser = username; selected = "Home" }
             )
@@ -811,6 +817,13 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     }
                 }
             }
+                if (selected == "Home" && statusCreatorRequested) {
+                    FynxStatusHubPanel(
+                        startWithCreator = true,
+                        onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false },
+                        onComposerVisibilityChange = { statusComposerImmersive = it }
+                    )
+                }
         }
     }
 }
