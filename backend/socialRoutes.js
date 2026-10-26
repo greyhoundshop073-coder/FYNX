@@ -224,7 +224,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await ensureMarketplaceSchema();
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
-      const result = await pool.query("SELECT EXISTS (SELECT 1 FROM marketplace_price_watches WHERE user_id = $1 AND listing_id = $2) AS watched", [req.user.sub, id]);
+      const result = await pool.query("SELECT EXISTS (SELECT 1 FROM marketplace_price_watches w JOIN marketplace_listings l ON l.id = w.listing_id WHERE w.user_id = $1 AND w.listing_id = $2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $1 AND b.blocked_id = l.seller_id) OR (b.blocker_id = l.seller_id AND b.blocked_id = $1))) AS watched", [req.user.sub, id]);
       return res.json({ watched: Boolean(result.rows[0]?.watched) });
     } catch (error) { console.error("marketplace price watch state", error); return res.status(500).json({ error: "price watch state unavailable" }); }
   });
@@ -234,7 +234,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await ensureMarketplaceSchema();
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
-      const listing = (await pool.query("SELECT id, seller_id, price FROM marketplace_listings WHERE id = $1 AND active = TRUE", [id])).rows[0];
+      const listing = (await pool.query("SELECT l.id, l.seller_id, l.price FROM marketplace_listings l WHERE l.id = $1 AND l.active = TRUE AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = l.seller_id) OR (b.blocker_id = l.seller_id AND b.blocked_id = $2))", [id, req.user.sub])).rows[0];
       if (!listing) return res.status(404).json({ error: "listing not found" });
       if (String(listing.seller_id) === String(req.user.sub)) return res.status(400).json({ error: "you cannot price-watch your own listing" });
       await pool.query("INSERT INTO marketplace_price_watches(user_id, listing_id) VALUES ($1,$2) ON CONFLICT(user_id,listing_id) DO NOTHING", [req.user.sub, id]);
