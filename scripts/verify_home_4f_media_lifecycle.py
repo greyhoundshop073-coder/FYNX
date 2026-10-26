@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Static Home 4F media/lifecycle/integrity audit."""
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,15 @@ discovery = DISCOVERY.read_text(encoding="utf-8")
 saved_panel = SAVED_PANEL.read_text(encoding="utf-8")
 viewer = VIEWER.read_text(encoding="utf-8")
 runtime_navigation = RUNTIME_NAVIGATION.read_text(encoding="utf-8")
+
+# Fail before instrumentation if the runtime harness itself is not valid Python.
+try:
+    ast.parse(runtime_navigation, filename=str(RUNTIME_NAVIGATION))
+except SyntaxError as error:
+    raise SystemExit(
+        "HOME 4F RUNTIME RED: runtime navigation script has invalid Python syntax "
+        f"at {error.lineno}:{error.offset}: {error.msg}"
+    ) from error
 
 required_home = {
     "FynxMediaCache.getOrDownload": "real media cache/download path",

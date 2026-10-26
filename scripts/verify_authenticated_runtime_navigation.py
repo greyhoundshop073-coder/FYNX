@@ -1250,7 +1250,7 @@ def login():
                 return last_xml, (
                     f"Railway returned {backend_outage_reason} and the safe local UI fallback "
                     f"failed: {local_error}; visible markers: {last_markers}"
-                )"
+                )
             if any(marker in combined for marker in ("timeout","timed out","network","connection failed","fetch failed","unable to connect")):
                 reason="the login form returned a network/backend error"
             else:
