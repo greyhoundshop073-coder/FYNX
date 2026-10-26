@@ -71,11 +71,22 @@ required_camera_readiness = {
         and "val captureReady = hasCamera && boundMode == mode && cameraControl != null" in camera_capture
         and "boundMode = null" in camera_capture
         and "boundMode = mode" in camera_capture,
-    "capture control is disabled before CameraX is ready":
-        "FilledIconButton(enabled = captureReady || recording != null, onClick={" in camera_capture,
-    "camera controls do not auto-hide before the active capture use case is ready":
-        "LaunchedEffect(showCaptureControls, pendingUri, recording, captureReady, timerCountingDown)" in camera_capture
-        and "timerCountingDown == 0 && captureReady" in camera_capture
+    "capture control is disabled until the active CameraX use case is ready and while a photo is saving":
+        "FilledIconButton(enabled = (captureReady && !photoCaptureInFlight) || recording != null, onClick={" in camera_capture,
+    "photo capture in flight has a bounded timeout and restores visible controls":
+        "LaunchedEffect(photoCaptureInFlight)" in camera_capture
+        and "Photo capture timed out. Please try again." in camera_capture
+        and "photoCaptureInFlight = false" in camera_capture
+        and "showCaptureControls = true" in camera_capture,
+    "camera shutter exposes its label on the actual clickable button":
+        '.semantics(mergeDescendants = true) { contentDescription = if (recording != null) "Stop video note"' in camera_capture
+        and "contentDescription = null" in camera_capture,
+    "photo-save progress prevents auto-hide until preview or error":
+        "timerCountingDown == 0 && captureReady && !photoCaptureInFlight" in camera_capture
+        and "CircularProgressIndicator(" in camera_capture,
+    "camera controls do not auto-hide before CameraX is ready or during photo capture":
+        "showCaptureControls, pendingUri, recording, captureReady, timerCountingDown, photoCaptureInFlight" in camera_capture
+        and "timerCountingDown == 0 && captureReady && !photoCaptureInFlight" in camera_capture
         and "timerCountingDown == 0 && cameraControl != null && hasCamera" not in camera_capture,
     "user sees an explicit camera startup state":
         'Text("Starting camera…"' in camera_capture,
