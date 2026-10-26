@@ -71,7 +71,7 @@ export async function installSocialMultiMedia() {
       const mediaId = Number(req.params.id);
       if (!Number.isInteger(mediaId) || mediaId < 1) return next();
       const result = await pool.query(
-        \`SELECT mm.mime_type, mm.data
+        \`SELECT mm.mime_type
            FROM message_media mm
            JOIN social_post_media spm ON spm.media_id = mm.id
            JOIN social_posts p ON p.id = spm.post_id
@@ -100,9 +100,11 @@ export async function installSocialMultiMedia() {
         [mediaId, req.user.sub]
       );
       if (!result.rows[0]) return next();
+      const payload = await getCachedMediaPayload(pool, mediaId);
+      if (!payload) return next();
       res.set('Cache-Control', 'private, max-age=3600');
-      res.type(result.rows[0].mime_type);
-      return res.send(result.rows[0].data);
+      res.type(payload.mimeType);
+      return res.send(payload.data);
     } catch (error) {
       console.error('social normalized media', error);
       return res.status(500).json({ error: 'social media failed' });
