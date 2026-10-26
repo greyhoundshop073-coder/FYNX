@@ -409,7 +409,44 @@ fun FynxCameraCapturePanel(
                 Text("Starting camera…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
             }
             if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
-            if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
+            if (recording == null && !fastCapture) {
+                // Keep the two adjustment sliders on one row so the shutter and mode
+                // selector remain on-screen on shorter devices.
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Zoom", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(40.dp))
+                    Slider(
+                        value = zoomRatio.coerceIn(1f, 4f),
+                        onValueChange = { zoomRatio = it; cameraControl?.setZoomRatio(it) },
+                        valueRange = 1f..4f,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Exposure", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(58.dp))
+                    val range = cameraInfo?.exposureState?.exposureCompensationRange
+                    val lower = (range?.lower ?: -2).toFloat()
+                    val upper = (range?.upper ?: 2).toFloat()
+                    Slider(
+                        value = exposure.toFloat().coerceIn(lower, upper),
+                        onValueChange = { exposure = it.toInt(); cameraControl?.setExposureCompensationIndex(exposure) },
+                        valueRange = lower..upper,
+                        steps = ((upper - lower).toInt() - 1).coerceAtLeast(0),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Timer", style = MaterialTheme.typography.labelMedium)
+                    FilterChip(selected = captureTimerSeconds == 0, onClick = { captureTimerSeconds = 0 }, label = { Text("Off") })
+                    FilterChip(selected = captureTimerSeconds == 3, onClick = { captureTimerSeconds = 3 }, label = { Text("3s") })
+                    FilterChip(selected = captureTimerSeconds == 10, onClick = { captureTimerSeconds = 10 }, label = { Text("10s") })
+                }
+            }
             if (liveProofMode) {
                 Button(onClick = onLiveProofStart, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
                     Icon(Icons.Default.Videocam, null)
