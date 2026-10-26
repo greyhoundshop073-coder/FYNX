@@ -13,7 +13,7 @@ const checks = [
   ['refund ledger is idempotent', /entry_type[^\n]*['\"]REFUND['\"]/.test(webhook) && webhook.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['payout amount is tied to seller net accounting', worker.includes('operationAmount + marketplaceFee') && worker.includes('Math.round((operationAmount + marketplaceFee) * 100) / 100 !== escrowAmount')],
   ['payout currency is tied to escrow', worker.includes("String(operation.currency).toUpperCase() !== String(escrow.currency).toUpperCase()")],
-  ['refund blocks payout', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED')")],
+  ['unresolved refunds block payout; only provider-confirmed terminal failures stop blocking', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED','BLOCKED')") && worker.includes("COALESCE(metadata->>'refundEvent','') <> 'refund.failed'") && worker.includes("COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'") && worker.includes('refund financial operation is unresolved for this order')],
   ['payout is release-pending only', worker.includes("escrow.status !== 'RELEASE_PENDING'")],
   ['payout accounting is validated before terminal success', worker.includes("status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'") && worker.indexOf("status='SUCCEEDED',provider_reference=$1") > worker.indexOf("payout settlement accounting does not reconcile with the protected escrow")],
   ['release terminal state is escrow RELEASED', worker.includes("SET status='RELEASED'")],

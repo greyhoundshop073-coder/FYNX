@@ -14,7 +14,7 @@ const checks = [
   ['successful refund finalizes refund operation and escrow', webhook.includes("eventName === 'refund.processed'") && webhook.includes("status='SUCCEEDED'") && webhook.includes("status='REFUNDED'")],
   ['payment confirmation rejects terminal/conflicting states', paymentState.includes("throw Object.assign(new Error(`payment cannot confirm order from status ${order.status}`)")],
   ['payout worker cannot execute without release-pending escrow', worker.includes("escrow.status !== 'RELEASE_PENDING'")],
-  ['payout worker blocks pending or succeeded refunds', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED')")],
+  ['payout worker blocks unresolved refunds; only verified terminal refund failures are non-blocking', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED','BLOCKED')") && worker.includes("COALESCE(metadata->>'refundEvent','') <> 'refund.failed'") && worker.includes("COALESCE(metadata->>'refundRecoveryStatus','') <> 'failed'")],
   ['buyer refund cannot race an active payout', resolution.includes('resolution === \'BUYER\' && payoutConflict')],
   ['seller release cannot race an active refund', resolution.includes('resolution === \'SELLER\' && refundConflict')],
   ['payout operation has unique idempotency', settlement.includes('idempotency_key TEXT NOT NULL UNIQUE') && settlement.includes('PAYOUT-${order.id}')],

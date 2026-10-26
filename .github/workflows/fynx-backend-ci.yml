@@ -81,6 +81,8 @@ jobs:
           node --check marketplaceAdvertising.js
           node --check notificationPush.js
           node --check notificationBootstrap.js
+          node --check marketplaceBatch2FinalHardening.js
+          node --check verify-marketplace-recovery-worker-safety.mjs
           node --check notificationDevices.js
           node --check verify-marketplace-ad-creative-identity.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs
@@ -127,6 +129,11 @@ jobs:
         run: |
           node verify-media-route.mjs
           node test-media-route-db.mjs
+
+      - name: Verify notification bootstrap idempotency
+        run: node verify-notification-bootstrap-idempotency.mjs
+      - name: Verify Home post reaction SQL contract
+        run: node verify-social-post-reaction-bootstrap.mjs
 
       - name: Run Chat end-to-end integration gate
         working-directory: .
@@ -232,6 +239,8 @@ jobs:
         run: python3 scripts/verify_r6b_payment_expiry.py
       - name: Run Batch 2 financial hardening verification
         run: node verify-marketplace-batch2.mjs
+      - name: Verify Marketplace recovery worker load and failure safety
+        run: node verify-marketplace-recovery-worker-safety.mjs
       - name: Verify group permission enforcement contract
         run: python3 ../scripts/verify_group_permissions_contract.py
       - name: Verify backend package metadata

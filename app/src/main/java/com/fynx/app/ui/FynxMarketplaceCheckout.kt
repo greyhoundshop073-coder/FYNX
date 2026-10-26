@@ -179,11 +179,17 @@ internal fun FynxMarketplaceCheckoutDialog(
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val quantity = quantityText.toIntOrNull()?.coerceAtLeast(1) ?: 0
+    val quantity = quantityText.toIntOrNull() ?: 0
+    val quantityError = when {
+        listing.quantity <= 0 -> "This product is currently out of stock."
+        quantity <= 0 -> "Choose a quantity of at least 1."
+        quantity > listing.quantity -> "Maximum available quantity is ${listing.quantity}."
+        else -> null
+    }
 
     fun refreshQuote() {
-        if (quantity <= 0 || quantity > listing.quantity) {
-            message = "Choose a valid quantity (maximum ${listing.quantity})."
+        if (quantityError != null) {
+            message = quantityError
             quote = null
             return
         }
@@ -214,7 +220,8 @@ internal fun FynxMarketplaceCheckoutDialog(
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text(listing.title, style = MaterialTheme.typography.titleMedium)
                 Text("${listing.currency} ${String.format(Locale.US, "%,.2f", listing.price)} each", color = MaterialTheme.colorScheme.primary)
-                OutlinedTextField(quantityText, { quantityText = it.filter(Char::isDigit); quote = null }, label = { Text("Quantity") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(quantityText, { quantityText = it.filter(Char::isDigit); quote = null; message = null }, label = { Text("Quantity") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                quantityError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (listing.deliveryAvailable) FilterChip(selected = fulfillment == "DELIVERY", onClick = { fulfillment = "DELIVERY"; quote = null }, label = { Text("Delivery") })
                     if (listing.pickupAvailable) FilterChip(selected = fulfillment == "PICKUP", onClick = { fulfillment = "PICKUP"; quote = null }, label = { Text("Pickup") })
@@ -228,7 +235,7 @@ internal fun FynxMarketplaceCheckoutDialog(
                         OutlinedTextField(state, { state = it }, label = { Text("State") }, singleLine = true, modifier = Modifier.weight(1f))
                     }
                 }
-                Button(onClick = { refreshQuote() }, enabled = !busy && quantity > 0, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { refreshQuote() }, enabled = !busy && quantityError == null, modifier = Modifier.fillMaxWidth()) {
                     if (busy) CircularProgressIndicator(Modifier.height(18.dp)) else Text("Review exact total")
                 }
                 quote?.let { q ->
@@ -266,7 +273,7 @@ internal fun FynxMarketplaceCheckoutDialog(
                             if (q.fulfillmentMethod == "DELIVERY") FynxMarketplaceCheckoutAddress(name, phone, address, city, state, country) else null,
                             stableOrderId
                         ).onSuccess(onProtectedOrder)
-                            .onFailure { message = it.message ?: "Protected order could not be created." }
+                            .onFailure { message = marketplacePaymentFailureMessage(it) }
                         busy = false
                     }
                 }

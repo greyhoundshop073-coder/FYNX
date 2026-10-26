@@ -14,6 +14,7 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
   const uuid = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
   const clean = (value, max = 200) => typeof value === 'string' ? value.trim().slice(0, max) : '';
   const normalizeCurrency = (value) => { const currency = clean(value, 3).toUpperCase(); return /^[A-Z]{3}$/.test(currency) ? currency : null; };
+  const paystackConfigured = () => typeof process.env.PAYSTACK_SECRET_KEY === 'string' && process.env.PAYSTACK_SECRET_KEY.trim().length > 0;
   const feeConfig = () => {
     const modeValue = String(process.env.FYNX_MARKETPLACE_FEE_MODE || 'SELLER').toUpperCase();
     const mode = ['ZERO', 'BUYER', 'SELLER', 'SPLIT'].includes(modeValue) ? modeValue : 'SELLER';
@@ -84,6 +85,10 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
         }
         await client.query('ROLLBACK');
         return res.status(200).json({ order: publicCheckoutOrder(existing), idempotent: true });
+      }
+      if (!paystackConfigured()) {
+        await client.query('ROLLBACK');
+        return res.status(503).json({ error: 'marketplace payments are not configured yet', code: 'PAYMENT_PROVIDER_NOT_CONFIGURED' });
       }
       const listing = (await client.query(`SELECT l.*,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE l.id=$1 AND l.active=TRUE FOR UPDATE`, [listingId])).rows[0];
       if (!listing) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'listing not found or no longer available' }); }
@@ -168,6 +173,10 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
           return res.status(409).json({ error: 'checkout id is already bound to a different cart request', code: 'CHECKOUT_ID_REUSE_CONFLICT' });
         }
         await client.query('ROLLBACK'); return res.status(200).json({ checkout: existing, orders: children.rows.map(publicCheckoutOrder), idempotent: true });
+      }
+      if (!paystackConfigured()) {
+        await client.query('ROLLBACK');
+        return res.status(503).json({ error: 'marketplace payments are not configured yet', code: 'PAYMENT_PROVIDER_NOT_CONFIGURED' });
       }
       const sortedItems = [...items].sort((a, b) => a.listingId - b.listingId);
       const lines = []; let checkoutCurrency = null;

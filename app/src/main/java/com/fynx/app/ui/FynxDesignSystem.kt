@@ -26,30 +26,42 @@ enum class FynxAccent(
     /** Mature companion tone used sparingly for tertiary accents and reflective depth. */
     val companion: Color
 ) {
-    // Keep the established FYNX identity colors unchanged.
-    Blue(Color(0xFF2F8CFF), Color(0xFF22C7F2), Color(0xFFB7A36A)),
+    // Default FYNX brand palette: Cobalt Blue primary, blue companion, Classic Green tertiary.
+    Blue(Color(0xFF0047AB), Color(0xFF3C73BD), FynxDesign.ClassicGreen),
     Purple(Color(0xFF7C5CFF), Color(0xFFB18CFF), Color(0xFFA4778A)),
     Charcoal(Color(0xFF37474F), Color(0xFF607D8B), Color(0xFF8A9499))
 }
 
 object FynxDesign {
+    // Supporting palette: neutral surfaces, secondary content and premium-only details.
+    val SoftCloudWhite = Color(0xFFF5F7FA)
+    val MidnightSlate = Color(0xFF1C2434)
+    val SlateGrey = Color(0xFF64748B)
+    val PremiumGold = Color(0xFFD4AF37)
+    val PaleCobalt = Color(0xFFE8EEFA)
+
     val Background = Color(0xFF071326)
     val Surface = Color(0xFF0D1B2E)
-    val SurfaceRaised = Color(0xFF15263D)
+    val SurfaceRaised = MidnightSlate
     val TextPrimary = Color(0xFFF5F8FF)
     val TextSecondary = Color(0xFFB9C6D8)
     val Outline = Color(0xFF31445F)
     val SelectedContainer = Color(0xFF132B49)
-    val LightBackground = Color(0xFFF5F7FB)
+    val LightBackground = SoftCloudWhite
     val LightSurface = Color(0xFFFFFFFF)
     val LightSurfaceRaised = Color(0xFFEAF0F7)
     val LightTextPrimary = Color(0xFF17202A)
-    val LightTextSecondary = Color(0xFF5E6B78)
+    val LightTextSecondary = SlateGrey
     val LightOutline = Color(0xFFD2DAE5)
-    val LightSelectedContainer = Color(0xFFE4EFFC)
+    val LightSelectedContainer = PaleCobalt
     // Subtle neutral/reflective tones: deliberately restrained so light mode stays white.
-    val BlueLightCompanionContainer = Color(0xFFF2EBDD)
-    val BlueDarkCompanionContainer = Color(0xFF3A3324)
+    val BlueLightCompanionContainer = Color(0xFFE6F4EA)
+    val BlueDarkCompanionContainer = Color(0xFF153A27)
+    /** Exact user-approved success and brand-error colors. */
+    val ClassicGreen = Color(0xFF008000)
+    val CrimsonRed = Color(0xFFDC143C)
+    /** Brighter counterpart used for error text on dark surfaces to preserve contrast. */
+    val DarkModeError = Color(0xFFFF7086)
     val PurpleLightCompanionContainer = Color(0xFFF3E7EC)
     val PurpleDarkCompanionContainer = Color(0xFF3A2B32)
     val CharcoalLightCompanionContainer = Color(0xFFE7EBED)
@@ -155,6 +167,20 @@ fun FynxTheme(
         darkColorScheme(
             primary = effectiveAccent.primary,
             onPrimary = onAccent,
+            primaryContainer = when {
+                amoled -> FynxDesign.AmoledSelectedContainer
+                charcoal -> FynxDesign.CharcoalSelectedContainer
+                effectiveAccent == FynxAccent.Purple -> FynxDesign.PurpleDarkCompanionContainer
+                effectiveAccent == FynxAccent.Blue -> FynxDesign.SelectedContainer
+                else -> FynxDesign.CharcoalSelectedContainer
+            },
+            onPrimaryContainer = when {
+                amoled -> FynxDesign.AmoledTextPrimary
+                charcoal -> FynxDesign.CharcoalTextPrimary
+                else -> FynxDesign.TextPrimary
+            },
+            error = FynxDesign.DarkModeError,
+            onError = FynxDesign.Background,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
             tertiary = effectiveAccent.companion,
@@ -197,6 +223,14 @@ fun FynxTheme(
         lightColorScheme(
             primary = effectiveAccent.primary,
             onPrimary = onAccent,
+            primaryContainer = when (effectiveAccent) {
+                FynxAccent.Blue -> FynxDesign.LightSelectedContainer
+                FynxAccent.Purple -> FynxDesign.PurpleLightCompanionContainer
+                FynxAccent.Charcoal -> FynxDesign.CharcoalLightCompanionContainer
+            },
+            onPrimaryContainer = FynxDesign.LightTextPrimary,
+            error = FynxDesign.CrimsonRed,
+            onError = Color.White,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
             tertiary = effectiveAccent.companion,
@@ -207,13 +241,13 @@ fun FynxTheme(
                 FynxAccent.Charcoal -> FynxDesign.CharcoalLightCompanionContainer
             },
             onTertiaryContainer = Color(0xFF20252A),
-            background = Color(0xFFF8F9FB),
-            onBackground = Color(0xFF11161B),
-            surface = Color.White,
-            onSurface = Color(0xFF11161B),
+            background = FynxDesign.LightBackground,
+            onBackground = FynxDesign.LightTextPrimary,
+            surface = FynxDesign.LightSurface,
+            onSurface = FynxDesign.LightTextPrimary,
             surfaceVariant = Color(0xFFF0F2F5),
-            onSurfaceVariant = Color(0xFF59636D),
-            outline = Color(0xFFD5DBE1),
+            onSurfaceVariant = FynxDesign.LightTextSecondary,
+            outline = FynxDesign.LightOutline,
             surfaceContainerLowest = Color.White,
             surfaceContainerLow = Color.White,
             surfaceContainer = Color.White,

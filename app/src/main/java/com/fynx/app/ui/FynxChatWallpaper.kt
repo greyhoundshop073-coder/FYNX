@@ -603,7 +603,7 @@ fun AccentDialog(current: FynxAccent, onSelected: (FynxAccent) -> Unit, onDismis
             FynxAccent.entries.forEach { option ->
                 val label = when (option) {
                     FynxAccent.Charcoal -> "Charcoal Black"
-                    FynxAccent.Blue -> "FYNX Blue"
+                    FynxAccent.Blue -> "Cobalt Blue"
                     FynxAccent.Purple -> "FYNX Purple"
                 }
                 Row(

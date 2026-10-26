@@ -112,6 +112,22 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
   const parseOrderId = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
   const amountSubunit = (amount, currency) => { const normalized = String(currency || '').trim().toUpperCase(); if (!['NGN', 'USD'].includes(normalized)) return null; const value = Number(amount); if (!Number.isFinite(value) || value <= 0) return null; return Math.round(value * 100); };
 
+  const verifyOrderPaymentAttempt = async (reference, order) => {
+    const data = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
+    const transaction = data.data || {};
+    const expectedAmount = amountSubunit(order.total_amount, order.currency);
+    const metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || '');
+    const metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '');
+    const status = String(transaction.status || '').trim().toLowerCase();
+    const matches = String(transaction.reference || '') === String(reference)
+      && expectedAmount !== null
+      && Number(transaction.amount) === expectedAmount
+      && String(transaction.currency || '').trim().toUpperCase() === String(order.currency || '').trim().toUpperCase()
+      && metadataOrderId === String(order.id)
+      && metadataBuyerId === String(order.buyer_id);
+    return { transaction, status, matches };
+  };
+
   app.post('/api/marketplace/orders/:id/payment', auth, async (req, res) => {
     const orderId = parseOrderId(req.params.id), email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     if (!orderId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'valid order id and customer email are required' });
@@ -125,9 +141,80 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       if (existing.payment_reference && existing.payment_authorization_url) return res.status(200).json({ orderId: String(existing.id), reference: existing.payment_reference, authorizationUrl: existing.payment_authorization_url, accessCode: existing.payment_access_code || null, idempotent: true, amountSubunit: amountSubunit(existing.total_amount, existing.currency), currency: String(existing.currency).toUpperCase() });
       const amount = amountSubunit(existing.total_amount, existing.currency);
       if (!amount) return res.status(400).json({ error: 'unsupported marketplace payment currency or amount' });
-      const reference = `FYNX-${existing.id}`, payload = { email, amount: String(amount), currency: String(existing.currency).toUpperCase(), reference, metadata: { orderId: String(existing.id), buyerId: String(existing.buyer_id), purpose: 'FYNX_MARKETPLACE_ORDER' } };
+
+      let staleReferenceToReplace = null;
+      let reference = `FYNX-${existing.id}`;
+      if (existing.payment_reference && !existing.payment_authorization_url) {
+        let previous;
+        try {
+          previous = await verifyOrderPaymentAttempt(existing.payment_reference, existing);
+        } catch (error) {
+          if (error?.code === 'PAYSTACK_NOT_CONFIGURED') throw error;
+          return res.status(409).json({
+            error: 'previous order payment attempt could not be verified safely; no new payment was started',
+            reference: String(existing.payment_reference)
+          });
+        }
+        if (!previous.matches) {
+          return res.status(409).json({
+            error: 'previous order payment attempt does not match this order; no new payment was started',
+            reference: String(existing.payment_reference)
+          });
+        }
+        if (!['failed', 'abandoned', 'reversed'].includes(previous.status)) {
+          return res.status(409).json({
+            error: previous.status === 'success'
+              ? 'previous order payment appears successful; verify the existing reference before retrying'
+              : 'previous order payment is not confirmed failed; retry after the provider reaches a terminal state',
+            reference: String(existing.payment_reference),
+            providerStatus: previous.status || 'unknown'
+          });
+        }
+        staleReferenceToReplace = String(existing.payment_reference);
+        reference = `FYNX-ORDER-${crypto.randomUUID()}`;
+      }
+
+      let payload = { email, amount: String(amount), currency: String(existing.currency).toUpperCase(), reference, metadata: { orderId: String(existing.id), buyerId: String(existing.buyer_id), purpose: 'FYNX_MARKETPLACE_ORDER' } };
       if (process.env.PAYSTACK_CALLBACK_URL) payload.callback_url = process.env.PAYSTACK_CALLBACK_URL;
-      const data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
+      let data;
+      try {
+        data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
+      } catch (error) {
+        const duplicateReferenceError = error?.code === 'PAYSTACK_REQUEST_FAILED'
+          && /(duplicate|reference.*already|already.*reference|already\s+used|used\\s+before)/i.test(String(error.message || ''));
+        if (!duplicateReferenceError || staleReferenceToReplace) throw error;
+        let previous;
+        try {
+          previous = await verifyOrderPaymentAttempt(reference, existing);
+        } catch (verificationError) {
+          if (verificationError?.code === 'PAYSTACK_NOT_CONFIGURED') throw verificationError;
+          return res.status(409).json({
+            error: 'provider rejected the existing order reference but its status could not be verified; no new payment was started',
+            reference
+          });
+        }
+        if (!previous.matches) {
+          return res.status(409).json({
+            error: 'existing order payment reference could not be matched safely; no new payment was started',
+            reference
+          });
+        }
+        if (!['failed', 'abandoned', 'reversed'].includes(previous.status)) {
+          return res.status(409).json({
+            error: previous.status === 'success'
+              ? 'previous order payment appears successful; verify the existing reference before retrying'
+              : 'previous order payment is not confirmed failed; retry after the provider reaches a terminal state',
+            reference,
+            providerStatus: previous.status || 'unknown'
+          });
+        }
+        // The deterministic legacy reference is already known to Paystack and
+        // terminally failed. A one-time UUID reference makes the next attempt
+        // distinct while preserving provider recovery for legacy success cases.
+        reference = `FYNX-ORDER-${crypto.randomUUID()}`;
+        payload = { ...payload, reference };
+        data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
+      }
       const providerReference = String(data.data?.reference || '').trim();
       const providerAmount = Number(data.data?.amount);
       const providerCurrency = String(data.data?.currency || '').trim().toUpperCase();
@@ -143,7 +230,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         if (String(locked.buyer_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can pay this order' }); }
         if (locked.status !== 'PAYMENT_PENDING') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'this order is no longer awaiting payment' }); }
         if (locked.payment_reference && locked.payment_authorization_url) { await client.query('COMMIT'); return res.status(200).json({ orderId: String(locked.id), reference: locked.payment_reference, authorizationUrl: locked.payment_authorization_url, accessCode: locked.payment_access_code || null, idempotent: true, amountSubunit: amount, currency: String(existing.currency).toUpperCase() }); }
-        const updated = await client.query(`UPDATE marketplace_orders SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3,updated_at=NOW() WHERE id=$4 AND buyer_id=$5 AND status='PAYMENT_PENDING' AND payment_reference IS NULL RETURNING id`, [reference, authorizationUrl, accessCode, orderId, req.user.sub]);
+        const updated = await client.query(`UPDATE marketplace_orders SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3,updated_at=NOW() WHERE id=$4 AND buyer_id=$5 AND status='PAYMENT_PENDING' AND (payment_reference IS NULL OR ($6::text IS NOT NULL AND payment_reference=$6 AND payment_authorization_url IS NULL)) RETURNING id`, [reference, authorizationUrl, accessCode, orderId, req.user.sub, staleReferenceToReplace]);
         if (!updated.rows[0]) { const current = (await client.query(`SELECT payment_reference,payment_authorization_url,payment_access_code FROM marketplace_orders WHERE id=$1`, [orderId])).rows[0]; await client.query('COMMIT'); if (current?.payment_reference && current?.payment_authorization_url) return res.status(200).json({ orderId, reference: current.payment_reference, authorizationUrl: current.payment_authorization_url, accessCode: current.payment_access_code || null, idempotent: true, amountSubunit: amount, currency: String(existing.currency).toUpperCase() }); return res.status(409).json({ error: 'payment initialization could not be committed; retry the order payment request' }); }
         await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'PAYMENT_INITIALIZED','PAYMENT_PENDING','PAYMENT_PENDING',$3::jsonb)`, [orderId, req.user.sub, JSON.stringify({ reference, provider: 'paystack', amount, currency: String(existing.currency).toUpperCase() })]);
         await client.query('COMMIT');
@@ -170,16 +257,67 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         if (!group) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'checkout group not found' }); }
         if (group.status !== 'PAYMENT_PENDING') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group is not awaiting payment' }); }
         if (group.payment_reference && group.payment_authorization_url) { await client.query('COMMIT'); return res.status(200).json({ checkoutId: String(group.id), reference: group.payment_reference, authorizationUrl: group.payment_authorization_url, accessCode: group.payment_access_code || null, idempotent: true, amountSubunit: amountSubunit(group.buyer_total, group.currency), currency: String(group.currency).toUpperCase() }); }
+
+        // Recover legacy/interrupted rows which have a provider reference but no
+        // durable authorization URL. Never overwrite a reference until Paystack
+        // confirms that exact attempt failed terminally; a successful, pending,
+        // unknown, or mismatched attempt must keep its reference.
+        let staleReferenceToReplace = null;
+        if (group.payment_reference && !group.payment_authorization_url) {
+          let previous;
+          try {
+            previous = await paystackRequest(`/transaction/verify/${encodeURIComponent(group.payment_reference)}`);
+          } catch (error) {
+            await client.query('ROLLBACK');
+            if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
+            return res.status(409).json({
+              error: 'previous checkout payment attempt could not be verified safely; no new payment was started',
+              reference: String(group.payment_reference)
+            });
+          }
+          const previousTransaction = previous.data || {};
+          const previousStatus = String(previousTransaction.status || '').trim().toLowerCase();
+          const previousAmount = amountSubunit(group.buyer_total, group.currency);
+          const previousCurrency = String(previousTransaction.currency || '').trim().toUpperCase();
+          const previousCheckoutId = String(previousTransaction.metadata?.checkoutGroupId || previousTransaction.metadata?.checkout_group_id || '');
+          const previousBuyerId = String(previousTransaction.metadata?.buyerId || previousTransaction.metadata?.buyer_id || '');
+          const previousAttemptMatches = String(previousTransaction.reference || '') === String(group.payment_reference)
+            && previousAmount !== null
+            && Number(previousTransaction.amount) === previousAmount
+            && previousCurrency === String(group.currency).toUpperCase()
+            && previousCheckoutId === String(group.id)
+            && previousBuyerId === String(group.buyer_id);
+          if (!previousAttemptMatches) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({
+              error: 'previous checkout payment attempt does not match this checkout; no new payment was started',
+              reference: String(group.payment_reference)
+            });
+          }
+          if (!['failed', 'abandoned', 'reversed'].includes(previousStatus)) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({
+              error: previousStatus === 'success'
+                ? 'previous checkout payment appears successful; verify the existing reference before retrying'
+                : 'previous checkout payment is not confirmed failed; retry after the provider reaches a terminal state',
+              reference: String(group.payment_reference),
+              providerStatus: previousStatus || 'unknown'
+            });
+          }
+          staleReferenceToReplace = String(group.payment_reference);
+        }
+
         const amount = amountSubunit(group.buyer_total, group.currency);
         if (!amount) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'unsupported marketplace payment currency or amount' }); }
-        const reference = `FYNX-CHECKOUT-${group.id}`;
+        // A provider init can succeed before the following DB commit fails. The URL is not returned until commit, so retry with a fresh provider reference instead of reusing one Paystack has already seen.
+        const reference = `FYNX-CHECKOUT-${crypto.randomUUID()}`;
         const payload = { email, amount: String(amount), currency: String(group.currency).toUpperCase(), reference, metadata: { checkoutGroupId: String(group.id), buyerId: String(group.buyer_id), purpose: 'FYNX_MARKETPLACE_CHECKOUT_GROUP' } };
         if (process.env.PAYSTACK_CALLBACK_URL) payload.callback_url = process.env.PAYSTACK_CALLBACK_URL;
         const data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
         const providerReference = String(data.data?.reference || '').trim(), providerAmount = Number(data.data?.amount), providerCurrency = String(data.data?.currency || '').trim().toUpperCase();
         const authorizationUrl = data.data?.authorization_url || '', accessCode = data.data?.access_code || null;
         if (!authorizationUrl || providerReference !== reference || providerAmount !== amount || providerCurrency !== String(group.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(502).json({ error: 'payment provider returned data that does not match the checkout group' }); }
-        const updated = await client.query(`UPDATE marketplace_checkout_groups SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3,updated_at=NOW() WHERE id=$4 AND buyer_id=$5 AND status='PAYMENT_PENDING' AND payment_reference IS NULL RETURNING id`, [reference, authorizationUrl, accessCode, checkoutId, req.user.sub]);
+        const updated = await client.query(`UPDATE marketplace_checkout_groups SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3,updated_at=NOW() WHERE id=$4 AND buyer_id=$5 AND status='PAYMENT_PENDING' AND (payment_reference IS NULL OR ($6::text IS NOT NULL AND payment_reference=$6 AND payment_authorization_url IS NULL)) RETURNING id`, [reference, authorizationUrl, accessCode, checkoutId, req.user.sub, staleReferenceToReplace]);
         if (!updated.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group payment initialization could not be committed; retry' }); }
         await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) SELECT order_id,$1,'PAYMENT_INITIALIZED','PAYMENT_PENDING','PAYMENT_PENDING',$2::jsonb FROM marketplace_checkout_group_items WHERE checkout_id=$3`, [req.user.sub, JSON.stringify({ reference, provider: 'paystack', amount, currency: String(group.currency).toUpperCase(), checkoutGroupId: String(group.id) }), checkoutId]);
         await client.query('COMMIT');

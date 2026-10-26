@@ -58,9 +58,9 @@ export async function installSocialPostReactions() {
       if (type && !allowed.has(type)) return res.status(400).json({ error: 'invalid reaction type' });
       const params = [id];
       const where = ['r.post_id=$1'];
-      if (type) { params.push(type); where.push('r.reaction=$2'); }
+      if (type) { params.push(type); where.push('r.reaction_type=$2'); }
       const result = await pool.query(
-        \`SELECT u.id,u.username,u.display_name,r.reaction,r.created_at
+        \`SELECT u.id,u.username,u.display_name,r.reaction_type AS reaction,r.created_at
            FROM social_post_reactions r JOIN users u ON u.id=r.user_id
           WHERE \${where.join(' AND ')}
           ORDER BY r.created_at DESC LIMIT 200\`,

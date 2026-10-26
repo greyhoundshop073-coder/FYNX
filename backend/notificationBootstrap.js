@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { applyNotificationBootstrapPatch } from "./notificationBootstrapPatch.js";
 import path from "node:path";
 
 const backendDir = path.dirname(fileURLToPath(import.meta.url));
@@ -9,18 +10,9 @@ async function patchOnce(fileName, patches) {
   let source = await readFile(filePath, "utf8");
   let changed = false;
   for (const patch of patches) {
-    // Import patches intentionally retain their original marker in the replacement.
-    // Skip a patch once its complete replacement is already present, so repeated
-    // Railway starts never inject the same import twice.
-    if (source.includes(patch.replacement)) {
-      continue;
-    }
-    if (source.includes(patch.marker)) {
-      source = source.replace(patch.marker, patch.replacement);
-      changed = true;
-    } else if (patch.required && !source.includes(patch.already)) {
-      throw new Error(`Notification bootstrap could not locate ${fileName} marker: ${patch.already}`);
-    }
+    const nextSource = applyNotificationBootstrapPatch(source, patch, fileName);
+    if (nextSource !== source) changed = true;
+    source = nextSource;
   }
   if (changed) await writeFile(filePath, source);
 }
@@ -54,7 +46,9 @@ await patchOnce("groupRoutes.js", [
 await patchOnce("socialRoutes.js", [
   {
     marker: 'export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {',
-    replacement: 'import { queueFynxNotification } from "./notificationPush.js";\n\nexport function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {'
+    replacement: 'import { queueFynxNotification } from "./notificationPush.js";\n\nexport function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {',
+    already: 'import { queueFynxNotification } from "./notificationPush.js";',
+    required: true
   },
   {
     marker: "      return res.status(201).json({ request: result.rows[0] });",
