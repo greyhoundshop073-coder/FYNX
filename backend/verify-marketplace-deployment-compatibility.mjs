@@ -4,14 +4,15 @@ import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.
 import { registerMarketplaceListingLifecycleRoutes } from "./marketplaceListingLifecycleRoutes.js";
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [server, bootstrap, packageJson, shop, listings, schema, social] = await Promise.all([
+const [server, bootstrap, packageJson, shop, listings, schema, social, discovery] = await Promise.all([
   read("./server.js"),
   read("./serverBootstrap.js"),
   read("./package.json"),
   read("./marketplaceShopProfiles.js"),
   read("./marketplaceListingLifecycleRoutes.js"),
   read("./marketplaceSchema.js"),
-  read("./socialRoutes.js")
+  read("./socialRoutes.js"),
+  read("./discoveryRoutes.js")
 ]);
 
 assert.ok(server.includes('app.get("/version"'), "backend must expose a version route for deployment provenance");
@@ -36,6 +37,23 @@ assert.ok(bootstrap.includes('if (!source.includes(contract)) throw new Error(')
 assert.ok(packageJson.includes("verify-marketplace-deployment-compatibility.mjs")
   && packageJson.includes("verify-deployment-provenance.mjs"),
   "prestart must execute compatibility and provenance contracts");
+
+assert.ok(schema.includes('"  reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),"')
+  && schema.includes("ADD COLUMN IF NOT EXISTS reserved_quantity INTEGER NOT NULL DEFAULT 0"),
+  "shared Marketplace schema must provide reserved stock before discovery queries run");
+assert.ok(social.includes("l.quantity - COALESCE(l.reserved_quantity, 0) > 0")
+  && social.includes("AS available_quantity"),
+  "Marketplace browse and seller inventory must expose only unreserved stock alongside total quantity");
+assert.ok(discovery.includes("l.quantity - COALESCE(l.reserved_quantity, 0) > 0")
+  && discovery.includes("AS available_quantity")
+  && discovery.includes("Number(row.available_quantity) <= 0"),
+  "Marketplace discovery and product details must enforce available stock consistently");
+assert.ok(social.includes("SELECT id, seller_id, price, reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE")
+  && social.includes("if (quantity < reservedQuantity)")
+  && social.includes("stock cannot be lower than units already reserved"),
+  "seller quantity edits must not reduce total stock below units reserved by orders");
+assert.ok(social.includes("Number.isInteger(quantity) || quantity <= 0"),
+  "new Marketplace listings must start with positive stock");
 
 for (const [name, moduleSource, route, method] of [
   ["My Shop read", shop, "/api/marketplace/my-shop", "get"],
