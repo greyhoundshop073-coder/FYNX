@@ -48,6 +48,13 @@ assert.ok(discovery.includes("l.quantity - COALESCE(l.reserved_quantity, 0) > 0"
   && discovery.includes("AS available_quantity")
   && discovery.includes("Number(row.available_quantity) <= 0"),
   "Marketplace discovery and product details must enforce available stock consistently");
+assert.ok(discovery.includes("b.blocker_id=$1 AND b.blocked_id=l.seller_id")
+  && discovery.includes("b.blocker_id=l.seller_id AND b.blocked_id=$1")
+  && discovery.includes("[listingId, req.user.sub]"),
+  "Marketplace discovery and listing details must enforce two-way block privacy");
+assert.ok(social.includes("marketplace_price_watches w JOIN marketplace_listings l")
+  && social.includes("b.blocker_id = l.seller_id AND b.blocked_id = $1"),
+  "Marketplace price-watch state and creation must respect two-way blocks");
 assert.ok(social.includes("SELECT id, seller_id, price, reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE")
   && social.includes("if (quantity < reservedQuantity)")
   && social.includes("stock cannot be lower than units already reserved"),
