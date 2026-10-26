@@ -145,6 +145,10 @@ fun FynxMarketplaceSellerCenterPanel() {
                 moneyTotals = snapshot.totals.orEmpty()
                 moneyTotalsFromBackend = snapshot.totals != null
             }.onFailure { failure ->
+                // A failed refresh must never leave old payout amounts looking current.
+                moneyRecords = emptyList()
+                moneyTotals = emptyMap()
+                moneyTotalsFromBackend = false
                 moneyError = failure.message ?: "Seller earnings could not load."
             }
             moneyLoading = false
@@ -341,22 +345,28 @@ fun FynxMarketplaceSellerCenterPanel() {
                     if (!moneyLoading && moneyRecords.isEmpty() && moneyError == null) {
                         Text("No marketplace earnings yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    currencies.forEach { currency ->
-                        val rows = moneyRecords.filter { it.currency == currency }
-                        val serverTotals = moneyTotals[currency]
-                        val protected = if (moneyTotalsFromBackend) serverTotals?.protectedFunds ?: 0.0
-                            else rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet }
-                        val available = if (moneyTotalsFromBackend) serverTotals?.availableForPayout ?: 0.0
-                            else rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet }
-                        val pending = if (moneyTotalsFromBackend) serverTotals?.payoutPending ?: 0.0
-                            else rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet }
-                        val paid = if (moneyTotalsFromBackend) serverTotals?.paidOut ?: 0.0
-                            else rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
-                        Text(currency, fontWeight = FontWeight.Bold)
-                        MoneySummaryRow("Protected", protected, currency)
-                        MoneySummaryRow("Available for payout", available, currency)
-                        MoneySummaryRow("Payout pending", pending, currency)
-                        MoneySummaryRow("Paid out", paid, currency)
+                    if (!moneyLoading && moneyError == null) {
+                        currencies.forEach { currency ->
+                            val rows = moneyRecords.filter { it.currency == currency }
+                            val serverTotals = moneyTotals[currency]
+                            val protected = if (moneyTotalsFromBackend) serverTotals?.protectedFunds ?: 0.0
+                                else rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet }
+                            val available = if (moneyTotalsFromBackend) serverTotals?.availableForPayout ?: 0.0
+                                else rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet }
+                            val pending = if (moneyTotalsFromBackend) serverTotals?.payoutPending ?: 0.0
+                                else rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet }
+                            val paid = if (moneyTotalsFromBackend) serverTotals?.paidOut ?: 0.0
+                                else rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
+                            Text(currency, fontWeight = FontWeight.Bold)
+                            MoneySummaryRow("Protected", protected, currency)
+                            MoneySummaryRow("Available for payout", available, currency)
+                            MoneySummaryRow("Payout pending", pending, currency)
+                            MoneySummaryRow("Paid out", paid, currency)
+                        }
+                    } else if (moneyLoading) {
+                        Text("Checking current balances…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Text("Current balances are hidden until refresh succeeds. Retry before making payout decisions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (!moneyLoading && moneyError == null && !moneyTotalsFromBackend) {
                         Text(
