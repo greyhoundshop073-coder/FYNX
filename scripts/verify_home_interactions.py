@@ -55,7 +55,7 @@ if 'MediaController' in home:
 require(home, 'LazyColumn(state = feedListState', "single feed state owns vertical scrolling")
 require_normalized(home, 'Text("What\'s on your mind?",', "Home keeps a persistent create-post entry ahead of loading/error/empty states")
 require(home, 'contentDescription = "Create post"', "Home create-post media action remains accessible")
-create_post_entry = home.index('Text("What\'s on your mind?",')
+create_post_entry = home.index("What's on your mind?")
 feed_header_entry = home.index('item(key = "feed_header")')
 feed_loading_entry = home.index('if (loading) item(key = "feed_loading")')
 if not (feed_header_entry < create_post_entry < feed_loading_entry):
