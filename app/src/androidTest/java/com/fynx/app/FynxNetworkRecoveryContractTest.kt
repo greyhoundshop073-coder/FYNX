@@ -145,7 +145,13 @@ class FynxNetworkRecoveryContractTest {
                         failureMessage.contains("Application failed to respond", ignoreCase = true)
                 val railwayApplicationMissing =
                     failureMessage.contains("HTTP 404") &&
-                        failureMessage.contains("Application not found", ignoreCase = true)
+                        (
+                            failureMessage.contains("Application not found", ignoreCase = true) ||
+                                failureMessage.contains(
+                                    "The FYNX service is temporarily unavailable",
+                                    ignoreCase = true
+                                )
+                            )
                 if (!result.isSuccess && (railwayGatewayUnavailable || railwayApplicationMissing)) {
                     org.junit.Assume.assumeNoException(
                         "Railway backend deployment is unavailable after $attempt attempts; " +
