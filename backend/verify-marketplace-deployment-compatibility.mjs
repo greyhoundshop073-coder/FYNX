@@ -53,7 +53,7 @@ assert.ok(discovery.includes("to_regclass('marketplace_orders') IS NOT NULL AS r
   && discovery.includes(': "0";'),
   "Marketplace discovery must work before the first order initializes the orders table");
 const exactListingStart = discovery.indexOf('app.get("/api/marketplace/listing/:id"');
-const exactListingEnd = discovery.indexOf("\\n  });", exactListingStart);
+const exactListingEnd = discovery.indexOf("  // Home Batch 4:", exactListingStart);
 assert.ok(exactListingStart >= 0 && exactListingEnd > exactListingStart
   && discovery.slice(exactListingStart, exactListingEnd).includes("await ensureSchema();"),
   "direct product-detail deep links must initialize the shared Marketplace schema");
