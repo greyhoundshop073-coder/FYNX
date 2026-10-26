@@ -93,7 +93,26 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var marketplaceListingId by remember { mutableStateOf<String?>(null) }
     var marketplaceAiListingId by remember { mutableStateOf<String?>(null) }
     var openChatMarketplaceListingId by remember { mutableStateOf<String?>(null) }
-    var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); val debugOfflineSession = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 && stored.state == AuthState.SIGNED_IN; if (stored.state == AuthState.SIGNED_IN && (FynxBackendClient.hasAccessToken(context) || debugOfflineSession)) stored else AuthSession() }) }
+    // Development APKs must open directly into the app so each build can be inspected without backend credentials.
+    // This bypass is restricted to debuggable builds; release APKs keep the real authentication gate.
+    var authSession by remember {
+        mutableStateOf(
+            if (FYNX_PREVIEW_MODE) {
+                AuthSession(AuthState.SIGNED_IN, "preview")
+            } else {
+                val stored = FynxAuthStore.load(context)
+                val isDebugBuild = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                when {
+                    isDebugBuild -> AuthSession(
+                        AuthState.SIGNED_IN,
+                        stored.username?.takeIf { it.isNotBlank() } ?: "fynx"
+                    )
+                    stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context) -> stored
+                    else -> AuthSession()
+                }
+            }
+        )
+    }
     var adminRole by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var remoteUnreadCount by remember { mutableIntStateOf(-1) }
