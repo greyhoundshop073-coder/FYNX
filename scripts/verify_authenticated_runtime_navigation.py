@@ -1180,7 +1180,22 @@ def login():
     run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
-    xml=dump_ui("authenticated-before-login.xml"); screenshot("authenticated-before-login.png")
+    # The development build may open directly into Home. Wait for either the
+    # real release login gate or the complete Home surface instead of taking one
+    # early snapshot during Android/Compose startup and falsely failing.
+    startup_xml = ""
+    startup_deadline = time.monotonic() + 15.0
+    startup_attempt = 0
+    while time.monotonic() < startup_deadline:
+        startup_xml = dump_ui(f"authenticated-before-login-wait-{startup_attempt}.xml")
+        if startup_xml and (
+            find_control(startup_xml, ["Sign In"]) or _home_surface_ready(startup_xml)
+        ):
+            break
+        startup_attempt += 1
+        time.sleep(0.5)
+    xml = dump_ui("authenticated-before-login.xml") or startup_xml
+    screenshot("authenticated-before-login.png")
     sign_in_gate=find_control(xml,["Sign In"])
     if not sign_in_gate:
         # Development APKs are intentionally configured to open directly into
