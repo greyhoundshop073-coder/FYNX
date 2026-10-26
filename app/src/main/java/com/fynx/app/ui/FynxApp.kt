@@ -437,32 +437,31 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Keep the FYNX brand stable. Connection state is secondary
+                        // feedback; it must never replace the Home title while the
+                        // backend is warming up or the device is reconnecting.
+                        Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                         if (appConnectionState == FynxAppConnectionManager.State.CONNECTED) {
-                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                             Spacer(Modifier.width(4.dp))
                             Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
                         } else {
-                            var connectingDotCount by remember { mutableIntStateOf(1) }
-                            LaunchedEffect(appConnectionState) {
-                                if (appConnectionState != FynxAppConnectionManager.State.CONNECTING) {
-                                    connectingDotCount = 1
-                                    return@LaunchedEffect
-                                }
-                                while (true) {
-                                    delay(450L)
-                                    connectingDotCount = connectingDotCount % 3 + 1
-                                }
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ) {
+                                Text(
+                                    if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
+                                        "Offline"
+                                    } else {
+                                        "Connecting"
+                                    },
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1
+                                )
                             }
-                            Text(
-                                if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
-                                    "Waiting for network..."
-                                } else {
-                                    "Connecting" + ".".repeat(connectingDotCount)
-                                },
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleLarge
-                            )
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
