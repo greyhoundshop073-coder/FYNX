@@ -168,15 +168,17 @@ object FynxRemoteSocialClient {
     }
     suspend fun nearbyMarketplaceListings(context: Context, query: String = "", category: String = "All", location: String): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=60&location=${URLEncoder.encode(location.trim(), "UTF-8")}").mapCatching(::parseListings)
     suspend fun myListings(context: Context): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/my-listings").mapCatching(::parseListings)
-    suspend fun createMarketplaceListing(context: Context, title: String, description: String, storeName: String, price: Double, currency: String, category: String, condition: String, quantity: Int, location: String, deliveryAvailable: Boolean, pickupAvailable: Boolean, deliveryFee: Double?, mediaUris: List<Uri>): Result<MarketplaceListing?> = runCatching {
+    suspend fun createMarketplaceListing(context: Context, title: String, description: String, storeName: String, price: Double, currency: String, category: String, condition: String, quantity: Int, location: String, deliveryAvailable: Boolean, pickupAvailable: Boolean, deliveryFee: Double?, mediaUris: List<Uri>): Result<String> = runCatching {
         require(title.trim().length >= 2) { "Product name is required." }; require(description.trim().length >= 5) { "Add a product description." }; require(price.isFinite() && price > 0) { "Enter a valid product price." }; require(FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency)) { "Marketplace currently supports NGN and USD." }; require(quantity > 0) { "Product quantity must be at least 1." }; require(mediaUris.isNotEmpty()) { "Add at least one product photo or video." }
         val mediaIds = mediaUris.distinct().take(12).map { u -> val mime = mediaMimeType(context, u); require(mime.startsWith("image/") || mime.startsWith("video/")) { "Marketplace media must be an image or video." }; FynxProductionMessaging.uploadMedia(context, u, mime).getOrThrow().id }
         val raw = FynxBackendClient.postJson(context, "/api/marketplace/listings", JSONObject().apply { put("title", title.trim()); put("description", description.trim()); put("storeName", storeName.trim()); put("price", price); put("currency", currency.trim().uppercase()); put("category", category.trim()); put("condition", condition.trim().uppercase()); put("quantity", quantity); put("location", location.trim()); put("deliveryAvailable", deliveryAvailable); put("pickupAvailable", pickupAvailable); put("deliveryFee", deliveryFee ?: JSONObject.NULL); put("mediaIds", JSONArray(mediaIds)) }.toString()).getOrThrow()
-        val id = JSONObject(raw).getJSONObject("listing").optString("id")
-        // The successful create response is authoritative. Read back the owner inventory when
-        // available, but never turn a committed publish into a reported failure if this
-        // follow-up read fails; that could encourage a duplicate listing retry.
-        myListings(context).getOrNull()?.firstOrNull { it.id == id }
+        val id = JSONObject(raw).getJSONObject("listing").optString("id").trim()
+        // The create response is authoritative. Do not make publish success depend on a second
+        // request to owner inventory: that request can fail after the listing is already committed.
+        require(id.isNotBlank()) {
+            "FYNX accepted the listing but could not confirm its ID. Check My Shop before trying again."
+        }
+        id
     }
     suspend fun deleteMarketplaceListing(context: Context, id: String): Result<Unit> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id")); return FynxBackendClient.delete(context, "/api/marketplace/listings/$numericId").map { Unit } }
     suspend fun createMarketplaceOrder(context: Context, listingId: String, quantity: Int): Result<MarketplaceOrder> { val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id")); require(quantity > 0) { "Quantity must be at least 1." }; return FynxBackendClient.postJson(context, "/api/marketplace/orders", JSONObject().apply { put("listingId", numericId); put("quantity", quantity); put("orderId", java.util.UUID.randomUUID().toString()) }.toString()).mapCatching { parseOrder(JSONObject(it).getJSONObject("order")) } }
