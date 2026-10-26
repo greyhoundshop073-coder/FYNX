@@ -31,6 +31,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -86,6 +87,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
     LaunchedEffect(username, viewerUsername, storefrontReloadKey) {
         storefrontLoading = true
         storefrontError = null
+        profileLoading = true
         followError = null
         FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())
             .onSuccess { fetched ->
