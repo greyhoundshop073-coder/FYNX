@@ -221,8 +221,8 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                         Surface(
                                             modifier = Modifier.size(22.dp),
                                             shape = androidx.compose.foundation.shape.CircleShape,
-                                            color = Color(0xFF25D366),
-                                            contentColor = Color.White
+                                            color = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
                                         ) {
                                             Box(
                                                 modifier = Modifier.fillMaxSize(),
