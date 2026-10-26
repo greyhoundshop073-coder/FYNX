@@ -950,14 +950,23 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         return latest
 
     def wait_for_live_camera(name: str, timeout: float = 20.0) -> str:
-        """Wait for the live CameraX surface, not just for its optionally hidden buttons."""
+        """Wait for usable live capture controls, not a non-semantic PreviewView label.
+
+        CameraX's embedded PreviewView is exposed as an AndroidView and does not
+        reliably publish the Compose description "Live camera preview" to UI
+        Automator. After Retake, the real camera screen can be active and the
+        shutter enabled while that description is absent. Require an enabled
+        mode-specific capture action and ensure preview-only actions are gone.
+        """
         deadline = time.monotonic() + timeout
         latest = camera_xml
         index = 0
         while time.monotonic() < deadline:
             latest = dump_ui(f"{name}-{index}.xml")
             index += 1
-            if (latest and find_control(latest, ["Live camera preview"])
+            live_photo_action = find_enabled_control(latest, ["Take photo"]) if latest else None
+            live_video_action = find_enabled_control(latest, ["Record video note"]) if latest else None
+            if (latest and (live_photo_action or live_video_action)
                     and not find_control(latest, ["Retake"])
                     and not find_control(latest, ["Edit photo"])):
                 return latest
