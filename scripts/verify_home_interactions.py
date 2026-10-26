@@ -108,7 +108,10 @@ for needle in ('val previous = posts.firstOrNull { it.id == id }','optimisticLik
 
 require(home_shell, 'FynxRemoteHomeSocialPanel(', "Home feed host")
 require_normalized(home_shell, 'header = { FynxVisibleUpdatesPanel(', "Home AI/Status header wiring")
-require_normalized(home_shell, 'onCreateStatus = { showStatusCreatorHub = true }', "Home Status plus -> full Add status hub")
+require_normalized(home_shell, 'val openStatusCreator: () -> Unit = onCreateStatus ?: { showStatusCreatorHub = true }', "Home Status plus retains the local fallback while accepting the app-shell route")
+require_normalized(home_shell, 'onCreateStatus = openStatusCreator', "Home Status plus forwards the create action into the app shell")
+require(read("app/src/main/java/com/fynx/app/ui/FynxApp.kt"), 'onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }', "Home Status plus opens the immersive app-shell creator")
+require(read("app/src/main/java/com/fynx/app/ui/FynxApp.kt"), 'if (selected == "Home" && statusCreatorRequested)', "app shell overlays Status creator without navigating away from Home")
 require_normalized(home_shell, 'FynxStatusHubPanel( startWithCreator = true, onExitCreator = { showStatusCreatorHub = false } )', "Home Status creator exposes the full media/voice option hub and exits cleanly")
 require(visible_updates, 'onCreateStatus: () -> Unit', "Status create callback")
 require(visible_updates, 'IconButton(onClick = onCreateStatus', "Status create control action")
