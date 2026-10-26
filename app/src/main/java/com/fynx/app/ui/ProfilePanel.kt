@@ -483,7 +483,7 @@ fun SettingsPanel(
             .widthIn(max = 720.dp)
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
+            Modifier.fillMaxWidth().fynxHeaderGlass().padding(top = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {

@@ -388,7 +388,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         .statusBarsPadding()
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                         .height(52.dp * (1f - homeChromeProgress))
-                        .graphicsLayer { alpha = 1f - homeChromeProgress },
+                        .graphicsLayer { alpha = 1f - homeChromeProgress }
+                        .fynxHeaderGlass(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -491,7 +492,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 Row(
                     Modifier.fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .fynxHeaderGlass(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Spacer(Modifier.size(48.dp))
@@ -504,7 +506,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 Row(
                     Modifier.fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .fynxHeaderGlass(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Spacer(Modifier.size(48.dp))
@@ -527,7 +530,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 Row(
                     Modifier.fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .fynxHeaderGlass(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
