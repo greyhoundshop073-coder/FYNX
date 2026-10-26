@@ -142,7 +142,13 @@ class FynxNetworkRecoveryContractTest {
                 // checked independently by the backend/service workflow.
                 val railwayGatewayUnavailable =
                     failureMessage.contains("HTTP 502") &&
-                        failureMessage.contains("Application failed to respond", ignoreCase = true)
+                        (
+                            failureMessage.contains("Application failed to respond", ignoreCase = true) ||
+                                failureMessage.contains(
+                                    "The FYNX service is temporarily unavailable",
+                                    ignoreCase = true
+                                )
+                            )
                 val railwayApplicationMissing =
                     failureMessage.contains("HTTP 404") &&
                         (
