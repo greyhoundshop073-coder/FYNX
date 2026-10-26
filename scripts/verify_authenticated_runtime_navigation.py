@@ -949,6 +949,33 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
             time.sleep(.5)
         return latest
 
+    def wait_for_live_camera(name: str, timeout: float = 20.0) -> str:
+        """Wait for the live CameraX surface, not just for its optionally hidden buttons."""
+        deadline = time.monotonic() + timeout
+        latest = camera_xml
+        index = 0
+        while time.monotonic() < deadline:
+            latest = dump_ui(f"{name}-{index}.xml")
+            index += 1
+            if (latest and find_control(latest, ["Live camera preview"])
+                    and not find_control(latest, ["Retake"])
+                    and not find_control(latest, ["Edit photo"])):
+                return latest
+            time.sleep(.4)
+        return latest
+
+    def make_capture_button_available(current: str, name: str) -> tuple[str, bool]:
+        """Wake the live camera controls if their idle-hide timer elapsed during rebind."""
+        photo_button = find_enabled_control(current, ["Take photo"])
+        if photo_button is not None:
+            return current, True
+        if not find_control(current, ["Live camera preview"]):
+            return current, False
+        run("adb", "shell", "input", "tap", "40", "600")
+        time.sleep(.25)
+        current = wait_for_enabled(["Take photo"], name, 12.0)
+        return current, find_enabled_control(current, ["Take photo"]) is not None
+
     def wait_for_enabled(labels: list[str], name: str, timeout: float = 18.0) -> str:
         """Wait for a usable control, not merely its visible-but-disabled Compose label."""
         deadline = time.monotonic() + timeout
@@ -1045,10 +1072,17 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         return photo_preview
     _, rx, ry = retake
     run("adb", "shell", "input", "tap", str(rx), str(ry))
-    current = wait_for_enabled(["Take photo"], "authenticated-camera-after-photo-retake", 20.0)
-    if not find_enabled_control(current, ["Take photo"]):
+    current = wait_for_live_camera("authenticated-camera-after-photo-retake-live", 20.0)
+    if not find_control(current, ["Live camera preview"]):
         screenshot("authenticated-camera-after-photo-retake-missing.png")
-        FAILURES.append("camera capture runtime: Retake did not return to the live camera")
+        FAILURES.append("camera capture runtime: Retake left the captured photo preview open")
+        return current
+    current, photo_ready = make_capture_button_available(
+        current, "authenticated-camera-after-photo-retake"
+    )
+    if not photo_ready:
+        screenshot("authenticated-camera-after-photo-retake-missing.png")
+        FAILURES.append("camera capture runtime: Retake returned to the live camera but the capture control never became usable")
         return current
 
     # Video: switch mode, record briefly, stop, wait for CameraX Finalize, then retake.
@@ -1123,10 +1157,17 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         return video_preview
     _, rx, ry = retake
     run("adb", "shell", "input", "tap", str(rx), str(ry))
-    current = wait_for_enabled(["Take photo"], "authenticated-camera-after-video-retake", 20.0)
-    if not find_enabled_control(current, ["Take photo"]):
+    current = wait_for_live_camera("authenticated-camera-after-video-retake-live", 20.0)
+    if not find_control(current, ["Live camera preview"]):
         screenshot("authenticated-camera-after-video-retake-missing.png")
-        FAILURES.append("camera capture runtime: video Retake did not return to the live camera")
+        FAILURES.append("camera capture runtime: video Retake left the captured preview open")
+        return current
+    current, video_ready = make_capture_button_available(
+        current, "authenticated-camera-after-video-retake"
+    )
+    if not video_ready:
+        screenshot("authenticated-camera-after-video-retake-missing.png")
+        FAILURES.append("camera capture runtime: video Retake returned to the live camera but the capture control never became usable")
         return current
 
     report.append("- PASS photo and video capture/preview/retake journeys completed; no media was sent or published")

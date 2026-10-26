@@ -79,6 +79,12 @@ required_camera_readiness = {
         and "timerCountingDown == 0 && cameraControl != null && hasCamera" not in camera_capture,
     "user sees an explicit camera startup state":
         'Text("Starting camera…"' in camera_capture,
+    "Retake restores live camera capture controls":
+        "showCaptureControls = true" in camera_capture.split("fun retake()", 1)[1].split("fun rotatePhoto()", 1)[0],
+    "captured photo/video preview controls reserve bottom safe space":
+        ".padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp)" in camera_capture,
+    "live camera surface exposes an accessible marker for runtime recovery":
+        'contentDescription = "Live camera preview"' in camera_capture,
 }
 missing_camera_readiness = [label for label, ok in required_camera_readiness.items() if not ok]
 if missing_camera_readiness:
