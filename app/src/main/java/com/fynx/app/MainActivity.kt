@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import com.fynx.app.ui.AuthState
 import com.fynx.app.ui.FynxApp
 import com.fynx.app.ui.FynxAuthStore
+import com.fynx.app.ui.FynxBackendClient
 import com.fynx.app.ui.FynxDeepLinkDestination
 import com.fynx.app.ui.FynxDeepLinkParser
 import com.fynx.app.ui.FynxNotificationDeviceManager
@@ -84,7 +85,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun registerNotificationTokenIfSignedIn() {
-        if (FynxAuthStore.load(this).state != AuthState.SIGNED_IN) return
+        // The debug-only inspection session deliberately has no server token.
+        // Do not launch Android's notification permission dialog for a local-only
+        // session; register/prompt only for a real server-authenticated account.
+        if (FynxAuthStore.load(this).state != AuthState.SIGNED_IN ||
+            !FynxBackendClient.hasAccessToken(this)
+        ) return
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED

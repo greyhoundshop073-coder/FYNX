@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Static Home 4F media/lifecycle/integrity audit."""
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt"
+REMOTE_MEDIA = ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt"
+CAMERA = ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt"
 PANEL = ROOT / "app/src/main/java/com/fynx/app/ui/HomePanel.kt"
 LIFECYCLE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt"
 MEDIA_CACHE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt"
@@ -13,6 +16,8 @@ VIEWER = ROOT / "app/src/main/java/com/fynx/app/ui/FynxPostMediaViewer.kt"
 RUNTIME_NAVIGATION = ROOT / "scripts/verify_authenticated_runtime_navigation.py"
 
 home = HOME.read_text(encoding="utf-8")
+remote_media = REMOTE_MEDIA.read_text(encoding="utf-8")
+camera_capture = CAMERA.read_text(encoding="utf-8")
 panel = PANEL.read_text(encoding="utf-8")
 lifecycle = LIFECYCLE.read_text(encoding="utf-8")
 media_cache = MEDIA_CACHE.read_text(encoding="utf-8")
@@ -20,6 +25,15 @@ discovery = DISCOVERY.read_text(encoding="utf-8")
 saved_panel = SAVED_PANEL.read_text(encoding="utf-8")
 viewer = VIEWER.read_text(encoding="utf-8")
 runtime_navigation = RUNTIME_NAVIGATION.read_text(encoding="utf-8")
+
+# Fail before instrumentation if the runtime harness itself is not valid Python.
+try:
+    ast.parse(runtime_navigation, filename=str(RUNTIME_NAVIGATION))
+except SyntaxError as error:
+    raise SystemExit(
+        "HOME 4F RUNTIME RED: runtime navigation script has invalid Python syntax "
+        f"at {error.lineno}:{error.offset}: {error.msg}"
+    ) from error
 
 required_home = {
     "FynxMediaCache.getOrDownload": "real media cache/download path",
@@ -32,6 +46,9 @@ required_home = {
     "prepareAsync()": "asynchronous feed video preparation",
     "DisposableEffect(file)": "video lifecycle cleanup",
     "DisposableEffect(player)": "audio lifecycle cleanup",
+    "DisposableEffect(surface)": "inline video Surface wrapper cleanup",
+    "surface?.release()": "explicit Android Surface release",
+    "rememberHomeAudioPlayback": "shared asynchronous audio setup for Home music and voice notes",
     "player.release()": "audio resource release",
     "FynxRemoteProfileAvatar": "real author identity media",
     "MaterialTheme.colorScheme": "theme-aware Home presentation",
@@ -47,6 +64,57 @@ if missing:
     raise SystemExit("HOME 4F MEDIA RED: missing " + ", ".join(missing))
 if "MediaController" in home:
     raise SystemExit("HOME 4F MEDIA RED: legacy Android MediaController must not be present in the Home feed")
+
+required_camera_readiness = {
+    "CameraX readiness requires the matching use-case mode to be bound":
+        "var boundMode by remember { mutableStateOf<CameraMode?>(null) }" in camera_capture
+        and "val captureReady = hasCamera && boundMode == mode && cameraControl != null" in camera_capture
+        and "boundMode = null" in camera_capture
+        and "boundMode = mode" in camera_capture,
+    "capture control is disabled until the active CameraX use case is ready and while a photo is saving":
+        "FilledIconButton(enabled = (captureReady && !photoCaptureInFlight) || recording != null, onClick={" in camera_capture,
+    "photo capture in flight has a bounded timeout and restores visible controls":
+        "LaunchedEffect(photoCaptureInFlight)" in camera_capture
+        and "Photo capture timed out. Please try again." in camera_capture
+        and "photoCaptureInFlight = false" in camera_capture
+        and "showCaptureControls = true" in camera_capture,
+    "camera shutter exposes its label on the actual clickable button":
+        '.semantics(mergeDescendants = true) { contentDescription = if (recording != null) "Stop video note"' in camera_capture
+        and "contentDescription = null" in camera_capture,
+    "photo-save progress remains visible and has a bounded timeout":
+        "LaunchedEffect(photoCaptureInFlight)" in camera_capture
+        and "Photo capture timed out. Please try again." in camera_capture
+        and "if (photoCaptureInFlight)" in camera_capture
+        and "CircularProgressIndicator(" in camera_capture,
+    "live camera controls stay visible instead of racing an idle-hide timer":
+        "delay(5000L)" not in camera_capture
+        and "showCaptureControls = false" not in camera_capture.split("fun capturePhotoNow()", 1)[0]
+        and "captureReady && !photoCaptureInFlight" in camera_capture
+        and "timerCountingDown == 0 && cameraControl != null && hasCamera" not in camera_capture,
+    "user sees an explicit camera startup state":
+        'Text("Starting camera…"' in camera_capture,
+    "Retake restores live camera capture controls":
+        "showCaptureControls = true" in camera_capture.split("fun retake()", 1)[1].split("fun rotatePhoto()", 1)[0],
+    "captured photo preview controls retain their bottom safe-area spacing":
+        ".padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp)" in camera_capture,
+    "live camera capture row is not pushed outside the safe-area viewport":
+        "if (showCaptureControls || recording != null) Column(" in camera_capture
+        and "if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=32.dp)" in camera_capture,
+    "camera settings keep both sliders compact above the pinned capture row":
+        'Text("Zoom", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(40.dp))' in camera_capture
+        and 'Text("Exposure", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(58.dp))' in camera_capture
+        and "Modifier.weight(1f)" in camera_capture
+        and "FilledIconButton(enabled = (captureReady && !photoCaptureInFlight) || recording != null, onClick={" in camera_capture,
+    "the actual PreviewView exposes the live camera marker to the accessibility tree":
+        'AndroidView(factory={previewView},modifier=Modifier.fillMaxSize().semantics { contentDescription = "Live camera preview" })' in camera_capture,
+    "hidden camera controls can be restored above PreviewView touch handling":
+        camera_capture.index('AndroidView(factory={previewView},modifier=Modifier.fillMaxSize().semantics { contentDescription = "Live camera preview" })')
+        < camera_capture.index('contentDescription = "Show camera controls"')
+        < camera_capture.index("if (showGrid && pendingUri == null && recording == null)"),
+}
+missing_camera_readiness = [label for label, ok in required_camera_readiness.items() if not ok]
+if missing_camera_readiness:
+    raise SystemExit("HOME 4F CAMERA RED: " + ", ".join(missing_camera_readiness))
 
 required_media_cache = [
     'path.startsWith("/api/media/")',
@@ -155,5 +223,181 @@ required_runtime_capture = [
 missing_runtime_capture = [token for token in required_runtime_capture if token not in runtime_navigation]
 if missing_runtime_capture:
     raise SystemExit("HOME 4F RUNTIME RED: stable Home capture gate missing " + ", ".join(missing_runtime_capture))
+
+
+# Audio decoding must never block the Compose/UI thread. The shared helper must prepare
+# asynchronously, expose a prepared/error state, disable premature playback, and release resources.
+audio_helper_start = home.index("private fun rememberHomeAudioPlayback(")
+audio_helper_end = home.index("@Composable\nprivate fun MusicPostPlayer(", audio_helper_start)
+audio_helper = home[audio_helper_start:audio_helper_end]
+for token, label in (
+    ("prepareAsync()", "asynchronous player preparation"),
+    ("setOnPreparedListener", "prepared callback"),
+    ("setOnErrorListener", "audio decoder error handling"),
+    ("onDispose", "audio lifecycle disposal"),
+    ("player.release()", "audio player release"),
+):
+    if token not in audio_helper:
+        raise SystemExit("HOME 4F MEDIA RED: audio helper missing " + label)
+if ".prepare()" in audio_helper:
+    raise SystemExit("HOME 4F MEDIA RED: synchronous audio preparation can block the Home UI")
+for component in ("MusicPostPlayer(", "AudioPostPlayer("):
+    start = home.index("private fun " + component)
+    end = home.find("\n@Composable", start + 1)
+    if end < 0:
+        end = len(home)
+    body = home[start:end]
+    if "rememberHomeAudioPlayback(" not in body:
+        raise SystemExit("HOME 4F MEDIA RED: " + component.rstrip("(") + " does not use lifecycle-managed async playback")
+if "enabled = playback.prepared && !playback.failed" not in home:
+    raise SystemExit("HOME 4F MEDIA RED: audio playback controls must wait for prepared state")
+if "if (!playback.prepared || playback.failed)" not in home:
+    raise SystemExit("HOME 4F MEDIA RED: voice-note progress updater must not read decoder duration before preparation")
+fullscreen_start = home.index("if (fullscreen && file != null)")
+fullscreen_end = home.index("private fun relative(", fullscreen_start)
+if "contentScale = ContentScale.Fit" not in home[fullscreen_start:fullscreen_end]:
+    raise SystemExit("HOME 4F MEDIA RED: fullscreen photo viewer must fit the complete image instead of cropping edges")
+
+
+# Inline and fullscreen video must report decoder failures, offer retry, and release surfaces.
+video_start = home.index("private fun FynxFeedTextureVideo(")
+video_end = home.index("@Composable\ninternal fun RemoteSocialMedia(", video_start)
+video_player = home[video_start:video_end]
+for token, label in (
+    ("player.setOnErrorListener", "inline video decoder error handling"),
+    ("playbackFailed", "inline video error state"),
+    ("retryNonce++", "inline video retry action"),
+    ("Video couldn't be played", "inline video error feedback"),
+    ("DisposableEffect(surface)", "Surface lifetime boundary"),
+    ("surface?.release()", "Surface wrapper release"),
+):
+    if token not in video_player:
+        raise SystemExit("HOME 4F MEDIA RED: missing " + label)
+
+# Native SurfaceTexture callbacks must synchronously detach the decoder before allowing
+# TextureView to release the underlying texture. Preserve ordering in both disposal paths.
+destroy_start = video_player.index("override fun onSurfaceTextureDestroyed")
+destroy_end = video_player.index("override fun onSurfaceTextureUpdated", destroy_start)
+destroy_callback = video_player[destroy_start:destroy_end]
+destroy_order = [
+    "player.pause()",
+    "player.setSurface(null)",
+    "textureState.value = null",
+    "return true",
+]
+destroy_positions = [destroy_callback.find(token) for token in destroy_order]
+if any(position < 0 for position in destroy_positions) or destroy_positions != sorted(destroy_positions):
+    raise SystemExit("HOME 4F MEDIA RED: SurfaceTexture destruction must pause/detach before texture release")
+
+surface_effect_start = video_player.index("DisposableEffect(surface)")
+surface_effect_end = video_player.index("\n    }\n\n    Box(Modifier.fillMaxSize())", surface_effect_start)
+surface_effect = video_player[surface_effect_start:surface_effect_end]
+surface_order = ["player.pause()", "player.setSurface(null)", "surface?.release()"]
+surface_positions = [surface_effect.find(token) for token in surface_order]
+if any(position < 0 for position in surface_positions) or surface_positions != sorted(surface_positions):
+    raise SystemExit("HOME 4F MEDIA RED: Surface cleanup must pause and detach before releasing the wrapper")
+
+file_effect_start = video_player.rindex("DisposableEffect(file)")
+file_effect = video_player[file_effect_start:]
+file_order = ["player.pause()", "player.setSurface(null)", "player.stop()", "player.release()"]
+file_positions = [file_effect.find(token) for token in file_order]
+if any(position < 0 for position in file_positions) or file_positions != sorted(file_positions):
+    raise SystemExit("HOME 4F MEDIA RED: player cleanup must detach output before stop/release")
+
+remote_media_start = remote_media.index("DisposableEffect(resolvedUrl, type)")
+remote_media_end = remote_media.index("when (kind)", remote_media_start)
+remote_media_cleanup = remote_media[remote_media_start:remote_media_end]
+remote_order = ["disposingView?.pause()", "disposingView?.setOnPreparedListener(null)", "disposingView?.stopPlayback()"]
+remote_positions = [remote_media_cleanup.find(token) for token in remote_order]
+if any(position < 0 for position in remote_positions) or remote_positions != sorted(remote_positions):
+    raise SystemExit("HOME 4F MEDIA RED: remote VideoView cleanup must pause/clear callbacks before stopping playback")
+
+fullscreen_start = home.index("var fullscreenVideoView by remember(file)")
+fullscreen_dispose_start = home.index("DisposableEffect(file)", fullscreen_start)
+fullscreen_dispose_end = home.index("\n                    }\n                } else {", fullscreen_dispose_start)
+fullscreen_dispose = home[fullscreen_dispose_start:fullscreen_dispose_end]
+fullscreen_order = ["fullscreenVideoView?.pause()", "fullscreenVideoView?.setOnPreparedListener(null)", "fullscreenVideoView?.stopPlayback()"]
+fullscreen_positions = [fullscreen_dispose.find(token) for token in fullscreen_order]
+if any(position < 0 for position in fullscreen_positions) or fullscreen_positions != sorted(fullscreen_positions):
+    raise SystemExit("HOME 4F MEDIA RED: fullscreen VideoView cleanup must pause/clear callbacks before stopping playback")
+full_start = home.index("var fullscreenVideoView by remember(file)")
+full_end = home.index("DisposableEffect(file)", full_start)
+full_player = home[full_start:full_end]
+for token, label in (
+    ("fullscreenVideoLoading", "fullscreen video loading state"),
+    ("setOnErrorListener", "fullscreen video decoder error handling"),
+    ("fullscreenVideoFailed", "fullscreen video error state"),
+    ('Text("Retry video")', "fullscreen video retry action"),
+):
+    if token not in full_player:
+        raise SystemExit("HOME 4F MEDIA RED: missing " + label)
+
+
+# The Android accessibility tree may expose a button label on a non-clickable Text
+# child while Compose puts clickability/enabled state on its ancestor View. The runtime
+# selector must promote the label to that ancestor, otherwise the real voice-post flow
+# falsely fails even though the enabled Use recording action is visible.
+selector_start = runtime_navigation.index("def find_enabled_control(")
+selector_end = runtime_navigation.index("\ndef exercise_voice_post_preview", selector_start)
+selector = runtime_navigation[selector_start:selector_end]
+for token, label in (
+    ("parents={id(child): parent", "accessibility parent mapping"),
+    ("current=parents.get(id(current))", "label-to-click-target ancestor traversal"),
+    ('target.attrib.get("enabled","true").lower()=="false"', "enabled-state check on the actual click target"),
+):
+    if token not in selector:
+        raise SystemExit("HOME 4F RUNTIME SELECTOR RED: missing " + label)
+
+# Runtime certification must actually exercise photo and video capture/retake,
+# not merely open the camera preview. Captures are discarded and never published.
+camera_journey_start = runtime_navigation.find("def exercise_camera_capture_journeys(")
+if camera_journey_start < 0 or runtime_navigation.count("exercise_camera_capture_journeys(") < 2:
+    raise SystemExit("HOME 4F RUNTIME RED: real camera capture journey is not defined and called")
+camera_journey = runtime_navigation[camera_journey_start:runtime_navigation.find("\ndef login(", camera_journey_start)]
+for token, label in (
+    ('["Take photo"]', "photo capture action"),
+    ("photo_ready_deadline = time.monotonic() + 25.0", "photo capture waits for CameraX binding before tapping"),
+    ('photo_button = find_enabled_control(current, ["Take photo"])', "camera capture harness waits for the enabled photo action"),
+    ('record = find_enabled_control(current, ["Record video note"])', "camera capture harness waits for the enabled video action"),
+    ("def wait_for_enabled(labels: list[str]", "camera journey waits on an enabled-control helper"),
+    ('photo_button = find_enabled_control(current, ["Take photo"])', "photo action must be enabled before tapping"),
+    ('record = find_enabled_control(current, ["Record video note"])', "video recording action must be enabled before tapping"),
+    ('stop = find_enabled_control(current, ["Stop video note"])', "video stop action must be enabled before tapping"),
+    ('authenticated-camera-photo-action-ready-', "photo readiness hierarchy is captured while waiting"),
+    ('"tap", "40", "600"', "camera readiness polling restores auto-hidden capture controls through the real preview"),
+    ('["Record video note"]', "video capture action"),
+    ('["Stop video note"]', "video stop/finalization action"),
+    ('["Retake"]', "photo/video retake actions"),
+    ('["Send"]', "preview-only evidence for the never-publish contract"),
+    ("authenticated-camera-photo-preview.png", "photo preview screenshot"),
+    ("authenticated-camera-video-preview.png", "finalized video preview screenshot"),
+):
+    if token not in camera_journey:
+        raise SystemExit("HOME 4F RUNTIME RED: missing " + label)
+if 'input", "tap", str(sx), str(sy)' not in camera_journey:
+    raise SystemExit("HOME 4F RUNTIME RED: camera record/stop touches are missing")
+if 'tap_control(video_preview, ["Send"]' in camera_journey or 'tap_control(photo_preview, ["Send"]' in camera_journey:
+    raise SystemExit("HOME 4F RUNTIME RED: runtime camera journey must never publish test media")
+
+# Protect the runtime harness's permission and backend-outage boundaries.
+tap_start = runtime_navigation.index("def tap_control(")
+tap_end = runtime_navigation.index("\ndef backend_real_chat_target", tap_start)
+tap_control_source = runtime_navigation[tap_start:tap_end]
+if 'find_control(next_xml,["Allow camera"])' not in tap_control_source:
+    raise SystemExit("HOME 4F RUNTIME RED: camera destination must handle FYNX's in-app Allow camera screen")
+for token, label in (
+    ('run("adb", "shell", "input", "keyevent", *(["KEYCODE_DEL"] * 128))', "valid repeated password-clearing keyevent command"),
+    ("def known_railway_backend_outage(status: int, body: str)", "specific external Railway outage classifier"),
+    ('status == 502 and "application failed to respond" in normalized', "specific gateway 502 response check"),
+    ('status == 404 and "application not found" in normalized', "specific unbound Railway application 404 check"),
+    ("def railway_backend_outage_reason() -> str", "independent Railway health probe"),
+    ('base + "/health"', "backend health endpoint probe"),
+    ("known_railway_backend_outage(response.status, body)", "successful-response status classification"),
+    ("known_railway_backend_outage(failure.code, body)", "HTTP-error status classification"),
+    ("backend_outage_reason", "local UI fallback gated by a confirmed external outage"),
+    ("_enter_debug_local_ui_after_backend_outage", "clearly separated local-only UI fallback"),
+):
+    if token not in runtime_navigation:
+        raise SystemExit("HOME 4F RUNTIME RED: missing " + label)
 
 print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")

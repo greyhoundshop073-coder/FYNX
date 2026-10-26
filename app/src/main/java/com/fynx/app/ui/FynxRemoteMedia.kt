@@ -137,8 +137,16 @@ fun FynxRemoteMedia(
     }
     DisposableEffect(resolvedUrl, type) {
         onDispose {
-            videoView?.stopPlayback()
+            val disposingView = videoView
+            // VideoView manages its own decoder. Stop future callbacks, pause and
+            // then stop playback before dropping the view/player references.
+            runCatching { disposingView?.pause() }
+            runCatching { disposingView?.setOnPreparedListener(null) }
+            runCatching { disposingView?.setOnCompletionListener(null) }
+            runCatching { disposingView?.setOnErrorListener(null) }
+            runCatching { disposingView?.stopPlayback() }
             preparedPlayer = null
+            videoPlaying = false
             videoView = null
         }
     }
@@ -189,7 +197,18 @@ fun FynxRemoteMedia(
                             view.setOnErrorListener { _, _, _ -> videoPlaying = false; true }
                         }
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    onRelease = { view ->
+                        // Release the decoder as soon as the AndroidView leaves the UI tree.
+                        runCatching { view.pause() }
+                        runCatching { view.setOnPreparedListener(null) }
+                        runCatching { view.setOnCompletionListener(null) }
+                        runCatching { view.setOnErrorListener(null) }
+                        runCatching { view.stopPlayback() }
+                        if (videoView === view) videoView = null
+                        preparedPlayer = null
+                        videoPlaying = false
+                    }
                 )
                 Surface(color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f), shape = RoundedCornerShape(50), modifier = Modifier.align(Alignment.Center)) {
                     IconButton(onClick = { videoView?.let { view -> if (view.isPlaying) { view.pause(); videoPlaying = false } else { view.start(); videoPlaying = true } } }) {
@@ -278,35 +297,163 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDuration
     var loading by remember(resolvedUrl) { mutableStateOf(false) }
     var error by remember(resolvedUrl) { mutableStateOf<String?>(null) }
     var positionMs by remember(resolvedUrl) { mutableLongStateOf(0L) }
-    var durationMs by remember(resolvedUrl) { mutableLongStateOf(maxDurationMs ?: 0L) }
+    var durationMs by remember(resolvedUrl) { mutableLongStateOf(maxDurationMs?.coerceAtLeast(0L) ?: 0L) }
+    var seeking by remember(resolvedUrl) { mutableStateOf(false) }
+    val temporaryFile = remember(resolvedUrl) { arrayOfNulls<File>(1) }
 
-    DisposableEffect(resolvedUrl) { onDispose { player?.release(); player = null } }
-    LaunchedEffect(playing, player) { while (playing) { positionMs = player?.currentPosition?.toLong() ?: positionMs; delay(120L) } }
+    // Key the cleanup effect to the actual player object. The former URL-only
+    // effect captured null on first composition and never released a later player.
+    DisposableEffect(resolvedUrl, player) {
+        val activePlayer = player
+        onDispose {
+            runCatching { activePlayer?.setOnPreparedListener(null) }
+            runCatching { activePlayer?.setOnCompletionListener(null) }
+            runCatching { activePlayer?.setOnErrorListener(null) }
+            runCatching { activePlayer?.release() }
+        }
+    }
+    DisposableEffect(resolvedUrl) {
+        onDispose { temporaryFile[0]?.delete() }
+    }
+    LaunchedEffect(playing, player, seeking) {
+        val active = player ?: return@LaunchedEffect
+        while (playing && !seeking) {
+            runCatching { active.currentPosition.toLong() }.getOrNull()?.let { position ->
+                positionMs = position.coerceIn(0L, durationMs.coerceAtLeast(0L))
+            }
+            delay(120L)
+        }
+    }
 
     Row(modifier = modifier.padding(horizontal = 2.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Surface(modifier = Modifier.size(42.dp), shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primaryContainer) {
             IconButton(enabled = !loading, onClick = {
-                if (playing) { player?.pause(); playing = false; return@IconButton }
-                if (player != null) { player?.start(); playing = true; return@IconButton }
-                loading = true; error = null
+                if (playing) {
+                    runCatching { player?.pause() }
+                    playing = false
+                    return@IconButton
+                }
+
+                val current = player
+                if (current != null && error == null) {
+                    runCatching {
+                        if (durationMs > 0L && positionMs >= durationMs) {
+                            current.seekTo(0)
+                            positionMs = 0L
+                        }
+                        current.start()
+                        playing = true
+                    }.onFailure {
+                        error = "Audio unavailable. Tap to retry."
+                        playing = false
+                        player = null
+                    }
+                    return@IconButton
+                }
+
+                // A previous decode/network failure must not leave a broken player
+                // blocking retries. The keyed effect releases it when the state changes.
+                player = null
+                loading = true
+                error = null
+                positionMs = 0L
                 scope.launch {
+                    var candidate: MediaPlayer? = null
+                    var pendingTemp: File? = null
                     try {
                         val cached = remoteMediaCacheFile(context, resolvedUrl, ".audio")
-                        val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
-                        if (cached?.exists() != true) downloadRemoteMedia(context, resolvedUrl, target).getOrThrow()
-                        val next = MediaPlayer().apply {
-                            setAudioAttributes(AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).setUsage(AudioAttributes.USAGE_MEDIA).build())
-                            setDataSource(target.absolutePath)
-                            setOnPreparedListener { durationMs = it.duration.toLong(); loading = false; player = it; it.start(); playing = true }
-                            setOnCompletionListener { playing = false }
-                            setOnErrorListener { _, _, _ -> loading = false; error = "Audio unavailable"; true }
-                            prepareAsync()
+                        val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir).also { pendingTemp = it }
+                        if (cached?.exists() != true || cached.length() <= 0L) {
+                            downloadRemoteMedia(context, resolvedUrl, target).getOrThrow()
                         }
+                        if (cached == null) temporaryFile[0] = target
+
+                        val next = MediaPlayer().apply {
+                            setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                                    .build()
+                            )
+                            setDataSource(target.absolutePath)
+                            setOnPreparedListener { ready ->
+                                val actualDuration = ready.duration.toLong().coerceAtLeast(0L)
+                                durationMs = maxDurationMs?.let { minOf(it.coerceAtLeast(0L), actualDuration) } ?: actualDuration
+                                positionMs = 0L
+                                loading = false
+                                runCatching { ready.start() }
+                                    .onSuccess { player = ready; playing = true }
+                                    .onFailure {
+                                        error = "Audio unavailable. Tap to retry."
+                                        playing = false
+                                        player = null
+                                    }
+                            }
+                            setOnCompletionListener { completed ->
+                                playing = false
+                                positionMs = 0L
+                                runCatching { completed.seekTo(0) }
+                            }
+                            setOnErrorListener { _, _, _ ->
+                                loading = false
+                                playing = false
+                                error = "Audio unavailable. Tap to retry."
+                                player = null
+                                true
+                            }
+                        }
+                        candidate = next
                         player = next
-                    } catch (t: Throwable) { loading = false; error = t.message ?: "Audio unavailable" }
+                        next.prepareAsync()
+                        pendingTemp = null
+                    } catch (cancelled: CancellationException) {
+                        candidate?.let { runCatching { it.release() } }
+                        pendingTemp?.delete()
+                        throw cancelled
+                    } catch (cause: Throwable) {
+                        candidate?.let { runCatching { it.release() } }
+                        pendingTemp?.delete()
+                        loading = false
+                        playing = false
+                        player = null
+                        error = cause.message?.takeIf { it.isNotBlank() } ?: "Audio unavailable. Tap to retry."
+                    }
                 }
-            }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause audio" else "Play audio") }
+            }) {
+                Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause audio" else "Play audio")
+            }
         }
-        Column(Modifier.weight(1f).padding(start = 8.dp)) { LinearProgressIndicator(progress = { if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth()); Text(error ?: "Audio", style = MaterialTheme.typography.labelSmall) }
+        Column(Modifier.weight(1f).padding(start = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            LinearProgressIndicator(
+                progress = { if (durationMs > 0L) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Slider(
+                value = positionMs.toFloat().coerceIn(0f, durationMs.toFloat().coerceAtLeast(1f)),
+                onValueChange = { value ->
+                    if (durationMs > 0L) {
+                        seeking = true
+                        positionMs = value.toLong().coerceIn(0L, durationMs)
+                    }
+                },
+                onValueChangeFinished = {
+                    if (durationMs > 0L) runCatching { player?.seekTo(positionMs.coerceIn(0L, durationMs).toInt()) }
+                    seeking = false
+                },
+                valueRange = 0f..durationMs.toFloat().coerceAtLeast(1f),
+                enabled = !loading && player != null && durationMs > 0L,
+                modifier = Modifier.fillMaxWidth().height(26.dp)
+            )
+            Text(
+                error ?: if (loading) "Loading audio…" else "${formatFynxAudioTime(positionMs)} / ${formatFynxAudioTime(durationMs)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
+}
+
+private fun formatFynxAudioTime(milliseconds: Long): String {
+    val seconds = (milliseconds.coerceAtLeast(0L) / 1000L).toInt()
+    return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
 }

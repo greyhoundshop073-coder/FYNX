@@ -6,6 +6,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** Uploads selected assets through the existing authenticated media path, then creates one real post. */
+private data class ValidatedPostMedia(val uri: Uri, val mime: String, val type: String, val sizeBytes: Long)
+
 object FynxMultiMediaPostClient {
     private const val MAX_MEDIA = 4
     private const val MAX_SINGLE_MEDIA_BYTES = 12L * 1024L * 1024L
@@ -65,12 +67,12 @@ object FynxMultiMediaPostClient {
             JSONObject(raw).optString("postId").takeIf { it.isNotBlank() }
                 ?: throw IllegalStateException("FYNX created the post but the server did not return its post ID.")
         } else {
-            val mediaIds = JSONArray()
-            val mediaTypes = JSONArray()
+            // Validate every selected file before creating any remote media records.
+            // Previously a later oversized/unsupported asset could fail after earlier assets
+            // had already been uploaded, leaving orphan media rows without a post.
             var totalBytes = 0L
             var hasAudio = false
-
-            for ((index, uri) in selected.withIndex()) {
+            val validated = selected.mapIndexed { index, uri ->
                 val mime = detectMimeType(context, uri)
                 val type = when {
                     mime.startsWith("image/") -> "image"
@@ -80,7 +82,7 @@ object FynxMultiMediaPostClient {
                 }
                 if (type == "audio") hasAudio = true
                 if (hasAudio && (selected.size != 1 || index != 0)) {
-                    throw IllegalArgumentException("Voice posts use one audio recording. Use photos/videos for a multi-media post.")
+                    throw IllegalArgumentException("Voice posts cannot be mixed with visual media. Voice posts use one audio recording.")
                 }
 
                 val size = runCatching {
@@ -100,10 +102,15 @@ object FynxMultiMediaPostClient {
                         throw IllegalArgumentException("The selected media is too large to publish together. Keep the total at or below 48 MB.")
                     }
                 }
+                ValidatedPostMedia(uri = uri, mime = mime, type = type, sizeBytes = size)
+            }
 
-                val uploaded = FynxProductionMessaging.uploadMedia(context, uri, mime).getOrThrow()
+            val mediaIds = JSONArray()
+            val mediaTypes = JSONArray()
+            for (item in validated) {
+                val uploaded = FynxProductionMessaging.uploadMedia(context, item.uri, item.mime).getOrThrow()
                 mediaIds.put(uploaded.id)
-                mediaTypes.put(type)
+                mediaTypes.put(item.type)
             }
 
             val raw = FynxBackendClient.postJson(

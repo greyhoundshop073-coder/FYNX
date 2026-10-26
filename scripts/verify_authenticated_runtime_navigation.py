@@ -4,7 +4,7 @@
 # Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
 import os, subprocess, time, html, re, json
-import urllib.parse, urllib.request
+import urllib.error, urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -63,6 +63,322 @@ def wait_for_home_feed_settled(timeout:float=30.0)->tuple[str,bool]:
             return latest,True
         time.sleep(.5)
     return latest,False
+
+def _node_bounds(node):
+    """Parse an Android UIAutomator bounds attribute as (left, top, right, bottom)."""
+    match = re.fullmatch(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", node.attrib.get("bounds", ""))
+    return tuple(map(int, match.groups())) if match else None
+
+
+def _home_surface_ready(xml_text: str) -> bool:
+    """Recognize the actual Home surface rather than any screen with a Home tab."""
+    return bool(
+        xml_text
+        and find_control(xml_text, ["Open FYNX camera"])
+        and find_control(xml_text, ["Chat"])
+        and find_control(xml_text, ["Friends"])
+    )
+
+
+def _feed_viewport(xml_text: str):
+    """Return the largest visible vertical scroll viewport from a real UI hierarchy."""
+    candidates = []
+    for node in nodes(xml_text):
+        bounds = _node_bounds(node)
+        if not bounds or node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        left, top, right, bottom = bounds
+        width, height = right - left, bottom - top
+        if width > 0 and height > 0:
+            candidates.append((width * height, bounds))
+    return max(candidates, default=(0, None), key=lambda item: item[0])[1]
+
+
+def _screen_extent(xml_text: str):
+    rightmost = bottommost = 0
+    for node in nodes(xml_text):
+        bounds = _node_bounds(node)
+        if bounds:
+            rightmost = max(rightmost, bounds[2])
+            bottommost = max(bottommost, bounds[3])
+    return rightmost, bottommost
+
+
+def _visible_home_post_media(xml_text: str) -> bool:
+    """Require a real, large feed-media surface below the 'Your feed' heading."""
+    heading_bottom = max(
+        (_node_bounds(node)[3] for node in nodes(xml_text)
+         if (node.attrib.get("text") or "").strip().casefold() == "your feed"
+         and _node_bounds(node)),
+        default=None,
+    )
+    viewport = _feed_viewport(xml_text)
+    screen_width, _ = _screen_extent(xml_text)
+    if heading_bottom is None or not viewport or screen_width <= 0:
+        return False
+    _, viewport_top, _, viewport_bottom = viewport
+    for node in nodes(xml_text):
+        bounds = _node_bounds(node)
+        if not bounds:
+            continue
+        left, top, right, bottom = bounds
+        width, height = right - left, bottom - top
+        if (
+            node.attrib.get("class") == "android.view.View"
+            and node.attrib.get("clickable", "false").lower() == "true"
+            and width >= screen_width * 0.70
+            and height >= 220
+            and top >= heading_bottom
+            and top < viewport_bottom
+            and bottom > viewport_top
+        ):
+            return True
+    return False
+
+
+def _feed_action_controls_visible(xml_text: str) -> bool:
+    """Require Like and Comment controls to be on-screen within the actual feed viewport."""
+    viewport = _feed_viewport(xml_text)
+    if not viewport:
+        return False
+    left, top, right, bottom = viewport
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    for label in ("Like", "Comment"):
+        node = _find_control_node(root, [label.casefold()])
+        if node is None or node.attrib.get("visible-to-user", "true").lower() == "false":
+            return False
+        center = _center(node)
+        if not center or not (left <= center[0] <= right and top <= center[1] <= bottom):
+            return False
+    return True
+
+
+def capture_home_feed_evidence(xml_text: str) -> str:
+    """Capture real Home media and action-row evidence, then restore Home's top position."""
+    settled_xml, settled = wait_for_home_feed_settled()
+    if settled_xml:
+        xml_text = settled_xml
+    if not settled:
+        FAILURES.append("Home feed did not leave its loading state within 30 seconds after returning from Profile")
+        return xml_text
+
+    (ROOT / "authenticated-home-after-profile.xml").write_text(xml_text, encoding="utf-8")
+    screenshot("authenticated-home-after-profile.png")
+    report.append("- PASS Home returned to its settled feed after opening Profile; captured authenticated-home-after-profile.png")
+
+    has_real_post_media = _visible_home_post_media(xml_text)
+    if has_real_post_media:
+        report.append("- PASS real Home feed exposes a large post-media surface below 'Your feed'")
+    elif LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+        # Never invent a test post to make runtime certification pass. With no live
+        # backend session, accept only the actual Home feed's explicit retry/error or
+        # honest empty state, and record that post media/actions need live service access.
+        screenshot("authenticated-home-local-feed-backend-unavailable.png")
+        if find_control(xml_text, ["Retry"]):
+            report.append("- PASS Home feed rendered an explicit retry/error state during the confirmed backend outage; no post/media data was fabricated.")
+        elif find_control(xml_text, ["Your feed is ready", "There are no visible posts yet"]):
+            report.append("- PASS Home feed rendered its honest empty state in the local-only session; no post/media data was fabricated.")
+        else:
+            FAILURES.append("Home feed exposed neither real post media nor a clear retry/empty state during local-only certification")
+        report.append("- LIVE feed post media, Like and Comment persistence remain unverified because the server-authenticated session could not be established.")
+        return xml_text
+    else:
+        FAILURES.append("Home feed settled, but the real UI hierarchy did not expose a visible post-media surface below 'Your feed'")
+
+    # Scroll the actual LazyColumn until its real accessible Like and Comment actions
+    # are in the viewport. This avoids treating an initial screenshot crop as proof
+    # that the controls are missing.
+    interaction_xml = xml_text
+    actions_visible = False
+    for attempt in range(5):
+        if _feed_action_controls_visible(interaction_xml):
+            actions_visible = True
+            break
+        viewport = _feed_viewport(interaction_xml)
+        if not viewport:
+            break
+        left, top, right, bottom = viewport
+        x = (left + right) // 2
+        start_y = max(top + 80, bottom - 180)
+        end_y = min(bottom - 80, top + 260)
+        if start_y <= end_y:
+            break
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        time.sleep(0.7)
+        interaction_xml = dump_ui(f"authenticated-home-interactions-{attempt}.xml")
+
+    if actions_visible:
+        (ROOT / "authenticated-home-interactions.xml").write_text(interaction_xml, encoding="utf-8")
+        screenshot("authenticated-home-interactions.png")
+        report.append("- PASS actual Home post Like and Comment actions became accessible after feed scrolling; captured authenticated-home-interactions.png")
+    else:
+        FAILURES.append("Home feed did not expose both Like and Comment controls after five bounded real scroll gestures")
+
+    # Return the feed to the top after the interaction capture so subsequent header
+    # and camera tests run from Home's normal visible position.
+    top_xml = interaction_xml
+    for attempt in range(5):
+        if _home_surface_ready(top_xml):
+            return top_xml
+        viewport = _feed_viewport(top_xml)
+        if not viewport:
+            break
+        left, top, right, bottom = viewport
+        x = (left + right) // 2
+        start_y = min(bottom - 100, top + 180)
+        end_y = max(top + 100, bottom - 280)
+        if start_y >= end_y:
+            break
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        time.sleep(0.6)
+        top_xml = dump_ui(f"authenticated-home-return-to-top-{attempt}.xml")
+    if not _home_surface_ready(top_xml):
+        # Re-select the actual Home tab rather than force-stopping or resetting auth.
+        home_tab = find_control(top_xml, ["Home"])
+        if home_tab:
+            _, x, y = home_tab
+            run("adb", "shell", "input", "tap", str(x), str(y))
+            time.sleep(0.8)
+            top_xml = dump_ui("authenticated-home-return-to-top-tab.xml")
+    return top_xml or xml_text
+
+
+def find_enabled_control(xml_text:str, labels:list[str]):
+    """Find a labeled control through its real clickable, enabled Compose ancestor."""
+    if not xml_text:
+        return None
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    wanted=[label.casefold() for label in labels]
+    parents={id(child): parent for parent in root.iter("node") for child in list(parent)}
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user","true").lower()=="false":
+            continue
+        hay=" | ".join(((node.attrib.get("text") or "").strip().casefold(),
+                        (node.attrib.get("content-desc") or "").strip().casefold()))
+        if not any(label in hay for label in wanted):
+            continue
+        # Compose commonly puts the human-readable Text in a non-clickable child,
+        # while the parent View owns enabled/clickable semantics. Resolve that
+        # ancestor rather than incorrectly concluding the action is unavailable.
+        target=node
+        current=node
+        while current is not None:
+            if (current.attrib.get("clickable","false").lower()=="true"
+                    and _center(current)):
+                target=current
+                break
+            current=parents.get(id(current))
+        if (target.attrib.get("visible-to-user","true").lower()=="false"
+                or target.attrib.get("enabled","true").lower()=="false"
+                or target.attrib.get("clickable","false").lower()!="true"):
+            continue
+        center=_center(target)
+        if center:
+            return (node.attrib.get("text") or node.attrib.get("content-desc") or labels[0],
+                    center[0],center[1])
+    return None
+
+
+def exercise_voice_post_preview(composer_xml:str)->str:
+    """Record a short real microphone clip, preview it, attach it, and never publish it."""
+    def recover(current:str, reason:str)->str:
+        FAILURES.append("Home voice-post runtime: "+reason)
+        if current and find_control(current,["Cancel"]):
+            control=find_control(current,["Cancel"])
+            if control:
+                _,cx,cy=control
+                run("adb","shell","input","tap",str(cx),str(cy))
+        for attempt in range(12):
+            time.sleep(.4)
+            candidate=dump_ui("authenticated-voice-recorder-recovery-"+str(attempt)+".xml")
+            if candidate and find_control(candidate,["What's on your mind?"]):
+                return candidate
+        return ""
+
+    voice_xml=tap_control(composer_xml,["Voice"],"home-composer-voice-recorder",["Start recording"])
+    if not voice_xml:
+        return recover(dump_ui("authenticated-voice-recorder-open-failed.xml"),"the real composer did not open the voice recorder")
+
+    start=find_control(voice_xml,["Start recording"])
+    if not start:
+        return recover(voice_xml,"Start recording was not accessible")
+    _,sx,sy=start
+    run("adb","shell","input","tap",str(sx),str(sy))
+
+    recording_xml=""
+    recording_started=False
+    for attempt in range(30):
+        time.sleep(.4)
+        recording_xml=dump_ui("authenticated-voice-recording-wait-"+str(attempt)+".xml")
+        if recording_xml and find_control(recording_xml,["Stop"]) and find_control(recording_xml,["Recording your voice"]):
+            recording_started=True
+            break
+        permission=find_control(recording_xml,["While using the app","Only this time","Allow while using the app"])
+        markers=visible_marker_summary(recording_xml).casefold()
+        if not permission and "record audio" in markers:
+            permission=find_control(recording_xml,["Allow"])
+        if permission:
+            _,px,py=permission
+            run("adb","shell","input","tap",str(px),str(py))
+            time.sleep(.6)
+            continue
+        if find_control(recording_xml,["Microphone permission is required","Microphone could not start"]):
+            break
+
+    if not recording_started:
+        screenshot("authenticated-voice-recording-not-started.png")
+        return recover(recording_xml or voice_xml,"recording did not start after the permission decision")
+
+    screenshot("authenticated-voice-recording.png")
+    time.sleep(1.5)
+    recording_xml=dump_ui("authenticated-voice-before-stop.xml")
+    stop=find_control(recording_xml,["Stop"])
+    if not stop:
+        return recover(recording_xml,"Stop was missing after a short recording")
+    _,sx,sy=stop
+    run("adb","shell","input","tap",str(sx),str(sy))
+
+    preview_xml=""
+    usable=None
+    for attempt in range(40):
+        time.sleep(.35)
+        preview_xml=dump_ui("authenticated-voice-preview-wait-"+str(attempt)+".xml")
+        usable=find_enabled_control(preview_xml,["Use recording"])
+        if usable and find_control(preview_xml,["Voice post preview"]):
+            break
+        if preview_xml and find_control(preview_xml,["The recording could not be saved","The recording could not be played"]):
+            break
+    if not usable:
+        screenshot("authenticated-voice-preview-unavailable.png")
+        return recover(preview_xml,"the recorded clip did not reach a decoded, enabled Use recording state")
+
+    screenshot("authenticated-voice-preview-ready.png")
+    _,ux,uy=usable
+    run("adb","shell","input","tap",str(ux),str(uy))
+    attachment_xml=""
+    for attempt in range(16):
+        time.sleep(.4)
+        attachment_xml=dump_ui("authenticated-voice-post-attachment-"+str(attempt)+".xml")
+        if (attachment_xml and find_control(attachment_xml,["What's on your mind?"])
+                and find_control(attachment_xml,["item ready"])
+                and find_control(attachment_xml,["audio"])):
+            break
+    if not (attachment_xml and find_control(attachment_xml,["What's on your mind?"])
+            and find_control(attachment_xml,["item ready"]) and find_control(attachment_xml,["audio"])):
+        screenshot("authenticated-voice-post-attachment-missing.png")
+        return recover(attachment_xml or preview_xml,"Use recording returned without a visible audio attachment in the real composer")
+
+    screenshot("authenticated-voice-post-attachment.png")
+    report.append("- PASS Home composer recorded a real short voice clip and asynchronous preview became playable; captured authenticated-voice-preview-ready.png")
+    report.append("- PASS Use recording attached the clip to the composer without publishing it; captured authenticated-voice-post-attachment.png")
+    return attachment_xml
+
 
 def clear_runtime_log():
     """Start a focused logcat window immediately before a Chat/Groups route."""
@@ -379,6 +695,15 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
             run("adb","shell","input","tap",str(px),str(py))
             time.sleep(1)
             continue
+        if expected_labels and "switch front/back camera" in [label.casefold() for label in expected_labels]:
+            # FYNX first shows its own Allow camera screen on a fresh install; tap
+            # that action, then the loop above handles Android's CAMERA/AUDIO dialogs.
+            app_camera_permission=find_control(next_xml,["Allow camera"])
+            if app_camera_permission:
+                _,cx,cy=app_camera_permission
+                run("adb","shell","input","tap",str(cx),str(cy))
+                time.sleep(.6)
+                continue
         if expected_labels and any(find_control(next_xml,[wanted]) for wanted in expected_labels):
             break
     screenshot(f"authenticated-{name}.png")
@@ -499,14 +824,428 @@ def exercise_notification_route(route:str, name:str)->bool:
     report.append(f"- PASS {name} notification tap route: cold + warm Activity launch remain alive")
     return True
 
+def known_railway_backend_outage(status: int, body: str) -> str:
+    """Recognize only the two observed Railway platform responses, not arbitrary API errors."""
+    normalized = body.casefold()
+    if status == 502 and "application failed to respond" in normalized:
+        return "HTTP 502 (Application failed to respond)"
+    if status == 404 and "application not found" in normalized:
+        return "HTTP 404 (Application not found)"
+    return ""
+
+
+def known_railway_backend_outage_in_text(text: str) -> str:
+    """Recognize the same platform outage when the login screen exposes the response."""
+    normalized = text.casefold()
+    if "http 502" in normalized and "application failed to respond" in normalized:
+        return "HTTP 502 (Application failed to respond)"
+    if "http 404" in normalized and "application not found" in normalized:
+        return "HTTP 404 (Application not found)"
+    return ""
+
+
+def railway_backend_outage_reason() -> str:
+    """Confirm a known Railway platform outage independently through /health."""
+    base = os.environ.get(
+        "FYNX_PRODUCTION_BASE_URL",
+        "https://fynx-backend-testing-testing.up.railway.app",
+    ).rstrip("/")
+    request = urllib.request.Request(
+        base + "/health",
+        headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            body = response.read(4096).decode("utf-8", "replace")
+            return known_railway_backend_outage(response.status, body)
+    except urllib.error.HTTPError as failure:
+        body = failure.read(4096).decode("utf-8", "replace")
+        return known_railway_backend_outage(failure.code, body)
+    except Exception:
+        # DNS, TLS, timeout, 401/403, and other failures still do not trigger local login.
+        return ""
+
+
+def _enter_debug_local_ui_after_backend_outage(
+    login_xml: str, outage_reason: str
+) -> tuple[str, str]:
+    """Use the existing passwordless debug UI only after a known Railway platform outage.
+
+    This keeps Home UI certification useful while the external backend is unavailable,
+    but never reports the local-only session as server-authenticated.
+    """
+    global LOGIN_MODE
+    if not find_control(login_xml, ["Leave password blank for quick local entry"]):
+        return login_xml, "passwordless debug entry was not offered for this saved account"
+
+    password_control = find_control(login_xml, ["Password"])
+    if not password_control:
+        return login_xml, "password field was not available to clear for local UI entry"
+    _, px, py = password_control
+    run("adb", "shell", "input", "tap", str(px), str(py))
+    # Compose password fields do not consistently honor CTRL+A on the emulator.
+    # Move to the end and send a bounded batch of delete key events as a fallback.
+    run("adb", "shell", "input", "keyevent", "KEYCODE_CTRL_A")
+    run("adb", "shell", "input", "keyevent", "KEYCODE_DEL")
+    run("adb", "shell", "input", "keyevent", "KEYCODE_MOVE_END")
+    run("adb", "shell", "input", "keyevent", *(["KEYCODE_DEL"] * 128))
+    run("adb", "shell", "input", "keyevent", "4")
+    time.sleep(.8)
+    cleared_xml = dump_ui("authenticated-login-local-entry-cleared.xml")
+    try:
+        root = ET.fromstring(cleared_xml)
+        password_fields = [
+            node for node in root.iter("node")
+            if node.attrib.get("class") == "android.widget.EditText"
+            and node.attrib.get("password", "false").lower() == "true"
+            and node.attrib.get("visible-to-user", "true").lower() != "false"
+        ]
+        password_is_blank = bool(password_fields) and all(
+            not (node.attrib.get("text") or "").strip() for node in password_fields
+        )
+    except ET.ParseError:
+        password_is_blank = False
+    if not password_is_blank:
+        return cleared_xml or login_xml, "password could not be cleared safely; local entry was not attempted"
+
+    sign_in = find_control(cleared_xml, ["Sign In"])
+    if not sign_in:
+        return cleared_xml, "Sign In was not available after clearing the password"
+    _, sx, sy = sign_in
+    run("adb", "shell", "input", "tap", str(sx), str(sy))
+    deadline = time.monotonic() + 15.0
+    current = cleared_xml
+    while time.monotonic() < deadline:
+        time.sleep(.5)
+        current = dump_ui("authenticated-home-local-entry-wait.xml")
+        if _home_surface_ready(current):
+            LOGIN_MODE = "debug-only local UI entry (not server-authenticated)"
+            report.append(
+                "- NOTE server authentication was unavailable because the Railway deployment "
+                "returned " + outage_reason + ". This run does not certify server authentication."
+            )
+            report.append("- PASS continued Home UI checks through the existing passwordless debug entry; this session does not certify backend authentication or live feed data.")
+            screenshot("authenticated-home-local-ui-entry.png")
+            return current, ""
+    return current or login_xml, "passwordless debug entry did not reach Home after confirmed backend outage (" + outage_reason + ")"
+
+
+
+def exercise_camera_capture_journeys(camera_xml: str) -> str:
+    """Exercise actual photo/video capture, preview, and retake without publishing media."""
+    if not camera_xml:
+        return ""
+
+    def wait_for(labels: list[str], name: str, timeout: float = 18.0) -> str:
+        deadline = time.monotonic() + timeout
+        latest = camera_xml
+        index = 0
+        while time.monotonic() < deadline:
+            latest = dump_ui(f"{name}-{index}.xml")
+            index += 1
+            if latest and all(find_control(latest, [label]) for label in labels):
+                return latest
+            time.sleep(.5)
+        return latest
+
+    def wait_for_live_camera(name: str, timeout: float = 20.0) -> str:
+        """Wait for usable live capture controls, not a non-semantic PreviewView label.
+
+        CameraX's embedded PreviewView is exposed as an AndroidView and does not
+        reliably publish the Compose description "Live camera preview" to UI
+        Automator. After Retake, the real camera screen can be active and the
+        shutter enabled while that description is absent. Require an enabled
+        mode-specific capture action and ensure preview-only actions are gone.
+        """
+        deadline = time.monotonic() + timeout
+        latest = camera_xml
+        index = 0
+        while time.monotonic() < deadline:
+            latest = dump_ui(f"{name}-{index}.xml")
+            index += 1
+            live_photo_action = find_enabled_control(latest, ["Take photo"]) if latest else None
+            live_video_action = find_enabled_control(latest, ["Record video note"]) if latest else None
+            if (latest and (live_photo_action or live_video_action)
+                    and not find_control(latest, ["Retake"])
+                    and not find_control(latest, ["Edit photo"])):
+                return latest
+            time.sleep(.4)
+        return latest
+
+    def make_capture_button_available(
+        current: str, name: str, capture_labels: list[str]
+    ) -> tuple[str, bool]:
+        """Wake the active camera's mode-specific capture control without a preview label."""
+        if find_enabled_control(current, capture_labels) is not None:
+            return current, True
+        if find_control(current, ["Retake"]) or find_control(current, ["Edit photo"]):
+            return current, False
+
+        # The camera preview is an AndroidView and its description is not guaranteed
+        # to appear in UI Automator. Prefer the explicit overlay action when present;
+        # otherwise send a harmless tap to the known camera preview area to reveal
+        # controls, then poll the required enabled control in the hierarchy.
+        reveal = find_control(current, ["Show camera controls"])
+        if reveal is not None:
+            _, cx, cy = reveal
+            run("adb", "shell", "input", "tap", str(cx), str(cy))
+        else:
+            run("adb", "shell", "input", "tap", "40", "600")
+        time.sleep(.25)
+        current = wait_for_enabled(capture_labels, name, 12.0)
+        return current, find_enabled_control(current, capture_labels) is not None
+
+    def wait_for_enabled(labels: list[str], name: str, timeout: float = 18.0) -> str:
+        """Wait for a usable control, not merely its visible-but-disabled Compose label."""
+        deadline = time.monotonic() + timeout
+        latest = camera_xml
+        index = 0
+        while time.monotonic() < deadline:
+            latest = dump_ui(f"{name}-{index}.xml")
+            index += 1
+            if latest and all(find_enabled_control(latest, [label]) for label in labels):
+                return latest
+            time.sleep(.4)
+        return latest
+
+    def allow_camera_or_audio_permission(current: str) -> tuple[str, bool]:
+        permission = find_control(
+            current,
+            ["While using the app", "Only this time", "Allow while using the app"],
+        )
+        if permission is None:
+            markers = visible_marker_summary(current).casefold()
+            if "camera" in markers or "microphone" in markers or "record audio" in markers:
+                permission = find_control(current, ["Allow"])
+        if permission is None:
+            return current, False
+        _, px, py = permission
+        run("adb", "shell", "input", "tap", str(px), str(py))
+        time.sleep(.8)
+        return dump_ui("camera-permission-resolved.xml"), True
+
+    current = camera_xml
+    # Photo: capture -> actual preview -> retake. Never tap Send.
+    photo_button = find_enabled_control(current, ["Take photo"])
+    if photo_button is None:
+        current, _ = allow_camera_or_audio_permission(current)
+        photo_button = find_enabled_control(current, ["Take photo"])
+
+    # CameraX can show PreviewView and its control row before ImageCapture finishes binding.
+    # Wait for the real Compose click target to become enabled before attempting a capture.
+    photo_ready_deadline = time.monotonic() + 25.0
+    photo_ready_attempt = 0
+    while photo_button is None and time.monotonic() < photo_ready_deadline:
+        current = dump_ui(f"authenticated-camera-photo-action-ready-{photo_ready_attempt}.xml")
+        photo_ready_attempt += 1
+        current, permission_used = allow_camera_or_audio_permission(current)
+        photo_button = find_enabled_control(current, ["Take photo"])
+        if photo_button is None:
+            # The real camera screen intentionally lets controls fade away after use.
+            # Bring them back through the preview surface before concluding that the
+            # capture action never became ready. This keeps the test testing CameraX,
+            # not a hidden control row.
+            if not permission_used:
+                run("adb", "shell", "input", "tap", "40", "600")
+                time.sleep(.2)
+                current = dump_ui(f"authenticated-camera-photo-controls-restored-{photo_ready_attempt}.xml")
+                current, permission_used = allow_camera_or_audio_permission(current)
+                photo_button = find_enabled_control(current, ["Take photo"])
+        if photo_button is None:
+            time.sleep(.4)
+
+    if photo_button is None:
+        # Force a final, fresh hierarchy with controls requested so the failure
+        # report distinguishes a genuinely disabled capture from an auto-hidden row.
+        run("adb", "shell", "input", "tap", "40", "600")
+        time.sleep(.3)
+        current = dump_ui("authenticated-camera-photo-bind-timeout.xml")
+        screenshot("authenticated-camera-photo-button-missing.png")
+        has_action = find_control(current, ["Take photo"]) is not None
+        is_starting = find_control(current, ["Starting camera…"]) is not None
+        if is_starting:
+            reason = "CameraX did not make the active ImageCapture use case ready within 25 seconds"
+        elif has_action:
+            reason = "Take photo remained disabled after CameraX readiness wait"
+        else:
+            reason = "camera capture controls could not be restored for the final readiness check"
+        FAILURES.append(
+            "camera capture runtime: " + reason + "; visible markers: "
+            + visible_marker_summary(current)
+        )
+        return current
+
+    _, px, py = photo_button
+    run("adb", "shell", "input", "tap", str(px), str(py))
+    photo_preview = wait_for(["Retake", "Send"], "authenticated-camera-photo-preview", 20.0)
+    if not (find_control(photo_preview, ["Retake"]) and find_control(photo_preview, ["Send"])):
+        screenshot("authenticated-camera-photo-preview-missing.png")
+        diagnostic_labels = [
+            "Take photo", "Capturing photo", "Starting camera…",
+            "Photo capture timed out. Please try again.", "Photo capture failed",
+            "Photo could not be prepared", "Photo capture could not start",
+            "Retake", "Send",
+        ]
+        visible_camera_state = [
+            label for label in diagnostic_labels
+            if find_control(photo_preview, [label])
+        ]
+        detail = ", ".join(visible_camera_state) if visible_camera_state else visible_marker_summary(photo_preview)
+        FAILURES.append(
+            "camera capture runtime: photo capture did not reach a preview with Retake and Send; "
+            "visible camera state: " + detail
+        )
+        return photo_preview or current
+    screenshot("authenticated-camera-photo-preview.png")
+    report.append("- PASS real CameraX photo capture opened a photo preview with Retake/Send controls")
+
+    retake = find_control(photo_preview, ["Retake"])
+    if retake is None:
+        FAILURES.append("camera capture runtime: photo preview Retake action was not accessible")
+        return photo_preview
+    _, rx, ry = retake
+    run("adb", "shell", "input", "tap", str(rx), str(ry))
+    current = wait_for_live_camera("authenticated-camera-after-photo-retake-live", 20.0)
+    photo_live_action = find_enabled_control(current, ["Take photo"])
+    if (photo_live_action is None
+            or find_control(current, ["Retake"])
+            or find_control(current, ["Edit photo"])):
+        screenshot("authenticated-camera-after-photo-retake-missing.png")
+        FAILURES.append("camera capture runtime: photo Retake did not restore an enabled live capture action")
+        return current
+    current, photo_ready = make_capture_button_available(
+        current, "authenticated-camera-after-photo-retake", ["Take photo"]
+    )
+    if not photo_ready:
+        screenshot("authenticated-camera-after-photo-retake-missing.png")
+        FAILURES.append("camera capture runtime: Retake returned to the live camera but the capture control never became usable")
+        return current
+
+    # Video: switch mode, record briefly, stop, wait for CameraX Finalize, then retake.
+    video_mode = find_control(current, ["Video"])
+    if video_mode is None:
+        FAILURES.append("camera capture runtime: Video mode selector was not accessible after photo retake")
+        return current
+    _, vx, vy = video_mode
+    run("adb", "shell", "input", "tap", str(vx), str(vy))
+    current = wait_for_enabled(["Record video note"], "authenticated-camera-video-mode", 20.0)
+    if not find_enabled_control(current, ["Record video note"]):
+        screenshot("authenticated-camera-video-mode-missing.png")
+        FAILURES.append("camera capture runtime: Video mode did not expose Record video note")
+        return current
+
+    recording_started = False
+    deadline = time.monotonic() + 18.0
+    while time.monotonic() < deadline and not recording_started:
+        record = find_enabled_control(current, ["Record video note"])
+        if record is None:
+            current = dump_ui("authenticated-camera-video-record-control-wait.xml")
+            current, permission_used = allow_camera_or_audio_permission(current)
+            if permission_used:
+                current = wait_for_enabled(["Record video note"], "authenticated-camera-video-after-permission", 20.0)
+            else:
+                time.sleep(.4)
+            continue
+        _, vx, vy = record
+        run("adb", "shell", "input", "tap", str(vx), str(vy))
+        # First press may request microphone permission; permission grant returns to
+        # camera mode and requires a second explicit press to start recording.
+        current = dump_ui("authenticated-camera-video-record-request.xml")
+        current, permission_used = allow_camera_or_audio_permission(current)
+        if permission_used:
+            current = wait_for_enabled(["Record video note"], "authenticated-camera-video-ready-after-permission", 20.0)
+            continue
+        stop_deadline = time.monotonic() + 8.0
+        while time.monotonic() < stop_deadline:
+            current = dump_ui("authenticated-camera-video-recording.xml")
+            if find_enabled_control(current, ["Stop video note"]):
+                recording_started = True
+                break
+            time.sleep(.4)
+
+    if not recording_started:
+        screenshot("authenticated-camera-video-recording-not-started.png")
+        FAILURES.append("camera capture runtime: video recording did not expose Stop video note after permission handling")
+        return current
+
+    screenshot("authenticated-camera-video-recording.png")
+    time.sleep(1.3)
+    current = dump_ui("authenticated-camera-video-before-stop.xml")
+    stop = find_enabled_control(current, ["Stop video note"])
+    if stop is None:
+        FAILURES.append("camera capture runtime: Stop video note was not accessible after recording")
+        return current
+    _, sx, sy = stop
+    run("adb", "shell", "input", "tap", str(sx), str(sy))
+
+    video_preview = wait_for(["Retake", "Send"], "authenticated-camera-video-finalize-preview", 25.0)
+    if not (find_control(video_preview, ["Retake"]) and find_control(video_preview, ["Send"])):
+        screenshot("authenticated-camera-video-preview-missing.png")
+        FAILURES.append("camera capture runtime: video did not finalize into a preview with Retake and Send")
+        return video_preview or current
+    screenshot("authenticated-camera-video-preview.png")
+    report.append("- PASS CameraX video recording stopped and finalized into a playable preview with Retake/Send controls")
+
+    # Discard the captured clip. Do not tap Send, so the account gains no test post.
+    retake = find_control(video_preview, ["Retake"])
+    if retake is None:
+        FAILURES.append("camera capture runtime: finalized video Retake action was not accessible")
+        return video_preview
+    _, rx, ry = retake
+    run("adb", "shell", "input", "tap", str(rx), str(ry))
+    current = wait_for_live_camera("authenticated-camera-after-video-retake-live", 20.0)
+    live_capture_action = find_enabled_control(current, ["Record video note"])
+    if (live_capture_action is None
+            or find_control(current, ["Retake"])
+            or find_control(current, ["Edit photo"])):
+        screenshot("authenticated-camera-after-video-retake-missing.png")
+        FAILURES.append("camera capture runtime: video Retake did not restore the enabled video capture action")
+        return current
+    current, video_ready = make_capture_button_available(
+        current, "authenticated-camera-after-video-retake", ["Record video note"]
+    )
+    if not video_ready:
+        screenshot("authenticated-camera-after-video-retake-missing.png")
+        FAILURES.append("camera capture runtime: video Retake returned to the live camera but the capture control never became usable")
+        return current
+
+    report.append("- PASS photo and video capture/preview/retake journeys completed; no media was sent or published")
+    screenshot("authenticated-camera-after-retakes.png")
+    return current
+
+
 def login():
     global LOGIN_MODE
     run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
-    xml=dump_ui("authenticated-before-login.xml"); screenshot("authenticated-before-login.png")
+    # The development build may open directly into Home. Wait for either the
+    # real release login gate or the complete Home surface instead of taking one
+    # early snapshot during Android/Compose startup and falsely failing.
+    startup_xml = ""
+    startup_deadline = time.monotonic() + 15.0
+    startup_attempt = 0
+    while time.monotonic() < startup_deadline:
+        startup_xml = dump_ui(f"authenticated-before-login-wait-{startup_attempt}.xml")
+        if startup_xml and (
+            find_control(startup_xml, ["Sign In"]) or _home_surface_ready(startup_xml)
+        ):
+            break
+        startup_attempt += 1
+        time.sleep(0.5)
+    xml = dump_ui("authenticated-before-login.xml") or startup_xml
+    screenshot("authenticated-before-login.png")
     sign_in_gate=find_control(xml,["Sign In"])
-    if not sign_in_gate: return xml,"authentication gate was not visible"
+    if not sign_in_gate:
+        # Development APKs are intentionally configured to open directly into
+        # FYNX during active implementation. Recognize this as a local inspection
+        # session, not server authentication, and continue testing the real UI.
+        if _home_surface_ready(xml):
+            LOGIN_MODE = "debug-only local UI entry (not server-authenticated)"
+            report.append("- PASS development APK opened directly into Home for inspection; server authentication is not certified.")
+            return xml, ""
+        return xml, "neither the release authentication gate nor the direct debug Home surface was visible"
     _,x,y=sign_in_gate; run("adb","shell","input","tap",str(x),str(y))
     xml=""
     for _ in range(12):
@@ -523,6 +1262,25 @@ def login():
     if result.returncode!=0: return xml,"adb input text failed for username"
     run("adb","shell","input","keyevent","4"); time.sleep(.5)
     xml=dump_ui("authenticated-after-username.xml")
+    # Probe the actual backend independently because Compose accessibility dumps may
+    # omit the red error text that is visible on the login screenshot. Only use the
+    # local debug UI route when /health confirms one of the known platform-level Railway outages.
+    backend_outage_reason = (
+        railway_backend_outage_reason()
+        if find_control(xml, ["Leave password blank for quick local entry"])
+        else ""
+    )
+    if backend_outage_reason:
+        local_xml, local_error = _enter_debug_local_ui_after_backend_outage(
+            xml, backend_outage_reason
+        )
+        if not local_error:
+            return local_xml, ""
+        return (
+            local_xml or xml,
+            f"Railway backend outage confirmed ({backend_outage_reason}), "
+            "but safe debug UI entry failed: " + local_error,
+        )
     # Debug APKs intentionally expose a passwordless local UI-entry path when no
     # local account is stored. Exercise that explicit affordance rather than
     # incorrectly failing because the Password field is intentionally absent.
@@ -581,7 +1339,23 @@ def login():
             screenshot("authenticated-login-rejected.png")
             if any(marker in combined for marker in ("invalid username","invalid password","incorrect password","invalid credentials")):
                 reason="the server rejected the supplied credentials"
-            elif any(marker in combined for marker in ("timeout","timed out","network","connection failed","fetch failed","unable to connect")):
+                return last_xml, f"{reason}; visible markers: {last_markers}"
+            # Do not alter login behavior for invalid credentials or general errors.
+            # The single explicit Railway gateway 502 is an external outage; when
+            # the existing passwordless debug entry is offered, continue UI-only
+            # Home checks and label them accurately rather than falsely certifying auth.
+            backend_outage_reason = known_railway_backend_outage_in_text(combined)
+            if backend_outage_reason:
+                local_xml, local_error = _enter_debug_local_ui_after_backend_outage(
+                    last_xml, backend_outage_reason
+                )
+                if not local_error:
+                    return local_xml, ""
+                return last_xml, (
+                    f"Railway returned {backend_outage_reason} and the safe local UI fallback "
+                    f"failed: {local_error}; visible markers: {last_markers}"
+                )
+            if any(marker in combined for marker in ("timeout","timed out","network","connection failed","fetch failed","unable to connect")):
                 reason="the login form returned a network/backend error"
             else:
                 reason="the login form returned without opening authenticated Home"
@@ -601,24 +1375,108 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
+def _is_sign_in_gate(xml_text:str)->bool:
+    """Detect the actual login screen without mistaking a username search field for sign-in."""
+    exact=set()
+    for node in nodes(xml_text):
+        if node.attrib.get("visible-to-user","true").lower()=="false":
+            continue
+        exact.add((node.attrib.get("text") or "").strip().casefold())
+        exact.add((node.attrib.get("content-desc") or "").strip().casefold())
+    # "Username" alone is not sufficient: Friends/More discovery screens expose
+    # a "Search username or name" field, which previously caused false auth failures.
+    if "sign in" in exact or "log in" in exact:
+        return True
+    return "welcome back" in exact and "username" in exact and "password" in exact
+
+
+def return_home_in_app(name:str)->str:
+    """Return to Home through app navigation without killing the process or resetting authentication."""
+    current = dump_ui(name + "-current.xml")
+
+    for attempt in range(12):
+        if _home_surface_ready(current):
+            return current
+        if _is_sign_in_gate(current):
+            FAILURES.append(name + ": app navigation reached the sign-in gate; the certification will not re-login or change authentication state")
+            return current
+
+        # Prefer the live Home tab over force-stopping the process. Cold relaunches
+        # previously discarded the session and made unrelated navigation assertions
+        # fail at the login gate.
+        home_tab = find_control(current, ["Home"])
+        if home_tab:
+            _, x, y = home_tab
+            run("adb", "shell", "input", "tap", str(x), str(y))
+            time.sleep(0.7)
+            current = dump_ui(name + "-home-tab-" + str(attempt) + ".xml")
+            if _home_surface_ready(current):
+                return current
+
+            # Home may already be selected with its header collapsed by scrolling.
+            # Swipe down inside its actual scroll viewport to reveal the header.
+            for top_attempt in range(4):
+                if _home_surface_ready(current):
+                    return current
+                viewport = _feed_viewport(current)
+                if not viewport:
+                    break
+                left, top, right, bottom = viewport
+                x = (left + right) // 2
+                start_y = min(bottom - 100, top + 180)
+                end_y = max(top + 100, bottom - 280)
+                if start_y >= end_y:
+                    break
+                run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+                time.sleep(0.6)
+                current = dump_ui(name + "-scroll-home-top-" + str(top_attempt) + ".xml")
+            if _home_surface_ready(current):
+                return current
+        else:
+            # Secondary pages may hide the bottom bar. Exit them through Android's
+            # Back dispatch and keep polling the real UI hierarchy.
+            run("adb", "shell", "input", "keyevent", "4")
+            time.sleep(0.7)
+            current = dump_ui(name + "-back-" + str(attempt) + ".xml")
+            if _home_surface_ready(current):
+                return current
+            if _is_sign_in_gate(current):
+                FAILURES.append(name + ": in-app Back reached the sign-in gate; authentication was left untouched")
+                return current
+
+        # Handle only an empty transition frame. Relaunch the Home deep link once
+        # without force-stopping; never call login() from a navigation reset helper.
+        if not current and attempt >= 2:
+            run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://home", PACKAGE)
+            time.sleep(1.5)
+            current = dump_ui(name + "-home-deeplink.xml")
+
+    FAILURES.append(name + ": could not return to the authenticated Home surface through in-app navigation")
+    return current
+
+
+
+
 def restore_home_after_restart(name:str)->str:
-    """Restart Home and restore the approved debug-only local UI session when needed."""
+    """Cold-start Home restoration for explicit deep-link recovery journeys."""
     run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
     current=dismiss_runtime_permission_prompt() or dump_ui(name+"-initial.xml")
-    if find_control(current,["Sign In"]):
-        # This app intentionally keeps its debug-only saved-device UI session local.
-        # Restore it through the existing test path after process death; never alter
-        # production authentication or report a sign-in gate as a Chat/Groups failure.
+    if _is_sign_in_gate(current):
+        # Some test paths deliberately exercise a cold start. Restore through the
+        # approved existing login path, but do not use this helper for normal
+        # in-app Home navigation.
         current,error=login()
         if error:
-            FAILURES.append(name+": could not restore Home after app restart: "+error)
+            FAILURES.append(name+": could not restore Home after cold start: "+error)
             return current
-    if find_control(current,["Sign In"]) or find_control(current,["Username"]):
-        FAILURES.append(name+": restart remained at the sign-in gate")
+    if _is_sign_in_gate(current):
+        FAILURES.append(name+": cold-start recovery remained at the sign-in gate")
         return current
     return current
+
+
 
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
     # A failed tap must remain failed; returning the previous screen caused false GREEN results.
@@ -647,7 +1505,7 @@ else:
     if find_control(xml,["Sign In"]) and find_control(xml,["Create Account"]): FAILURES.append("authentication did not leave the login gate")
     else:
         if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
-            report.append("- PASS debug-only saved-device UI entry; this does not certify server authentication")
+            report.append("- PASS debug-only local inspection entry; this does not certify server authentication")
         else:
             report.append("- PASS real account authenticated through the FYNX login flow")
 
@@ -655,6 +1513,7 @@ if not FAILURES:
     # Capture the real Settings home from the authenticated running APK.
     profile_xml=tap_control(xml,["Open FYNX profile"],"settings-open-profile",["Edit profile","Settings"])
     if profile_xml:
+        report.append("- PASS Home header avatar opened the real Profile screen; Profile controls were visible")
         settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
         if settings_xml:
             report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
@@ -673,14 +1532,26 @@ if not FAILURES:
         run("adb","shell","input","keyevent","4")
         time.sleep(0.8)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
-    if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
+    if _is_sign_in_gate(xml):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
+    elif _home_surface_ready(xml):
+        xml = capture_home_feed_evidence(xml)
     composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
     if composer_xml:
         report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
+        voice_composer_xml=exercise_voice_post_preview(composer_xml)
+        if voice_composer_xml:
+            composer_xml=voice_composer_xml
+        else:
+            # A failed voice smoke remains RED, but do not let a stale screen block the independent camera check.
+            home_for_camera=return_home_in_app("authenticated-home-after-voice-smoke")
+            composer_xml=tap_control(home_for_camera,["Open FYNX camera"],"home-camera-composer-after-voice",["What's on your mind?"])
         camera_xml=tap_control(composer_xml,["Video/Camera"],"composer-camera",["Switch front/back camera"])
-        if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
-        else: FAILURES.append("post composer -> real camera")
+        if camera_xml:
+            report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
+            camera_xml = exercise_camera_capture_journeys(camera_xml)
+        else:
+            FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
     # The debug saved-device entry is intentionally a local UI-only route, not
     # server authentication. Do not cold-start it: that returns to Sign In and
@@ -713,7 +1584,7 @@ if not FAILURES:
             FAILURES.append("could not return to Home through in-app Back navigation for Status runtime check")
         report += ["", "## Captured Status surfaces",
                    "- authenticated-status-home.png", "- authenticated-status-create.png",
-                   "", "Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only saved-device UI entry, which explicitly does not certify server authentication."]
+                   "", "Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only local inspection entry, which explicitly does not certify server authentication."]
         report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
         if FAILURES:
             report += ["", "Failures:"] + ["- " + item for item in FAILURES]
@@ -721,7 +1592,7 @@ if not FAILURES:
         print("\n".join(report))
         raise SystemExit(1 if FAILURES else 0)
 
-    xml=restore_home_after_restart("authenticated-home-camera-reset") or xml
+    xml=return_home_in_app("authenticated-home-camera-reset") or xml
 
     for name,labels,expected in (
         ("chat",["Chat"],["Messages and groups in one place"]),
@@ -730,7 +1601,7 @@ if not FAILURES:
     ):
         # Recover Home after the preceding journey instead of reusing stale coordinates.
         if name != "chat":
-            xml=restore_home_after_restart("authenticated-home-before-"+name) or xml
+            xml=return_home_in_app("authenticated-home-before-"+name) or xml
         after=capture_surface(name,labels,xml,expected)
         if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
@@ -768,7 +1639,7 @@ if not FAILURES:
                 conversation_after=""
                 conversation_ui_opened=False
                 if real_chat_target:
-                    restore_home_after_restart("private-chat-real-target-home")
+                    return_home_in_app("private-chat-real-target-home")
                     clear_runtime_log()
                     started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+real_chat_target,PACKAGE,timeout=30)
                     time.sleep(.5)
@@ -788,7 +1659,7 @@ if not FAILURES:
                 else:
                     # Use the production Friends discovery UI as the fallback. This
                     # exercises the same real-user search and Chat action a user uses.
-                    home_for_chat=restore_home_after_restart("private-chat-fallback-home")
+                    home_for_chat=return_home_in_app("private-chat-fallback-home")
                     friends_surface=tap_control(
                         home_for_chat,
                         ["Friends"],
@@ -898,7 +1769,7 @@ if not FAILURES:
                         exercise_notification_route("fynx://chat/" + route_username, "private-chat")
                 else:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
-                reset=restore_home_after_restart("authenticated-home-chat-group-reset") or xml
+                reset=return_home_in_app("authenticated-home-chat-group-reset") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 if groups_xml:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
@@ -966,7 +1837,7 @@ if not FAILURES:
                 else:
                     FAILURES.append("group-chat entry certification blocked because the authenticated Chat surface was unavailable after Home reset")
         else: FAILURES.append("authenticated Home -> "+name)
-        xml=restore_home_after_restart("authenticated-home-reset") or xml
+        xml=return_home_in_app("authenticated-home-reset") or xml
 
 def find_feature_entry(xml_text:str, labels:list[str]):
     """Find an actual clickable feature card, not the search field or its text."""
@@ -1003,7 +1874,7 @@ def find_feature_entry(xml_text:str, labels:list[str]):
     return None
 
 def open_features(target_labels:list[str]|None=None):
-    home_xml=restore_home_after_restart("authenticated-home-features") or xml
+    home_xml=return_home_in_app("authenticated-home-features") or xml
     feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
     if not feature_xml: return ""
     if target_labels is None: return feature_xml
@@ -1068,7 +1939,7 @@ def open_features(target_labels:list[str]|None=None):
 # Certify the actual Marketplace destination in the same exact-commit APK.
 # This is a UI/runtime assertion only; the screen must remain navigable when the
 # live service is unavailable, and no sample listing data is fabricated.
-marketplace_home = restore_home_after_restart("authenticated-home-marketplace-entry")
+marketplace_home = return_home_in_app("authenticated-home-marketplace-entry")
 marketplace_xml = tap_control(
     marketplace_home,
     ["Marketplace"],
@@ -1083,7 +1954,8 @@ else:
     
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png","",
+           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png",
+           "- authenticated-voice-preview-ready.png","- authenticated-voice-post-attachment.png","",
            f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")

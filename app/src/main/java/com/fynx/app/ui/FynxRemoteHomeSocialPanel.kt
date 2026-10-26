@@ -55,6 +55,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.Locale
@@ -62,6 +63,7 @@ import org.json.JSONObject
 
 private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
 private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
+private const val HOME_FEED_REQUEST_TIMEOUT_MS = 18_000L
 private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val mutualFriends: Int, val reason: String, val photoId: String?)
 
 @Composable
@@ -75,6 +77,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var hasMore by remember { mutableStateOf(false) }
     var feedNextCursor by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var paginationError by remember { mutableStateOf<String?>(null) }
     var feedRequestInFlight by remember { mutableStateOf(false) }
     var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
@@ -96,6 +99,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var reportPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var reportBusy by remember { mutableStateOf(false) }
     var reportNotice by remember { mutableStateOf<String?>(null) }
+    var reportReason by remember { mutableStateOf("Spam or misleading") }
     var discoveryLoadingMore by remember { mutableStateOf(false) }
     var discoveryHasMore by remember { mutableStateOf(false) }
     var discoveryOffset by remember { mutableIntStateOf(0) }
@@ -312,56 +316,104 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
 
     fun reload(forceRefresh: Boolean = false) {
-        val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
-        feedRequestInFlight = true; lastFeedRequestAt = now
+        val now = System.currentTimeMillis()
+        if (feedRequestInFlight) return
+        if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
+        feedRequestInFlight = true
+        lastFeedRequestAt = now
         scope.launch {
-            loading = true
-            // Backend health is not the same as device connectivity. Keep attempting the
-            // real feed request when the backend probe is down, and use cached posts only
-            // when the phone itself is offline.
-            val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE
-            if (!activeNetworkReady) {
-                val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
-                if (posts.isEmpty() && cachedPage != null) {
-                    posts = cachedPage.posts
-                    hasMore = cachedPage.hasMore
-                    feedNextCursor = cachedPage.nextCursor
-                    interactionStates = emptyMap()
-                    reactionStates = emptyMap()
-                    postMedia = emptyMap()
+            var shouldRevalidateCache = false
+            try {
+                loading = true
+                // Backend health is not the same as device connectivity. Keep attempting the
+                // real feed request when the backend probe is down, and use cached posts only
+                // when the phone itself is offline.
+                val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE
+                if (!activeNetworkReady) {
+                    val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
+                    if (posts.isEmpty() && cachedPage != null) {
+                        posts = cachedPage.posts
+                        hasMore = cachedPage.hasMore
+                        feedNextCursor = cachedPage.nextCursor
+                        interactionStates = emptyMap()
+                        reactionStates = emptyMap()
+                        postMedia = emptyMap()
+                    }
+                    error = if (posts.isEmpty()) "You're offline. Connect to a network to load your feed." else null
+                    paginationError = null
+                    return@launch
                 }
-                error = if (posts.isEmpty()) "You're offline. Connect to a network to load your feed." else null
-                loading = false
-                feedRequestInFlight = false
-                return@launch
-            }
-            val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
-            var cachedRevalidationStarted = false
-            FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
-                .onSuccess { page ->
-                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null
-                    interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
-                    resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
-                    discoveryOffset = 0; discoveryHasMore = false
-                    if (hadFreshCache) {
-                        // Keep pagination locked until cache revalidation settles. Otherwise a
-                        // next-page request can race this response and use a stale cursor.
-                        cachedRevalidationStarted = true
-                        loading = false
-                        scope.launch {
-                            try {
-                                FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
-                                    .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
-                                    .onFailure { /* Keep the valid cached snapshot visible. */ }
-                            } finally {
-                                feedRequestInFlight = false
-                            }
+
+                val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
+                val feedPageResult = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS) {
+                    FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
+                }
+                if (feedPageResult == null) {
+                    // A slow/unavailable backend must never leave the feed spinner running indefinitely.
+                    // Preserve any already-loaded content and expose a user-retryable state.
+                    error = if (posts.isEmpty()) {
+                        "Your feed is taking too long to load. Check your connection and retry."
+                    } else {
+                        "Could not refresh the feed. Showing the posts already loaded."
+                    }
+                    return@launch
+                }
+
+                feedPageResult
+                    .onSuccess { page ->
+                        posts = page.posts
+                        hasMore = page.hasMore
+                        feedNextCursor = page.nextCursor
+                        error = null
+                        paginationError = null
+                        interactionStates = emptyMap()
+                        reactionStates = emptyMap()
+                        reactionPickerPostId = null
+                        reactionUsersPostId = null
+                        resolveAuthorPhotos(page.posts)
+                        hydrateInteractionStates(page.posts)
+                        hydrateReactionStates(page.posts)
+                        postMedia = emptyMap()
+                        hydratePostMedia(page.posts)
+                        discoveryOffset = 0
+                        discoveryHasMore = false
+                        shouldRevalidateCache = hadFreshCache
+                    }
+                    .onFailure {
+                        error = if (it.message?.contains("HTTP 404", true) == true) {
+                            "Your FYNX feed service is temporarily unavailable."
+                        } else {
+                            it.message ?: "Unable to load your feed."
                         }
                     }
+
+                if (shouldRevalidateCache) {
+                    // Keep the cached snapshot visible while refreshing it in the same request
+                    // lifecycle. The in-flight lock stays set until this bounded attempt settles.
+                    loading = false
+                    val refreshedPage = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS) {
+                        FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
+                    }
+                    refreshedPage?.onSuccess { fresh ->
+                        posts = fresh.posts
+                        hasMore = fresh.hasMore
+                        feedNextCursor = fresh.nextCursor
+                        error = null
+                        paginationError = null
+                        resolveAuthorPhotos(fresh.posts)
+                        hydrateInteractionStates(fresh.posts)
+                        hydrateReactionStates(fresh.posts)
+                        hydratePostMedia(fresh.posts)
+                    }
                 }
-                .onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }
-            loading = false
-            if (!cachedRevalidationStarted) feedRequestInFlight = false
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                error = failure.message ?: "Unable to load your feed."
+            } finally {
+                loading = false
+                feedRequestInFlight = false
+            }
         }
     }
 
@@ -378,10 +430,37 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         onInitialPostConsumed()
     }
 
-    fun loadMore() {
-        if (loading || loadingMore || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
+    fun loadMore(retry: Boolean = false) {
+        // Stop automatic pagination after a failed page. The error card below offers
+        // an explicit retry using the same continuation cursor instead of reloading page 1.
+        if (loading || loadingMore || !hasMore || feedRequestInFlight || (paginationError != null && !retry)) return
+        if (retry) paginationError = null
         feedRequestInFlight = true
-        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
+        scope.launch {
+            loadingMore = true
+            try {
+                FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor)
+                    .onSuccess { page ->
+                        val existing = posts.map { it.id }.toSet()
+                        val additions = page.posts.filterNot { it.id in existing }
+                        posts = posts + additions
+                        hasMore = page.hasMore
+                        feedNextCursor = page.nextCursor
+                        paginationError = null
+                        error = null
+                        resolveAuthorPhotos(additions)
+                        hydrateInteractionStates(additions)
+                        hydrateReactionStates(additions)
+                        hydratePostMedia(additions)
+                        if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset)
+                    }.onFailure { failure ->
+                        paginationError = failure.message ?: "Unable to load more posts."
+                    }
+            } finally {
+                loadingMore = false
+                feedRequestInFlight = false
+            }
+        }
     }
     fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, count: (FynxRemoteSocialClient.SocialInteractionState) -> Int, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
@@ -436,10 +515,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
-    LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
+    LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight, paginationError) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
             .collect { (lastVisibleIndex, totalItems) ->
-                if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight) {
+                if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight && paginationError == null) {
                     if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)
                 }
             }
@@ -479,9 +558,54 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LazyColumn(state = feedListState, modifier = modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { Text("Your feed", style = MaterialTheme.typography.titleMedium); Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall) }
-
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = FynxDesign.LargeCardShape,
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
+                border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .45f))
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier.size(40.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = .12f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    TextButton(
+                        onClick = onCreatePost,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            "What's on your mind?",
+                            modifier = Modifier.fillMaxWidth(),
+                            color = FynxDesign.TextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Start
+                        )
+                    }
+                    IconButton(
+                        onClick = onCreatePost,
+                        modifier = Modifier.semantics { contentDescription = "Create post" }
+                    ) {
+                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Create post")
+                    }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Your feed", style = MaterialTheme.typography.titleMedium)
+                    Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading Home feed" }) }
@@ -490,7 +614,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         posts.forEachIndexed { postIndex, post ->
             item(key = post.id) {
             val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]; val state = interactionStates[post.id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0); val reaction = reactionStates[post.id] ?: FynxHomePostReactionsClient.ReactionState(); val busy = post.id in interactionBusy || "follow:${post.authorUsername.removePrefix("@").trim().lowercase()}" in interactionBusy
-            RemotePostCard(post, currentUsername, photoId, activeStatusOwners.contains(post.authorUsername.removePrefix("@").trim().lowercase()), state, reaction, busy, postMedia[post.id].orEmpty(), playbackActive = focusedVideoPostId == post.id && !feedListState.isScrollInProgress, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onOpenStatus = { openAuthorStatus(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onOpenAudienceEditor = { audiencePost = post }, onReport = { reportPost = post }, onInterested = { id -> scope.launch { FynxDiscoveryClient.recordInterested(context, id) } }, onNotInterested = { id -> scope.launch { FynxDiscoveryClient.recordNotInterested(context, id) } }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenReactionUsers = { reactionUsersPostId = post.id }, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) }, onOpenMediaViewer = { items, index -> mediaViewerPost = post; mediaViewerItems = items; mediaViewerIndex = index })
+            RemotePostCard(post, currentUsername, photoId, activeStatusOwners.contains(post.authorUsername.removePrefix("@").trim().lowercase()), state, reaction, busy, postMedia[post.id].orEmpty(), playbackActive = focusedVideoPostId == post.id && !feedListState.isScrollInProgress, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onOpenStatus = { openAuthorStatus(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onOpenAudienceEditor = { audiencePost = post }, onReport = { reportReason = "Spam or misleading"; reportNotice = null; reportPost = post }, onInterested = { id -> scope.launch { FynxDiscoveryClient.recordInterested(context, id) } }, onNotInterested = { id -> scope.launch { FynxDiscoveryClient.recordNotInterested(context, id) } }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenReactionUsers = { reactionUsersPostId = post.id }, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) }, onOpenMediaViewer = { items, index -> mediaViewerPost = post; mediaViewerItems = items; mediaViewerIndex = index })
             if (post.id != posts.lastOrNull()?.id) {
                 HorizontalDivider(
                     modifier = Modifier.fillMaxWidth(),
@@ -536,9 +660,72 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 }
             }
         }
+        paginationError?.let { message ->
+            item(key = "feed_pagination_error") {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                        TextButton(onClick = { loadMore(retry = true) }, enabled = !loadingMore && !feedRequestInFlight) { Text("Retry loading posts") }
+                    }
+                }
+            }
+        }
         if (loadingMore) item(key = "feed_loading_more") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
     }
-    reportPost?.let { post -> AlertDialog(onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } }, title = { Text("Report post") }, text = { Text(reportNotice ?: "Report this post to FYNX for review.") }, confirmButton = { TextButton(enabled = !reportBusy, onClick = { reportBusy = true; reportNotice = "Sending report…"; scope.launch { FynxDiscoveryClient.recordEvent(context, "REPORT", postId = post.id, metadata = JSONObject().put("reason", "user_report")).onSuccess { reportNotice = "Report submitted."; reportBusy = false; delay(700L); reportPost = null; reportNotice = null }.onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false } } }) { Text("Report post") } }, dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }) }
+    reportPost?.let { post ->
+        val reportReasons = listOf(
+            "Spam or misleading",
+            "Harassment or hate",
+            "Violence or dangerous content",
+            "Nudity or sexual content",
+            "Scam or impersonation",
+            "Other"
+        )
+        AlertDialog(
+            onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } },
+            title = { Text("Report post") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(reportNotice ?: "Choose the reason that best describes this post.")
+                    if (reportNotice == null) {
+                        reportReasons.forEach { reason ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable(enabled = !reportBusy) { reportReason = reason }.padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = reportReason == reason, onClick = { reportReason = reason }, enabled = !reportBusy)
+                                Text(reason, Modifier.padding(start = 4.dp))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !reportBusy && reportNotice == null, onClick = {
+                    reportBusy = true
+                    reportNotice = "Sending report…"
+                    scope.launch {
+                        FynxSafetyRemoteClient.submitReport(
+                            context = context,
+                            targetUsername = post.authorUsername,
+                            reason = reportReason,
+                            details = "Post ID: ${post.id}. Reported from Home feed."
+                        ).onSuccess {
+                            reportNotice = "Report submitted to FYNX Safety for review."
+                            reportBusy = false
+                            delay(700L)
+                            reportPost = null
+                            reportNotice = null
+                        }.onFailure { failure ->
+                            reportNotice = failure.message ?: "Report could not be submitted."
+                            reportBusy = false
+                        }
+                    }
+                }) { Text("Submit report") }
+            },
+            dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }
+        )
+    }
     commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, initialCommentId = initialCommentId, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }) }
     reactionUsersPostId?.let { postId -> ReactionUsersDialog(context = context, postId = postId, onDismiss = { reactionUsersPostId = null }) }
     authorStatusViewer?.let { HomeAuthorStatusDialog(it, onDismiss = { authorStatusViewer = null }) }
@@ -779,7 +966,9 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                             DropdownMenuItem(text = { Text("I'm interested") }, onClick = { menuOpen = false; onInterested(post.id) })
                             DropdownMenuItem(text = { Text("Share post") }, onClick = { menuOpen = false; onShare() }, leadingIcon = { Icon(Icons.Default.Share, null) })
                             DropdownMenuItem(text = { Text("I'm not interested") }, onClick = { menuOpen = false; onNotInterested(post.id) })
-                            DropdownMenuItem(text = { Text("Report post") }, onClick = { menuOpen = false; onReport() })
+                            if (!post.authorUsername.removePrefix("@").trim().equals(currentUsername.removePrefix("@").trim(), ignoreCase = true)) {
+                                DropdownMenuItem(text = { Text("Report post") }, onClick = { menuOpen = false; onReport() })
+                            }
                         }
                     }
                 }
@@ -869,6 +1058,22 @@ private fun FynxFeedTextureVideo(
     val player = remember(file) { MediaPlayer() }
     var prepared by remember(file) { mutableStateOf(false) }
     var playing by remember(file) { mutableStateOf(false) }
+    var playbackFailed by remember(file) { mutableStateOf(false) }
+    var retryNonce by remember(file) { mutableIntStateOf(0) }
+
+    // Pause and detach the decoder synchronously before releasing its Surface wrapper.
+    // TextureView may destroy its SurfaceTexture before Compose disposes this effect.
+    DisposableEffect(surface) {
+        onDispose {
+            runCatching { if (player.isPlaying) player.pause() }
+            runCatching { player.setSurface(null) }
+            if (playing) {
+                playing = false
+                onPlayingChanged(false)
+            }
+            runCatching { surface?.release() }
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         AndroidView(
@@ -879,7 +1084,18 @@ private fun FynxFeedTextureVideo(
                     setSurfaceTextureListener(object : TextureView.SurfaceTextureListener {
                         override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) { textureState.value = texture }
                         override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) = Unit
-                        override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean { textureState.value = null; return true }
+                        override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean {
+                            // Detach while the texture is still valid; returning true lets
+                            // TextureView release it only after MediaPlayer no longer targets it.
+                            runCatching { if (player.isPlaying) player.pause() }
+                            runCatching { player.setSurface(null) }
+                            if (playing) {
+                                playing = false
+                                onPlayingChanged(false)
+                            }
+                            if (textureState.value === texture) textureState.value = null
+                            return true
+                        }
                         override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) = Unit
                     })
                 }
@@ -894,22 +1110,39 @@ private fun FynxFeedTextureVideo(
             }
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            FilledIconButton(
-                onClick = {
-                    if (!prepared) return@FilledIconButton
-                    runCatching {
-                        if (playing) { player.pause(); playing = false } else { player.start(); playing = true }
-                        onPlayingChanged(playing)
+            when {
+                playbackFailed -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Video couldn't be played", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                    IconButton(onClick = { retryNonce++ }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Default.Refresh, "Retry video", tint = Color.White)
                     }
-                },
-                modifier = Modifier.size(56.dp)
-            ) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video") }
+                }
+                !prepared -> CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
+                else -> FilledIconButton(
+                    onClick = {
+                        if (!prepared) return@FilledIconButton
+                        runCatching {
+                            if (playing) { player.pause(); playing = false } else { player.start(); playing = true }
+                            onPlayingChanged(playing)
+                        }.onFailure {
+                            playbackFailed = true
+                            prepared = false
+                            playing = false
+                            onPlayingChanged(false)
+                        }
+                    },
+                    modifier = Modifier.size(56.dp)
+                ) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video") }
+            }
         }
     }
 
-    LaunchedEffect(file, surface) {
+    LaunchedEffect(file, surface, retryNonce) {
+        prepared = false
+        playing = false
+        playbackFailed = false
+        onPlayingChanged(false)
         if (surface == null) return@LaunchedEffect
-        prepared = false; playing = false; onPlayingChanged(false)
         runCatching {
             player.reset()
             player.setDataSource(file.absolutePath)
@@ -921,22 +1154,51 @@ private fun FynxFeedTextureVideo(
                 if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
             player.setOnCompletionListener { playing = false; onPlayingChanged(false) }
-            player.setOnErrorListener { _, _, _ -> prepared = false; playing = false; onPlayingChanged(false); true }
+            player.setOnErrorListener { _, _, _ ->
+                prepared = false
+                playing = false
+                playbackFailed = true
+                onPlayingChanged(false)
+                true
+            }
             player.prepareAsync()
-        }.onFailure { prepared = false; playing = false; onPlayingChanged(false) }
+        }.onFailure {
+            prepared = false
+            playing = false
+            playbackFailed = true
+            onPlayingChanged(false)
+        }
     }
     LaunchedEffect(playbackActive, prepared) {
         if (!prepared) return@LaunchedEffect
         runCatching {
             if (playbackActive && !playing) { player.start(); playing = true; onPlayingChanged(true) }
             else if (!playbackActive && playing) { player.pause(); playing = false; onPlayingChanged(false) }
+        }.onFailure {
+            playbackFailed = true
+            prepared = false
+            playing = false
+            onPlayingChanged(false)
         }
     }
     LaunchedEffect(muted, prepared) {
         if (prepared) runCatching { player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f) }
     }
     DisposableEffect(file) {
-        onDispose { runCatching { player.stop() }; runCatching { player.release() }; textureState.value = null }
+        onDispose {
+            // Remove the output target before stop/release so the decoder cannot
+            // continue rendering into a SurfaceTexture that is being recycled.
+            runCatching { if (player.isPlaying) player.pause() }
+            runCatching { player.setSurface(null) }
+            runCatching { player.setOnPreparedListener(null) }
+            runCatching { player.setOnCompletionListener(null) }
+            runCatching { player.setOnErrorListener(null) }
+            runCatching { player.stop() }
+            runCatching { player.release() }
+            playing = false
+            onPlayingChanged(false)
+            textureState.value = null
+        }
     }
 }
 
@@ -1010,35 +1272,76 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     var fullscreenPlayer by remember(file) { mutableStateOf<MediaPlayer?>(null) }
                     var fullscreenPlaying by remember(file) { mutableStateOf(false) }
                     var fullscreenMuted by remember(file) { mutableStateOf(true) }
+                    var fullscreenVideoLoading by remember(file) { mutableStateOf(true) }
+                    var fullscreenVideoFailed by remember(file) { mutableStateOf(false) }
                     AndroidView(
                         factory = { ctx ->
                             FynxPassiveVideoView(ctx).apply {
                                 fullscreenVideoView = this
                                 layoutParams = ViewGroup.LayoutParams(-1, -1)
-                                setVideoPath(file!!.absolutePath)
                                 setOnPreparedListener { player ->
+                                    fullscreenVideoLoading = false
+                                    fullscreenVideoFailed = false
                                     fullscreenPlayer = player
                                     player.isLooping = true
                                     player.setVolume(0f, 0f)
                                     player.start()
                                     fullscreenPlaying = true
                                 }
+                                setOnErrorListener { _, _, _ ->
+                                    fullscreenVideoLoading = false
+                                    fullscreenVideoFailed = true
+                                    fullscreenPlaying = false
+                                    fullscreenPlayer = null
+                                    true
+                                }
                                 setOnCompletionListener { fullscreenPlaying = false }
+                                setVideoPath(file!!.absolutePath)
                             }
                         },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        onRelease = { view ->
+                            runCatching { view.pause() }
+                            runCatching { view.setOnPreparedListener(null) }
+                            runCatching { view.setOnCompletionListener(null) }
+                            runCatching { view.setOnErrorListener(null) }
+                            runCatching { view.stopPlayback() }
+                        }
                     )
-                    IconButton(
-                        onClick = {
-                            val view = fullscreenVideoView
-                            if (view != null) {
-                                if (fullscreenPlaying) { view.pause(); fullscreenPlaying = false }
-                                else { view.start(); fullscreenPlaying = true }
-                            }
-                        },
-                        modifier = Modifier.align(Alignment.Center).size(64.dp)
-                    ) {
-                        Icon(if (fullscreenPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (fullscreenPlaying) "Pause full-screen video" else "Play full-screen video", tint = Color.White, modifier = Modifier.size(42.dp))
+                    if (fullscreenVideoLoading && !fullscreenVideoFailed) {
+                        CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
+                    }
+                    if (fullscreenVideoFailed) {
+                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Video couldn't be played", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                            TextButton(
+                                onClick = {
+                                    val view = fullscreenVideoView
+                                    if (view != null) {
+                                        fullscreenVideoLoading = true
+                                        fullscreenVideoFailed = false
+                                        fullscreenPlaying = false
+                                        runCatching { view.stopPlayback(); view.setVideoPath(file!!.absolutePath) }
+                                            .onFailure { fullscreenVideoLoading = false; fullscreenVideoFailed = true }
+                                    }
+                                },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                            ) { Text("Retry video") }
+                        }
+                    }
+                    if (!fullscreenVideoLoading && !fullscreenVideoFailed) {
+                        IconButton(
+                            onClick = {
+                                val view = fullscreenVideoView
+                                if (view != null) {
+                                    if (fullscreenPlaying) { view.pause(); fullscreenPlaying = false }
+                                    else { view.start(); fullscreenPlaying = true }
+                                }
+                            },
+                            modifier = Modifier.align(Alignment.Center).size(64.dp)
+                        ) {
+                            Icon(if (fullscreenPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (fullscreenPlaying) "Pause full-screen video" else "Play full-screen video", tint = Color.White, modifier = Modifier.size(42.dp))
+                        }
                     }
                     IconButton(
                         onClick = {
@@ -1049,6 +1352,12 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     ) { Icon(if (fullscreenMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (fullscreenMuted) "Unmute full-screen video" else "Mute full-screen video", tint = Color.White) }
                     DisposableEffect(file) {
                         onDispose {
+                            // The full-screen VideoView owns its decoder: pause it and
+                            // clear callbacks before stopping playback during dialog teardown.
+                            runCatching { fullscreenVideoView?.pause() }
+                            runCatching { fullscreenVideoView?.setOnPreparedListener(null) }
+                            runCatching { fullscreenVideoView?.setOnCompletionListener(null) }
+                            runCatching { fullscreenVideoView?.setOnErrorListener(null) }
                             runCatching { fullscreenVideoView?.stopPlayback() }
                             fullscreenVideoView = null
                             fullscreenPlayer = null
@@ -1058,7 +1367,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                 } else {
                     var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
                     LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
-                    bitmap?.let { Image(it.asImageBitmap(), "Full screen post media", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                    bitmap?.let { Image(it.asImageBitmap(), "Full screen post media", Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
                 }
                 IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) { Icon(Icons.Default.Close, "Close media viewer", tint = Color.White) }
             }
@@ -1068,27 +1377,115 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
 
 private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
 
+private data class HomeAudioPlayback(
+    val player: MediaPlayer,
+    val prepared: Boolean,
+    val failed: Boolean,
+    val playing: Boolean,
+    val durationMs: Long,
+    val togglePlayback: () -> Unit
+)
+
+@Composable
+private fun rememberHomeAudioPlayback(file: File, knownDurationMs: Long = 0L): HomeAudioPlayback {
+    val player = remember(file) { MediaPlayer() }
+    var prepared by remember(file) { mutableStateOf(false) }
+    var failed by remember(file) { mutableStateOf(false) }
+    var playing by remember(file) { mutableStateOf(false) }
+    var durationMs by remember(file) { mutableLongStateOf(knownDurationMs.coerceAtLeast(0L)) }
+
+    DisposableEffect(player) {
+        prepared = false
+        failed = false
+        playing = false
+        player.setOnPreparedListener { preparedPlayer ->
+            durationMs = if (knownDurationMs > 0L) knownDurationMs else preparedPlayer.duration.toLong().coerceAtLeast(0L)
+            prepared = true
+        }
+        player.setOnCompletionListener { completedPlayer ->
+            playing = false
+            runCatching { completedPlayer.seekTo(0) }
+        }
+        player.setOnErrorListener { _, _, _ ->
+            prepared = false
+            playing = false
+            failed = true
+            true
+        }
+        try {
+            player.setDataSource(file.absolutePath)
+            player.prepareAsync()
+        } catch (_: Exception) {
+            prepared = false
+            failed = true
+        }
+        onDispose {
+            runCatching { player.setOnPreparedListener(null) }
+            runCatching { player.setOnCompletionListener(null) }
+            runCatching { player.setOnErrorListener(null) }
+            runCatching { player.release() }
+        }
+    }
+
+    val togglePlayback: () -> Unit = {
+        if (prepared && !failed) {
+            runCatching {
+                if (player.isPlaying) {
+                    player.pause()
+                    playing = false
+                } else {
+                    if (player.duration > 0 && player.currentPosition >= player.duration) player.seekTo(0)
+                    player.start()
+                    playing = true
+                }
+            }.onFailure {
+                failed = true
+                playing = false
+            }
+        }
+    }
+    return HomeAudioPlayback(player, prepared, failed, playing, durationMs, togglePlayback)
+}
+
 @Composable
 private fun MusicPostPlayer(mediaId: String, title: String, artist: String, durationMs: Long) {
     val context = LocalContext.current
     var file by remember(mediaId) { mutableStateOf<File?>(null) }
-    LaunchedEffect(mediaId) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio") } }
-    if (file != null) {
-        val player = remember(file) { MediaPlayer().apply { setDataSource(file!!.absolutePath); prepare() } }
-        var playing by remember(file) { mutableStateOf(false) }
-        DisposableEffect(player) {
-            player.setOnCompletionListener { playing = false; runCatching { player.seekTo(0) } }
-            onDispose { runCatching { player.release() } }
+    var loadFailed by remember(mediaId) { mutableStateOf(false) }
+    var retryNonce by remember(mediaId) { mutableIntStateOf(0) }
+    LaunchedEffect(mediaId, retryNonce) {
+        file = null
+        loadFailed = false
+        file = withContext(Dispatchers.IO) {
+            runCatching { FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio") }.getOrNull()
         }
+        loadFailed = file == null
+    }
+    if (file == null) {
         Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
             Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                    Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                Text(if (loadFailed) "Music unavailable" else "Loading music…", Modifier.weight(1f).padding(horizontal = 10.dp), style = MaterialTheme.typography.bodyMedium)
+                if (loadFailed) TextButton(onClick = { retryNonce++ }) { Text("Retry") } else CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
+        }
+    } else {
+        val audioFile = file!!
+        val playback = rememberHomeAudioPlayback(audioFile, durationMs)
+        Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
+            Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                        Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                        Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                    }
+                    Text(formatMusicDuration(playback.durationMs), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                    IconButton(enabled = playback.prepared && !playback.failed, onClick = playback.togglePlayback) {
+                        Icon(if (playback.playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playback.playing) "Pause music" else "Play music")
+                    }
                 }
-                Text(formatMusicDuration(durationMs.takeIf { it > 0 } ?: player.duration.toLong()), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
-                IconButton(onClick = { runCatching { if (player.isPlaying) { player.pause(); playing = false } else { if (player.currentPosition >= player.duration) player.seekTo(0); player.start(); playing = true } } }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause music" else "Play music") }
+                if (playback.failed) Text("This music couldn't be played.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -1101,25 +1498,9 @@ private fun formatMusicDuration(durationMs: Long): String {
 
 @Composable
 private fun AudioPostPlayer(file: File) {
-    val player = remember(file) {
-        MediaPlayer().apply {
-            setDataSource(file.absolutePath)
-            prepare()
-        }
-    }
-    var playing by remember(file) { mutableStateOf(false) }
-
-    DisposableEffect(player) {
-        player.setOnCompletionListener {
-            playing = false
-            runCatching { player.seekTo(0) }
-        }
-        onDispose {
-            runCatching { player.release() }
-        }
-    }
-
-    val durationSeconds = (player.duration / 1000).coerceAtLeast(0)
+    val playback = rememberHomeAudioPlayback(file)
+    val player = playback.player
+    val durationSeconds = (playback.durationMs / 1000L).toInt().coerceAtLeast(0)
 
     Surface(
         modifier = Modifier
@@ -1130,31 +1511,30 @@ private fun AudioPostPlayer(file: File) {
         color = MaterialTheme.colorScheme.secondaryContainer,
         tonalElevation = 0.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .heightIn(min = 82.dp)
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
+            var playbackProgress by remember(file) { mutableFloatStateOf(0f) }
+            var seeking by remember(file) { mutableStateOf(false) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             IconButton(
-                onClick = {
-                    runCatching {
-                        if (player.isPlaying) {
-                            player.pause()
-                            playing = false
-                        } else {
-                            if (player.currentPosition >= player.duration) player.seekTo(0)
-                            player.start()
-                            playing = true
-                        }
-                    }
-                },
+                enabled = playback.prepared && !playback.failed,
+                onClick = playback.togglePlayback,
                 modifier = Modifier.size(40.dp)
             ) {
                 Icon(
-                    imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (playing) "Pause voice note" else "Play voice note",
+                    imageVector = if (playback.playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (playback.playing) "Pause voice note" else "Play voice note",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -1162,7 +1542,6 @@ private fun AudioPostPlayer(file: File) {
             Spacer(Modifier.width(4.dp))
 
             val waveformHeights = listOf(12, 18, 24, 15, 28, 20, 32, 17, 25, 13, 22, 30, 18, 26, 15, 23, 12, 20)
-            var playbackProgress by remember(file) { mutableFloatStateOf(0f) }
             val waveTransition = rememberInfiniteTransition(label = "voice_wave")
             val wavePhase by waveTransition.animateFloat(
                 initialValue = 0f,
@@ -1170,41 +1549,55 @@ private fun AudioPostPlayer(file: File) {
                 animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart),
                 label = "voice_wave_phase"
             )
-            LaunchedEffect(playing, player) {
-                while (playing) {
+            LaunchedEffect(playback.playing, playback.prepared, playback.failed, player, seeking) {
+                if (!playback.prepared || playback.failed) {
+                    if (!seeking) playbackProgress = 0f
+                    return@LaunchedEffect
+                }
+                while (playback.playing && playback.prepared && !playback.failed && !seeking) {
                     playbackProgress = if (player.duration > 0) {
                         (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
                     } else 0f
-                    delay(50L)
+                    delay(80L)
                 }
-                playbackProgress = if (player.duration > 0) {
-                    (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
-                } else 0f
+                if (!seeking) {
+                    playbackProgress = if (playback.prepared && !playback.failed && player.duration > 0) {
+                        (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
+                    } else 0f
+                }
             }
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(38.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                waveformHeights.forEachIndexed { index, baseHeight ->
-                    val distance = kotlin.math.abs(index - wavePhase)
-                    val pulse = if (playing) (kotlin.math.sin((index + wavePhase) * 0.72f) + 1f) * 0.18f else 0f
-                    val height = (baseHeight * (0.82f + pulse)).coerceIn(7f, 34f)
-                    val passed = index < playbackProgress * waveformHeights.size
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height(height.dp)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(
-                                if (passed || (playing && distance < 0.9f))
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
-                            )
-                    )
+            if (playback.failed) {
+                Text("Voice note unavailable", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+            } else if (!playback.prepared) {
+                Box(Modifier.weight(1f).height(38.dp), contentAlignment = Alignment.CenterStart) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    waveformHeights.forEachIndexed { index, baseHeight ->
+                        val distance = kotlin.math.abs(index - wavePhase)
+                        val pulse = if (playback.playing) (kotlin.math.sin((index + wavePhase) * 0.72f) + 1f) * 0.18f else 0f
+                        val height = (baseHeight * (0.82f + pulse)).coerceIn(7f, 34f)
+                        val passed = index < playbackProgress * waveformHeights.size
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(height.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .background(
+                                    if (passed || (playback.playing && distance < 0.9f))
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
+                                )
+                        )
+                    }
                 }
             }
 
@@ -1215,12 +1608,31 @@ private fun AudioPostPlayer(file: File) {
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
             ) {
                 Text(
-                    text = "${durationSeconds}s",
+                    text = if (playback.prepared) "${durationSeconds}s" else if (playback.failed) "!" else "…",
                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = if (playback.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                 )
             }
+        }
+            Slider(
+                value = playbackProgress.coerceIn(0f, 1f),
+                onValueChange = { value ->
+                    seeking = true
+                    playbackProgress = value
+                },
+                onValueChangeFinished = {
+                    if (playback.durationMs > 0L) {
+                        runCatching {
+                            player.seekTo((playback.durationMs * playbackProgress).toLong().coerceIn(0L, playback.durationMs).toInt())
+                        }.onFailure { seeking = false }
+                    }
+                    seeking = false
+                },
+                valueRange = 0f..1f,
+                enabled = playback.prepared && !playback.failed && playback.durationMs > 0L,
+                modifier = Modifier.fillMaxWidth().height(24.dp).padding(horizontal = 12.dp)
+            )
         }
     }
 }

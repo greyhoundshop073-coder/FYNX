@@ -203,5 +203,30 @@ object FynxBackendClient {
     private fun migrateLegacyAccessToken(context: Context): String? { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val legacy = prefs.getString(LEGACY_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() } ?: return null; return runCatching { FynxSecureTokenStore.save(context, legacy); prefs.edit().remove(LEGACY_ACCESS_TOKEN).apply(); legacy }.getOrNull() }
     private class FynxNetworkUnavailableException : IOException("FYNX network connection is unavailable")
     private class FynxUnauthorizedException : IOException("FYNX session expired")
-    private class FynxHttpException(val status: Int, body: String) : IOException("FYNX backend returned HTTP $status${body.takeIf { it.isNotBlank() }?.let { ": ${it.take(600)}" } ?: ""}")
+
+    /**
+     * Keep raw gateway/proxy JSON out of user-facing error labels while preserving
+     * the HTTP status for retry and feed-state decisions. The Railway platform 404
+     * is a deployment outage, not a useful message to display verbatim.
+     */
+    private fun safeHttpErrorMessage(status: Int, body: String): String {
+        val trimmed = body.trim()
+        val serverMessage = runCatching {
+            JSONObject(trimmed).optString("message").trim()
+        }.getOrDefault("")
+        return when {
+            status == HttpURLConnection.HTTP_NOT_FOUND &&
+                serverMessage.equals("Application not found", ignoreCase = true) ->
+                "The FYNX service is temporarily unavailable."
+            serverMessage.isNotBlank() -> serverMessage.take(180)
+            status in 500..599 -> "The FYNX service is temporarily unavailable."
+            trimmed.isNotBlank() && !trimmed.startsWith("{") &&
+                !trimmed.startsWith("<") -> trimmed.take(180)
+            else -> "The request could not be completed."
+        }
+    }
+
+    private class FynxHttpException(val status: Int, body: String) : IOException(
+        "FYNX backend returned HTTP $status: ${FynxBackendClient.safeHttpErrorMessage(status, body)}"
+    )
 }

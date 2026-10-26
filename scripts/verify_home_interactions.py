@@ -53,6 +53,13 @@ for needle in ('post.mediaUrl?.let','RemoteSocialMedia','VideoView','rememberLaz
 if 'MediaController' in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy Android MediaController must not compete with FYNX feed controls")
 require(home, 'LazyColumn(state = feedListState', "single feed state owns vertical scrolling")
+require_normalized(home, 'Text("What\'s on your mind?",', "Home keeps a persistent create-post entry ahead of loading/error/empty states")
+require(home, 'contentDescription = "Create post"', "Home create-post media action remains accessible")
+create_post_entry = home.index("What's on your mind?")
+feed_header_entry = home.index('item(key = "feed_header")')
+feed_loading_entry = home.index('if (loading) item(key = "feed_loading")')
+if not (feed_header_entry < create_post_entry < feed_loading_entry):
+    raise SystemExit("HOME INTERACTIONS RED: persistent create-post entry must appear in the feed header before loading/error/empty-state handling")
 require(home, 'snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }', "automatic near-bottom feed pagination")
 for needle in ('onOpenAuthorProfile','FynxRemoteSocialClient.follow','FynxDiscoveryClient.recordEngagement','Intent.ACTION_SEND'):
     require(home, needle, f"identity/share behavior {needle}")
@@ -149,6 +156,21 @@ if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
     raise SystemExit("HOME INTERACTIONS RED: OpenAI API key must never be present in Android client code")
 
 app_source = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
+home_topbar_start = app_source.find('if (selected == "Home") {', app_source.find("topBar = {"))
+home_topbar_end = app_source.find('} else if (selected == "Friends") {', home_topbar_start)
+home_topbar = app_source[home_topbar_start:home_topbar_end] if home_topbar_start >= 0 and home_topbar_end > home_topbar_start else ""
+brand_position = home_topbar.find('Text("FYNX",')
+connection_branch_position = home_topbar.find('if (appConnectionState == FynxAppConnectionManager.State.CONNECTED)')
+waiting_branch_position = home_topbar.find('FynxAppConnectionManager.State.WAITING_FOR_NETWORK')
+connecting_branch_position = home_topbar.find('FynxAppConnectionManager.State.CONNECTING')
+if connection_branch_position < 0 or brand_position < connection_branch_position:
+    raise SystemExit("HOME INTERACTIONS RED: connected state must show FYNX branding and verification")
+if waiting_branch_position < 0 or '"Waiting for network..."' not in home_topbar:
+    raise SystemExit("HOME INTERACTIONS RED: waiting-for-network state must display the intended waiting message")
+if connecting_branch_position < 0 or '"Connecting" + ".".repeat(connectingDotCount)' not in home_topbar:
+    raise SystemExit("HOME INTERACTIONS RED: connecting state must display the animated Connecting... message")
+if '"Offline"' in home_topbar:
+    raise SystemExit("HOME INTERACTIONS RED: do not replace the intended waiting/connecting states with a generic Offline label")
 remote_media = read("app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt")
 require(app_source, "import androidx.compose.foundation.clickable", "Home profile controls import Compose clickable extension")
 require(app_source, "allowImagePreview = false", "Home header avatar taps navigate to Profile instead of opening the avatar image")

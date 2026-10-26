@@ -4,6 +4,9 @@ from pathlib import Path
 client = Path("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()
 home = Path("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text()
 routes = Path("backend/socialRoutes.js").read_text()
+reload_start = home.index("fun reload(forceRefresh: Boolean = false)")
+reload_end = home.index("\n    LaunchedEffect(publishRefreshKey)", reload_start)
+reload = home[reload_start:reload_end]
 
 checks = [
     ("feed page exposes a continuation cursor", "val nextCursor: String? = null" in client),
@@ -18,6 +21,16 @@ checks = [
     ("feed cache is not shared through HTTP", "Cache-Control', 'private, no-store'" in routes),
     ("matching feed index exists", "social_posts_created_id_idx" in routes),
 ]
+checks.extend([
+    ("failed next-page requests stop automatic re-fetch loops", "var paginationError by remember" in home and "paginationError == null" in home and "paginationError != null && !retry" in home),
+    ("next-page retry keeps the existing continuation cursor", "fun loadMore(retry: Boolean = false)" in home and "beforeCursor = feedNextCursor" in home),
+    ("Home presents a dedicated cursor-preserving pagination retry", 'item(key = "feed_pagination_error")' in home and 'loadMore(retry = true)' in home and 'Text("Retry loading posts")' in home),
+    ("initial Home feed request has a bounded deadline", "private const val HOME_FEED_REQUEST_TIMEOUT_MS = 18_000L" in home and "withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS)" in home),
+    ("timeout exposes a retryable error without erasing loaded posts", "Your feed is taking too long to load. Check your connection and retry." in home and "Could not refresh the feed. Showing the posts already loaded." in home),
+    ("Home feed always clears loading and request lock in finally", "finally {" in reload and "loading = false\n                feedRequestInFlight = false" in reload),
+    ("cancelled feed requests are rethrown after state cleanup", "catch (cancelled: kotlinx.coroutines.CancellationException)" in reload and "throw cancelled" in reload),
+    ("cached feed revalidation is bounded in the owning request lifecycle", "val refreshedPage = withTimeoutOrNull(HOME_FEED_REQUEST_TIMEOUT_MS)" in reload and reload.count("scope.launch") == 1),
+])
 for name, ok in checks:
     if not ok:
         raise SystemExit(f"Home feed correctness gate FAILED: {name}")
