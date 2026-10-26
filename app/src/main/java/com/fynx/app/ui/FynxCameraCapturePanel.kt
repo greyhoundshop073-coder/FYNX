@@ -127,6 +127,9 @@ fun FynxCameraCapturePanel(
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
 
+    val captureReady = hasCamera && boundMode == mode && cameraControl != null &&
+        (if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null)
+
     LaunchedEffect(recording != null, recordingStartedAt) { while (recording != null) { recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L); delay(200L) } }
     LaunchedEffect(recording, recordingStartedAt, videoNoteMode) {
         if (recording != null && videoNoteMode) {
@@ -134,7 +137,21 @@ fun FynxCameraCapturePanel(
             recording?.stop()
         }
     }
-    LaunchedEffect(showCaptureControls, pendingUri, recording, cameraControl, hasCamera) { if (showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0 && cameraControl != null && hasCamera) { delay(5000L); showCaptureControls = false } }
+    LaunchedEffect(showCaptureControls, pendingUri, recording, captureReady, timerCountingDown) {
+        // Keep the capture controls on screen while CameraX is still binding. Hiding
+        // them based on cameraControl alone can remove the only way to observe/retry
+        // a capture whose active mode-specific use case is not ready yet.
+        if (showCaptureControls && pendingUri == null && recording == null &&
+            timerCountingDown == 0 && captureReady
+        ) {
+            delay(5000L)
+            if (showCaptureControls && pendingUri == null && recording == null &&
+                timerCountingDown == 0 && captureReady
+            ) {
+                showCaptureControls = false
+            }
+        }
+    }
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
         val generation = bindGeneration + 1; bindGeneration = generation
@@ -223,8 +240,6 @@ fun FynxCameraCapturePanel(
 
     if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
-    val captureReady = hasCamera && boundMode == mode && cameraControl != null &&
-        (if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null)
     if(previewUri!=null && previewType!=null){
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())

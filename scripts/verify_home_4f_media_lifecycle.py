@@ -63,6 +63,10 @@ required_camera_readiness = {
         and "boundMode = mode" in camera_capture,
     "capture control is disabled before CameraX is ready":
         "FilledIconButton(enabled = captureReady || recording != null, onClick={" in camera_capture,
+    "camera controls do not auto-hide before the active capture use case is ready":
+        "LaunchedEffect(showCaptureControls, pendingUri, recording, captureReady, timerCountingDown)" in camera_capture
+        and "timerCountingDown == 0 && captureReady" in camera_capture
+        and "timerCountingDown == 0 && cameraControl != null && hasCamera" not in camera_capture,
     "user sees an explicit camera startup state":
         'Text("Starting camera…"' in camera_capture,
 }
@@ -318,6 +322,7 @@ for token, label in (
     ('record = find_enabled_control(current, ["Record video note"])', "video recording action must be enabled before tapping"),
     ('stop = find_enabled_control(current, ["Stop video note"])', "video stop action must be enabled before tapping"),
     ('authenticated-camera-photo-action-ready-', "photo readiness hierarchy is captured while waiting"),
+    ('"tap", "40", "600"', "camera readiness polling restores auto-hidden capture controls through the real preview"),
     ('["Record video note"]', "video capture action"),
     ('["Stop video note"]', "video stop/finalization action"),
     ('["Retake"]', "photo/video retake actions"),

@@ -970,13 +970,36 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
         current, permission_used = allow_camera_or_audio_permission(current)
         photo_button = find_enabled_control(current, ["Take photo"])
         if photo_button is None:
+            # The real camera screen intentionally lets controls fade away after use.
+            # Bring them back through the preview surface before concluding that the
+            # capture action never became ready. This keeps the test testing CameraX,
+            # not a hidden control row.
+            if not permission_used:
+                run("adb", "shell", "input", "tap", "40", "600")
+                time.sleep(.2)
+                current = dump_ui(f"authenticated-camera-photo-controls-restored-{photo_ready_attempt}.xml")
+                current, permission_used = allow_camera_or_audio_permission(current)
+                photo_button = find_enabled_control(current, ["Take photo"])
+        if photo_button is None:
             time.sleep(.4)
 
     if photo_button is None:
+        # Force a final, fresh hierarchy with controls requested so the failure
+        # report distinguishes a genuinely disabled capture from an auto-hidden row.
+        run("adb", "shell", "input", "tap", "40", "600")
+        time.sleep(.3)
+        current = dump_ui("authenticated-camera-photo-bind-timeout.xml")
         screenshot("authenticated-camera-photo-button-missing.png")
+        has_action = find_control(current, ["Take photo"]) is not None
+        is_starting = find_control(current, ["Starting camera…"]) is not None
+        if is_starting:
+            reason = "CameraX did not make the active ImageCapture use case ready within 25 seconds"
+        elif has_action:
+            reason = "Take photo remained disabled after CameraX readiness wait"
+        else:
+            reason = "camera capture controls could not be restored for the final readiness check"
         FAILURES.append(
-            "camera capture runtime: Take photo stayed disabled until the CameraX capture use case became ready; "
-            "camera permission or ImageCapture binding did not settle; visible markers: "
+            "camera capture runtime: " + reason + "; visible markers: "
             + visible_marker_summary(current)
         )
         return current
