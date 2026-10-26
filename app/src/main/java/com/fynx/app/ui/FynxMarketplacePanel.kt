@@ -465,10 +465,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 onValueChange = { query = it.take(80) },
                 onCart = { showCart = true },
                 cartCount = cartQuantities.values.sum().coerceAtLeast(0),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
+                modifier = Modifier.fillMaxWidth().fynxHeaderGlass().padding(horizontal = 16.dp, vertical = 2.dp)
             )
             Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 1.dp),
+                modifier = Modifier.fillMaxWidth().fynxHeaderGlass().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {

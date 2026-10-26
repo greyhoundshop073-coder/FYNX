@@ -719,7 +719,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(18.dp))
+                    .fynxHeaderGlass()
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
