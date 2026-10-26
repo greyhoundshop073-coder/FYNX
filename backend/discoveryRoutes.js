@@ -126,7 +126,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const category = cleanText(req.query?.category, 40);
       const location = cleanText(req.query?.location, 160);
       const params = [req.user.sub];
-      const where = ["l.active=TRUE", "l.quantity - COALESCE(l.reserved_quantity, 0) > 0", "l.seller_id<>$1", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
+      const where = ["l.active=TRUE", "l.quantity - COALESCE(l.reserved_quantity, 0) > 0", "l.seller_id<>$1", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$1))", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
       if (q) { params.push(`%${q}%`); const n=params.length; where.push(`(l.title ILIKE $${n} OR l.description ILIKE $${n} OR COALESCE(l.category,'') ILIKE $${n} OR COALESCE(l.store_name,'') ILIKE $${n} OR u.username ILIKE $${n} OR u.display_name ILIKE $${n})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=$${params.length}`); }
       if (location) { params.push(`%${location}%`); where.push(`l.location ILIKE $${params.length}`); }
@@ -157,9 +157,9 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.active,l.created_at
         FROM marketplace_listings l
         JOIN users u ON u.id=l.seller_id
-        WHERE l.id=$1 AND UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')
+        WHERE l.id=$1 AND UPPER(COALESCE(l.currency,'')) IN ('NGN','USD') AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$2))
         LIMIT 1
-      `, [listingId]);
+      `, [listingId, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: "listing not found" });
       const row = result.rows[0];
       if (!row.active || Number(row.available_quantity) <= 0) return res.status(404).json({ error: "listing unavailable" });
