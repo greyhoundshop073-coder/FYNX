@@ -81,12 +81,15 @@ required_camera_readiness = {
     "camera shutter exposes its label on the actual clickable button":
         '.semantics(mergeDescendants = true) { contentDescription = if (recording != null) "Stop video note"' in camera_capture
         and "contentDescription = null" in camera_capture,
-    "photo-save progress prevents auto-hide until preview or error":
-        "timerCountingDown == 0 && captureReady && !photoCaptureInFlight" in camera_capture
+    "photo-save progress remains visible and has a bounded timeout":
+        "LaunchedEffect(photoCaptureInFlight)" in camera_capture
+        and "Photo capture timed out. Please try again." in camera_capture
+        and "if (photoCaptureInFlight)" in camera_capture
         and "CircularProgressIndicator(" in camera_capture,
-    "camera controls do not auto-hide before CameraX is ready or during photo capture":
-        "showCaptureControls, pendingUri, recording, captureReady, timerCountingDown, photoCaptureInFlight" in camera_capture
-        and "timerCountingDown == 0 && captureReady && !photoCaptureInFlight" in camera_capture
+    "live camera controls stay visible instead of racing an idle-hide timer":
+        "delay(5000L)" not in camera_capture
+        and "showCaptureControls = false" not in camera_capture.split("fun capturePhotoNow()", 1)[0]
+        and "captureReady && !photoCaptureInFlight" in camera_capture
         and "timerCountingDown == 0 && cameraControl != null && hasCamera" not in camera_capture,
     "user sees an explicit camera startup state":
         'Text("Starting camera…"' in camera_capture,
