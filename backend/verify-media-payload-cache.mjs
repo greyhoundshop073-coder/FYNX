@@ -44,7 +44,7 @@ assert.match(serverSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPa
 assert.match(marketplaceSource, /import \{ getCachedMediaPayload \} from '\.\/mediaPayloadCache\.js';/);
 assert.match(socialSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
 assert.match(aiSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
-const aiImageLoader = route(aiSource, "async function loadImageInputs", "\\n}\\n\\nexport function registerFynxAiConversationRoutes");
+const aiImageLoader = route(aiSource, "async function loadImageInputs", "\n}\n\nexport function registerFynxAiConversationRoutes");
 assert.match(aiImageLoader, /SELECT id,mime_type FROM message_media/);
 assert.doesNotMatch(aiImageLoader, /SELECT id,mime_type,data/);
 assert.ok(aiImageLoader.indexOf("WHERE owner_id=$1") < aiImageLoader.indexOf("getCachedMediaPayload"));
