@@ -39,7 +39,7 @@ check("all production feed/profile captions use the shared expandable component"
 check("only the current user's audience icon is interactive", 'if (post.authorUsername.equals(currentUsername.removePrefix("@"), true)) IconButton' in home)
 check("connection manager distinguishes network, connecting and connected", 'WAITING_FOR_NETWORK' in connection and 'CONNECTING' in connection and 'CONNECTED' in connection)
 check("connected state requires successful FYNX backend health", 'FynxBackendClient.health(appContext).isSuccess' in connection and '_state.value = State.CONNECTED' in connection)
-check("header text matches the required three states", '"Waiting for network..."' in app and '"Connecting" + ".".repeat(connectingDotCount)' in app and 'Text("FYNX"' in app and 'Icons.Default.Verified' in app)
+check("Home header keeps FYNX branding while exposing connection state separately", 'Text("FYNX"' in app and 'Icons.Default.Verified' in app and '"Offline"' in app and '"Connecting"' in app and 'color = MaterialTheme.colorScheme.surfaceVariant' in app and '"Waiting for network..."' not in app and '"Connecting" + ".".repeat(connectingDotCount)' not in app)
 
 check("main push has the full static/unit/lint Android build", 'on:\n  push:' in workflow and './gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon' in workflow)
 # The workflow intentionally uses a commit-named file and commit-named artifact.
