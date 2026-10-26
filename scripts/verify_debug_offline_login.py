@@ -2,9 +2,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
+app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = {
+    "development APK opens directly into the app without a live backend token": "val isDebugBuild = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0" in app and "isDebugBuild -> AuthSession(" in app and 'stored.username?.takeIf { it.isNotBlank() } ?: "fynx"' in app,
+    "debug inspection identity is persisted for panels using the local auth store": "Persist the debug-only local inspection identity" in app and "FynxAuthStore.save(context, authSession.username?.takeIf { it.isNotBlank() } ?: \"fynx\")" in app,
+    "release builds keep the real access-token authentication gate": "stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context) -> stored" in app and "if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN)" in app,
     "debug login requires an Android debuggable build": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
     "saved-device login is immediate and does not wait for the backend": "val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)" in auth and "FynxAuthStore.save(context, savedLocalUsername)" in auth,
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
