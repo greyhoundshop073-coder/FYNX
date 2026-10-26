@@ -45,6 +45,19 @@ package_json = read("backend/package.json")
 # 0. Runtime crash regression: both conversation composables are created while
 # entering their screens. PickMultipleVisualMedia rejects maxItems <= 1 at
 # construction time, so a one-item gallery must use the single-item contract.
+# The message composer stores one attachment per outgoing message. Do not expose a
+# multi-select file picker while the callback only stages/sends a single URI.
+forbid(
+    conversation,
+    r"ActivityResultContracts\.OpenMultipleDocuments\s*\(\s*\)",
+    "Private Chat file picker must not allow multi-select while the composer only accepts one attachment",
+)
+require(
+    conversation,
+    r"ActivityResultContracts\.OpenDocument\s*\(\s*\)",
+    "Private Chat file picker must return one attachment consistent with the composer contract",
+)
+
 for panel, label in ((conversation, "Private Chat"), (groups, "Group Chat")):
     forbid(
         panel,
