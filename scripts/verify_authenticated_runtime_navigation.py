@@ -1096,9 +1096,12 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
     _, rx, ry = retake
     run("adb", "shell", "input", "tap", str(rx), str(ry))
     current = wait_for_live_camera("authenticated-camera-after-photo-retake-live", 20.0)
-    if not find_control(current, ["Live camera preview"]):
+    photo_live_action = find_enabled_control(current, ["Take photo"])
+    if (photo_live_action is None
+            or find_control(current, ["Retake"])
+            or find_control(current, ["Edit photo"])):
         screenshot("authenticated-camera-after-photo-retake-missing.png")
-        FAILURES.append("camera capture runtime: Retake left the captured photo preview open")
+        FAILURES.append("camera capture runtime: photo Retake did not restore an enabled live capture action")
         return current
     current, photo_ready = make_capture_button_available(
         current, "authenticated-camera-after-photo-retake"
@@ -1181,9 +1184,12 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
     _, rx, ry = retake
     run("adb", "shell", "input", "tap", str(rx), str(ry))
     current = wait_for_live_camera("authenticated-camera-after-video-retake-live", 20.0)
-    if not find_control(current, ["Live camera preview"]):
+    live_capture_action = find_enabled_control(current, ["Take photo", "Record video note"])
+    if (live_capture_action is None
+            or find_control(current, ["Retake"])
+            or find_control(current, ["Edit photo"])):
         screenshot("authenticated-camera-after-video-retake-missing.png")
-        FAILURES.append("camera capture runtime: video Retake left the captured preview open")
+        FAILURES.append("camera capture runtime: video Retake did not restore an enabled live capture action")
         return current
     current, video_ready = make_capture_button_available(
         current, "authenticated-camera-after-video-retake"
