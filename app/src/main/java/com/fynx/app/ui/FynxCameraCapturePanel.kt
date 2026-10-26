@@ -339,7 +339,7 @@ fun FynxCameraCapturePanel(
         };return
     }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).clickable { if (recording == null) showCaptureControls = true }.semantics { contentDescription = "Live camera preview" }){
-        AndroidView(factory={previewView},modifier=Modifier.fillMaxSize())
+        AndroidView(factory={previewView},modifier=Modifier.fillMaxSize().semantics { contentDescription = "Live camera preview" })
         // AndroidView's PreviewView can consume touch events before they reach the
         // parent Box. When idle controls have faded, put a real hit target *above*
         // the camera surface so tapping the preview reliably restores the controls.
