@@ -113,6 +113,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             }
         )
     }
+    // Persist the debug-only local inspection identity so Home, Status, camera and
+    // other panels that read FynxAuthStore share the same local session after startup.
+    // Never create a token or weaken the release authentication path.
+    LaunchedEffect(authSession.state, authSession.username) {
+        val isDebugBuild = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (isDebugBuild && authSession.state == AuthState.SIGNED_IN &&
+            !FynxBackendClient.hasAccessToken(context)
+        ) {
+            FynxAuthStore.save(context, authSession.username?.takeIf { it.isNotBlank() } ?: "fynx")
+        }
+    }
     var adminRole by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var remoteUnreadCount by remember { mutableIntStateOf(-1) }
