@@ -193,12 +193,26 @@ fun FynxMatureStatusComposerPanel(
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true; error = null }, onError = { message -> error = message }) else error = "Microphone permission is required for a voice Status."
     }
+
+    // Back/X while recording finishes a preview instead of destroying the draft or leaking the recorder.
+    fun finishVoiceRecordingToPreview() {
+        if (!recording) return
+        stopMatureVoiceRecording(recorder, recordingFile) { uri, message ->
+            if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."
+            recorder = null
+            recordingFile = null
+            recording = false
+            recordingPaused = false
+            accumulatedRecordingMs = 0L
+            type = FynxStatusType.VOICE
+        }
+    }
     LaunchedEffect(recording, recordingStarted, recordingPaused) {
         while (recording) {
             if (!recordingPaused) {
                 elapsed = accumulatedRecordingMs + (System.currentTimeMillis() - recordingStarted).coerceAtLeast(0L)
                 if (elapsed >= FYNX_STATUS_MAX_VOICE_DURATION_MS) {
-                    stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; recordingPaused = false; accumulatedRecordingMs = 0L; type = FynxStatusType.VOICE }
+                    finishVoiceRecordingToPreview()
                 }
             }
             delay(200)
@@ -219,8 +233,9 @@ fun FynxMatureStatusComposerPanel(
 
     // Android system Back must behave like the visible close control on every composer mode.
     // During publishing, ignore Back so an in-flight upload is not abandoned accidentally.
-    BackHandler(enabled = !publishing && !recording) {
+    BackHandler(enabled = !publishing) {
         when {
+            recording -> finishVoiceRecordingToPreview()
             showStatusEmoji -> showStatusEmoji = false
             audienceMenu -> audienceMenu = false
             showColors -> showColors = false
@@ -313,7 +328,7 @@ fun FynxMatureStatusComposerPanel(
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
-                    onClick = { if (!publishing) onClose() },
+                    onClick = { if (!publishing) { if (recording) finishVoiceRecordingToPreview() else onClose() } },
                     enabled = !publishing,
                     modifier = Modifier.size(44.dp)
                 ) {
@@ -608,7 +623,7 @@ fun FynxMatureStatusComposerPanel(
                                     }, enabled = !publishing) {
                                         Text(if (recordingPaused) "Resume" else "Pause")
                                     }
-                                    FilledTonalButton(onClick = { stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; recordingPaused = false; accumulatedRecordingMs = 0L } }) {
+                                    FilledTonalButton(onClick = { finishVoiceRecordingToPreview() }) {
                                         Icon(Icons.Default.Stop, "Stop")
                                         Spacer(Modifier.width(6.dp))
                                         Text("Stop • ${formatMatureTime(elapsed)}")
