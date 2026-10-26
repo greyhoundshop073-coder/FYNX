@@ -193,7 +193,7 @@ require(app_source, 'if (notificationPreferencesOnly) notificationPreferencesOnl
 require(app_source, 'IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" })', "Home notification entry clears stale Profile-only notification context")
 require(app_source, 'navigationHistory = (navigationHistory.dropLast(1).filterNot { it == selected } + selected).ifEmpty { listOf("Home") }', "system Back keeps contextual destinations aligned with navigation history")
 require(app_source, 'if (!isKeyboardVisible && selected in mainNav.map { it.key })', "bottom navigation is available on every primary tab")
-require(app_source, 'visible = selected != "Home" || !homeChromeHidden', "Home scroll hiding does not hide navigation on other tabs")
+require(app_source, 'visible = selected != "Home" || statusCreatorRequested || !homeChromeHidden', "Home scrolling cannot hide the existing bottom navigation while Status creator is active")
 money_center = read("app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt")
 budget = read("app/src/main/java/com/fynx/app/ui/BudgetPlannerPanel.kt")
 require(app_source, '"AI Creation" -> { selected = "AI" }', "AI Creation central route")
