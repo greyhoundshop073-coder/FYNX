@@ -48,6 +48,15 @@ assert.ok(discovery.includes("l.quantity - COALESCE(l.reserved_quantity, 0) > 0"
   && discovery.includes("AS available_quantity")
   && discovery.includes("Number(row.available_quantity) <= 0"),
   "Marketplace discovery and product details must enforce available stock consistently");
+assert.ok(discovery.includes("to_regclass('marketplace_orders') IS NOT NULL AS ready")
+  && discovery.includes("const orderScoreSql = orderTableReady")
+  && discovery.includes(': "0";'),
+  "Marketplace discovery must work before the first order initializes the orders table");
+const exactListingStart = discovery.indexOf('app.get("/api/marketplace/listing/:id"');
+const exactListingEnd = discovery.indexOf("\\n  });", exactListingStart);
+assert.ok(exactListingStart >= 0 && exactListingEnd > exactListingStart
+  && discovery.slice(exactListingStart, exactListingEnd).includes("await ensureSchema();"),
+  "direct product-detail deep links must initialize the shared Marketplace schema");
 assert.ok(discovery.includes("b.blocker_id=$1 AND b.blocked_id=l.seller_id")
   && discovery.includes("b.blocker_id=l.seller_id AND b.blocked_id=$1")
   && discovery.includes("[listingId, req.user.sub]"),
