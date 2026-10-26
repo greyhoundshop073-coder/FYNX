@@ -3,12 +3,13 @@ import { readFile } from "node:fs/promises";
 import { getCachedMediaPayload, getMediaPayloadCacheStats } from "./mediaPayloadCache.js";
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [cacheSource, serverSource, marketplaceSource, socialSource, socialBootstrap] = await Promise.all([
+const [cacheSource, serverSource, marketplaceSource, socialSource, socialBootstrap, aiSource] = await Promise.all([
   read("./mediaPayloadCache.js"),
   read("./server.js"),
   read("./marketplaceCompletion.js"),
   read("./socialRoutes.js"),
-  read("./socialMultiMediaBootstrap.js")
+  read("./socialMultiMediaBootstrap.js"),
+  read("./aiConversationRoutes.js")
 ]);
 
 assert.match(cacheSource, /MAX_CACHE_BYTES\s*=\s*32\s*\*\s*1024\s*\*\s*1024/);
@@ -42,6 +43,11 @@ assert.doesNotMatch(socialBootstrap, /SELECT mm\.mime_type, mm\.data/);
 assert.match(serverSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
 assert.match(marketplaceSource, /import \{ getCachedMediaPayload \} from '\.\/mediaPayloadCache\.js';/);
 assert.match(socialSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
+assert.match(aiSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
+const aiImageLoader = route(aiSource, "async function loadImageInputs", "\\n}\\n\\nexport function registerFynxAiConversationRoutes");
+assert.match(aiImageLoader, /SELECT id,mime_type FROM message_media/);
+assert.doesNotMatch(aiImageLoader, /SELECT id,mime_type,data/);
+assert.ok(aiImageLoader.indexOf("WHERE owner_id=$1") < aiImageLoader.indexOf("getCachedMediaPayload"));
 
 // Two concurrent requests for one media id should perform one database payload read.
 let queryCount = 0;
