@@ -94,24 +94,35 @@ fun FynxVisibleUpdatesPanel(
 
     fun refreshStatuses() {
         scope.launch(Dispatchers.IO) {
-            val latest = FynxStatusClient.list(context).getOrDefault(emptyList())
+            val latest = FynxStatusClient.list(context).getOrNull()
             val following = FynxProfileRemoteClient.following(context)
                 .getOrDefault(emptyList())
                 .map { it.username.removePrefix("@").trim().lowercase() }
                 .toSet()
             withContext(Dispatchers.Main) {
                 followingUsernames = following
-                statuses = latest
-                resolveOwnerPhotos(latest)
+                // A timeout or temporary offline response must not erase a previously
+                // loaded Status row; the next lifecycle refresh can retry normally.
+                if (latest != null) {
+                    statuses = latest
+                    resolveOwnerPhotos(latest)
+                }
             }
         }
     }
 
     LaunchedEffect(currentUsername, homeRefreshKey) { refreshStatuses() }
 
+    // Remove statuses at their actual expiry even if Home remains open and no other
+    // state changes trigger a recomposition.
+    LaunchedEffect(statuses) {
+        val nextExpiry = statuses.minOfOrNull { it.expiresAtMillis } ?: return@LaunchedEffect
+        kotlinx.coroutines.delay((nextExpiry - System.currentTimeMillis()).coerceAtLeast(1L))
+        statuses = statuses.filterNot(FynxStatus::isExpired)
+    }
+
     val current = currentUsername.removePrefix("@").trim().lowercase()
-    val activeStatuses = statuses
-        .filter { it.expiresAtMillis <= 0L || it.expiresAtMillis > System.currentTimeMillis() }
+    val activeStatuses = statuses.filterNot(FynxStatus::isExpired)
     val viewedStatusIds = FynxStatusClient.viewedStatusIds(context)
     val unseenOwners = activeStatuses
         .groupBy { it.ownerUsername.removePrefix("@").trim().lowercase() }
@@ -124,6 +135,10 @@ fun FynxVisibleUpdatesPanel(
         .mapNotNull { (_, list) -> list.maxByOrNull { it.createdAtMillis }?.let { latest -> latest to list.size } }
     val own = grouped.firstOrNull {
         it.first.ownerUsername.removePrefix("@").trim().equals(current, ignoreCase = true)
+    }
+    val ownHasUnseen = activeStatuses.any {
+        it.ownerUsername.removePrefix("@").trim().equals(current, ignoreCase = true) &&
+            it.id !in viewedStatusIds
     }
 
     Column(
@@ -153,7 +168,7 @@ fun FynxVisibleUpdatesPanel(
                             own?.first,
                             currentUsername.ifBlank { "You" },
                             "Your status",
-                            false,
+                            ownHasUnseen,
                             if (own != null) { { onOpenStatusOwner(current) } } else { onCreateStatus },
                             own?.second ?: 0,
                             ownerPhotoIds[current],
@@ -227,7 +242,7 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
                 Box(
                     Modifier.size(70.dp)
                         .background(if (status?.type == FynxStatusType.TEXT) Color(status.textStyle.backgroundColor) else FynxDesign.SurfaceRaised, CircleShape)
-                        .border(3.dp, if (active) Brush.sweepGradient(listOf(Color(0xFFE1306C), Color(0xFF22C55E), Color(0xFFE1306C))) else Brush.sweepGradient(listOf(FynxDesign.Outline, FynxDesign.Outline)), CircleShape)
+                        .border(3.dp, if (active) fynxStatusRingBrush() else Brush.sweepGradient(listOf(FynxDesign.Outline, FynxDesign.Outline)), CircleShape)
                         .clip(CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
@@ -246,12 +261,12 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
             }
             if (isOwn) {
                 IconButton(onClick = onCreateStatus, modifier = Modifier.align(Alignment.BottomEnd).requiredSize(25.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .background(Color(0xFF22C55E), CircleShape)
                         .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                         .clip(CircleShape)
                         .semantics { contentDescription = "Create your status" }
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(17.dp))
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
                 }
             }
         }
