@@ -89,7 +89,7 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
         groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
     }
 
-    Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Groups", style = MaterialTheme.typography.headlineSmall)
@@ -1120,7 +1120,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     )
                     Spacer(Modifier.width(6.dp))
                     Box(
-                        Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF7C3AED)),
+                        Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center
                     ) {
                         IconButton(

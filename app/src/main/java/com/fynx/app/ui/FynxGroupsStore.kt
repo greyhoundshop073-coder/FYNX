@@ -49,8 +49,7 @@ object FynxGroupsStore {
     fun add(context: Context, group: FynxGroup): Boolean {
         val valid = FynxGroupsBatch1.create(group) ?: return false
         val groups = load(context)
-        if (groups.any { it.name.equals(valid.name, ignoreCase = true) }) return false
-        save(context, groups + valid)
+        save(context, groups.filterNot { it.id == valid.id } + valid)
         return true
     }
 

@@ -5,6 +5,8 @@ UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 
 PRIVATE = (UI / "ConversationPanel.kt").read_text(encoding="utf-8")
 ACTIVE_GROUP = (UI / "FynxGroupsPanel.kt").read_text(encoding="utf-8")
+CHATS = (UI / "ChatsPanel.kt").read_text(encoding="utf-8")
+GROUPS_LANDING = ACTIVE_GROUP.split("@Composable\nprivate fun FynxGroupPulseSheet", 1)[0]
 APP = (UI / "FynxApp.kt").read_text(encoding="utf-8")
 MAIN_ACTIVITY = (ROOT / "app/src/main/java/com/fynx/app/MainActivity.kt").read_text(encoding="utf-8")
 RUNTIME_CERTIFICATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
@@ -39,6 +41,8 @@ require(
 )
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
 require("active group conversation has bottom content padding", "contentPadding = PaddingValues(bottom" in ACTIVE_GROUP)
+require("Chats and Groups lists reserve space below the bottom-right contacts FAB", CHATS.count("contentPadding = PaddingValues(bottom = 96.dp)") >= 2)
+require("Groups landing page follows the selected theme background", "background(MaterialTheme.colorScheme.background)" in GROUPS_LANDING and "background(FynxDesign.Background)" not in GROUPS_LANDING)
 require("active group conversation uses 48dp minimum touch targets", "Modifier.size(48.dp)" in ACTIVE_GROUP)
 require("active group conversation supports message search", "searchQuery" in ACTIVE_GROUP)
 require("active group conversation supports reply targets", "replyToId" in ACTIVE_GROUP)
