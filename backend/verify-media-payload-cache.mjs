@@ -23,21 +23,21 @@ function route(source, startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-const primaryMediaRoute = route(serverSource, 'app.get("/api/media/:id"', "\\nfunction messageProjection()");
+const primaryMediaRoute = route(serverSource, 'app.get("/api/media/:id"', "\nfunction messageProjection()");
 assert.match(primaryMediaRoute, /SELECT mm\.mime_type\s+FROM message_media mm/);
 assert.doesNotMatch(primaryMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
 assert.ok(primaryMediaRoute.indexOf("if (!result.rows[0])") < primaryMediaRoute.indexOf("getCachedMediaPayload"));
 
-const marketplaceMediaRoute = route(marketplaceSource, "app.get('/api/marketplace/media/:id'", "\\n  app.get('/api/marketplace/seller/orders'");
+const marketplaceMediaRoute = route(marketplaceSource, "app.get('/api/marketplace/media/:id'", "\n  app.get('/api/marketplace/seller/orders'");
 assert.match(marketplaceMediaRoute, /SELECT mm\.mime_type\s+FROM message_media mm/);
 assert.doesNotMatch(marketplaceMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
 assert.ok(marketplaceMediaRoute.indexOf("if (!result.rows[0])") < marketplaceMediaRoute.indexOf("getCachedMediaPayload"));
 
-const socialMediaRoute = route(socialSource, "app.get('/api/social/media/:id'", "\\n\\n}");
+const socialMediaRoute = route(socialSource, "app.get('/api/social/media/:id'", "\n\n}");
 assert.match(socialMediaRoute, /SELECT mm\.mime_type\s+FROM message_media mm/);
 assert.doesNotMatch(socialMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
 assert.ok(socialMediaRoute.indexOf("if(!r.rows[0])") < socialMediaRoute.indexOf("getCachedMediaPayload"));
-assert.match(socialBootstrap, /SELECT mm\.mime_type\\s*\\n\\s*FROM message_media mm/);
+assert.match(socialBootstrap, /SELECT mm\.mime_type\s*\n\s*FROM message_media mm/);
 assert.doesNotMatch(socialBootstrap, /SELECT mm\.mime_type, mm\.data/);
 assert.match(serverSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
 assert.match(marketplaceSource, /import \{ getCachedMediaPayload \} from '\.\/mediaPayloadCache\.js';/);
