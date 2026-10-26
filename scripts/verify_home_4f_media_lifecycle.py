@@ -102,8 +102,8 @@ required_camera_readiness = {
         and 'Text("Exposure", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(58.dp))' in camera_capture
         and "Modifier.weight(1f)" in camera_capture
         and "FilledIconButton(enabled = (captureReady && !photoCaptureInFlight) || recording != null, onClick={" in camera_capture,
-    "live camera surface exposes an accessible marker for runtime recovery":
-        'contentDescription = "Live camera preview"' in camera_capture,
+    "the actual PreviewView exposes the live camera marker to the accessibility tree":
+        'AndroidView(factory={previewView},modifier=Modifier.fillMaxSize().semantics { contentDescription = "Live camera preview" })' in camera_capture,
     "hidden camera controls can be restored above PreviewView touch handling":
         camera_capture.index("AndroidView(factory={previewView},modifier=Modifier.fillMaxSize())")
         < camera_capture.index('contentDescription = "Show camera controls"')
