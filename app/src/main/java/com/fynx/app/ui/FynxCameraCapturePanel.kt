@@ -140,23 +140,11 @@ fun FynxCameraCapturePanel(
             recording?.stop()
         }
     }
-    LaunchedEffect(
-        showCaptureControls, pendingUri, recording, captureReady, timerCountingDown, photoCaptureInFlight
-    ) {
-        // Do not hide controls while binding or while a photo is being written. A slow
-        // CameraX callback must not leave the user staring at a live preview with no
-        // capture controls or no way to see the failure state.
-        if (showCaptureControls && pendingUri == null && recording == null &&
-            timerCountingDown == 0 && captureReady && !photoCaptureInFlight
-        ) {
-            delay(5000L)
-            if (showCaptureControls && pendingUri == null && recording == null &&
-                timerCountingDown == 0 && captureReady && !photoCaptureInFlight
-            ) {
-                showCaptureControls = false
-            }
-        }
-    }
+    // Keep live camera controls available until the user acts. An idle-hide timer
+    // can race with camera binding and accessibility-driven capture: a user may see
+    // an enabled shutter, tap as the row disappears, and activate only the preview.
+    // The explicit timer countdown below still hides controls during the countdown,
+    // and capturePhotoNow() restores them for capture feedback.
 
     LaunchedEffect(photoCaptureInFlight) {
         if (photoCaptureInFlight) {

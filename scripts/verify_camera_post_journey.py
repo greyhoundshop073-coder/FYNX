@@ -18,6 +18,9 @@ checks = [
      and "withContext(Dispatchers.IO)" in photo_callback
      and "normalizeCapturedPhoto(file, mirrorFront)" in photo_callback
      and "pendingUri = Uri.fromFile(file)" in photo_callback),
+    ("Live camera capture controls do not auto-hide on an idle timer",
+     "delay(5000L)" not in camera
+     and "showCaptureControls = false" not in camera.split("LaunchedEffect(photoCaptureInFlight)", 1)[0]),
     ("Camera preview supports retake before handoff", 'Text("Retake")' in camera and "retake()" in camera),
     ("Camera preview sends the captured asset to the composer", 'Text("Send")' in camera and "onCaptured(previewUri,previewType)" in camera),
     ("Captured media uses the authoritative media type resolver", "FynxMultiMediaPostClient.mediaKind(context, it)" in home),
