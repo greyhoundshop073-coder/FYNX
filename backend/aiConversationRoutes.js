@@ -2,6 +2,7 @@ import pg from "pg";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { runAssistantAgent } from "./fynxAiToolRegistry.js";
+import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -86,16 +87,23 @@ async function readConversation(db, id, userId) {
 async function loadImageInputs(db, mediaIds, userId) {
   const ids=[...new Set((Array.isArray(mediaIds)?mediaIds:[]).map(String).filter(validId))].slice(0,4);
   if (!ids.length) return [];
+  // Check ownership and MIME without transferring large BYTEA payloads from Neon.
   const result=await db.query(`
-    SELECT id,mime_type,data,byte_size FROM message_media
+    SELECT id,mime_type FROM message_media
     WHERE owner_id=$1 AND id=ANY($2::bigint[]) ORDER BY id ASC
   `,[userId,ids]);
   if (result.rows.length!==ids.length) throw new Error("one or more attachments are unavailable");
-  return result.rows.map(row=>{
-    const mime=String(row.mime_type||"").toLowerCase();
+  const images=[];
+  for (const row of result.rows) {
+    const declaredMime=String(row.mime_type||"").toLowerCase();
+    if (!declaredMime.startsWith("image/")) throw new Error("FYNX AI currently accepts image attachments");
+    const payload=await getCachedMediaPayload(db,row.id);
+    if (!payload) throw new Error("one or more attachments are unavailable");
+    const mime=String(payload.mimeType||declaredMime).toLowerCase();
     if (!mime.startsWith("image/")) throw new Error("FYNX AI currently accepts image attachments");
-    return {id:String(row.id),type:"image",dataUrl:`data:${mime};base64,${Buffer.from(row.data).toString("base64")}`};
-  });
+    images.push({id:String(row.id),type:"image",dataUrl:`data:${mime};base64,${Buffer.from(payload.data).toString("base64")}`});
+  }
+  return images;
 }
 
 export function registerFynxAiConversationRoutes({ app }) {

@@ -105,6 +105,8 @@ jobs:
           node --check verify-stage15d-jobs.mjs
       - name: Verify notification bootstrap is idempotent across retries
         run: node verify-notification-bootstrap-idempotency.mjs
+      - name: Verify bounded media payload cache
+        run: node verify-media-payload-cache.mjs
       - name: Run Chat end-to-end integration gate
         working-directory: .
         run: python3 scripts/verify_chat_end_to_end.py

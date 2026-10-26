@@ -4,6 +4,7 @@ import http from "http";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
+import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { WebSocketServer } from "ws";
 import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
@@ -476,7 +477,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
     const mediaId = Number(req.params.id);
     if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: "invalid media id" });
     const result = await pool.query(`
-      SELECT mm.mime_type, mm.data
+      SELECT mm.mime_type
       FROM message_media mm
       WHERE mm.id = $1
         AND (
@@ -555,9 +556,11 @@ app.get("/api/media/:id", auth, async (req, res) => {
       LIMIT 1
     `, [mediaId, req.user.sub]);
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
+    const payload = await getCachedMediaPayload(pool, mediaId);
+    if (!payload) return res.status(404).json({ error: "media not found" });
     res.set("Cache-Control", "private, no-store");
-    res.type(result.rows[0].mime_type);
-    return res.send(result.rows[0].data);
+    res.type(payload.mimeType);
+    return res.send(payload.data);
   } catch (error) { console.error("media fetch", error); return res.status(500).json({ error: "media fetch failed" }); }
 });
 

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { registerMarketplaceShippingTimeline } from './marketplaceShippingTimeline.js';
 import { isMarketplaceDestinationCovered } from './marketplaceShipping.js';
+import { getCachedMediaPayload } from './mediaPayloadCache.js';
 
 export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
   registerMarketplaceShippingTimeline({ app, pool, auth });
@@ -83,7 +84,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const mediaId = Number(req.params.id);
       if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: 'invalid media id' });
       const result = await pool.query(`
-        SELECT mm.mime_type, mm.data
+        SELECT mm.mime_type
         FROM message_media mm
         WHERE mm.id = $1
           AND (
@@ -110,9 +111,11 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
           )
         LIMIT 1`, [mediaId, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: 'marketplace media not found' });
+      const payload = await getCachedMediaPayload(pool, mediaId);
+      if (!payload) return res.status(404).json({ error: 'marketplace media not found' });
       res.set('Cache-Control', 'private, no-store');
-      res.type(result.rows[0].mime_type);
-      return res.send(result.rows[0].data);
+      res.type(payload.mimeType);
+      return res.send(payload.data);
     } catch (error) {
       console.error('marketplace media fetch', error);
       return res.status(500).json({ error: 'marketplace media fetch failed' });
