@@ -178,6 +178,7 @@ internal fun FynxMarketplaceCheckoutDialog(
     var quote by remember { mutableStateOf<FynxMarketplaceCheckoutQuote?>(null) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var quoteRequestGeneration by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val quantity = quantityText.toIntOrNull() ?: 0
     val quantityError = when {
@@ -187,15 +188,23 @@ internal fun FynxMarketplaceCheckoutDialog(
         else -> null
     }
 
+    fun invalidateQuote() {
+        // Invalidate in-flight responses as well as any quote already shown to the buyer.
+        quoteRequestGeneration += 1
+        quote = null
+        message = null
+    }
+
     fun refreshQuote() {
+        quoteRequestGeneration += 1
+        val requestGeneration = quoteRequestGeneration
+        quote = null
         if (quantityError != null) {
             message = quantityError
-            quote = null
             return
         }
         if (fulfillment == "DELIVERY" && (name.isBlank() || phone.isBlank() || address.isBlank())) {
             message = "Name, phone and delivery address are required."
-            quote = null
             return
         }
         busy = true
@@ -208,7 +217,10 @@ internal fun FynxMarketplaceCheckoutDialog(
                 fulfillment,
                 if (fulfillment == "DELIVERY") FynxMarketplaceCheckoutAddress(name, phone, address, city, state, country) else null
             )
-            result.onSuccess { quote = it }.onFailure { quote = null; message = it.message ?: "Checkout quote could not be prepared." }
+            if (quoteRequestGeneration == requestGeneration) {
+                result.onSuccess { quote = it }
+                    .onFailure { message = it.message ?: "Checkout quote could not be prepared." }
+            }
             busy = false
         }
     }
@@ -220,19 +232,19 @@ internal fun FynxMarketplaceCheckoutDialog(
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text(listing.title, style = MaterialTheme.typography.titleMedium)
                 Text("${listing.currency} ${String.format(Locale.US, "%,.2f", listing.price)} each", color = MaterialTheme.colorScheme.primary)
-                OutlinedTextField(quantityText, { quantityText = it.filter(Char::isDigit); quote = null; message = null }, label = { Text("Quantity") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(quantityText, { quantityText = it.filter(Char::isDigit); invalidateQuote() }, label = { Text("Quantity") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 quantityError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (listing.deliveryAvailable) FilterChip(selected = fulfillment == "DELIVERY", onClick = { fulfillment = "DELIVERY"; quote = null }, label = { Text("Delivery") })
-                    if (listing.pickupAvailable) FilterChip(selected = fulfillment == "PICKUP", onClick = { fulfillment = "PICKUP"; quote = null }, label = { Text("Pickup") })
+                    if (listing.deliveryAvailable) FilterChip(selected = fulfillment == "DELIVERY", onClick = { fulfillment = "DELIVERY"; invalidateQuote() }, label = { Text("Delivery") })
+                    if (listing.pickupAvailable) FilterChip(selected = fulfillment == "PICKUP", onClick = { fulfillment = "PICKUP"; invalidateQuote() }, label = { Text("Pickup") })
                 }
                 if (fulfillment == "DELIVERY") {
-                    OutlinedTextField(name, { name = it }, label = { Text("Full name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(phone, { phone = it }, label = { Text("Phone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(address, { address = it }, label = { Text("Delivery address") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(name, { name = it; invalidateQuote() }, label = { Text("Full name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(phone, { phone = it; invalidateQuote() }, label = { Text("Phone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(address, { address = it; invalidateQuote() }, label = { Text("Delivery address") }, modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(city, { city = it }, label = { Text("City") }, singleLine = true, modifier = Modifier.weight(1f))
-                        OutlinedTextField(state, { state = it }, label = { Text("State") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(city, { city = it; invalidateQuote() }, label = { Text("City") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(state, { state = it; invalidateQuote() }, label = { Text("State") }, singleLine = true, modifier = Modifier.weight(1f))
                     }
                 }
                 Button(onClick = { refreshQuote() }, enabled = !busy && quantityError == null, modifier = Modifier.fillMaxWidth()) {
