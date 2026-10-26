@@ -116,6 +116,7 @@ fun FynxCameraCapturePanel(
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recordingStartedAt by remember { mutableLongStateOf(0L) }
     var recordingElapsed by remember { mutableLongStateOf(0L) }
+    var photoCaptureInFlight by remember { mutableStateOf(false) }
     BackHandler { if (recording == null) onDismiss() }
     var error by remember { mutableStateOf<String?>(null) }
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
@@ -139,18 +140,31 @@ fun FynxCameraCapturePanel(
             recording?.stop()
         }
     }
-    LaunchedEffect(showCaptureControls, pendingUri, recording, captureReady, timerCountingDown) {
-        // Keep the capture controls on screen while CameraX is still binding. Hiding
-        // them based on cameraControl alone can remove the only way to observe/retry
-        // a capture whose active mode-specific use case is not ready yet.
+    LaunchedEffect(
+        showCaptureControls, pendingUri, recording, captureReady, timerCountingDown, photoCaptureInFlight
+    ) {
+        // Do not hide controls while binding or while a photo is being written. A slow
+        // CameraX callback must not leave the user staring at a live preview with no
+        // capture controls or no way to see the failure state.
         if (showCaptureControls && pendingUri == null && recording == null &&
-            timerCountingDown == 0 && captureReady
+            timerCountingDown == 0 && captureReady && !photoCaptureInFlight
         ) {
             delay(5000L)
             if (showCaptureControls && pendingUri == null && recording == null &&
-                timerCountingDown == 0 && captureReady
+                timerCountingDown == 0 && captureReady && !photoCaptureInFlight
             ) {
                 showCaptureControls = false
+            }
+        }
+    }
+
+    LaunchedEffect(photoCaptureInFlight) {
+        if (photoCaptureInFlight) {
+            delay(15_000L)
+            if (photoCaptureInFlight) {
+                photoCaptureInFlight = false
+                error = "Photo capture timed out. Please try again."
+                showCaptureControls = true
             }
         }
     }
@@ -239,18 +253,60 @@ fun FynxCameraCapturePanel(
             }; val outputBitmap=android.graphics.Bitmap.createBitmap(bitmap.width,bitmap.height,android.graphics.Bitmap.Config.ARGB_8888); android.graphics.Canvas(outputBitmap).drawBitmap(bitmap,0f,0f,android.graphics.Paint().apply { colorFilter=ColorMatrixColorFilter(matrix) }); FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); outputBitmap.recycle(); filter=selected; filterIntensity=intensity; error=null }.onFailure { error=it.message ?: "Filter could not be applied" } }
     fun enhancePhoto() { val source=pendingUri ?: return; if(pendingType!="image" || enhancing)return; enhancing=true; error=null; scope.launch { val result=withContext(Dispatchers.IO){FynxAiPhotoEnhancer.enhance(context,source)}; result.onSuccess { enhancedUri -> deleteUri(source); pendingUri=enhancedUri; filter=CameraFilter.NATURAL; filterIntensity=1f; error=null }.onFailure { error=it.message ?: "AI photo enhancement failed" }; enhancing=false } }
     fun capturePhotoNow() {
-        val capture = imageCapture ?: run { error = "Camera is still starting"; return }
+        if (photoCaptureInFlight) return
+        val capture = imageCapture ?: run {
+            error = "Camera is still starting"
+            showCaptureControls = true
+            return
+        }
+        photoCaptureInFlight = true
+        showCaptureControls = true
+        error = null
         val stamp = System.currentTimeMillis()
-        val file = File(context.cacheDir, "fynx_photo_"+stamp+".jpg")
-        val original = File(context.cacheDir, "fynx_photo_original_"+stamp+".jpg")
-        capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
-            override fun onImageSaved(result: ImageCapture.OutputFileResults) {
-                runCatching { normalizeCapturedPhoto(file, lens == CameraSelector.LENS_FACING_FRONT); file.copyTo(original, overwrite = true) }
-                    .onSuccess { pendingUri = Uri.fromFile(file); pendingOriginalUri = Uri.fromFile(original); pendingType = "image"; filter = CameraFilter.NATURAL; error = null; showCaptureControls = true }
-                    .onFailure { file.delete(); original.delete(); error = it.message ?: "Photo could not be prepared"; showCaptureControls = true }
-            }
-            override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed"; showCaptureControls = true }
-        })
+        val file = File(context.cacheDir, "fynx_photo_" + stamp + ".jpg")
+        val original = File(context.cacheDir, "fynx_photo_original_" + stamp + ".jpg")
+        runCatching {
+            capture.takePicture(
+                ImageCapture.OutputFileOptions.Builder(file).build(),
+                ContextCompat.getMainExecutor(context),
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(result: ImageCapture.OutputFileResults) {
+                        runCatching {
+                            normalizeCapturedPhoto(file, lens == CameraSelector.LENS_FACING_FRONT)
+                            file.copyTo(original, overwrite = true)
+                        }.onSuccess {
+                            photoCaptureInFlight = false
+                            pendingUri = Uri.fromFile(file)
+                            pendingOriginalUri = Uri.fromFile(original)
+                            pendingType = "image"
+                            filter = CameraFilter.NATURAL
+                            error = null
+                            showCaptureControls = true
+                        }.onFailure {
+                            photoCaptureInFlight = false
+                            file.delete()
+                            original.delete()
+                            error = it.message ?: "Photo could not be prepared"
+                            showCaptureControls = true
+                        }
+                    }
+
+                    override fun onError(exception: ImageCaptureException) {
+                        photoCaptureInFlight = false
+                        file.delete()
+                        original.delete()
+                        error = exception.message ?: "Photo capture failed"
+                        showCaptureControls = true
+                    }
+                }
+            )
+        }.onFailure { failure ->
+            photoCaptureInFlight = false
+            file.delete()
+            original.delete()
+            error = failure.message ?: "Photo capture could not start"
+            showCaptureControls = true
+        }
     }
 
     if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
@@ -362,14 +418,27 @@ fun FynxCameraCapturePanel(
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null){mode=CameraMode.PHOTO;showCaptureControls=true}},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(enabled = captureReady || recording != null, onClick={
-                if(mode==CameraMode.PHOTO){if(captureTimerSeconds>0){if(timerCountingDown==0){timerCountingDown=captureTimerSeconds;showCaptureControls=false;scope.launch{delay(captureTimerSeconds*1000L);timerCountingDown=0;capturePhotoNow()}}}else capturePhotoNow()}else{val active=recording;if(active!=null)active.stop()else{if(!hasAudio){audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);return@FilledIconButton};val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingType=if(videoNoteMode)"video_note" else "video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},modifier=Modifier.size(80.dp),shape=androidx.compose.foundation.shape.CircleShape,colors=IconButtonDefaults.filledIconButtonColors(containerColor=Color.White,contentColor=Color.Black)){
+            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null){mode=CameraMode.PHOTO;showCaptureControls=true}},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(enabled = (captureReady && !photoCaptureInFlight) || recording != null, onClick={
+                if(mode==CameraMode.PHOTO){if(captureTimerSeconds>0){if(timerCountingDown==0){timerCountingDown=captureTimerSeconds;showCaptureControls=false;scope.launch{delay(captureTimerSeconds*1000L);timerCountingDown=0;capturePhotoNow()}}}else capturePhotoNow()}else{val active=recording;if(active!=null)active.stop()else{if(!hasAudio){audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);return@FilledIconButton};val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingType=if(videoNoteMode)"video_note" else "video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},modifier=Modifier.size(80.dp).semantics(mergeDescendants = true) { contentDescription = if (recording != null) "Stop video note" else if (photoCaptureInFlight) "Capturing photo" else if (mode == CameraMode.PHOTO) "Take photo" else "Record video note" },shape=androidx.compose.foundation.shape.CircleShape,colors=IconButtonDefaults.filledIconButtonColors(containerColor=Color.White,contentColor=Color.Black)){
                                 Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) {
                                     if (videoNoteMode && recording != null) {
                                         val progress = (recordingElapsed.toFloat() / 60_000f).coerceIn(0f, 1f)
                                         Canvas(Modifier.fillMaxSize().padding(2.dp)) { drawArc(Color(0xFF8B7BE8), -90f, 360f * progress, false, style = androidx.compose.ui.graphics.drawscope.Stroke(5.dp.toPx())) }
                                     }
-                                    Icon(if(mode==CameraMode.PHOTO)Icons.Default.PhotoCamera else if(recording!=null)Icons.Default.Stop else Icons.Default.Videocam,if(recording!=null)"Stop video note" else if(mode==CameraMode.PHOTO)"Take photo" else "Record video note")
+                                    if (photoCaptureInFlight) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(30.dp),
+                                            color = Color.Black,
+                                            strokeWidth = 3.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            if (mode == CameraMode.PHOTO) Icons.Default.PhotoCamera
+                                            else if (recording != null) Icons.Default.Stop
+                                            else Icons.Default.Videocam,
+                                            contentDescription = null
+                                        )
+                                    }
                                 }
                             };FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null){mode=CameraMode.VIDEO;showCaptureControls=true}},label={Text("Video")},leadingIcon={Icon(Icons.Default.Videocam,null)})}
         }
