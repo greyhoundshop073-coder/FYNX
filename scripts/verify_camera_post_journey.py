@@ -6,12 +6,18 @@ camera = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt").read_text(encoding="utf-8")
 refresh = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt").read_text(encoding="utf-8")
 backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")
+photo_callback = camera.split("override fun onImageSaved", 1)[-1].split("override fun onError", 1)[0]
 
 checks = [
     ("Home camera opens the real camera panel", "showCamera = true" in home and "FynxCameraCapturePanel(" in home),
     ("Home camera starts a fresh session", "capturedUris = emptyList()" in home and "cameraOpenedFromComposer = false" in home),
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
     ("Camera dismiss returns to an existing composer draft", "cameraOpenedFromComposer && !posting" in home),
+    ("Photo normalization and file copying run off the UI thread before preview state changes",
+     "scope.launch" in photo_callback
+     and "withContext(Dispatchers.IO)" in photo_callback
+     and "normalizeCapturedPhoto(file, mirrorFront)" in photo_callback
+     and "pendingUri = Uri.fromFile(file)" in photo_callback),
     ("Camera preview supports retake before handoff", 'Text("Retake")' in camera and "retake()" in camera),
     ("Camera preview sends the captured asset to the composer", 'Text("Send")' in camera and "onCaptured(previewUri,previewType)" in camera),
     ("Captured media uses the authoritative media type resolver", "FynxMultiMediaPostClient.mediaKind(context, it)" in home),

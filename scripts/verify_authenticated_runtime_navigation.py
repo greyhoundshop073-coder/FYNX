@@ -1061,7 +1061,21 @@ def exercise_camera_capture_journeys(camera_xml: str) -> str:
     photo_preview = wait_for(["Retake", "Send"], "authenticated-camera-photo-preview", 20.0)
     if not (find_control(photo_preview, ["Retake"]) and find_control(photo_preview, ["Send"])):
         screenshot("authenticated-camera-photo-preview-missing.png")
-        FAILURES.append("camera capture runtime: photo capture did not reach a preview with Retake and Send")
+        diagnostic_labels = [
+            "Take photo", "Capturing photo", "Starting camera…",
+            "Photo capture timed out. Please try again.", "Photo capture failed",
+            "Photo could not be prepared", "Photo capture could not start",
+            "Retake", "Send",
+        ]
+        visible_camera_state = [
+            label for label in diagnostic_labels
+            if find_control(photo_preview, [label])
+        ]
+        detail = ", ".join(visible_camera_state) if visible_camera_state else visible_marker_summary(photo_preview)
+        FAILURES.append(
+            "camera capture runtime: photo capture did not reach a preview with Retake and Send; "
+            "visible camera state: " + detail
+        )
         return photo_preview or current
     screenshot("authenticated-camera-photo-preview.png")
     report.append("- PASS real CameraX photo capture opened a photo preview with Retake/Send controls")

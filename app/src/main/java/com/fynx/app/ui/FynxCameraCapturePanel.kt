@@ -271,23 +271,32 @@ fun FynxCameraCapturePanel(
                 ContextCompat.getMainExecutor(context),
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(result: ImageCapture.OutputFileResults) {
-                        runCatching {
-                            normalizeCapturedPhoto(file, lens == CameraSelector.LENS_FACING_FRONT)
-                            file.copyTo(original, overwrite = true)
-                        }.onSuccess {
-                            photoCaptureInFlight = false
-                            pendingUri = Uri.fromFile(file)
-                            pendingOriginalUri = Uri.fromFile(original)
-                            pendingType = "image"
-                            filter = CameraFilter.NATURAL
-                            error = null
-                            showCaptureControls = true
-                        }.onFailure {
-                            photoCaptureInFlight = false
-                            file.delete()
-                            original.delete()
-                            error = it.message ?: "Photo could not be prepared"
-                            showCaptureControls = true
+                        // CameraX invokes this callback on the main executor. Bitmap decoding,
+                        // rotation/mirroring, JPEG compression, and file copying are disk/CPU work;
+                        // doing them here can freeze Compose before it renders the photo preview.
+                        val mirrorFront = lens == CameraSelector.LENS_FACING_FRONT
+                        scope.launch {
+                            val prepared = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    normalizeCapturedPhoto(file, mirrorFront)
+                                    file.copyTo(original, overwrite = true)
+                                }
+                            }
+                            prepared.onSuccess {
+                                photoCaptureInFlight = false
+                                pendingUri = Uri.fromFile(file)
+                                pendingOriginalUri = Uri.fromFile(original)
+                                pendingType = "image"
+                                filter = CameraFilter.NATURAL
+                                error = null
+                                showCaptureControls = true
+                            }.onFailure {
+                                photoCaptureInFlight = false
+                                file.delete()
+                                original.delete()
+                                error = it.message ?: "Photo could not be prepared"
+                                showCaptureControls = true
+                            }
                         }
                     }
 
