@@ -65,25 +65,57 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
   });
 
   app.patch('/api/marketplace/my-shop', auth, async (req, res) => {
-    const shopName = typeof req.body?.shopName === 'string' ? req.body.shopName.trim().slice(0, 120) : '';
-    const description = typeof req.body?.description === 'string' ? req.body.description.trim().slice(0, 800) : '';
-    const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : '';
-    const contactPhone = typeof req.body?.contactPhone === 'string' ? req.body.contactPhone.trim().slice(0, 40) : '';
-    if (shopName.length < 2) return res.status(400).json({ error: 'shop name must contain at least 2 characters' });
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+    const fields = [
+      ['shopName', 120],
+      ['description', 800],
+      ['location', 160],
+      ['contactPhone', 40]
+    ];
+    const values = {};
+    for (const [field, maxLength] of fields) {
+      if (!Object.prototype.hasOwnProperty.call(body, field)) {
+        values[field] = null;
+        continue;
+      }
+      if (typeof body[field] !== 'string') {
+        return res.status(400).json({ error: field + ' must be a string' });
+      }
+      values[field] = body[field].trim().slice(0, maxLength);
+    }
+
+    if (fields.every(([field]) => values[field] === null)) {
+      return res.status(400).json({ error: 'at least one shop field must be provided' });
+    }
+    if (values.shopName !== null && values.shopName.length < 2) {
+      return res.status(400).json({ error: 'shop name must contain at least 2 characters' });
+    }
 
     try {
       await ensureSchema();
+      // A first save must establish a shop name. For existing shops, omitted
+      // fields are passed as NULL and preserved by the conflict update below.
+      if (values.shopName === null) {
+        const existing = await pool.query(
+          'SELECT seller_id FROM marketplace_shop_profiles WHERE seller_id = $1 LIMIT 1',
+          [req.user.sub]
+        );
+        if (!existing.rows[0]) {
+          return res.status(400).json({ error: 'shop name is required when creating a shop' });
+        }
+      }
+
       const result = await pool.query(`
         INSERT INTO marketplace_shop_profiles (seller_id, shop_name, description, location, contact_phone)
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, COALESCE($2, ''), COALESCE($3, ''), COALESCE($4, ''), COALESCE($5, ''))
         ON CONFLICT (seller_id) DO UPDATE SET
-          shop_name = EXCLUDED.shop_name,
-          description = EXCLUDED.description,
-          location = EXCLUDED.location,
-          contact_phone = EXCLUDED.contact_phone,
+          shop_name = COALESCE($2, marketplace_shop_profiles.shop_name),
+          description = COALESCE($3, marketplace_shop_profiles.description),
+          location = COALESCE($4, marketplace_shop_profiles.location),
+          contact_phone = COALESCE($5, marketplace_shop_profiles.contact_phone),
           updated_at = NOW()
         RETURNING shop_name, description, location, contact_phone, updated_at
-      `, [req.user.sub, shopName, description, location, contactPhone]);
+      `, [req.user.sub, values.shopName, values.description, values.location, values.contactPhone]);
       const user = await pool.query('SELECT username, display_name FROM users WHERE id=$1 LIMIT 1', [req.user.sub]);
       if (!user.rows[0]) return res.status(404).json({ error: 'seller account not found' });
       return res.json({ shop: publicProfile({ ...user.rows[0], ...result.rows[0] }) });
