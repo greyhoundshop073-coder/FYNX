@@ -22,7 +22,7 @@ All Android Marketplace changes must land in the canonical integration branch ab
 - Working branch: `fix/marketplace-sell-form-category-duplication-20261026`.
 - UI fix commit: `e2b41282679d00122ae02201778e8af9b81e2809` — remove duplicate category selector from the product-publishing form.
 - Regression-test commit: `a892a453ceec56029339a65b317c7d66ff67f7da` — add a check to `scripts/verify_marketplace_seller_flow.py` ensuring the active sell dialog contains the category-choice list once.
-- CI status at last update: **pending PR workflow**. Do not treat this change as green until workflow results are inspected.
+- CI evidence from the initial PR run: Android Build failed at `scripts/verify_marketplace_seller_flow.py` on the stale check that demanded a second category list after the location guidance. The new no-duplicate assertion passed. The existing verifier compares the primary Category selector against discovery correctly, but also incorrectly required the duplicate selector to remain; this assertion has been removed while keeping the discovery-vs-primary-selector category contract. Corrective verifier commit: pending in the new branch head; rerun CI before marking passed.
 
 ## Verified source paths (static code inspection, not live end-to-end proof)
 
@@ -48,11 +48,11 @@ All Android Marketplace changes must land in the canonical integration branch ab
 | Batch | Change / evidence | CI | Canonical branch | Latest APK |
 |---|---|---|---|---|
 | P0 — baseline inspection | Confirmed canonical baseline, open Marketplace-related PRs, active sell-form implementation, current verifier and Android workflow trigger configuration. | Inspected workflow configuration; this was not a test run. | Baseline observed at `c0977f263e8883efab3ff31fedf2edb613bfa978`. | Not verified in this batch. |
-| P1 — duplicate category selector | Removed one duplicate category-chip row from `MarketplaceSellDialog`; added a regression assertion to `scripts/verify_marketplace_seller_flow.py`. Commits: `e2b41282679d00122ae02201778e8af9b81e2809`, `a892a453ceec56029339a65b317c7d66ff67f7da`. | Pending until PR workflow completes. | Not merged; must verify after PR creation/review. | Not verified. |
+| P1 — duplicate category selector | Removed one duplicate category-chip row from `MarketplaceSellDialog`; added a regression assertion to `scripts/verify_marketplace_seller_flow.py`. The first Android CI run exposed a stale verifier clause requiring the deleted duplicate row. That clause was removed while preserving the primary selector vs discovery category-set check. UI commit: `e2b41282679d00122ae02201778e8af9b81e2809`; initial verifier commit: `a892a453ceec56029339a65b317c7d66ff67f7da`; corrected verifier commit is recorded in subsequent history. | Initial Android Build failed at the Marketplace seller-flow verifier. Corrected commit needs fresh workflow run. | Not merged; verify after PR checks. | Not verified. |
 
 ## Required acceptance gates (do not mark complete without evidence)
 
-- [ ] New regression assertion passes in CI.
+- [ ] New regression assertion passes in CI (its first CI run passed locally within the verifier, but the overall verifier failed on the stale old duplicate-selector expectation; fresh CI required after correction).
 - [ ] `scripts/verify_marketplace_seller_flow.py` passes in CI.
 - [ ] Marketplace integration/security and financial contract gates pass.
 - [ ] Android build/test/lint workflow passes for the reviewed change; inspect skipped steps, not only the overall conclusion.
