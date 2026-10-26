@@ -161,12 +161,16 @@ home_topbar_end = app_source.find('} else if (selected == "Friends") {', home_to
 home_topbar = app_source[home_topbar_start:home_topbar_end] if home_topbar_start >= 0 and home_topbar_end > home_topbar_start else ""
 brand_position = home_topbar.find('Text("FYNX",')
 connection_branch_position = home_topbar.find('if (appConnectionState == FynxAppConnectionManager.State.CONNECTED)')
-if brand_position < 0 or connection_branch_position < 0 or brand_position > connection_branch_position:
-    raise SystemExit("HOME INTERACTIONS RED: Home must keep the FYNX brand visible regardless of connection state")
-if '"Waiting for network..."' in home_topbar or '"Connecting" + ".".repeat' in home_topbar:
-    raise SystemExit("HOME INTERACTIONS RED: connection status must not replace or animate in place of the Home brand")
-if '"Offline"' not in home_topbar or '"Connecting"' not in home_topbar:
-    raise SystemExit("HOME INTERACTIONS RED: Home brand needs a compact secondary connection label")
+waiting_branch_position = home_topbar.find('FynxAppConnectionManager.State.WAITING_FOR_NETWORK')
+connecting_branch_position = home_topbar.find('FynxAppConnectionManager.State.CONNECTING')
+if connection_branch_position < 0 or brand_position < connection_branch_position:
+    raise SystemExit("HOME INTERACTIONS RED: FYNX branding must be shown for the connected state, not forced over connection-state messaging")
+if waiting_branch_position < 0 or '"Waiting for network..."' not in home_topbar:
+    raise SystemExit("HOME INTERACTIONS RED: waiting-for-network state must display the intended waiting message")
+if connecting_branch_position < 0 or '"Connecting" + ".".repeat(connectingDotCount)' not in home_topbar:
+    raise SystemExit("HOME INTERACTIONS RED: connecting state must display the animated Connecting... message")
+if '"Offline"' in home_topbar:
+    raise SystemExit("HOME INTERACTIONS RED: do not replace the intended waiting/connecting states with a generic Offline label")
 remote_media = read("app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt")
 require(app_source, "import androidx.compose.foundation.clickable", "Home profile controls import Compose clickable extension")
 require(app_source, "allowImagePreview = false", "Home header avatar taps navigate to Profile instead of opening the avatar image")
