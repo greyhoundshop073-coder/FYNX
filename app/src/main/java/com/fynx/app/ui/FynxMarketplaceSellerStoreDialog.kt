@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,11 +51,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /** A Marketplace-native seller storefront, backed only by current FYNX listing/reputation data. */
 @Composable
 internal fun FynxMarketplaceSellerStoreDialog(
     username: String,
+    viewerUsername: String,
     listings: List<FynxRemoteSocialClient.MarketplaceListing>,
     reputation: FynxMarketplaceClient.SellerReputation?,
     photoId: String?,
@@ -63,6 +66,8 @@ internal fun FynxMarketplaceSellerStoreDialog(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val isOwnStore = username.removePrefix("@").trim().equals(viewerUsername.removePrefix("@").trim(), ignoreCase = true)
     var tab by remember { mutableStateOf("Products") }
     var profileName by remember(username) { mutableStateOf("") }
     var storeName by remember(username) { mutableStateOf("") }
@@ -70,13 +75,18 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var shopLocation by remember(username) { mutableStateOf("") }
     var shopContactPhone by remember(username) { mutableStateOf("") }
     var profileLoading by remember(username) { mutableStateOf(true) }
+    var followedByViewer by remember(username, viewerUsername) { mutableStateOf<Boolean?>(null) }
+    var followerCount by remember(username) { mutableStateOf<Int?>(null) }
+    var followBusy by remember(username, viewerUsername) { mutableStateOf(false) }
+    var followError by remember(username, viewerUsername) { mutableStateOf<String?>(null) }
     var storefrontListings by remember(username) { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>?>(null) }
     var storefrontLoading by remember(username) { mutableStateOf(true) }
     var storefrontError by remember(username) { mutableStateOf<String?>(null) }
     var storefrontReloadKey by remember(username) { mutableStateOf(0) }
-    LaunchedEffect(username, storefrontReloadKey) {
+    LaunchedEffect(username, viewerUsername, storefrontReloadKey) {
         storefrontLoading = true
         storefrontError = null
+        followError = null
         FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())
             .onSuccess { fetched ->
                 storefrontListings = fetched.filter { it.active && it.quantity > 0 }
@@ -87,10 +97,19 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 storefrontError = "Products could not load. Check your connection and try again."
             }
         storefrontLoading = false
-        FynxProfileRemoteClient.get(context, username.removePrefix("@").trim()).onSuccess { profile ->
-            profileName = profile.displayName.orEmpty()
-            profileBio = profile.bio.orEmpty()
-        }
+        FynxProfileRemoteClient.get(context, username.removePrefix("@").trim())
+            .onSuccess { profile ->
+                profileName = profile.displayName.orEmpty()
+                profileBio = profile.bio.orEmpty()
+                followedByViewer = profile.followedByCurrentUser
+                followerCount = profile.followerCount
+                followError = null
+            }
+            .onFailure { failure ->
+                followedByViewer = null
+                followerCount = null
+                followError = failure.message ?: "Follow status could not load."
+            }
         storeName = listings.firstOrNull()?.storeName.orEmpty()
         FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())
             .onSuccess { raw ->
@@ -140,6 +159,12 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                     Text(sellerListings.size.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                                     Text("Available products", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
+                                followerCount?.let { count ->
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(count.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                        Text("Followers", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
                                 reputation?.let { r ->
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(r.successfulSales.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
@@ -151,6 +176,50 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                             Text(String.format(Locale.US, "%.1f", r.averageRating), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                                         }
                                         Text("${r.reviewCount} reviews", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                            if (!isOwnStore) {
+                                OutlinedButton(
+                                    enabled = !profileLoading && followedByViewer != null && !followBusy,
+                                    onClick = {
+                                        val wasFollowing = followedByViewer ?: return@OutlinedButton
+                                        followBusy = true
+                                        followError = null
+                                        scope.launch {
+                                            FynxRemoteSocialClient.follow(context, username, wasFollowing)
+                                                .onSuccess { nowFollowing ->
+                                                    if (nowFollowing != wasFollowing) {
+                                                        followerCount = followerCount?.let { count ->
+                                                            (count + if (nowFollowing) 1 else -1).coerceAtLeast(0)
+                                                        }
+                                                    }
+                                                    followedByViewer = nowFollowing
+                                                }
+                                                .onFailure { failure ->
+                                                    followError = failure.message ?: "Could not update shop follow status."
+                                                }
+                                            followBusy = false
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        when {
+                                            followBusy -> "Updating follow…"
+                                            profileLoading -> "Loading follow status…"
+                                            followedByViewer == true -> "Following"
+                                            followedByViewer == false -> "Follow shop"
+                                            else -> "Follow status unavailable"
+                                        }
+                                    )
+                                }
+                                followError?.let { message ->
+                                    Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                    if (followedByViewer == null) {
+                                        TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading) {
+                                            Text("Retry follow status")
+                                        }
                                     }
                                 }
                             }
