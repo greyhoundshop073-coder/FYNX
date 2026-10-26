@@ -1,10 +1,11 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import crypto from 'node:crypto';
 import pg from 'pg';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, max: 8 }) : null;
+const pool = getFynxDatabasePool();
 
 let schemaPromise;
 

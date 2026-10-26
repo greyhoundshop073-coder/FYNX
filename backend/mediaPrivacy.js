@@ -1,20 +1,11 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from "pg";
 import jwt from "jsonwebtoken";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const JWT_SECRET = process.env.JWT_SECRET || "";
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  max: 2,
-  min: 0,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 10_000,
-  query_timeout: 12_000,
-  keepAlive: true
-}) : null;
+const pool = getFynxDatabasePool();
 
 function viewerId(req) {
   const header = req.get("authorization") || "";

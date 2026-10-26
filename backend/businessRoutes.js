@@ -1,16 +1,9 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from "pg";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  max: 8,
-  keepAlive: true,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000
-}) : null;
+const pool = getFynxDatabasePool();
 
 function clean(value, max) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";

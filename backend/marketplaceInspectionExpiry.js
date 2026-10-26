@@ -1,18 +1,10 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import { ensureMarketplaceProtectionSchema } from './marketplaceProtection.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 2,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+const pool = getFynxDatabasePool();
 
 const AUTO_COMPLETE_INTERVAL_MS = 60_000;
 

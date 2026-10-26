@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from "pg";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -5,9 +6,7 @@ import crypto from "crypto";
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const JWT_SECRET = process.env.JWT_SECRET || "";
-const pool = DATABASE_URL
-  ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false, max: 8 })
-  : null;
+const pool = getFynxDatabasePool();
 
 const CAMPAIGN_STATUSES = new Set(["draft", "pending_review", "active", "paused", "completed", "rejected"]);
 const TARGETING_KEYS = new Set(["locations", "ageMin", "ageMax", "interests"]);
