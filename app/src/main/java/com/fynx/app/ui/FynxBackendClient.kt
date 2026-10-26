@@ -227,6 +227,6 @@ object FynxBackendClient {
     }
 
     private class FynxHttpException(val status: Int, body: String) : IOException(
-        "FYNX backend returned HTTP $status: ${safeHttpErrorMessage(status, body)}"
+        "FYNX backend returned HTTP $status: ${FynxBackendClient.safeHttpErrorMessage(status, body)}"
     )
 }
