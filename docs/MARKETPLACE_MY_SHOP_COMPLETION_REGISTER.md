@@ -43,6 +43,14 @@ All Android Marketplace changes must land in the canonical integration branch ab
 4. **Canonical integration drift:** The canonical branch must be re-read before every merge. A passing feature-branch workflow does not prove the canonical branch contains that commit.
 5. **Build and runtime limits:** No local Git clone/build was available during this audit environment because direct GitHub network resolution was unavailable. GitHub-hosted CI is the designated verification path for this batch. No APK is declared built or verified by this register update.
 
+## Additional source-level dependency found during this pass
+
+- **Potential stale delivery evidence after replacing one local phone driver with another:** in `backend/marketplaceCompletion.js`, the seller-only `POST /api/marketplace/orders/:id/driver-assignment` route deletes `marketplace_delivery_evidence` only when `String(prior.driver_id || '') !== String(resolvedDriverId || '')`. For two `SELLER_LOCAL` assignments, both driver IDs are null, even when the local driver name/phone/vehicle/pickup details change. The route then upserts the assignment and resets handover/delivery timestamps without removing the previous local driver's evidence. Since evidence is keyed by order, the previous handover note/photo reference may remain visible as if it belonged to the replacement assignment. This is a source-level finding, not a live reproduction.
+  - **Ownership:** Marketplace backend route; leave implementation to the dedicated backend/network workstream.
+  - **Required correction there:** detect an actual change to driver identity/details (including local phone/name and agreed pickup/vehicle data), enforce reassignment policy, and clear or version old assignment evidence transactionally when custody has not started; add a regression verifier for local-to-local reassignment, unchanged assignment idempotency, and evidence visibility after replacement.
+  - **Current status:** not fixed by this Android-only PR; not to be called complete until the backend owner changes and tests this contract.
+- **Source-only limitations:** the active client/backend source contains substantial protected checkout, seller inventory, receipt signing, dispute, and delivery functionality with structural verifier coverage. This is not a substitute for running the real API against the database and actual Android runtime.
+
 ## Batch ledger
 
 | Batch | Change / evidence | CI | Canonical branch | Latest APK |
