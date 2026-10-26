@@ -219,7 +219,7 @@ fun FynxMatureStatusComposerPanel(
 
     // Android system Back must behave like the visible close control on every composer mode.
     // During publishing, ignore Back so an in-flight upload is not abandoned accidentally.
-    BackHandler(enabled = !publishing) {
+    BackHandler(enabled = !publishing && !recording) {
         when {
             showStatusEmoji -> showStatusEmoji = false
             audienceMenu -> audienceMenu = false
