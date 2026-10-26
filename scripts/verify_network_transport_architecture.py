@@ -29,7 +29,7 @@ for needle in [
     "private fun safeHttpErrorMessage(status: Int, body: String): String",
     'serverMessage.equals("Application not found", ignoreCase = true)',
     '"The FYNX service is temporarily unavailable."',
-    '"FYNX backend returned HTTP $status: ${safeHttpErrorMessage(status, body)}"',
+    '"FYNX backend returned HTTP $status: ${FynxBackendClient.safeHttpErrorMessage(status, body)}"',
 ]:
     if needle not in backend:
         violations.append(f"backend error presentation invariant missing: {needle}")
