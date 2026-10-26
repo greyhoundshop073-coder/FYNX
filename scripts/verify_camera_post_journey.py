@@ -1,4 +1,5 @@
-from pathlib import Path\nimport re
+from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 home = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt").read_text(encoding="utf-8")
