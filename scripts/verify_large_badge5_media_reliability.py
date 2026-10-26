@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Large Badge #5: camera/media reliability and full-media display certification."""
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 remote = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
@@ -29,7 +30,7 @@ camera_checks = {
     "zoom": "setZoomRatio" in camera,
     "exposure": "setExposureCompensationIndex" in camera,
     "timer": "captureTimerSeconds" in camera,
-    "preview and send": "pendingUri" in camera and "onCaptured(previewUri,previewType)" in camera,
+    "preview and send": "pendingUri" in camera and re.search(r"onCaptured\s*\(\s*previewUri\s*,\s*previewType\s*\)", camera) is not None,
     "retake": "retake()" in camera,
 }
 surface_checks = {
