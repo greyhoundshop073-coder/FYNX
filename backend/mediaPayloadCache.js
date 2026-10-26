@@ -41,7 +41,7 @@ function cacheEntry(id, mimeType, data, now) {
 
 export async function getCachedMediaPayload(pool, mediaId) {
   const id = String(mediaId ?? "").trim();
-  if (!/^[1-9]\\d{0,19}$/.test(id)) return null;
+  if (!/^[1-9]\d{0,19}$/.test(id)) return null;
 
   const cached = readEntry(id, Date.now());
   if (cached) return cached;
