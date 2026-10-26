@@ -164,7 +164,7 @@ connection_branch_position = home_topbar.find('if (appConnectionState == FynxApp
 waiting_branch_position = home_topbar.find('FynxAppConnectionManager.State.WAITING_FOR_NETWORK')
 connecting_branch_position = home_topbar.find('FynxAppConnectionManager.State.CONNECTING')
 if connection_branch_position < 0 or brand_position < connection_branch_position:
-    raise SystemExit("HOME INTERACTIONS RED: FYNX branding must be shown for the connected state, not forced over connection-state messaging")
+    raise SystemExit("HOME INTERACTIONS RED: connected state must show FYNX branding and verification")
 if waiting_branch_position < 0 or '"Waiting for network..."' not in home_topbar:
     raise SystemExit("HOME INTERACTIONS RED: waiting-for-network state must display the intended waiting message")
 if connecting_branch_position < 0 or '"Connecting" + ".".repeat(connectingDotCount)' not in home_topbar:
