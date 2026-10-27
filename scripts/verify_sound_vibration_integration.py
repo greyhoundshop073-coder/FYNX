@@ -23,6 +23,9 @@ group = read("app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt")
 social = read("app/src/main/java/com/fynx/app/ui/FynxSocialInteractionSounds.kt")
 settings = read("app/src/main/java/com/fynx/app/ui/NotificationPanel.kt")
 foundation = read("app/src/main/java/com/fynx/app/ui/NotificationFoundation.kt")
+call_alert = read("app/src/main/java/com/fynx/app/ui/FynxCallAlertController.kt")
+calls = read("app/src/main/java/com/fynx/app/ui/FynxCallsPanel.kt")
+messaging_service = read("app/src/main/java/com/fynx/app/ui/FynxFirebaseMessagingService.kt")
 
 check("sound master preference is exposed in settings", "FynxInteractionSound.setMasterEnabled(context, it)" in settings)
 check("private, group and social sound categories are exposed", all(token in settings for token in [
@@ -57,5 +60,23 @@ check("social feedback routes through shared category and silent-mode policy", "
 check("in-app sounds respect Android Silent and Vibrate modes", "audio.ringerMode != AudioManager.RINGER_MODE_NORMAL" in interaction)
 check("notification settings provide direct Android channel settings access", "Settings.ACTION_APP_NOTIFICATION_SETTINGS" in settings)
 check("existing notification channels remain the authority for background alert behavior", "NotificationManagerCompat.from(context).notify(id, builder.build())" in foundation)
+
+
+check("incoming-call ringtone is tied to RINGING state and stopped when call state changes or screen closes", all(token in calls for token in [
+    "FynxCallAlertController.start(context, currentAlertSession.id)",
+    "currentAlertSession?.state == FynxCallState.RINGING",
+    "FynxCallAlertController.stop()",
+    "onDispose {",
+    "FynxCallAlertController.stop()"
+]))
+check("incoming-call alerts use the FYNX looping ringtone and mode-safe vibration", all(token in call_alert for token in [
+    "R.raw.fynx_call_ring", "isLooping = true",
+    "AudioManager.RINGER_MODE_VIBRATE", "AudioManager.RINGER_MODE_SILENT",
+    "VibrationEffect.createWaveform", "AudioAttributes.USAGE_NOTIFICATION_RINGTONE"
+]))
+check("incoming and missed call push types route to the Calls notification channel", all(token in messaging_service for token in [
+    '"CALL"', '"INCOMING_CALL"', '"VOICE_CALL"', '"VIDEO_CALL"', '"MISSED_CALL"',
+    "FynxNotificationFoundation.CALLS_CHANNEL"
+]))
 
 print("GREEN: FYNX sound/vibration integration gate")

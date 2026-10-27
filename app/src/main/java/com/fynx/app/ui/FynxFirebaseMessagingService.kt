@@ -35,6 +35,8 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         }
         val channel = when (type) {
             "MESSAGE" -> FynxNotificationFoundation.MESSAGES_CHANNEL
+            "CALL", "CALL_INVITE", "INCOMING_CALL", "INCOMING_VOICE_CALL", "INCOMING_VIDEO_CALL",
+            "VOICE_CALL", "VIDEO_CALL", "MISSED_CALL" -> FynxNotificationFoundation.CALLS_CHANNEL
             "FRIEND_REQUEST", "FOLLOW", "STORY", "COMMENT", "REACTION" -> FynxNotificationFoundation.FRIENDS_CHANNEL
             "GROUP" -> FynxNotificationFoundation.GROUPS_CHANNEL
             "MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL

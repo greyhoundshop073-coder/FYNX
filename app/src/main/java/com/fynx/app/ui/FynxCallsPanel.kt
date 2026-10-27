@@ -163,7 +163,11 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
 
     DisposableEffect(Unit) {
         realtimeClient.connect()
-        onDispose { mediaEngine.disconnect(); realtimeClient.close() }
+        onDispose {
+            FynxCallAlertController.stop()
+            mediaEngine.disconnect()
+            realtimeClient.close()
+        }
     }
 
     suspend fun resolveUser(username: String): String? = FynxSocialClient.searchUsers(context, username).getOrNull()?.firstOrNull { it.username.equals(username, true) }?.id
@@ -241,6 +245,17 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
 
     LaunchedEffect(initialName, initialOutgoing) { if (initialOutgoing && !initialName.isNullOrBlank()) beginOutgoing(initialName, initialVideo) }
+
+    // Keep the incoming-call alert owned by the call session. State changes stop it
+    // immediately on answer, decline, remote hang-up, timeout, and screen disposal.
+    LaunchedEffect(session?.id, session?.state) {
+        val currentAlertSession = session
+        if (currentAlertSession?.state == FynxCallState.RINGING) {
+            FynxCallAlertController.start(context, currentAlertSession.id)
+        } else {
+            FynxCallAlertController.stop()
+        }
+    }
 
     LaunchedEffect(session?.id, session?.state) {
         val current = session ?: return@LaunchedEffect
