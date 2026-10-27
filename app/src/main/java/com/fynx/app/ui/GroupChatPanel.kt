@@ -94,9 +94,14 @@ fun GroupChatPanel(
     var searchQuery by remember { mutableStateOf("") }
     var showGroupMenu by remember { mutableStateOf(false) }
 
-    fun feedback() {
+    fun feedback(message: ChatMessage? = null) {
         FynxHaptics.perform(localView)
-        FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_SENT)
+        val event = when {
+            message?.attachmentUri != null -> FynxInteractionSound.Event.GROUP_MEDIA_SENT
+            message?.replyToId != null -> FynxInteractionSound.Event.GROUP_REPLY
+            else -> FynxInteractionSound.Event.GROUP_MESSAGE_SENT
+        }
+        FynxInteractionSound.play(context, event)
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -277,7 +282,7 @@ fun GroupChatPanel(
                     saveGroupMessages(context, group.id, messages)
                     error = null
                     // Confirmation feedback is only emitted after the server accepts the message.
-                    feedback()
+                    feedback(message)
                 }
                 .onFailure { e ->
                     messages = messages.filterNot { it.id == message.id }
@@ -654,7 +659,10 @@ fun GroupChatPanel(
                             scope.launch {
                                 val next = if (message.reaction == "👍") null else "👍"
                                 FynxGroupRemoteClient.reactToMessage(context, group.id, message.id, next)
-                                    .onSuccess { applyServer(it) }
+                                    .onSuccess {
+                                        applyServer(it)
+                                        FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_REACTION)
+                                    }
                                     .onFailure { error = it.message ?: "Reaction failed." }
                                 actionMessage = null
                             }

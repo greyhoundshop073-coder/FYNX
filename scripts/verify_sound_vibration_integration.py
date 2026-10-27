@@ -23,6 +23,7 @@ group = read("app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt")
 social = read("app/src/main/java/com/fynx/app/ui/FynxSocialInteractionSounds.kt")
 settings = read("app/src/main/java/com/fynx/app/ui/NotificationPanel.kt")
 foundation = read("app/src/main/java/com/fynx/app/ui/NotificationFoundation.kt")
+comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
 call_alert = read("app/src/main/java/com/fynx/app/ui/FynxCallAlertController.kt")
 calls = read("app/src/main/java/com/fynx/app/ui/FynxCallsPanel.kt")
 messaging_service = read("app/src/main/java/com/fynx/app/ui/FynxFirebaseMessagingService.kt")
@@ -39,6 +40,15 @@ check("incoming message feedback is deduplicated by stable remote message id", "
 check("incoming chat uses the chat-specific sound and vibration preferences", "FynxInChatSound.play(context, chat.username)" in conversation and "FynxHaptics.incomingChatMessage(context, chat.username)" in conversation)
 check("private text and media send confirmations play only after successful delivery response", "FynxInteractionSound.Event.MESSAGE_SENT" in conversation and "FynxInteractionSound.Event.MEDIA_SENT" in conversation and conversation.index("// Only confirm after the backend accepted the send") > conversation.index(".onSuccess { remote ->"))
 check("voice-message retry success has media confirmation feedback", "FynxInteractionSound.play(context, FynxInteractionSound.Event.MEDIA_SENT)" in conversation)
+check("private replies and private message reactions have distinct success feedback", all(token in conversation for token in [
+    "FynxInteractionSound.Event.REPLY", "FynxInteractionSound.Event.REACTION"
+]))
+check("group sends select media and reply feedback only after server success", all(token in group for token in [
+    "FynxInteractionSound.Event.GROUP_MEDIA_SENT", "FynxInteractionSound.Event.GROUP_REPLY",
+    "feedback(message)", "FynxGroupRemoteClient.sendMessage(context, group.id, message)"
+]) and group.index("FynxGroupRemoteClient.sendMessage(context, group.id, message)") < group.index("feedback(message)"))
+check("group reaction feedback is emitted after server success", "FynxInteractionSound.Event.GROUP_REACTION" in group and group.index("FynxGroupRemoteClient.reactToMessage(context, group.id, message.id, next)") < group.index("FynxInteractionSound.Event.GROUP_REACTION"))
+check("social comments and replies use shared SOCIAL_COMMENT sound preference", "FynxSocialInteractionSounds.commented(context)" in comments_panel and "FynxInteractionSound.Event.SOCIAL_COMMENT" in social)
 check("group success feedback uses shared sound and system haptics", "FynxHaptics.perform(localView)" in group and "FynxInteractionSound.Event.GROUP_MESSAGE_SENT" in group)
 check("group incoming feedback is deduplicated and ignores messages from self", all(token in group for token in [
     "latestMessages.none { it.id == incomingId }", "groupFeedbackMessageIds.add(incomingId)",

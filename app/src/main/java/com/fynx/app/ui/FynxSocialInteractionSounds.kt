@@ -18,4 +18,7 @@ object FynxSocialInteractionSounds {
 
     fun reaction(context: Context) =
         FynxInteractionSound.play(context, FynxInteractionSound.Event.SOCIAL_REACTION)
+
+    fun commented(context: Context) =
+        FynxInteractionSound.play(context, FynxInteractionSound.Event.SOCIAL_COMMENT)
 }

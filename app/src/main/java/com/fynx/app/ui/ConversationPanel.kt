@@ -611,8 +611,11 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         // Only confirm after the backend accepted the send; failed/retried sends stay silent.
                         FynxInteractionSound.play(
                             context,
-                            if (selectedAttachment != null) FynxInteractionSound.Event.MEDIA_SENT
-                            else FynxInteractionSound.Event.MESSAGE_SENT
+                            when {
+                                selectedAttachment != null -> FynxInteractionSound.Event.MEDIA_SENT
+                                replyToId != null -> FynxInteractionSound.Event.REPLY
+                                else -> FynxInteractionSound.Event.MESSAGE_SENT
+                            }
                         )
                         if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
                             FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
@@ -977,6 +980,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                             if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing
                                                         }
                                                     }
+                                                    FynxInteractionSound.play(context, FynxInteractionSound.Event.REACTION)
                                                 }
                                                 .onFailure { networkError = "Reaction could not be removed yet. Please try again." }
                                         }
@@ -1025,6 +1029,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                     if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing
                                                 }
                                             }
+                                            FynxInteractionSound.play(context, FynxInteractionSound.Event.REACTION)
                                         }.onFailure { networkError = "Reaction could not be saved yet. Please try again." }
                                     }
                                 },
