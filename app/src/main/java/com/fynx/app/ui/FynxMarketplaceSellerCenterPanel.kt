@@ -90,10 +90,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyTotalsFromBackend by remember { mutableStateOf(false) }
     var showDriverAssignments by remember { mutableStateOf(false) }
     var activeSection by rememberSaveable { mutableStateOf("Overview") }
-    val selectedChipColors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-    )
+    val selectedChipColors = fynxMarketplaceSelectedChipColors()
     var shopName by rememberSaveable { mutableStateOf("") }
     var shopDescription by rememberSaveable { mutableStateOf("") }
     var shopLocation by rememberSaveable { mutableStateOf("") }
