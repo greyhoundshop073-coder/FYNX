@@ -2,24 +2,43 @@
 """Regression gate for the approved FYNX brand palette and appearance choices."""
 from pathlib import Path
 
+
+def relative_luminance(hex_color: str) -> float:
+    """Calculate WCAG 2.x relative luminance for a #RRGGBB color."""
+    channels = [int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    linear = [channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4 for channel in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def contrast_ratio(first: str, second: str) -> float:
+    """Return the WCAG contrast ratio between two #RRGGBB colors."""
+    light, dark = sorted((relative_luminance(first), relative_luminance(second)), reverse=True)
+    return (light + 0.05) / (dark + 0.05)
+
+
 ROOT = Path(__file__).resolve().parents[1]
 design = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt").read_text(encoding="utf-8")
 picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt").read_text(encoding="utf-8")
 guidelines = (ROOT / "docs/FYNX_MASTER_UI_GUIDELINES.md").read_text(encoding="utf-8")
 
 checks = [
-    ("default blue accent uses approved Cobalt Blue and the shared Classic Green token", "Blue(Color(0xFF0047AB), Color(0xFF3C73BD), FynxDesign.ClassicGreen)" in design),
+    ("default blue accent uses the Azure Blue token and preserves the existing companion and Classic Green", "Blue(FynxDesign.AzureBlue, Color(0xFF3C73BD), FynxDesign.ClassicGreen)" in design),
+    ("Azure Blue token is the exact user-approved primary blue", "val AzureBlue = Color(0xFF007FFF)" in design),
+    ("legacy Cobalt Blue is not still used as the default primary", "Blue(Color(0xFF0047AB)" not in design),
+    ("primary foreground selection uses the WCAG black/white crossover", "effectiveAccent.primary.luminance() > 0.179f" in design and "onPrimary = onAccent" in design),
+    ("black foreground on Azure Blue meets WCAG AA for normal text",
+     contrast_ratio("#007FFF", "#000000") >= 4.5 and contrast_ratio("#007FFF", "#000000") > contrast_ratio("#007FFF", "#FFFFFF")),
     ("success token is the exact Classic Green", "val ClassicGreen = Color(0xFF008000)" in design),
     ("brand error token is the exact Crimson Red", "val CrimsonRed = Color(0xFFDC143C)" in design),
     ("dark mode uses a contrast-safe red for error text", "error = FynxDesign.DarkModeError" in design and "val DarkModeError = Color(0xFFFF7086)" in design),
     ("light mode uses the exact Crimson Red for error text", "error = FynxDesign.CrimsonRed" in design),
     ("dark-mode error foreground uses a contrast-safe dark color", "error = FynxDesign.DarkModeError" in design and "onError = FynxDesign.Background" in design),
     ("light-mode error foreground stays white on the approved Crimson Red", "error = FynxDesign.CrimsonRed" in design and "onError = Color.White" in design),
-    ("accent picker labels the selected blue Cobalt Blue", 'FynxAccent.Blue -> "Cobalt Blue"' in picker),
+    ("accent picker labels the selected blue Azure Blue", 'FynxAccent.Blue -> "Azure Blue"' in picker),
     ("Light, Dark, and System appearance choices are preserved",
      all(f'Triple("{mode}"' in picker for mode in ("System", "Light", "Dark"))),
     ("master UI guidelines document the approved three-color palette",
-     all(token in guidelines for token in ("#0047AB", "#008000", "#DC143C"))),
+     all(token in guidelines for token in ("#007FFF", "#008000", "#DC143C"))),
 
     ("Soft Cloud White token is exact and wired to light background",
      "val SoftCloudWhite = Color(0xFFF5F7FA)" in design and "val LightBackground = SoftCloudWhite" in design and "background = FynxDesign.LightBackground" in design),

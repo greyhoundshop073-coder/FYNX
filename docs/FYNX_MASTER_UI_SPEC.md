@@ -9,11 +9,11 @@ Use the approved FYNX master reference image as the visual source of truth for l
 ## Core visual language
 
 - Primary background: deep navy / blue-black.
-- Primary accent: Cobalt Blue (`#0047AB`).
+- Primary accent: Azure Blue (`#007FFF`).
 - Successful and confirmed actions: Classic Green (`#008000`).
 - Errors and failed actions: Crimson Red (`#DC143C`); use a brighter contrast-safe red for error text on dark surfaces.
 - Purple remains available as an optional user-selected accent, not the default brand control color.
-- Use solid Cobalt Blue for primary actions; do not add blue-to-purple gradients to actions.
+- Use solid Azure Blue for primary actions and active states; do not add blue-to-purple gradients to actions.
 - Surfaces/cards: slightly raised dark navy surfaces with subtle separation.
 - Primary text: white / near-white.
 - Secondary text: muted light grey-blue.
@@ -32,7 +32,7 @@ These tones support the three official FYNX brand colors; they are not additiona
 - Soft Cloud White (`#F5F7FA`): the light-mode page background. Keep surfaces clean and content contrast high.
 - Midnight Slate (`#1C2434`): raised dark-mode surfaces and panels, used over the deeper navy background.
 - Slate Grey (`#64748B`): secondary text and quiet icons in light mode; never use it for essential text on a dark surface.
-- Pale Cobalt (`#E8EEFA`): gentle light-mode selection/focus containers. Keep primary actions solid Cobalt Blue.
+- Pale Cobalt (`#E8EEFA`): gentle light-mode selection/focus containers. Use it for selected/highlighted cards; keep ordinary content cards neutral and primary actions solid Azure Blue.
 - Premium Gold (`#D4AF37`): reserved for premium/verified/reward details only. Do not use it for success/error states, large backgrounds, or small text on its own; pair it with a readable dark foreground.
 
 Use semantic tokens from `FynxDesign` instead of repeating raw hex values. Preserve the existing deep-navy, Charcoal Black and Black AMOLED appearance options. Do not scatter every palette color across every screen.

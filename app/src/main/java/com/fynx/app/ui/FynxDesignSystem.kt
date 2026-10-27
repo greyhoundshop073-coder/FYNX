@@ -26,13 +26,16 @@ enum class FynxAccent(
     /** Mature companion tone used sparingly for tertiary accents and reflective depth. */
     val companion: Color
 ) {
-    // Default FYNX brand palette: Cobalt Blue primary, blue companion, Classic Green tertiary.
-    Blue(Color(0xFF0047AB), Color(0xFF3C73BD), FynxDesign.ClassicGreen),
+    // Default FYNX brand palette: Azure Blue primary, existing blue companion, Classic Green tertiary.
+    Blue(FynxDesign.AzureBlue, Color(0xFF3C73BD), FynxDesign.ClassicGreen),
     Purple(Color(0xFF7C5CFF), Color(0xFFB18CFF), Color(0xFFA4778A)),
     Charcoal(Color(0xFF37474F), Color(0xFF607D8B), Color(0xFF8A9499))
 }
 
 object FynxDesign {
+    /** User-approved primary FYNX blue, used by the default accent and themed primary controls. */
+    val AzureBlue = Color(0xFF007FFF)
+
     // Supporting palette: neutral surfaces, secondary content and premium-only details.
     val SoftCloudWhite = Color(0xFFF5F7FA)
     val MidnightSlate = Color(0xFF1C2434)
@@ -162,7 +165,8 @@ fun FynxTheme(
         "System" -> darkMode || scheduledNight
         else -> darkMode || scheduledNight
     }
-    val onAccent = if (effectiveAccent.primary.luminance() > 0.5f) Color.Black else Color.White
+    // Choose the higher-contrast black/white foreground; Azure Blue needs black text/icons for WCAG AA contrast.
+    val onAccent = if (effectiveAccent.primary.luminance() > 0.179f) Color.Black else Color.White
     val scheme = if (effectiveDarkMode) {
         darkColorScheme(
             primary = effectiveAccent.primary,
