@@ -205,3 +205,17 @@ All Android Marketplace changes must land in the canonical integration branch ab
 - Add a pure order-response parser that validates the returned order ID, state and requested checkout identity; checks finite/nonnegative financial fields; reconciles product subtotal, full Marketplace fee shares and buyer-payable total; and only then constructs the order passed to payment initialization.
 - Add JVM tests for valid mapping, missing/malformed identity and status, request mismatch, missing/malformed amounts, and arithmetic reconciliation.
 - **Verification state:** pending exact-head JVM/build/lint CI. This source change is not a claim that payment, order persistence, payout or delivery has been live-tested. The independent live-backend/payment-provider dependency remains unchanged.
+
+
+## P7 — Multi-product checkout quote and order parity
+
+**Feature branch:** `fix/marketplace-checkout-idempotency-quote-validation-20261027`  
+**Scope:** Android Marketplace cart quote/order response validation, JVM tests, source-contract checks and this register only. No backend/API implementation or shared configuration is changed.
+
+- The multi-product quote mapper previously used `opt*` defaults and checked only the item count. It could accept an expired/malformed quote, wrong listing or quantity, changed currency/method, missing price/fee fields, or aggregate arithmetic that did not equal the line items.
+- The multi-order mapper previously checked only for a `checkout` object. It could pass payment initialization a checkout whose ID/state/total differed from the reviewed quote, or a partial/duplicate set of child orders.
+- Added a pure multi-quote parser that validates 1–20 unique expected cart lines, quote UUID and expiry, every listing/quantity/currency/fulfillment, finite amounts, per-line fee shares, line subtotal/total arithmetic, aggregate subtotal/delivery/full FYNX fee/buyer fee/total reconciliation.
+- Added a multi-order parser that compares the final server checkout identity, currency, pending status and aggregate totals to the reviewed quote; validates every child order using the single-order strict parser; rejects missing/duplicate/foreign products, duplicate IDs, changed line prices/fees and non-pending child orders before passing control to payment.
+- Added JVM regression cases for valid responses, quote expiry/malformed identity, item mismatch, mixed currency, malformed arithmetic, partial orders, changed aggregate total/state, duplicate orders and price drift.
+- The multi-product delivery/fulfillment fields are locked during the active order request to prevent the visible form changing while an order is being confirmed.
+- **Verification state:** new source-contract and JVM tests are pending exact-head CI. This does not certify real Paystack payment, stock reservation, or backend/database persistence; it ensures the client refuses inconsistent server responses before launching payment.

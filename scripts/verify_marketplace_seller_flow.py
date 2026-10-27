@@ -179,6 +179,21 @@ checks.extend([
     ("seller-order payload rejects invalid amounts and missing status instead of displaying a false zero or pending order", 'order.optDouble("totalAmount", Double.NaN)' in seller_orders and '!total.isFinite() || total < 0.0' in seller_orders and 'order.optString("status").trim()' in seller_orders and 'Seller orders response contains an order without status.' in seller_orders and 'total = order.optDouble("totalAmount")' not in seller_orders),
 ])
 
+
+checks.extend([
+    ("multi-product quote validates every requested product and reconciles aggregate fees",
+     "parseMarketplaceMultiCheckoutQuoteResponse(raw, expectedLines)" in marketplace
+     and 'requiredText(item, "listingId")' in marketplace
+     and 'requiredText(item, "fulfillmentMethod")' in marketplace
+     and 'sumsTo(marketplaceFeeTotal, items.sumOf { it.marketplaceFee })' in marketplace
+     and 'sumsTo(total, items.sumOf { it.total })' in marketplace),
+    ("multi-product orders are validated against the reviewed quote before payment initialization",
+     "parseMarketplaceMultiCheckoutOrderResponse(raw, quote)" in marketplace
+     and 'if (status != "PAYMENT_PENDING")' in marketplace
+     and 'No payment was started; review the exact total again.' in marketplace
+     and 'createMultiOrder(context,lines(),q)' in marketplace),
+])
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
