@@ -394,6 +394,9 @@ internal fun parseProtectedMarketplaceCheckoutOrderResponse(
     }
 
     val status = requiredText("status").uppercase(Locale.US)
+    if (status != "PAYMENT_PENDING") {
+        throw IllegalStateException("The protected order is not in a payable pending state. Open My Shop or Orders to review its current status.")
+    }
     val product = order.optJSONObject("product")
     val productTitle = product?.optString("title").orEmpty().trim()
         .takeIf { it.isNotBlank() && it != "null" }

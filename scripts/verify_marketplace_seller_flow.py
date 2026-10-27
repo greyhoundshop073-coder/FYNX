@@ -197,7 +197,9 @@ checks.extend([
 checks.extend([
     ("single-item order rejects price drift from the reviewed quote before payment",
      "expectedQuote: FynxMarketplaceCheckoutQuote? = null" in checkout
-     and "expectedQuote = expectedQuote" in checkout and "stableOrderId,\n                            q" in checkout
+     and "expectedQuote = expectedQuote" in checkout
+     and 'if (status != "PAYMENT_PENDING")' in checkout
+     and "stableOrderId,\n                            q" in checkout
      and "No payment was started; review the exact total again." in checkout),
 ])
 

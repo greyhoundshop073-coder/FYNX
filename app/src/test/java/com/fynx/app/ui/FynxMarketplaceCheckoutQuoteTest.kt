@@ -164,6 +164,9 @@ class FynxMarketplaceCheckoutQuoteTest {
         assertInvalidOrder(validOrder { it.remove("id") })
         assertInvalidOrder(validOrder { it.put("id", "not-a-uuid") })
         assertInvalidOrder(validOrder { it.remove("status") })
+        assertInvalidOrder(validOrder { it.put("status", "PAID") })
+        assertInvalidOrder(validOrder { it.put("status", "CANCELLED") })
+        assertInvalidOrder(validOrder { it.put("status", "DISPUTED") })
         assertInvalidOrder(JSONObject().put("unexpected", true).toString())
     }
 
