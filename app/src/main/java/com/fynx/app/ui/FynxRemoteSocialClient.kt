@@ -231,7 +231,7 @@ object FynxRemoteSocialClient {
     }
     suspend fun reviewMarketplaceOrder(context: Context, id: String, rating: Int, comment: String): Result<Unit> { require(rating in 1..5) { "Rating must be between 1 and 5." }; return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/review", JSONObject().apply { put("rating", rating); put("comment", comment.trim().take(1000)) }.toString()).map { Unit } }
 
-    suspend fun like(context: Context, id: String, desired: Boolean? = null): Result<Pair<Boolean, Int>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); val body = desired?.let { JSONObject().put("liked", it).toString() } ?: "{}"; return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/like", body).mapCatching { val o = JSONObject(it); o.optBoolean("liked") to o.optInt("likeCount") } }
+    suspend fun like(context: Context, id: String, desired: Boolean? = null): Result<Pair<Boolean, Int>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); val body = desired?.let { JSONObject().put("liked", it).toString() } ?: "{}"; return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/like", body).mapCatching { val o = JSONObject(it); o.optBoolean("liked") to o.optInt("likeCount") }.onSuccess { result -> if (result.first) FynxSocialInteractionSounds.liked(context) } }
     suspend fun save(context: Context, id: String, saved: Boolean): Result<Pair<Boolean, Int>> {
         val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
         val path = "/api/social/posts/$numericId/save"

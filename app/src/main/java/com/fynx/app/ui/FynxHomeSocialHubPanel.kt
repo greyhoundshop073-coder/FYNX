@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -76,6 +77,7 @@ fun FynxHomeSocialHubPanel(
     onInitialPostConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val localView = LocalView.current
     val scope = rememberCoroutineScope()
     val configuredPostVisibility = remember { FynxPreferencesStore.loadVisibility(context, "privacy_posts_visibility") }
     val postingAllowed = configuredPostVisibility != "Nobody"
@@ -531,7 +533,7 @@ fun FynxHomeSocialHubPanel(
                         Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (audience != FynxPostAudience.SELECTED || selectedAudienceIds.isNotEmpty()) && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
-                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, null, selectedCatalogueMusic, selectedFeelingActivity) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
+                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, null, selectedCatalogueMusic, selectedFeelingActivity) }; result.onSuccess { FynxHaptics.perform(localView); finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
                         }) { Text(if (posting) "Publishing…" else "Post") }
                     }
 

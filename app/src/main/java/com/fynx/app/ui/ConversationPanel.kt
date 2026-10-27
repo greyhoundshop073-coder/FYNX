@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.editableText
@@ -68,6 +69,7 @@ import java.util.Locale
 @Composable
 fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
     val context = LocalContext.current
+    val localView = LocalView.current
     DisposableEffect(chat.username) {
         FynxNotificationForegroundState.setActivePrivateChat(chat.username)
         onDispose { FynxNotificationForegroundState.clearActivePrivateChat(chat.username) }
@@ -476,6 +478,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             isNewConversation = false
                             currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
                             FynxInteractionSound.play(context, FynxInteractionSound.Event.MEDIA_SENT)
+                            FynxHaptics.perform(localView)
                             pendingFile.delete()
                             pendingVoiceRetry = null
                             uploadedVoiceCache = null
@@ -617,6 +620,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 else -> FynxInteractionSound.Event.MESSAGE_SENT
                             }
                         )
+                        FynxHaptics.perform(localView)
                         if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
                             FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
                                 .onSuccess { marketplaceContextAttached = true }
@@ -981,6 +985,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                         }
                                                     }
                                                     FynxInteractionSound.play(context, FynxInteractionSound.Event.REACTION)
+                                                    FynxHaptics.perform(localView)
                                                 }
                                                 .onFailure { networkError = "Reaction could not be removed yet. Please try again." }
                                         }
@@ -1030,6 +1035,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                 }
                                             }
                                             FynxInteractionSound.play(context, FynxInteractionSound.Event.REACTION)
+                                            FynxHaptics.perform(localView)
                                         }.onFailure { networkError = "Reaction could not be saved yet. Please try again." }
                                     }
                                 },

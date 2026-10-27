@@ -59,5 +59,6 @@ object FynxHomePostReactionsClient {
     suspend fun clear(context: Context, postId: String): Result<ReactionState> {
         val id = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
         return FynxBackendClient.delete(context, "/api/social/posts/$id/reaction").mapCatching(::parse)
+            .onSuccess { FynxSocialInteractionSounds.reaction(context) }
     }
 }

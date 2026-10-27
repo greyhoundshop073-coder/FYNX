@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -35,6 +36,7 @@ private const val COMMENT_PAGE_SIZE = 50
 @Composable
 fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommentId: String? = null, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}) {
     val context = LocalContext.current
+    val localView = LocalView.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var comments by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }
@@ -129,6 +131,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             val result = if (parentId != null) FynxRemoteSocialClient.addReply(context, post.id, parentId, value) else FynxRemoteSocialClient.addComment(context, post.id, value)
             result.onSuccess { comment ->
                 FynxSocialInteractionSounds.commented(context)
+                FynxHaptics.perform(localView)
                 comments = (comments + comment).distinctBy { it.id }; resolveCommenterPhotos(listOf(comment)); commentCount += 1; onCommentCountChanged(commentCount)
                 if (comment.parentCommentId != null) { val parent = comment.parentCommentId!!; expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id })) }
                 text = ""; replyingToId = null

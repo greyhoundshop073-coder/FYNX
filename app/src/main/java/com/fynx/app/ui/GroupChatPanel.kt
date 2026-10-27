@@ -662,6 +662,7 @@ fun GroupChatPanel(
                                     .onSuccess {
                                         applyServer(it)
                                         FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_REACTION)
+                                        FynxHaptics.perform(localView)
                                     }
                                     .onFailure { error = it.message ?: "Reaction failed." }
                                 actionMessage = null

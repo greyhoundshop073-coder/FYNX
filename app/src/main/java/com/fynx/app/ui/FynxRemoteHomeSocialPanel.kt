@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -67,6 +68,7 @@ private data class HomePeopleRecommendation(val username: String, val displayNam
 @Composable
 fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, onOpenStatusOwner: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null, networkReady: Boolean? = null) {
     val context = LocalContext.current
+    val localView = LocalView.current
     val scope = rememberCoroutineScope()
     val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
@@ -383,12 +385,12 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     fun runLike(id: String) {
         if (id in interactionBusy) return; val previous = posts.firstOrNull { it.id == id } ?: return; val optimisticLiked = !previous.likedByCurrentUser; val optimisticCount = (previous.likeCount + if (optimisticLiked) 1 else -1).coerceAtLeast(0)
         posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = optimisticLiked, likeCount = optimisticCount) else it }; interactionBusy = interactionBusy + id
-        scope.launch { FynxRemoteSocialClient.like(context, id, desired = optimisticLiked).onSuccess { result -> val (liked, count) = result; posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count.coerceAtLeast(0)) else it } }.onFailure { posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser, likeCount = previous.likeCount) else it }; error = it.message ?: "Unable to update this like." }; interactionBusy = interactionBusy - id }
+        scope.launch { FynxRemoteSocialClient.like(context, id, desired = optimisticLiked).onSuccess { result -> val (liked, count) = result; FynxHaptics.perform(localView); posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count.coerceAtLeast(0)) else it } }.onFailure { posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser, likeCount = previous.likeCount) else it }; error = it.message ?: "Unable to update this like." }; interactionBusy = interactionBusy - id }
     }
     fun runReaction(id: String, reaction: String) {
         if (id in interactionBusy) return; val previous = reactionStates[id] ?: FynxHomePostReactionsClient.ReactionState(); val same = previous.currentReaction == reaction; val optimisticCounts = previous.counts.toMutableMap(); previous.currentReaction?.let { current -> optimisticCounts[current] = ((optimisticCounts[current] ?: 0) - 1).coerceAtLeast(0) }; if (!same) optimisticCounts[reaction] = (optimisticCounts[reaction] ?: 0) + 1
         reactionStates = reactionStates + (id to FynxHomePostReactionsClient.ReactionState(optimisticCounts.filterValues { it > 0 }, if (same) null else reaction)); interactionBusy = interactionBusy + id; reactionPickerPostId = null
-        scope.launch { val result = if (same) FynxHomePostReactionsClient.clear(context, id) else FynxHomePostReactionsClient.set(context, id, reaction); result.onSuccess { reactionStates = reactionStates + (id to it) }.onFailure { reactionStates = reactionStates + (id to previous); error = it.message ?: "Unable to update this reaction." }; interactionBusy = interactionBusy - id }
+        scope.launch { val result = if (same) FynxHomePostReactionsClient.clear(context, id) else FynxHomePostReactionsClient.set(context, id, reaction); result.onSuccess { FynxHaptics.perform(localView); reactionStates = reactionStates + (id to it) }.onFailure { reactionStates = reactionStates + (id to previous); error = it.message ?: "Unable to update this reaction." }; interactionBusy = interactionBusy - id }
     }
     fun runFollow(username: String, following: Boolean) {
         val key = "follow:${username.removePrefix("@").trim().lowercase()}"; if (key in interactionBusy) return; interactionBusy = interactionBusy + key
