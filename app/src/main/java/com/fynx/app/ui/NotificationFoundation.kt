@@ -19,6 +19,7 @@ import java.util.UUID
 object FynxNotificationFoundation {
     const val FRIENDS_CHANNEL = "fynx_friends_v2"
     const val MESSAGES_CHANNEL = "fynx_messages_v2"
+    const val GROUPS_CHANNEL = "fynx_groups_v1"
     const val CALLS_CHANNEL = "fynx_calls_v2"
     const val GIFTS_CHANNEL = "fynx_gifts_v2"
     const val MONEY_CHANNEL = "fynx_money_v2"
@@ -65,6 +66,23 @@ object FynxNotificationFoundation {
             .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
+        val existingMessagesChannel = manager.getNotificationChannel(MESSAGES_CHANNEL)
+        val groupSound = if (existingMessagesChannel == null) notificationSound else existingMessagesChannel.sound
+        val groupChannel = NotificationChannel(
+            GROUPS_CHANNEL,
+            "Group chats",
+            existingMessagesChannel?.importance ?: NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = "Group chat messages and mentions"
+            setSound(groupSound, existingMessagesChannel?.audioAttributes ?: notificationAudio)
+            val vibrationEnabled = existingMessagesChannel?.shouldVibrate() ?: true
+            enableVibration(vibrationEnabled)
+            if (vibrationEnabled) {
+                existingMessagesChannel?.vibrationPattern
+                    ?.takeIf { it.isNotEmpty() && it.any { duration -> duration > 0L } }
+                    ?.let { setVibrationPattern(it) }
+            }
+        }
         val channels = listOf(
             NotificationChannel(FRIENDS_CHANNEL, "Friends", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 setSound(notificationSound, notificationAudio)
@@ -72,6 +90,7 @@ object FynxNotificationFoundation {
             NotificationChannel(MESSAGES_CHANNEL, "Messages", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 setSound(notificationSound, notificationAudio)
             },
+            groupChannel,
             NotificationChannel(CALLS_CHANNEL, "Calls", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Incoming FYNX voice and video calls"
                 enableVibration(true)
@@ -181,6 +200,7 @@ object FynxNotificationFoundation {
     }
 
     private fun typeForChannel(channelId: String): FynxNotificationType = when (channelId) {
+        GROUPS_CHANNEL -> FynxNotificationType.GROUP
         MESSAGES_CHANNEL, CALLS_CHANNEL -> FynxNotificationType.MESSAGE
         FRIENDS_CHANNEL -> FynxNotificationType.FRIEND_REQUEST
         GIFTS_CHANNEL -> FynxNotificationType.REACTION

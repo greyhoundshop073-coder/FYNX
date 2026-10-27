@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.fynx.app.ui.AuthState
 import com.fynx.app.ui.FynxApp
+import com.fynx.app.ui.FynxNotificationForegroundState
 import com.fynx.app.ui.FynxAuthStore
 import com.fynx.app.ui.FynxDeepLinkDestination
 import com.fynx.app.ui.FynxDeepLinkParser
@@ -63,6 +64,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        FynxNotificationForegroundState.setForeground(true)
+    }
+
+    override fun onStop() {
+        FynxNotificationForegroundState.setForeground(false)
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {

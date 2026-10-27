@@ -20,10 +20,23 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         val body = data["body"]?.takeIf { it.isNotBlank() } ?: "You have a new FYNX notification."
         val route = data["route"]?.takeIf { it.isNotBlank() } ?: "fynx://home"
         val type = data["type"]?.uppercase().orEmpty()
+        val sourceUsername = data["sourceUsername"]?.trim()?.removePrefix("@")?.trim().orEmpty()
+        val targetId = data["targetId"]?.trim().orEmpty()
+        when (type) {
+            "MESSAGE" -> {
+                if (sourceUsername.isNotBlank() && !FynxConversationPreferences.chatNotifications(this, sourceUsername)) return
+                if (sourceUsername.isNotBlank() && FynxNotificationForegroundState.shouldSuppressPrivateNotification(sourceUsername)) return
+            }
+            "GROUP" -> {
+                if (targetId.isNotBlank() && (!FynxConversationPreferences.groupNotifications(this, targetId) ||
+                    FynxConversationPreferences.groupMuted(this, targetId))) return
+                if (targetId.isNotBlank() && FynxNotificationForegroundState.shouldSuppressGroupNotification(targetId)) return
+            }
+        }
         val channel = when (type) {
             "MESSAGE" -> FynxNotificationFoundation.MESSAGES_CHANNEL
             "FRIEND_REQUEST", "FOLLOW", "STORY", "COMMENT", "REACTION" -> FynxNotificationFoundation.FRIENDS_CHANNEL
-            "GROUP" -> FynxNotificationFoundation.MESSAGES_CHANNEL
+            "GROUP" -> FynxNotificationFoundation.GROUPS_CHANNEL
             "MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL
             "REMINDER" -> FynxNotificationFoundation.REMINDERS_CHANNEL
             else -> FynxNotificationFoundation.FRIENDS_CHANNEL

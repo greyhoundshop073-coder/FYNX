@@ -157,7 +157,7 @@ export async function queueFynxNotification(pool, {
     const devices = (await pool.query(`SELECT provider,token FROM notification_devices WHERE user_id=$1 AND enabled=TRUE AND provider='fcm'`, [userId])).rows;
     let delivered = 0;
     for (const device of devices) {
-      const result = await sendFcm(pool, { userId, device, notificationId: id, type, title: safeTitle, message: safeMessage, route });
+      const result = await sendFcm(pool, { userId, device, notificationId: id, type, title: safeTitle, message: safeMessage, route, targetId, sourceUsername });
       if (result) delivered += 1;
     }
     return { stored: true, delivered: delivered > 0, deliveredCount: delivered, id };
@@ -167,7 +167,7 @@ export async function queueFynxNotification(pool, {
   }
 }
 
-async function sendFcm(pool, { userId, device, notificationId, type, title, message, route }) {
+async function sendFcm(pool, { userId, device, notificationId, type, title, message, route, targetId, sourceUsername }) {
   const key = { notificationId, userId, provider: device.provider, token: device.token };
   let attempt = 0;
   while (attempt < 3) {
@@ -180,7 +180,15 @@ async function sendFcm(pool, { userId, device, notificationId, type, title, mess
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; UTF-8" },
         body: JSON.stringify({ message: {
           token: device.token,
-          data: { notificationId: String(notificationId), type: String(type), title: String(title), body: String(message), route: String(route) },
+          data: {
+            notificationId: String(notificationId),
+            type: String(type),
+            title: String(title),
+            body: String(message),
+            route: String(route),
+            targetId: String(targetId || "").slice(0, 200),
+            sourceUsername: String(sourceUsername || "").slice(0, 80)
+          },
           android: { priority: "high", ttl: "2419200s" },
         }})
       });
