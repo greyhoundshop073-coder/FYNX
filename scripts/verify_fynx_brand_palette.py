@@ -20,8 +20,10 @@ ROOT = Path(__file__).resolve().parents[1]
 design = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt").read_text(encoding="utf-8")
 picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt").read_text(encoding="utf-8")
 guidelines = (ROOT / "docs/FYNX_MASTER_UI_GUIDELINES.md").read_text(encoding="utf-8")
+marketplace_style = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text(encoding="utf-8")
 
 checks = [
+    ("Marketplace reference components use the shared Azure Blue token instead of a competing hard-coded primary blue", "val primary = FynxDesign.AzureBlue" in marketplace_style and "val primary = Color(0xFF155EEF)" not in marketplace_style),
     ("default blue accent uses the Azure Blue token and preserves the existing companion and Classic Green", "Blue(FynxDesign.AzureBlue, Color(0xFF3C73BD), FynxDesign.ClassicGreen)" in design),
     ("Azure Blue token is the exact user-approved primary blue", "val AzureBlue = Color(0xFF007FFF)" in design),
     ("legacy Cobalt Blue is not still used as the default primary", "Blue(Color(0xFF0047AB)" not in design),
