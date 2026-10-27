@@ -164,6 +164,12 @@ fun FynxMarketplaceSellerCenterPanel() {
         scope.launch {
             loading = true
             error = null
+            shopLoading = true
+            shopError = null
+            accountLoading = true
+            accountMessage = null
+            // Refresh earnings immediately so old amounts/history are hidden during the other requests.
+            loadMoney()
 
             val inventoryResult = FynxMarketplaceClient.myListings(context)
             if (requestGeneration != refreshGeneration) return@launch
@@ -183,8 +189,10 @@ fun FynxMarketplaceSellerCenterPanel() {
                     error = failure.message ?: "Could not load your listings."
                 }
 
-            shopLoading = true
-            shopError = null
+            shopName = ""
+            shopDescription = ""
+            shopLocation = ""
+            shopContactPhone = ""
             val shopResult = FynxBackendClient.get(context, "/api/marketplace/my-shop")
                 .mapCatching { raw ->
                     JSONObject(raw).optJSONObject("shop")
@@ -208,7 +216,6 @@ fun FynxMarketplaceSellerCenterPanel() {
                 }
             shopLoading = false
 
-            accountLoading = true
             val payoutResult = FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account")
                 .mapCatching { raw ->
                     val payload = JSONObject(raw)
@@ -239,7 +246,6 @@ fun FynxMarketplaceSellerCenterPanel() {
                 }
             accountLoading = false
             loading = false
-            loadMoney()
         }
     }
 

@@ -134,7 +134,7 @@ All Android Marketplace changes must land in the canonical integration branch ab
 - Seller-order parsing also occurred in `onSuccess` and had no response-generation guard. The dialog’s read-only “Refresh” additionally called the parent callback, triggering a redundant second My Shop refresh and several unnecessary GET requests.
 
 ### P4 repair and regression tests
-- Add generation guards for My Shop refreshes, earnings, and seller-order reads.
+- Add generation guards for My Shop refreshes, earnings, and seller-order reads; trigger the earnings refresh immediately so old figures are hidden while profile/inventory/payout requests are still loading.
 - Parse seller shop/payout/order response JSON inside `Result.mapCatching`, so malformed server responses follow the explicit failure path.
 - On failed inventory refresh, clear previous rows and label the count unavailable. On failed payout-account refresh, clear old account/verification data.
 - Disable refresh controls while their respective request is loading; remove the read-only seller-order Refresh callback that redundantly reloads the whole parent screen.
