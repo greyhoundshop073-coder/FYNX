@@ -365,8 +365,8 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         }
                         if (order.status in setOf("PAID", "SHIPPED") && order.driverHandoverAt == null && (order.driverType == "SELLER_LOCAL" || order.driverAcceptedAt == null || !order.driverApprovalActive)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(selected = driverMode == "FYNX_ACCOUNT", onClick = { driverMode = "FYNX_ACCOUNT" }, label = { Text("FYNX driver") }, enabled = !busy)
-                                FilterChip(selected = driverMode == "SELLER_LOCAL", onClick = { driverMode = "SELLER_LOCAL" }, label = { Text("Local phone driver") }, enabled = !busy)
+                                FilterChip(selected = driverMode == "FYNX_ACCOUNT", onClick = { driverMode = "FYNX_ACCOUNT" }, label = { Text("FYNX driver") }, enabled = !busy, colors = fynxMarketplaceSelectedChipColors())
+                                FilterChip(selected = driverMode == "SELLER_LOCAL", onClick = { driverMode = "SELLER_LOCAL" }, label = { Text("Local phone driver") }, enabled = !busy, colors = fynxMarketplaceSelectedChipColors())
                             }
                             if (driverMode == "FYNX_ACCOUNT") {
                                 OutlinedTextField(driverUsername, { driverUsername = it.take(32) }, label = { Text("Approved driver username") }, singleLine = true, enabled = !busy)
