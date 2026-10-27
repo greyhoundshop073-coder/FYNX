@@ -77,6 +77,10 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         val requestGeneration = ++orderLoadGeneration
         loading = true
         error = null
+        // Order status controls delivery, handover and financial actions. Never leave an
+        // earlier snapshot actionable while a newer request is being checked.
+        orders = emptyList()
+        selected = null
         scope.launch {
             val result = FynxBackendClient.get(context, "/api/marketplace/seller/orders")
                 .mapCatching { raw ->
@@ -86,19 +90,32 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         for (i in 0 until array.length()) {
                             val order = array.optJSONObject(i)
                                 ?: throw IllegalStateException("Seller orders response contains an invalid order.")
-                            if (order.optString("id").isBlank()) {
+                            val orderId = order.optString("id").trim()
+                            if (orderId.isBlank()) {
                                 throw IllegalStateException("Seller orders response contains an incomplete order.")
+                            }
+                            val total = order.optDouble("totalAmount", Double.NaN)
+                            if (!total.isFinite() || total < 0.0) {
+                                throw IllegalStateException("Seller orders response contains an invalid order amount.")
+                            }
+                            val status = order.optString("status").trim()
+                            if (status.isBlank()) {
+                                throw IllegalStateException("Seller orders response contains an order without status.")
+                            }
+                            val currency = order.optString("currency", "NGN").trim().uppercase(Locale.ROOT)
+                            if (currency.isBlank()) {
+                                throw IllegalStateException("Seller orders response contains an order without currency.")
                             }
                             add(
                                 SellerOrderRow(
-                                    id = order.optString("id"),
+                                    id = orderId,
                                     buyerName = order.optString("buyerDisplayName").ifBlank { order.optString("buyerUsername") },
                                     title = order.optJSONObject("product")?.optString("title").orEmpty().ifBlank { "FYNX order" },
-                                    total = order.optDouble("totalAmount"),
-                                    currency = order.optString("currency", "NGN"),
-                                    status = order.optString("status"),
-                                    fulfillment = order.optString("fulfillmentMethod", "DELIVERY"),
-                                    fulfillmentStatus = order.optString("fulfillmentStatus").ifBlank { order.optString("status") },
+                                    total = total,
+                                    currency = currency,
+                                    status = status,
+                                    fulfillment = order.optString("fulfillmentMethod").trim().ifBlank { "DELIVERY" },
+                                    fulfillmentStatus = order.optString("fulfillmentStatus").trim().ifBlank { status },
                                     address = order.optJSONObject("shippingAddress"),
                                     tracking = order.optString("trackingReference").takeIf { it.isNotBlank() },
                                     driverId = order.optString("driverId").takeIf { it.isNotBlank() && it != "null" },
@@ -127,7 +144,10 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     error = null
                 }
                 .onFailure { failure ->
-                    // Existing rows remain visible only alongside this explicit refresh error.
+                    // Fail closed: an old order snapshot must not remain available for
+                    // assigning drivers, recording custody, or displaying stale order state.
+                    orders = emptyList()
+                    selected = null
                     error = failure.message ?: "Seller orders could not load."
                 }
             loading = false
