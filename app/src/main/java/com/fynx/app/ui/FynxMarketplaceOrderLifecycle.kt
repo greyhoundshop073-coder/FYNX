@@ -89,14 +89,18 @@ fun FynxMarketplaceOrderLifecycle(
             deliveryDetailsLoading = true
             deliveryDetailsError = null
             FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
-                .onSuccess { raw ->
+                .mapCatching { raw ->
                     val response = JSONObject(raw)
-                    deliveryDetails = response.optJSONObject("assignment")
                     val evidence = response.optJSONArray("evidence")
-                    handoverPhotoMediaId = if (evidence == null) null else (0 until evidence.length())
+                    val photoMediaId = if (evidence == null) null else (0 until evidence.length())
                         .mapNotNull { evidence.optJSONObject(it) }
                         .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
                         ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
+                    response.optJSONObject("assignment") to photoMediaId
+                }
+                .onSuccess { details ->
+                    deliveryDetails = details.first
+                    handoverPhotoMediaId = details.second
                 }
                 .onFailure { deliveryDetailsError = marketplaceSafeError(it, "Delivery and driver details could not load.") }
             deliveryDetailsLoading = false
