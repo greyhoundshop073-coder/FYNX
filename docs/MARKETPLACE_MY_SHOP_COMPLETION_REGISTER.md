@@ -160,4 +160,74 @@ All Android Marketplace changes must land in the canonical integration branch ab
 - Normalize the currency to uppercase and give a blank fulfillment method the existing safe DELIVERY default.
 - Add regression assertions that guard stale-order clearing and malformed financial/status fields without removing existing Marketplace checks.
 
-**Verification status:** the source/test changes are staged on the feature branch. Exact-head CI must pass before merge. Live orders, delivery transitions and financial data remain unverified until a backend is available; this batch does not depend on or modify that backend.
+**Status:** merged through [PR #375](https://github.com/greyhoundshop073-coder/FYNX/pull/375) as canonical commit `52fac216543d34aed5d5f812f52b560aac8a5948`. Exact PR-head Android workflow [#40465757653](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40465757653) passed the fast build/test/lint and 129 Marketplace seller-flow checks; Backend CI [#40465757715](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40465757715) and repository parity/layout plus Android regression build [#40465757613](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40465757613) passed. Full emulator steps were skipped by the PR workflow. A post-merge canonical parity/layout workflow was launched at run [#40466629872](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40466629872); its final result must be recorded separately. Live order/fulfillment transitions remain unverified while the backend is unavailable.
+
+
+### P3 screenshot result correction — 2026-10-27
+
+- **Post-merge visual-capture evidence inspected:** canonical Android run [#40460202455](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40460202455) built the APK and captured genuine login-screen PNGs, but the authenticated journey did not reach Home. The report says login returned to the sign-in screen; no Marketplace or My Shop screen was reached and no Marketplace screenshots are claimed. The same run's instrumentation remained red only for Railway HTTP 404 `Application not found`. The capture code is merged, but actual Marketplace/My Shop screenshot certification remains blocked by the available authenticated navigation path/service.
+
+
+## P6 — Checkout quote validation and retry-safe order creation
+
+**Starting canonical SHA:** `52fac216543d34aed5d5f812f52b560aac8a5948`  
+**Feature branch:** `fix/marketplace-checkout-idempotency-quote-validation-20261027`  
+**Scope:** Android single-product checkout, quote parsing and client-side regression tests only. The existing backend idempotency contract is inspected but not changed. No deployment, schema, auth configuration, Avatar/Profile, Chat/Groups or Status/Story changes.
+
+### Verified source defects
+- The single-product checkout client creates `UUID.randomUUID()` inside every “Place protected order” click. If an order was accepted but its response was lost, another tap or reopened checkout submits a new order ID, bypassing the backend's existing idempotency protection.
+- The quote parser reads amounts using `JSONObject.optDouble` without a rejecting fallback. Missing amounts can become zero, and the UI can display a plausible but false subtotal/fee/total breakdown.
+- The client did not verify quote listing ID, requested quantity, fulfillment method, currency, expiry and arithmetic consistency together before showing the quote as payable.
+- Checkout fields remained editable while a quote/order request was active, allowing the visible intent to change while an order request was being submitted.
+
+### P6 repair
+- Reuse a server order ID for the same authenticated order intent across ambiguous retries and dialog reopenings; key the local lookup using a SHA-256 fingerprint of JWT `sub` plus normalized checkout intent when available, with a token-hash fallback for opaque/malformed tokens. Never persist the raw bearer token, subject, or delivery address. Bound stored attempts to 50 and expire old entries after 14 days; preserve the key while the server order can still be PAYMENT_PENDING, and clear it only after the existing authoritative payment-verification callback confirms payment.
+- Validate quote identity, expiry, listing, quantity, currency, fulfillment method, finite/nonnegative money fields, subtotal-by-quantity and total-by-fee breakdown before rendering a quote. Invalid responses follow the existing failure path with an actionable message.
+- Disable quantity, delivery/pickup and address fields while the quote/order request is active.
+- Add unit regression coverage for valid quotes, expired/malformed quotes, identity/quantity/currency/fulfillment mismatches, missing/non-finite amounts, totals reconciliation and intent-fingerprint stability. Extend the existing checkout fee verifier to protect the client/server idempotency contract. The JVM tests use the JSON reference implementation as a test-only dependency; it is not packaged into the Android APK.
+
+**Verification status at branch creation:** source/test changes are staged for PR and must pass exact-head Android build/test/lint and checkout/Marketplace source verifiers before merge. Runtime payment cannot be tested until the independent backend/provider service is available; no payment or order is simulated by these tests.
+
+
+### Concurrent canonical change reconciliation — 2026-10-27
+
+- Canonical integration advanced from `52fac216543d34aed5d5f812f52b560aac8a5948` to `dfc6bd1a552ef978f77569b024eacf2ec2d66105` via commit `dfc6bd1a552ef978f77569b024eacf2ec2d66105` (`Adopt Azure Blue as FYNX primary UI accent (#377)`).
+- That canonical commit changed only `FynxChatWallpaper.kt`, `FynxDesignSystem.kt`, the master UI guideline/spec docs, and `verify_fynx_brand_palette.py`. None overlaps the six P6 checkout files.
+- P6 was reconciled onto the newer canonical tree while retaining all six checkout-related files. Fresh CI is required on the rebased exact PR head; results from earlier heads are not evidence for this head.
+
+
+## P6 — Protected checkout order-response validation
+
+**Feature branch:** `fix/marketplace-checkout-idempotency-quote-validation-20261027`  
+**Scope:** Android Marketplace checkout response validation and JVM regression tests only. No backend route, payment provider, database, shared network configuration, Avatar/Profile, Chat/Groups or Status/Story code is changed.
+
+- The quote response is validated before it can be shown, but the order-creation response also needs its own fail-closed boundary. The previous mapper allowed missing order IDs, defaulted missing status to `PAYMENT_PENDING`, defaulted missing amounts to zero, and could accept an order for a different listing, quantity, currency or fulfillment method.
+- Add a pure order-response parser that validates the returned order ID, state and requested checkout identity; checks finite/nonnegative financial fields; reconciles product subtotal, full Marketplace fee shares and buyer-payable total; compares unit price, subtotal, delivery, all fee shares, discount and payable total against the reviewed quote; and rejects any repricing before payment initialization. It also requires the returned order state to be `PAYMENT_PENDING`; already-paid, cancelled, or otherwise non-payable idempotent retries are rejected instead of reopening payment.
+- Add JVM tests for valid mapping, missing/malformed identity and status, request mismatch, missing/malformed amounts, and arithmetic reconciliation.
+- **Verification state:** pending exact-head JVM/build/lint CI. This source change is not a claim that payment, order persistence, payout or delivery has been live-tested. The independent live-backend/payment-provider dependency remains unchanged.
+
+
+## P7 — Multi-product checkout quote and order parity
+
+**Feature branch:** `fix/marketplace-checkout-idempotency-quote-validation-20261027`  
+**Scope:** Android Marketplace cart quote/order response validation, JVM tests, source-contract checks and this register only. No backend/API implementation or shared configuration is changed.
+
+- The multi-product quote mapper previously used `opt*` defaults and checked only the item count. It could accept an expired/malformed quote, wrong listing or quantity, changed currency/method, missing price/fee fields, or aggregate arithmetic that did not equal the line items.
+- The multi-order mapper previously checked only for a `checkout` object. It could pass payment initialization a checkout whose ID/state/total differed from the reviewed quote, or a partial/duplicate set of child orders.
+- The parser distinguishes the quote’s full Marketplace fee from the grouped-checkout record’s `marketplace_fee`, which the existing backend contract stores as the buyer’s fee share. The client validates that field against the quoted buyer share and validates full fee shares against each child order.
+- Added a pure multi-quote parser that validates 1–20 unique expected cart lines, quote UUID and expiry, every listing/quantity/currency/fulfillment, finite amounts, per-line fee shares, line subtotal/total arithmetic, aggregate subtotal/delivery/full FYNX fee/buyer fee/total reconciliation.
+- Added a multi-order parser that compares the final server checkout identity, currency, pending status and aggregate totals to the reviewed quote; validates every child order using the single-order strict parser; rejects missing/duplicate/foreign products, duplicate IDs, changed line prices/fees and non-pending child orders before passing control to payment.
+- Added JVM regression cases for valid responses, quote expiry/malformed identity, item mismatch, mixed currency, malformed arithmetic, partial orders, changed aggregate total/state, duplicate orders and price drift.
+- The multi-product delivery/fulfillment fields are locked during the active order request to prevent the visible form changing while an order is being confirmed.
+- **Verification state:** new source-contract and JVM tests are pending exact-head CI. This does not certify real Paystack payment, stock reservation, or backend/database persistence; it ensures the client refuses inconsistent server responses before launching payment.
+
+## P8 — Unblock genuine Marketplace/My Shop visual capture
+
+**Feature branch:** fix/marketplace-checkout-idempotency-quote-validation-20261027  
+**Scope:** Marketplace-only runtime evidence script, its source-contract verifier, and this register. The default authenticated Home/Chat/Groups runtime journey is unchanged. No backend, auth implementation, APK code, Avatar/Profile, Chat/Groups UI, or Status/Story code is changed.
+
+- **Verified capture blocker:** the runtime script looked for the label “Saved-device login for this debug APK”, but the actual debug login screen exposes “Leave password blank for quick local entry. Enter it to connect this account to the live FYNX backend.” The old string did not match the real Android UI, so the Marketplace-only screenshot recovery continued into server login and stopped when the backend/login was unavailable.
+- In FYNX_MARKETPLACE_VISUALS_ONLY=1 mode only, detect the app’s existing passwordless debug-entry hint, use it without submitting a server login, and continue read-only navigation to the rendered Marketplace/My Shop surfaces. When no CI username secret exists, use a local-only visual username and never treat it as a server account.
+- The normal authenticated runtime journey still requires the configured E2E username/password; it does not switch to local UI mode. If visuals-only mode cannot see the app’s debug-entry hint and has no password secret, it fails with an explicit block rather than attempting an empty server login.
+- The runtime report labels debug-only capture as UI/navigation evidence, not live authentication or backend success. Product details still require a real visible priced listing; the capture never creates a listing, order, payment, driver, or seller record.
+- **Verification state:** source-contract change committed; exact-head CI and a new real Android runtime artifact must confirm the change. No Marketplace/My Shop PNG is claimed until it is captured from the emulator and inspected in the uploaded artifact.

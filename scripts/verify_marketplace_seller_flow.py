@@ -66,7 +66,7 @@ checks = [
     ("active Marketplace exposes the visible Message seller action wired to the real chat deep link", 'Text("Message seller")' in detail_components and "onContact = { contactSeller(listing.sellerUsername, listing.id) }" in marketplace and "FynxDeepLinkParser.chatAppLink" in marketplace and "Intent.ACTION_VIEW" in marketplace),
     ("active marketplace exposes Add to cart", "Add to cart" in marketplace and "cart = cart + listing" in marketplace),
     ("active marketplace Buy now enters the real checkout", "onBuyNow = { selected = null; checkoutListing = listing }" in marketplace and "FynxMarketplaceCheckoutDialog" in marketplace),
-    ("confirmed single-item Buy Now payment removes the purchased product and quantity from the saved cart", "onPaid = { paymentOrder = null; cart = cart.filterNot { it.id == order.listingId }; cartQuantities = cartQuantities.filterKeys { it != order.listingId }; protectedOrder = order; reload() }" in marketplace),
+    ("confirmed single-item Buy Now payment clears retry state and removes the purchased product and quantity from the saved cart", "onPaid = { clearMarketplaceCheckoutOrderIdForOrder(context, order.id); paymentOrder = null; cart = cart.filterNot { it.id == order.listingId }; cartQuantities = cartQuantities.filterKeys { it != order.listingId }; protectedOrder = order; reload() }" in marketplace),
     ("active marketplace details are scrollable for phone screens", "verticalScroll(rememberScrollState())" in marketplace),
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
@@ -177,6 +177,30 @@ checks.extend([
     ("seller-order read-only refresh avoids duplicate parent My Shop refresh and is disabled in flight", 'confirmButton = { TextButton(enabled = !loading, onClick = { load() }) { Text("Refresh") } }' in seller_orders and 'onClick = { load(); onChanged() }' not in seller_orders),
     ("seller-order refresh clears stale rows and selected delivery actions before a new request", "orders = emptyList()\n        selected = null\n        scope.launch" in seller_orders and "orders = emptyList()\n                    selected = null\n                    error = failure.message" in seller_orders),
     ("seller-order payload rejects invalid amounts and missing status instead of displaying a false zero or pending order", 'order.optDouble("totalAmount", Double.NaN)' in seller_orders and '!total.isFinite() || total < 0.0' in seller_orders and 'order.optString("status").trim()' in seller_orders and 'Seller orders response contains an order without status.' in seller_orders and 'total = order.optDouble("totalAmount")' not in seller_orders),
+])
+
+
+checks.extend([
+    ("multi-product quote validates every requested product and reconciles aggregate fees",
+     "parseMarketplaceMultiCheckoutQuoteResponse(raw, expectedLines)" in marketplace
+     and 'requiredText(item, "listingId")' in marketplace
+     and 'requiredText(item, "fulfillmentMethod")' in marketplace
+     and 'sumsTo(marketplaceFeeTotal, items.sumOf { it.marketplaceFee })' in marketplace
+     and 'sumsTo(total, items.sumOf { it.total })' in marketplace),
+    ("multi-product orders are validated against the reviewed quote before payment initialization",
+     "parseMarketplaceMultiCheckoutOrderResponse(raw, quote)" in marketplace
+     and 'if (status != "PAYMENT_PENDING")' in marketplace
+     and 'No payment was started; review the exact total again.' in marketplace
+     and 'createMultiOrder(context,lines(),q)' in marketplace),
+])
+
+checks.extend([
+    ("single-item order rejects price drift from the reviewed quote before payment",
+     "expectedQuote: FynxMarketplaceCheckoutQuote? = null" in checkout
+     and "expectedQuote = expectedQuote" in checkout
+     and 'if (status != "PAYMENT_PENDING")' in checkout
+     and "stableOrderId,\n                            q" in checkout
+     and "No payment was started; review the exact total again." in checkout),
 ])
 
 failed = [name for name, ok in checks if not ok]
