@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import android.Manifest
 import android.content.Context
 import android.media.MediaRecorder
+import android.os.Build
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
