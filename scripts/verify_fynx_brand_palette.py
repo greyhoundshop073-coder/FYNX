@@ -21,8 +21,10 @@ design = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt").read_t
 picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt").read_text(encoding="utf-8")
 guidelines = (ROOT / "docs/FYNX_MASTER_UI_GUIDELINES.md").read_text(encoding="utf-8")
 marketplace_style = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text(encoding="utf-8")
+marketplace_home = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceHome.kt").read_text(encoding="utf-8")
 
 checks = [
+    ("selected Nearby Marketplace card uses semantic selected-container and foreground tokens", "color = if (nearbySelected) MaterialTheme.colorScheme.primaryContainer else FynxMarketplaceReferenceStyle.surface" in marketplace_home and "tint = if (nearbySelected) MaterialTheme.colorScheme.onPrimaryContainer else FynxMarketplaceReferenceStyle.primarySoft" in marketplace_home and "color = if (nearbySelected) MaterialTheme.colorScheme.onPrimaryContainer else FynxMarketplaceReferenceStyle.text" in marketplace_home),
     ("Marketplace reference components use the shared Azure Blue token instead of a competing hard-coded primary blue", "val primary = FynxDesign.AzureBlue" in marketplace_style and "val primary = Color(0xFF155EEF)" not in marketplace_style),
     ("default blue accent uses the Azure Blue token and preserves the existing companion and Classic Green", "Blue(FynxDesign.AzureBlue, Color(0xFF3C73BD), FynxDesign.ClassicGreen)" in design),
     ("Azure Blue token is the exact user-approved primary blue", "val AzureBlue = Color(0xFF007FFF)" in design),
