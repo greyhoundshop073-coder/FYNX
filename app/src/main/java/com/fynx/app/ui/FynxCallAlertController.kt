@@ -4,15 +4,15 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import com.fynx.app.R
 
 /**
- * Owns one incoming-call alert at a time. The alert is tied to the active
- * call session, uses the FYNX ringtone, and follows Android's ring/vibrate/silent mode.
+ * Owns one incoming-call alert at a time. The ringtone is the user's Android
+ * default ringtone, and the alert follows Android's ring/vibrate/silent mode.
  */
 object FynxCallAlertController {
     private var activeCallId: String? = null
@@ -54,28 +54,51 @@ object FynxCallAlertController {
         activeCallId != null && (callId == null || activeCallId == callId)
 
     private fun startRingtoneLocked(context: Context) {
-        val player = runCatching { MediaPlayer.create(context, R.raw.fynx_call_ring) }.getOrNull()
-        if (player == null) {
-            startVibrationLocked(context)
-            return
-        }
-
+        val callId = activeCallId ?: return
+        // Use the ringtone selected by the device owner instead of overriding it
+        // with an FYNX-only tone.
+        val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE) ?: return
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-        val started = runCatching {
+        val player = MediaPlayer()
+        ringtone = player
+        val configured = runCatching {
             player.setAudioAttributes(attributes)
             player.isLooping = true
-            player.start()
+            player.setOnPreparedListener { ready ->
+                synchronized(this) {
+                    val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    val shouldPlay = activeCallId == callId && ringtone === ready &&
+                        audio?.ringerMode == AudioManager.RINGER_MODE_NORMAL &&
+                        (audio.getStreamVolume(AudioManager.STREAM_RING) > 0)
+                    if (shouldPlay) {
+                        runCatching { ready.start() }.onFailure {
+                            if (ringtone === ready) ringtone = null
+                            runCatching { ready.release() }
+                        }
+                    } else {
+                        if (ringtone === ready) ringtone = null
+                        runCatching { ready.release() }
+                    }
+                }
+            }
+            player.setOnErrorListener { failed, _, _ ->
+                synchronized(this) {
+                    if (ringtone === failed) ringtone = null
+                    runCatching { failed.release() }
+                }
+                true
+            }
+            player.setDataSource(context, ringtoneUri)
+            player.prepareAsync()
             true
         }.getOrDefault(false)
 
-        if (started) {
-            ringtone = player
-        } else {
+        if (!configured) {
+            if (ringtone === player) ringtone = null
             runCatching { player.release() }
-            startVibrationLocked(context)
         }
     }
 

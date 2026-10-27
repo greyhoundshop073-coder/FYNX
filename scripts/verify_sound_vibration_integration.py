@@ -69,11 +69,12 @@ check("incoming-call ringtone is tied to RINGING state and stopped when call sta
     "onDispose {",
     "FynxCallAlertController.stop()"
 ]))
-check("incoming-call alerts use the FYNX looping ringtone and mode-safe vibration", all(token in call_alert for token in [
-    "R.raw.fynx_call_ring", "isLooping = true",
+check("incoming-call alerts use the device ringtone and follow ring/vibrate/silent modes", all(token in call_alert for token in [
+    "RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)", "isLooping = true",
     "AudioManager.RINGER_MODE_VIBRATE", "AudioManager.RINGER_MODE_SILENT",
     "VibrationEffect.createWaveform", "AudioAttributes.USAGE_NOTIFICATION_RINGTONE"
 ]))
+check("foreground real-time calls suppress duplicate incoming-call push alerts", "FynxNotificationForegroundState.shouldSuppressCallNotification()" in messaging_service and "foreground && FynxCallAlertController.isAlerting()" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxNotificationForegroundState.kt").read_text(encoding="utf-8"))
 check("incoming and missed call push types route to the Calls notification channel", all(token in messaging_service for token in [
     '"CALL"', '"INCOMING_CALL"', '"VOICE_CALL"', '"VIDEO_CALL"', '"MISSED_CALL"',
     "FynxNotificationFoundation.CALLS_CHANNEL"

@@ -32,5 +32,9 @@ object FynxNotificationForegroundState {
     fun shouldSuppressGroupNotification(groupId: String): Boolean =
         foreground && activeGroup.isNotBlank() && activeGroup == groupId.trim()
 
+    /** A real-time incoming call already alerts the foreground call UI; avoid a duplicate FCM ring. */
+    fun shouldSuppressCallNotification(): Boolean =
+        foreground && FynxCallAlertController.isAlerting()
+
     private fun normalize(username: String): String = username.trim().removePrefix("@").lowercase()
 }

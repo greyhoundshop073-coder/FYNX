@@ -22,6 +22,10 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         val type = data["type"]?.uppercase().orEmpty()
         val sourceUsername = data["sourceUsername"]?.trim()?.removePrefix("@")?.trim().orEmpty()
         val targetId = data["targetId"]?.trim().orEmpty()
+        if (type in setOf("CALL", "CALL_INVITE", "INCOMING_CALL", "INCOMING_VOICE_CALL", "INCOMING_VIDEO_CALL", "VOICE_CALL", "VIDEO_CALL", "MISSED_CALL") &&
+            FynxNotificationForegroundState.shouldSuppressCallNotification()
+        ) return
+
         when (type) {
             "MESSAGE" -> {
                 if (sourceUsername.isNotBlank() && !FynxConversationPreferences.chatNotifications(this, sourceUsername)) return
