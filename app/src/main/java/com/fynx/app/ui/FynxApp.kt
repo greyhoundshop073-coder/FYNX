@@ -11,6 +11,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -595,9 +597,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(64.dp)
-                            .shadow(8.dp, RoundedCornerShape(32.dp)),
+                            .shadow(8.dp, RoundedCornerShape(32.dp))
+                            .background(FynxGlassMirror.glassBrush, RoundedCornerShape(32.dp))
+                            .border(1.dp, FynxGlassMirror.Rim, RoundedCornerShape(32.dp)),
                         shape = RoundedCornerShape(32.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                        color = Color.Transparent,
                         tonalElevation = 0.dp
                     ) {
                         NavigationBar(
@@ -630,11 +634,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                     },
                                     alwaysShowLabel = true,
                                     colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        selectedIconColor = FynxGlassMirror.Accent,
+                                        selectedTextColor = FynxGlassMirror.Accent,
+                                        indicatorColor = FynxGlassMirror.ClearBlue,
+                                        unselectedIconColor = FynxGlassMirror.MutedInk,
+                                        unselectedTextColor = FynxGlassMirror.MutedInk
                                     )
                                 )
                             }
