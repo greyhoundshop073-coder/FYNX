@@ -827,9 +827,9 @@ fun FynxCameraCapturePanel(
                         "Crop" -> {
                             Text("Choose a crop shape", color = Color(0xFFCACAD5), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("Square", "Portrait 4:5", "Landscape 16:9").forEach { label ->
+                                listOf("Crop square", "Portrait 4:5", "Landscape 16:9").forEach { label ->
                                     OutlinedButton(
-                                        onClick = { when (label) { "Square" -> cropPhotoSquare(); "Portrait 4:5" -> cropPhotoPortrait(); else -> cropPhotoLandscape() } },
+                                        onClick = { when (label) { "Crop square" -> cropPhotoSquare(); "Portrait 4:5" -> cropPhotoPortrait(); else -> cropPhotoLandscape() } },
                                         enabled = !enhancing,
                                         modifier = Modifier.weight(1f),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
