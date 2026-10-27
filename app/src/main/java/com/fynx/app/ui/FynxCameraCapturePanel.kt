@@ -206,7 +206,7 @@ fun FynxCameraCapturePanel(
                                 normalizeImportedPhotoToJpeg(file)
                             } else if (statusCapture) {
                                 require(file.length() <= FYNX_STATUS_MAX_VIDEO_BYTES) {
-                                    "This Status video is above the 12 MiB upload limit. Choose a smaller clip."
+                                    "This Status video is above the upload-size limit. Choose a smaller clip."
                                 }
                                 val metadata = android.media.MediaMetadataRetriever()
                                 val duration = try {
@@ -1131,6 +1131,13 @@ fun FynxCameraCapturePanel(
                         enabled = recording == null && !preparingPhoto && !galleryImporting,
                         modifier = Modifier.size(42.dp)
                     ) { Icon(Icons.Default.Close, "Close camera", tint = Color.White) }
+                    profilePhotoId?.takeIf { it.isNotBlank() }?.let { photoId ->
+                        FynxRemoteMedia("/api/media/$photoId", "image", Modifier.size(32.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop, rounded = true)
+                    } ?: Surface(
+                        Modifier.size(32.dp),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = Color.White.copy(alpha = 0.16f)
+                    ) {}
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                         Text(
                             if (liveProofMode) "LIVE PROOF" else if (statusCapture) "STATUS CAMERA" else if (videoNoteMode) "VIDEO NOTE" else "FYNX CAMERA",
