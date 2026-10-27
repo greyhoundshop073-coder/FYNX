@@ -90,6 +90,10 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyTotalsFromBackend by remember { mutableStateOf(false) }
     var showDriverAssignments by remember { mutableStateOf(false) }
     var activeSection by rememberSaveable { mutableStateOf("Overview") }
+    val selectedChipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+    )
     var shopName by rememberSaveable { mutableStateOf("") }
     var shopDescription by rememberSaveable { mutableStateOf("") }
     var shopLocation by rememberSaveable { mutableStateOf("") }
@@ -272,7 +276,7 @@ fun FynxMarketplaceSellerCenterPanel() {
         item {
             Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Overview", "Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts").forEach { section ->
-                    FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section, maxLines = 1) })
+                    FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section, maxLines = 1) }, colors = selectedChipColors)
                 }
             }
         }
@@ -707,8 +711,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 selected = editCondition == condition,
                                 onClick = { editCondition = condition },
                                 enabled = !editSaving,
-                                label = { Text(condition.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }, maxLines = 1)
-                                }
+                                label = { Text(condition.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }, maxLines = 1) },
+                                colors = selectedChipColors
                             )
                         }
                     }
@@ -807,7 +811,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Text("FYNX verifies the bank details with the payout provider before the account can receive protected Marketplace payouts.", style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("NGN", "USD").forEach { currency ->
-                            FilterChip(selected = payoutCurrency == currency, onClick = { payoutCurrency = currency }, label = { Text(currency) })
+                            FilterChip(selected = payoutCurrency == currency, onClick = { payoutCurrency = currency }, label = { Text(currency) }, colors = selectedChipColors)
                         }
                     }
                     OutlinedTextField(bankCode, { bankCode = it.filter(Char::isDigit) }, label = { Text("Bank code") }, singleLine = true)
