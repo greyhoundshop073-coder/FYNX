@@ -28,10 +28,12 @@ unit_tests = (ROOT / "app/src/test/java/com/fynx/app/ui/CameraMediaReliabilityTe
 checks = {
     "photo crop has a real bitmap pipeline": "fun cropPhotoSquare()" in camera and "Bitmap.createBitmap(bitmap, left, top, side, side)" in camera and "cropPhotoSquare()" in camera,
     "crop keeps the filter source in sync": "squareCrop(current, currentTemp)" in camera and "squareCrop(original, originalTemp)" in camera,
-    "text overlay has an editable input": "showPhotoTextDialog" in camera and "OutlinedTextField(" in camera and '"Add text"' in camera,
+    "text overlay has an editable input and bounded output length": "showPhotoTextDialog" in camera and "OutlinedTextField(" in camera and '"Add text"' in camera and "photoTextOverlay = it.take(96)" in camera and "}.take(4)" in camera,
     "sticker picker exposes actual choices": 'listOf("✨", "❤️", "🔥", "😂", "😎", "🎉", "🌈")' in camera and "selectedPhotoSticker" in camera,
     "text is composited into the outgoing image": "fun renderPhotoOverlays(" in camera and "canvas.drawText(line" in camera and "temp.copyTo(destination, overwrite = true)" in camera,
     "sticker is composited into the outgoing image": "canvas.drawText(sticker" in camera and "sendPreview(previewUri, previewType)" in camera,
+    "photo filters run bitmap work off the main thread": "fun applyFilterToPhoto(" in camera and "val result = withContext(Dispatchers.IO)" in camera and "fynx_photo_filter_" in camera and "temp.copyTo(target, overwrite = true)" in camera,
+    "AI enhancement establishes a fresh immutable filter baseline": "pendingOriginalUri = baselineUri" in camera and "pendingUri = workingUri" in camera and "fynx_smart_enhanced_working_" in camera,
     "the established camera-to-caller URI and type callback is retained": "onCaptured(previewUri, previewType)" in camera and 'pendingType = if (videoNoteMode) "video_note" else "video"' in camera,
     "retake removes the draft and resets creative edits": "fun retake()" in camera and 'photoTextOverlay = ""' in camera and "selectedPhotoSticker = null" in camera,
     "photo/video status upload protections remain": "FYNX_STATUS_MAX_VIDEO_BYTES" in camera and "FYNX_STATUS_MAX_VIDEO_DURATION_MS" in camera and "recorderBuilder.setTargetVideoEncodingBitRate(700_000)" in camera,

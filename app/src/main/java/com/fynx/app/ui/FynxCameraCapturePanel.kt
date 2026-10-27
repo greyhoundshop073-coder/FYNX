@@ -518,16 +518,107 @@ fun FynxCameraCapturePanel(
             enhancing = false
         }
     }
-    fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) { val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val strength = intensity.coerceIn(0f, 1f)
-            val matrix = ColorMatrix().apply {
-                setFynxFilter(
-                    1f + (selected.saturation - 1f) * strength,
-                    selected.brightness * strength,
-                    1f + (selected.contrast - 1f) * strength,
-                    1f
-                )
-            }; val outputBitmap=android.graphics.Bitmap.createBitmap(bitmap.width,bitmap.height,android.graphics.Bitmap.Config.ARGB_8888); android.graphics.Canvas(outputBitmap).drawBitmap(bitmap,0f,0f,android.graphics.Paint().apply { colorFilter=ColorMatrixColorFilter(matrix) }); FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); outputBitmap.recycle(); filter=selected; filterIntensity=intensity; error=null }.onFailure { error=it.message ?: "Filter could not be applied" } }
-    fun enhancePhoto() { val source=pendingUri ?: return; if(pendingType!="image" || enhancing)return; enhancing=true; error=null; scope.launch { val result=withContext(Dispatchers.IO){FynxAiPhotoEnhancer.enhance(context,source)}; result.onSuccess { enhancedUri -> deleteUri(source); pendingUri=enhancedUri; filter=CameraFilter.NATURAL; filterIntensity=1f; drawingStrokes=emptyList(); activeDrawingPoints=emptyList(); drawingMode=false; photoGeometryRevision++; error=null }.onFailure { error=it.message ?: "AI photo enhancement failed" }; enhancing=false } }
+    fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) {
+        val current = pendingUri ?: return
+        val original = pendingOriginalUri ?: current
+        if (pendingType != "image" || enhancing) return
+        val source = original.path?.let(::File) ?: return
+        val target = current.path?.let(::File) ?: return
+        val strength = intensity.coerceIn(0f, 1f)
+        enhancing = true
+        error = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bitmap = BitmapFactory.decodeFile(source.absolutePath)
+                        ?: error("Unable to decode photo for filtering")
+                    var outputBitmap: android.graphics.Bitmap? = null
+                    val temp = File(context.cacheDir, "fynx_photo_filter_${System.nanoTime()}.jpg")
+                    try {
+                        val matrix = ColorMatrix().apply {
+                            setFynxFilter(
+                                1f + (selected.saturation - 1f) * strength,
+                                selected.brightness * strength,
+                                1f + (selected.contrast - 1f) * strength,
+                                1f
+                            )
+                        }
+                        outputBitmap = android.graphics.Bitmap.createBitmap(
+                            bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888
+                        )
+                        android.graphics.Canvas(outputBitmap!!).drawBitmap(
+                            bitmap,
+                            0f,
+                            0f,
+                            android.graphics.Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) }
+                        )
+                        FileOutputStream(temp).use {
+                            check(outputBitmap!!.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) {
+                                "Filtered photo could not be saved"
+                            }
+                        }
+                        temp.copyTo(target, overwrite = true)
+                    } finally {
+                        temp.delete()
+                        bitmap.recycle()
+                        outputBitmap?.recycle()
+                    }
+                }
+            }
+            result.onSuccess {
+                filter = selected
+                filterIntensity = strength
+                error = null
+            }.onFailure {
+                error = it.message ?: "Filter could not be applied"
+            }
+            enhancing = false
+        }
+    }
+    fun enhancePhoto() {
+        val source = pendingUri ?: return
+        if (pendingType != "image" || enhancing) return
+        enhancing = true
+        error = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val baselineUri = FynxAiPhotoEnhancer.enhance(context, source).getOrThrow()
+                    val baselineFile = baselineUri.path?.let(::File)
+                        ?: error("Enhanced photo did not return a local file")
+                    val workingFile = File(
+                        context.cacheDir, "fynx_smart_enhanced_working_${System.nanoTime()}.jpg"
+                    )
+                    try {
+                        baselineFile.copyTo(workingFile, overwrite = true)
+                        Uri.fromFile(workingFile) to baselineUri
+                    } catch (failure: Throwable) {
+                        workingFile.delete()
+                        baselineFile.delete()
+                        throw failure
+                    }
+                }
+            }
+            result.onSuccess { (workingUri, baselineUri) ->
+                val oldUris = listOf(pendingUri, pendingOriginalUri).distinctBy { it?.path }
+                pendingUri = workingUri
+                pendingOriginalUri = baselineUri
+                filter = CameraFilter.NATURAL
+                filterIntensity = 1f
+                drawingStrokes = emptyList()
+                activeDrawingPoints = emptyList()
+                drawingMode = false
+                photoGeometryRevision++
+                error = null
+                oldUris.forEach { old ->
+                    if (old?.path != workingUri.path && old?.path != baselineUri.path) deleteUri(old)
+                }
+            }.onFailure {
+                error = it.message ?: "AI photo enhancement failed"
+            }
+            enhancing = false
+        }
+    }
     fun capturePhotoNow() {
         val capture = imageCapture ?: run { error = "Camera is still starting"; return }
         val stamp = System.currentTimeMillis()
@@ -855,7 +946,7 @@ fun FynxCameraCapturePanel(
                         Column {
                             OutlinedTextField(
                                 value = photoTextOverlay,
-                                onValueChange = { photoTextOverlay = it.take(220) },
+                                onValueChange = { photoTextOverlay = it.take(96) },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text("Your text") },
                                 placeholder = { Text("Write a caption for your photo") },
