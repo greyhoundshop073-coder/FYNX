@@ -53,6 +53,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.viewinterop.AndroidView
@@ -128,6 +130,9 @@ fun FynxCameraCapturePanel(
     BackHandler { if (recording == null && !preparingPhoto) onDismiss() }
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
     var filterIntensity by remember { mutableFloatStateOf(1f) }
+    var photoTextOverlay by remember { mutableStateOf("") }
+    var selectedPhotoSticker by remember { mutableStateOf<String?>(null) }
+    var showPhotoTextDialog by remember { mutableStateOf(false) }
     var enhancing by remember { mutableStateOf(false) }
     var showCaptureControls by remember { mutableStateOf(true) }
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
@@ -220,8 +225,182 @@ fun FynxCameraCapturePanel(
     }
     DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
-    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingType = null; pendingUri = null; pendingOriginalUri = null; filter = CameraFilter.NATURAL; filterIntensity = 1f; enhancing = false; recordingNotice = null; error = null }
-    fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
+    fun retake() {
+        deleteUri(pendingUri)
+        deleteUri(pendingOriginalUri)
+        pendingType = null
+        pendingUri = null
+        pendingOriginalUri = null
+        filter = CameraFilter.NATURAL
+        filterIntensity = 1f
+        photoTextOverlay = ""
+        selectedPhotoSticker = null
+        showPhotoTextDialog = false
+        enhancing = false
+        recordingNotice = null
+        error = null
+    }
+    fun rotatePhoto() {
+        if (pendingType != "image" || enhancing) return
+        val current = pendingUri?.path?.let(::File) ?: return
+        val original = pendingOriginalUri?.path?.let(::File)
+        enhancing = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    fun rotatedCopy(source: File, destination: File) {
+                        val bitmap = BitmapFactory.decodeFile(source.absolutePath)
+                            ?: error("Unable to decode photo for rotation")
+                        val rotated = android.graphics.Bitmap.createBitmap(
+                            bitmap, 0, 0, bitmap.width, bitmap.height,
+                            Matrix().apply { postRotate(90f) }, true
+                        )
+                        val temp = File(context.cacheDir, "fynx_rotate_${System.nanoTime()}.jpg")
+                        try {
+                            FileOutputStream(temp).use {
+                                check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it))
+                            }
+                            temp.copyTo(destination, overwrite = true)
+                        } finally {
+                            temp.delete()
+                            bitmap.recycle()
+                            rotated.recycle()
+                        }
+                    }
+                    rotatedCopy(current, current)
+                    if (original != null && original.absolutePath != current.absolutePath) {
+                        rotatedCopy(original, original)
+                    }
+                }
+            }
+            result.onFailure { error = it.message ?: "Photo rotation failed" }
+            enhancing = false
+        }
+    }
+    fun cropPhotoSquare() {
+        if (pendingType != "image" || enhancing) return
+        val current = pendingUri?.path?.let(::File) ?: return
+        val original = pendingOriginalUri?.path?.let(::File)
+        enhancing = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    fun squareCrop(source: File, output: File) {
+                        val bitmap = BitmapFactory.decodeFile(source.absolutePath)
+                            ?: error("Unable to decode photo for cropping")
+                        val side = minOf(bitmap.width, bitmap.height)
+                        val left = (bitmap.width - side) / 2
+                        val top = (bitmap.height - side) / 2
+                        val cropped = android.graphics.Bitmap.createBitmap(bitmap, left, top, side, side)
+                        try {
+                            FileOutputStream(output).use {
+                                check(cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it))
+                            }
+                        } finally {
+                            bitmap.recycle()
+                            cropped.recycle()
+                        }
+                    }
+                    val currentTemp = File(context.cacheDir, "fynx_crop_current_${System.nanoTime()}.jpg")
+                    val originalTemp = File(context.cacheDir, "fynx_crop_original_${System.nanoTime()}.jpg")
+                    try {
+                        squareCrop(current, currentTemp)
+                        if (original != null && original.absolutePath != current.absolutePath) {
+                            squareCrop(original, originalTemp)
+                        }
+                        currentTemp.copyTo(current, overwrite = true)
+                        if (original != null && original.absolutePath != current.absolutePath) {
+                            originalTemp.copyTo(original, overwrite = true)
+                        }
+                    } finally {
+                        currentTemp.delete()
+                        originalTemp.delete()
+                    }
+                }
+            }
+            result.onFailure { error = it.message ?: "Photo crop failed" }
+            enhancing = false
+        }
+    }
+    fun renderPhotoOverlays(uri: Uri, textOverlay: String, sticker: String?) {
+        if (textOverlay.isBlank() && sticker.isNullOrBlank()) return
+        val destination = uri.path?.let(::File) ?: error("Captured photo is not a local file")
+        val bitmap = BitmapFactory.decodeFile(destination.absolutePath)
+            ?: error("Unable to decode photo for editing")
+        val output = bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
+            ?: run { bitmap.recycle(); error("Unable to prepare photo editor canvas") }
+        val canvas = android.graphics.Canvas(output)
+        try {
+            if (textOverlay.isNotBlank()) {
+                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.WHITE
+                    textSize = (bitmap.width * 0.055f).coerceIn(24f, 84f)
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create(
+                        "sans-serif-medium", android.graphics.Typeface.BOLD
+                    )
+                    setShadowLayer(5f, 1f, 2f, android.graphics.Color.BLACK)
+                }
+                val lines = buildList {
+                    textOverlay.lines().forEach { originalLine ->
+                        var remaining = originalLine
+                        while (remaining.isNotEmpty() && size < 4) {
+                            val count = paint.breakText(remaining, true, bitmap.width * 0.82f, null)
+                                .coerceAtLeast(1)
+                            add(remaining.take(count))
+                            remaining = remaining.drop(count).trimStart()
+                        }
+                    }
+                }.take(4)
+                val lineHeight = paint.textSize * 1.18f
+                val firstBaseline = bitmap.height * 0.43f - (lines.size - 1) * lineHeight / 2f
+                lines.forEachIndexed { index, line ->
+                    canvas.drawText(line, bitmap.width / 2f, firstBaseline + index * lineHeight, paint)
+                }
+            }
+            if (!sticker.isNullOrBlank()) {
+                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.WHITE
+                    textSize = (bitmap.width * 0.15f).coerceIn(56f, 180f)
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    setShadowLayer(7f, 1f, 2f, android.graphics.Color.BLACK)
+                }
+                canvas.drawText(sticker, bitmap.width * 0.78f, bitmap.height * 0.82f, paint)
+            }
+            val temp = File(context.cacheDir, "fynx_photo_overlay_${System.nanoTime()}.jpg")
+            try {
+                FileOutputStream(temp).use {
+                    check(output.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it))
+                }
+                temp.copyTo(destination, overwrite = true)
+            } finally {
+                temp.delete()
+            }
+        } finally {
+            bitmap.recycle()
+            output.recycle()
+        }
+    }
+    fun sendPreview(previewUri: Uri, previewType: String) {
+        if (previewType != "image" ||
+            (photoTextOverlay.isBlank() && selectedPhotoSticker.isNullOrBlank())
+        ) {
+            onCaptured(previewUri, previewType)
+            return
+        }
+        if (enhancing) return
+        val textToRender = photoTextOverlay
+        val stickerToRender = selectedPhotoSticker
+        enhancing = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { renderPhotoOverlays(previewUri, textToRender, stickerToRender) }
+            }
+            result.onFailure { error = it.message ?: "Photo edits could not be applied" }
+            enhancing = false
+            if (result.isSuccess) onCaptured(previewUri, previewType)
+        }
+    }
     fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) { val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val strength = intensity.coerceIn(0f, 1f)
             val matrix = ColorMatrix().apply {
                 setFynxFilter(
@@ -285,6 +464,28 @@ fun FynxCameraCapturePanel(
     if(previewUri!=null && previewType!=null){
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
+            if (previewType == "image" && (photoTextOverlay.isNotBlank() || selectedPhotoSticker != null)) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center)
+                        .padding(horizontal = 24.dp)
+                        .background(Color.Black.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
+                        .padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (photoTextOverlay.isNotBlank()) {
+                        Text(
+                            photoTextOverlay,
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    selectedPhotoSticker?.let { sticker ->
+                        Text(sticker, fontSize = 56.sp, textAlign = TextAlign.Center)
+                    }
+                }
+            }
             Column(
                 Modifier
                     .align(Alignment.BottomCenter)
@@ -308,6 +509,36 @@ fun FynxCameraCapturePanel(
                             )
                         }
                     }
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { cropPhotoSquare() },
+                            enabled = !enhancing
+                        ) { Text(if (enhancing) "Processing…" else "Crop square") }
+                        OutlinedButton(
+                            onClick = { showPhotoTextDialog = true },
+                            enabled = !enhancing
+                        ) { Text(if (photoTextOverlay.isBlank()) "Add text" else "Edit text") }
+                    }
+                    Text("Stickers", style = MaterialTheme.typography.labelMedium)
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("✨", "❤️", "🔥", "😂", "😎", "🎉", "🌈").forEach { sticker ->
+                            FilterChip(
+                                selected = selectedPhotoSticker == sticker,
+                                enabled = !enhancing,
+                                onClick = {
+                                    selectedPhotoSticker =
+                                        if (selectedPhotoSticker == sticker) null else sticker
+                                },
+                                label = { Text(sticker) }
+                            )
+                        }
+                    }
                     if(filter != CameraFilter.NATURAL){
                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
                             Text("Intensity",style=MaterialTheme.typography.labelMedium,modifier=Modifier.width(56.dp))
@@ -328,7 +559,37 @@ fun FynxCameraCapturePanel(
             ) {
                 OutlinedButton(onClick = { if (!enhancing) retake() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Retake") }
                 if (previewType == "image") OutlinedButton(onClick = { if (!enhancing) rotatePhoto() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.RotateRight, null); Spacer(Modifier.width(4.dp)); Text("Rotate") }
-                Button(onClick = { if (!enhancing) onCaptured(previewUri, previewType) }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(4.dp)); Text("Send") }
+                Button(onClick = { if (!enhancing) sendPreview(previewUri, previewType) }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(4.dp)); Text("Send") }
+            }
+            if (showPhotoTextDialog) {
+                AlertDialog(
+                    onDismissRequest = { showPhotoTextDialog = false },
+                    title = { Text("Add text to photo") },
+                    text = {
+                        Column {
+                            OutlinedTextField(
+                                value = photoTextOverlay,
+                                onValueChange = { photoTextOverlay = it.take(220) },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Your text") },
+                                placeholder = { Text("Write a caption for your photo") },
+                                minLines = 2,
+                                maxLines = 4
+                            )
+                            Text(
+                                "Text is placed on the photo when you tap Send.",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showPhotoTextDialog = false }) { Text("Apply") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showPhotoTextDialog = false }) { Text("Cancel") }
+                    }
+                )
             }
         };return
     }
