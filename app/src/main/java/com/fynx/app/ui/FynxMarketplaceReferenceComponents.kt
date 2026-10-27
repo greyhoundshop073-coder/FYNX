@@ -58,6 +58,14 @@ internal object FynxMarketplaceReferenceStyle {
     val textMuted = Color(0xFFA5B6D0)
     val radius = RoundedCornerShape(18.dp)
 }
+
+/** Selected states across Marketplace use the same accessible Azure/pale-blue theme colors. */
+@Composable
+internal fun fynxMarketplaceSelectedChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+)
+
 @Composable
 internal fun MarketplaceReferenceSearchBar(
     value: String,
@@ -116,10 +124,7 @@ internal fun MarketplaceReferenceCategoryRow(
     nearbyLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val selectedChipColors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-    )
+    val selectedChipColors = fynxMarketplaceSelectedChipColors()
     Row(
         modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
