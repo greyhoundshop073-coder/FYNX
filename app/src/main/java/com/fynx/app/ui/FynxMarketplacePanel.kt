@@ -271,7 +271,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         scope.launch {
             FynxRemoteSocialClient.toggleMarketplaceProductSaved(context, listingId, knownSavedProductState(listingId))
                 .onSuccess { saved -> setSavedProductState(listingId, saved) }
-                .onFailure { error = it.message ?: "Saved Products could not be updated." }
+                .onFailure { error = marketplaceSafeError(it, "Saved Products could not be updated.") }
             savedProductBusyIds = savedProductBusyIds - listingId
         }
     }
@@ -284,7 +284,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 nearbyLoading = true
                 FynxPostLocationClient.currentPlace(context)
                     .onSuccess { place -> nearbyLabel = place; nearbyMode = true }
-                    .onFailure { error = it.message ?: "FYNX could not identify your area." }
+                    .onFailure { error = marketplaceSafeError(it, "FYNX could not identify your area.") }
                 nearbyLoading = false
             }
         } else {
@@ -304,7 +304,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 nearbyLoading = true
                 FynxPostLocationClient.currentPlace(context)
                     .onSuccess { place -> nearbyLabel = place; nearbyMode = true }
-                    .onFailure { error = it.message ?: "FYNX could not identify your area." }
+                    .onFailure { error = marketplaceSafeError(it, "FYNX could not identify your area.") }
                 nearbyLoading = false
             }
         } else {
@@ -321,7 +321,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             ordersError = null
             FynxRemoteSocialClient.orders(context)
                 .onSuccess { orders = it }
-                .onFailure { ordersError = it.message ?: "Orders could not load." }
+                .onFailure { ordersError = marketplaceSafeError(it, "Orders could not load.") }
             ordersLoading = false
         }
     }
@@ -365,7 +365,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     hasMoreListings = more
                     discoveryFallbackWarning = fallbackWarning
                     nextListingsOffset = advanceMarketplaceListingsOffset(0, 24)
-                }.onFailure { error = it.message ?: "Marketplace could not load." }
+                }.onFailure { error = marketplaceSafeError(it, "Marketplace could not load.") }
             }
             // Listing visibility must not wait on the independent orders request.
             loading = false
@@ -393,7 +393,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     nextListingsOffset = advanceMarketplaceListingsOffset(nextListingsOffset, 24)
                     hasMoreListings = page.hasMore && page.listings.isNotEmpty()
                     error = null
-                }.onFailure { error = it.message ?: "More products could not load." }
+                }.onFailure { error = marketplaceSafeError(it, "More products could not load.") }
             }
             loadingMoreListings = false
         }
@@ -484,7 +484,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         if (listingId.isNotBlank()) {
             loadExactMarketplaceListing(context, listingId)
                 .onSuccess { listing -> selected = listing }
-                .onFailure { error = it.message ?: "Marketplace listing could not be opened." }
+                .onFailure { error = marketplaceSafeError(it, "Marketplace listing could not be opened.") }
         }
     }
 
@@ -872,7 +872,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     scope.launch {
                         FynxRemoteSocialClient.toggleMarketplaceProductSaved(context, listingId, knownSavedProductState(listingId))
                             .onSuccess { saved -> setSavedProductState(listingId, saved) }
-                            .onFailure { error = it.message ?: "Saved Products could not be updated." }
+                            .onFailure { error = marketplaceSafeError(it, "Saved Products could not be updated.") }
                         savedProductBusy = false
                     }
                 }
@@ -887,7 +887,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             FynxRemoteSocialClient.watchMarketplacePrice(context, listingId)
                         }
                         result.onSuccess { watched -> priceWatchListingId = if (watched) listingId else null }
-                            .onFailure { error = it.message ?: "Price Watch could not be updated." }
+                            .onFailure { error = marketplaceSafeError(it, "Price Watch could not be updated.") }
                         priceWatchBusy = false
                     }
                 }
@@ -1251,10 +1251,10 @@ private fun MarketplacePaymentDialog(context: android.content.Context, order: Fy
                                 payment = checkout
                                 openMarketplaceCheckout(context, checkout.authorizationUrl).onFailure {
                                     payment = null
-                                    message = it.message ?: "Could not open payment checkout."
+                                    message = marketplaceSafeError(it, "Could not open payment checkout.")
                                 }
                             }
-                            .onFailure { message = it.message ?: "Could not start payment." }
+                            .onFailure { message = marketplaceSafeError(it, "Could not start payment.") }
                         busy = false
                     }
                 }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Continue to payment") }
@@ -1263,7 +1263,7 @@ private fun MarketplacePaymentDialog(context: android.content.Context, order: Fy
                     verifying = true
                     message = null
                     scope.launch {
-                        verifyMarketplacePayment(context, payment?.reference.orEmpty()).onSuccess { onPaid() }.onFailure { message = it.message ?: "Payment is not verified yet." }
+                        verifyMarketplacePayment(context, payment?.reference.orEmpty()).onSuccess { onPaid() }.onFailure { message = marketplaceSafeError(it, "Payment is not verified yet.") }
                         verifying = false
                     }
                 }) { if (verifying) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Verify payment") }
@@ -1282,7 +1282,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                 locationLoading = true
                 FynxPostLocationClient.currentPlace(context)
                     .onSuccess { place -> location = place }
-                    .onFailure { error = it.message ?: "FYNX could not identify this location." }
+                    .onFailure { error = marketplaceSafeError(it, "FYNX could not identify this location.") }
                 locationLoading = false
             }
         } else error = "Location permission is needed to add your listing area."
@@ -1295,7 +1295,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                 locationLoading = true
                 FynxPostLocationClient.currentPlace(context)
                     .onSuccess { place -> location = place }
-                    .onFailure { error = it.message ?: "FYNX could not identify this location." }
+                    .onFailure { error = marketplaceSafeError(it, "FYNX could not identify this location.") }
                 locationLoading = false
             }
         } else sellerLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
@@ -1376,7 +1376,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         OutlinedButton(onClick = { useCurrentListingLocation() }, enabled = !busy && !locationLoading, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (locationLoading) "Finding your area..." else "Use my current area") }
         Text("FYNX uses a human-readable area for discovery; your exact GPS coordinates are not published with the listing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delivery, { delivery = it }); Text("Delivery") }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(pickup, { pickup = it }); Text("Pickup") }; error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { listingId -> onPublished(listingId) }.onFailure { error = it.message ?: "Listing could not be published."; busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") } })
+    } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { listingId -> onPublished(listingId) }.onFailure { error = marketplaceSafeError(it, "Listing could not be published."); busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") } })
     if (showCamera) Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, _ -> media = FynxMarketplaceSellerFlowSupport.addMedia(context, media, uri); showCamera = false }, onDismiss = { showCamera = false }) } } }
 }
 
@@ -1971,7 +1971,7 @@ private fun MarketplaceMultiProductPaymentDialog(
                                 payment = p
                                 openMarketplaceCheckout(context, p.authorizationUrl).onFailure {
                                     payment = null
-                                    message = it.message ?: "Could not open Paystack checkout."
+                                    message = marketplaceSafeError(it, "Could not open Paystack checkout.")
                                 }
                             }
                         }.onFailure { message = marketplacePaymentFailureMessage(it) }
@@ -1987,7 +1987,7 @@ private fun MarketplaceMultiProductPaymentDialog(
                     scope.launch {
                         verifyMarketplaceCheckoutGroupPayment(context, payment?.reference.orEmpty())
                             .onSuccess { onPaid() }
-                            .onFailure { message = it.message ?: "Payment is not verified yet. You can retry verification." }
+                            .onFailure { message = marketplaceSafeError(it, "Payment is not verified yet. You can retry verification.") }
                         verifying = false
                     }
                 }) {

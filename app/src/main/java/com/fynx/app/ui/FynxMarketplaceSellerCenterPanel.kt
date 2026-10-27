@@ -154,7 +154,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                 moneyRecords = emptyList()
                 moneyTotals = emptyMap()
                 moneyTotalsFromBackend = false
-                moneyError = failure.message ?: "Seller earnings could not load."
+                moneyError = marketplaceSafeError(failure, "Seller earnings could not load.")
             }
             moneyLoading = false
         }
@@ -187,7 +187,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     archivedListings = emptyList()
                     listingActionError = null
                     listingActionMessage = null
-                    error = failure.message ?: "Could not load your listings."
+                    error = marketplaceSafeError(failure, "Could not load your listings.")
                 }
 
             shopName = ""
@@ -213,7 +213,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     shopDescription = ""
                     shopLocation = ""
                     shopContactPhone = ""
-                    shopError = failure.message ?: "Shop profile could not load."
+                    shopError = marketplaceSafeError(failure, "Shop profile could not load.")
                 }
             shopLoading = false
 
@@ -243,7 +243,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     // A failed or malformed response must not leave an old verified account on screen.
                     payoutAccounts = emptyList()
                     payoutAccount = null
-                    accountMessage = failure.message ?: "Payout account status could not load."
+                    accountMessage = marketplaceSafeError(failure, "Payout account status could not load.")
                 }
             accountLoading = false
             loading = false
@@ -254,6 +254,17 @@ fun FynxMarketplaceSellerCenterPanel() {
 
     // Include currencies from all-history totals even if recent detail rows omit them.
     val currencies = (moneyRecords.map { it.currency } + moneyTotals.keys).distinct().sorted()
+
+    val listingSummary = when {
+        loading -> "Loading listings…"
+        error != null -> "Listing count unavailable until refresh succeeds"
+        else -> "${listings.size} listing${if (listings.size == 1) "" else "s"}"
+    }
+    val settlementSummary = when {
+        moneyLoading -> "Checking recent earnings…"
+        moneyError != null -> "Recent earnings unavailable until refresh succeeds"
+        else -> "${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)"
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(12.dp),
@@ -283,7 +294,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Your shop at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text(if (shopName.isBlank()) "Set up your shop identity so buyers can recognize your business." else shopName, style = MaterialTheme.typography.titleMedium)
-                        Text(if (error != null) "Listing count unavailable until refresh succeeds • ${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)" else "${listings.size} listing${if (listings.size == 1) "" else "s"} • ${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("$listingSummary • $settlementSummary", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         error?.let { Text("Inventory is not current. Retry refresh before relying on listing availability.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         shopError?.let { Text("Shop profile could not be refreshed.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -375,7 +386,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                         shopError = null
                                     }
                                     .onFailure { failure ->
-                                        shopError = failure.message ?: "Shop profile could not be saved."
+                                        shopError = marketplaceSafeError(failure, "Shop profile could not be saved.")
                                     }
                                 shopSaving = false
                             }
@@ -567,7 +578,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                                 listingActionError = null
                                                 error = null
                                             }
-                                            .onFailure { listingActionError = it.message ?: "Listing could not be removed." }
+                                            .onFailure { listingActionError = marketplaceSafeError(it, "Listing could not be removed.") }
                                         deletingId = null
                                     }
                                 }) { Icon(Icons.Default.Delete, "Remove listing") }
@@ -643,7 +654,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                             listings = listOf(listing.copy(active = true)) + listings.filterNot { it.id == listing.id }
                                             listingActionMessage = "${listing.title} is live in Marketplace again."
                                         }
-                                        .onFailure { listingActionError = it.message ?: "Listing could not be republished." }
+                                        .onFailure { listingActionError = marketplaceSafeError(it, "Listing could not be republished.") }
                                     republishingId = null
                                 }
                             },
@@ -784,7 +795,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     editingListing = null
                                     error = null
                                 }
-                                .onFailure { editError = it.message ?: "Listing could not be updated." }
+                                .onFailure { editError = marketplaceSafeError(it, "Listing could not be updated.") }
                             editSaving = false
                         }
                     }
@@ -841,7 +852,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 accountMessage = "Payout account verified and connected."
                                 bankCode = ""; accountNumber = ""; accountName = ""
                             }
-                            .onFailure { accountMessage = it.message ?: "Payout account could not be verified." }
+                            .onFailure { accountMessage = marketplaceSafeError(it, "Payout account could not be verified.") }
                         accountSaving = false
                     }
                 }) { if (accountSaving) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Verify & save") }

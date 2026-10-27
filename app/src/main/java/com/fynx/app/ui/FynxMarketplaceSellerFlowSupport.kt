@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
+import java.util.Locale
 
 /**
  * Shared Marketplace seller-flow primitives.
@@ -39,4 +40,21 @@ internal object FynxMarketplaceSellerFlowSupport {
             price != null && price.isFinite() && price > 0.0 &&
             quantity != null && quantity in 1..MAX_QUANTITY &&
             media.isNotEmpty() && media.size <= MAX_PRODUCT_MEDIA
+}
+
+/**
+ * Keep transport/HTTP implementation details out of Marketplace user-facing error text.
+ * Domain validation messages remain useful to the user; raw server bodies and request IDs do not.
+ */
+internal fun marketplaceSafeError(error: Throwable?, fallback: String): String {
+    val message = error?.message?.trim().orEmpty()
+    if (message.isBlank()) return fallback
+    val normalized = message.lowercase(Locale.US)
+    val isRawTransportResponse =
+        normalized.startsWith("fynx backend returned http ") ||
+            normalized.startsWith("http ") ||
+            normalized.contains("request_id") ||
+            normalized.contains("\"status\":\"error\"") ||
+            (normalized.startsWith("{") && normalized.endsWith("}"))
+    return if (isRawTransportResponse) fallback else message.take(240)
 }

@@ -54,7 +54,7 @@ fun FynxSavedMarketplaceProductsPanel(onOpenListing: (String) -> Unit = {}) {
             error = null
             FynxRemoteSocialClient.savedMarketplaceProducts(context)
                 .onSuccess { products = it }
-                .onFailure { error = it.message ?: "Saved Products could not be loaded." }
+                .onFailure { error = marketplaceSafeError(it, "Saved Products could not be loaded.") }
             loading = false
         }
     }
@@ -100,7 +100,7 @@ fun FynxSavedMarketplaceProductsPanel(onOpenListing: (String) -> Unit = {}) {
                                     scope.launch {
                                         FynxRemoteSocialClient.unsaveMarketplaceProduct(context, product.id)
                                             .onSuccess { products = products.filterNot { it.id == product.id } }
-                                            .onFailure { error = it.message ?: "Could not remove this product." }
+                                            .onFailure { error = marketplaceSafeError(it, "Could not remove this product.") }
                                         busyIds = busyIds - product.id
                                     }
                                 }

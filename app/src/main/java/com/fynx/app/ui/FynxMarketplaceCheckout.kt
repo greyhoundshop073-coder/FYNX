@@ -520,7 +520,7 @@ internal fun FynxMarketplaceCheckoutDialog(
             )
             if (quoteRequestGeneration == requestGeneration) {
                 result.onSuccess { quote = it }
-                    .onFailure { message = it.message ?: "Checkout quote could not be prepared." }
+                    .onFailure { message = marketplaceSafeError(it, "Checkout quote could not be prepared.") }
             }
             busy = false
         }
