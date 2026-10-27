@@ -65,7 +65,7 @@ private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
 private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val mutualFriends: Int, val reason: String, val photoId: String?)
 
 @Composable
-fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null, networkReady: Boolean? = null) {
+fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, onOpenStatusOwner: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null, networkReady: Boolean? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
@@ -85,7 +85,6 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var peopleRecommendationsLoading by remember { mutableStateOf(false) }
     var peopleRecommendationsOffset by remember { mutableIntStateOf(0) }
     var peopleRecommendationsHasMore by remember { mutableStateOf(true) }
-    var authorStatusViewer by remember { mutableStateOf<List<FynxStatus>?>(null) }
     var interactionStates by remember { mutableStateOf<Map<String, FynxRemoteSocialClient.SocialInteractionState>>(emptyMap()) }
     var reactionStates by remember { mutableStateOf<Map<String, FynxHomePostReactionsClient.ReactionState>>(emptyMap()) }
     var reactionPickerPostId by remember { mutableStateOf<String?>(null) }
@@ -228,15 +227,6 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             FynxStatusClient.list(context).onSuccess { statuses ->
                 activeStatusOwners = statuses.filterNot(FynxStatus::isExpired).map { it.ownerUsername.removePrefix("@").trim().lowercase() }.toSet()
             }
-        }
-    }
-    fun openAuthorStatus(username: String) {
-        scope.launch {
-            FynxStatusClient.list(context).onSuccess { statuses ->
-                val owner = username.removePrefix("@").trim()
-                val ownerStatuses = statuses.filterNot(FynxStatus::isExpired).filter { it.ownerUsername.equals(owner, true) }.sortedBy { it.createdAtMillis }
-                if (ownerStatuses.isNotEmpty()) authorStatusViewer = ownerStatuses else onOpenAuthorProfile(owner)
-            }.onFailure { onOpenAuthorProfile(username.removePrefix("@").trim()) }
         }
     }
     fun hydrateInteractionStates(items: List<FynxRemoteSocialClient.RemotePost>) {
@@ -490,7 +480,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         posts.forEachIndexed { postIndex, post ->
             item(key = post.id) {
             val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]; val state = interactionStates[post.id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0); val reaction = reactionStates[post.id] ?: FynxHomePostReactionsClient.ReactionState(); val busy = post.id in interactionBusy || "follow:${post.authorUsername.removePrefix("@").trim().lowercase()}" in interactionBusy
-            RemotePostCard(post, currentUsername, photoId, activeStatusOwners.contains(post.authorUsername.removePrefix("@").trim().lowercase()), state, reaction, busy, postMedia[post.id].orEmpty(), playbackActive = focusedVideoPostId == post.id && !feedListState.isScrollInProgress, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onOpenStatus = { openAuthorStatus(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onOpenAudienceEditor = { audiencePost = post }, onReport = { reportPost = post }, onInterested = { id -> scope.launch { FynxDiscoveryClient.recordInterested(context, id) } }, onNotInterested = { id -> scope.launch { FynxDiscoveryClient.recordNotInterested(context, id) } }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenReactionUsers = { reactionUsersPostId = post.id }, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) }, onOpenMediaViewer = { items, index -> mediaViewerPost = post; mediaViewerItems = items; mediaViewerIndex = index })
+            RemotePostCard(post, currentUsername, photoId, activeStatusOwners.contains(post.authorUsername.removePrefix("@").trim().lowercase()), state, reaction, busy, postMedia[post.id].orEmpty(), playbackActive = focusedVideoPostId == post.id && !feedListState.isScrollInProgress, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onOpenStatus = { onOpenStatusOwner(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onOpenAudienceEditor = { audiencePost = post }, onReport = { reportPost = post }, onInterested = { id -> scope.launch { FynxDiscoveryClient.recordInterested(context, id) } }, onNotInterested = { id -> scope.launch { FynxDiscoveryClient.recordNotInterested(context, id) } }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenReactionUsers = { reactionUsersPostId = post.id }, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) }, onOpenMediaViewer = { items, index -> mediaViewerPost = post; mediaViewerItems = items; mediaViewerIndex = index })
             if (post.id != posts.lastOrNull()?.id) {
                 HorizontalDivider(
                     modifier = Modifier.fillMaxWidth(),
@@ -541,7 +531,6 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     reportPost?.let { post -> AlertDialog(onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } }, title = { Text("Report post") }, text = { Text(reportNotice ?: "Report this post to FYNX for review.") }, confirmButton = { TextButton(enabled = !reportBusy, onClick = { reportBusy = true; reportNotice = "Sending report…"; scope.launch { FynxDiscoveryClient.recordEvent(context, "REPORT", postId = post.id, metadata = JSONObject().put("reason", "user_report")).onSuccess { reportNotice = "Report submitted."; reportBusy = false; delay(700L); reportPost = null; reportNotice = null }.onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false } } }) { Text("Report post") } }, dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }) }
     commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, initialCommentId = initialCommentId, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }) }
     reactionUsersPostId?.let { postId -> ReactionUsersDialog(context = context, postId = postId, onDismiss = { reactionUsersPostId = null }) }
-    authorStatusViewer?.let { HomeAuthorStatusDialog(it, onDismiss = { authorStatusViewer = null }) }
     deletePost?.let { post -> AlertDialog(onDismissRequest = { if (post.id !in interactionBusy) deletePost = null }, title = { Text("Delete post?") }, text = { Text("This will permanently remove your post from FYNX. This action cannot be undone.") }, confirmButton = { TextButton(onClick = { runDelete(post.id) }, enabled = post.id !in interactionBusy) { Text("Delete") } }, dismissButton = { TextButton(onClick = { deletePost = null }, enabled = post.id !in interactionBusy) { Text("Cancel") } }) }
     audiencePost?.let { post -> FynxPostAudienceEditor(postId = post.id, currentVisibility = runCatching { FynxPostVisibility.valueOf(post.visibility.uppercase()) }.getOrDefault(FynxPostVisibility.PUBLIC), onDismiss = { audiencePost = null }, onSaved = { next -> posts = posts.map { if (it.id == post.id) it.copy(visibility = next.name) else it }; audiencePost = null }) }
     if (mediaViewerPost != null && mediaViewerItems.isNotEmpty()) {
@@ -741,7 +730,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
         if (post.isDiscovery) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Explore, "Suggested for you", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(6.dp)); Text("Suggested for you", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = if (hasActiveStatus) onOpenStatus else onOpenProfile, modifier = Modifier.size(50.dp).semantics { contentDescription = if (hasActiveStatus) "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} status" else "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} profile" }) { Box(Modifier.size(50.dp).border(if (hasActiveStatus) 2.dp else 0.dp, if (hasActiveStatus) Color(0xFF22C55E) else Color.Transparent, CircleShape).padding(if (hasActiveStatus) 2.dp else 0.dp)) { FynxRemoteProfileAvatar(profilePhotoMediaId, post.authorDisplayName.ifBlank { post.authorUsername }, Modifier.size(46.dp).clip(CircleShape), ownerUsername = post.authorUsername) } }
+            IconButton(onClick = if (hasActiveStatus) onOpenStatus else onOpenProfile, modifier = Modifier.size(50.dp).semantics { contentDescription = if (hasActiveStatus) "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} status" else "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} profile" }) { Box(Modifier.size(50.dp).then(if (hasActiveStatus) Modifier.border(2.dp, fynxStatusRingBrush(), CircleShape) else Modifier).padding(if (hasActiveStatus) 2.dp else 0.dp)) { FynxRemoteProfileAvatar(profilePhotoMediaId, post.authorDisplayName.ifBlank { post.authorUsername }, Modifier.size(46.dp).clip(CircleShape), ownerUsername = post.authorUsername) } }
             Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall, maxLines = 1, modifier = Modifier.clickable { onOpenProfile() }); Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) { Text("${post.authorUsername.removePrefix("@")} • ${relative(post.timestamp)}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1); val audienceIcon = when (post.visibility.uppercase()) { "PUBLIC" -> Icons.Default.Public; "FRIENDS_ONLY" -> Icons.Default.Group; "SELECTED_PEOPLE" -> Icons.Default.Person; "ONLY_ME" -> Icons.Default.Lock; else -> null }; audienceIcon?.let { icon -> if (post.authorUsername.equals(currentUsername.removePrefix("@"), true)) IconButton(onClick = onOpenAudienceEditor, modifier = Modifier.size(30.dp), enabled = !interactionBusy) { Icon(icon, "Change post audience", modifier = Modifier.size(16.dp), tint = FynxDesign.TextSecondary) } else Icon(icon, contentDescription = when (post.visibility.uppercase()) { "PUBLIC" -> "Public post"; "FRIENDS_ONLY" -> "Friends post"; "SELECTED_PEOPLE" -> "Selected people post"; else -> "Only me post" }, modifier = Modifier.size(14.dp), tint = FynxDesign.TextSecondary) } }; if (!post.location.isNullOrBlank()) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(Icons.Default.LocationOn, contentDescription = "Post location", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary); Text(post.location, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1) } }; if (!post.feelingActivity.isNullOrBlank()) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(Icons.Default.SentimentSatisfied, contentDescription = if (post.feelingActivityType == "ACTIVITY") "Post activity" else "Post feeling", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary); Text(if (post.feelingActivityType == "ACTIVITY") "Activity: ${post.feelingActivity}" else "Feeling: ${post.feelingActivity}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1) } } }
             if (mine) {
                 Box {
@@ -1221,32 +1210,6 @@ private fun AudioPostPlayer(file: File) {
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
-        }
-    }
-}
-
-
-@Composable
-private fun HomeAuthorStatusDialog(statuses: List<FynxStatus>, onDismiss: () -> Unit) {
-    if (statuses.isEmpty()) return
-    var index by remember(statuses) { mutableIntStateOf(0) }
-    val status = statuses[index.coerceIn(0, statuses.lastIndex)]
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        Box(Modifier.fillMaxSize().background(Color(status.textStyle.backgroundColor))) {
-            Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(status.ownerDisplayName.ifBlank { status.ownerUsername }, style = MaterialTheme.typography.titleMedium, color = Color(status.textStyle.foregroundColor))
-                Spacer(Modifier.height(16.dp))
-                when (status.type) {
-                    FynxStatusType.TEXT -> Text(status.text.orEmpty(), color = Color(status.textStyle.foregroundColor), style = MaterialTheme.typography.headlineSmall)
-                    FynxStatusType.PHOTO -> status.contentUri?.let { FynxRemoteMedia(it, "image", Modifier.fillMaxWidth().heightIn(max = 560.dp)) }
-                    FynxStatusType.VIDEO -> status.contentUri?.let { FynxRemoteMedia(it, "video", Modifier.fillMaxWidth().heightIn(max = 560.dp)) }
-                    FynxStatusType.VOICE -> Text("Voice Status", color = Color(status.textStyle.foregroundColor))
-                }
-                status.text?.takeIf { status.type != FynxStatusType.TEXT && it.isNotBlank() }?.let { Text(it, color = Color(status.textStyle.foregroundColor), modifier = Modifier.padding(top = 12.dp)) }
-            }
-            Row(Modifier.align(Alignment.TopEnd).padding(12.dp)) { TextButton(onClick = onDismiss) { Text("Close") } }
-            Row(Modifier.align(Alignment.CenterStart).padding(8.dp)) { IconButton(onClick = { if (index > 0) index-- }, enabled = index > 0) { Icon(Icons.Default.ArrowBack, "Previous Status") } }
-            Row(Modifier.align(Alignment.CenterEnd).padding(8.dp)) { IconButton(onClick = { if (index < statuses.lastIndex) index++ }, enabled = index < statuses.lastIndex) { Icon(Icons.Default.ArrowForward, "Next Status") } }
         }
     }
 }

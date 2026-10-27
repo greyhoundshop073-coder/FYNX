@@ -84,6 +84,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var openGroup by remember { mutableStateOf<String?>(null) }
     var profileUser by remember { mutableStateOf<String?>(null) }
     var statusOpenOwner by remember { mutableStateOf<String?>(null) }
+    var statusCreatorRequested by remember { mutableStateOf(false) }
+    var statusComposerImmersive by remember { mutableStateOf(false) }
     var statusOpenId by remember { mutableStateOf<String?>(null) }
     var postOpenId by remember { mutableStateOf<String?>(null) }
     var postOpenCommentId by remember { mutableStateOf<String?>(null) }
@@ -283,6 +285,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         if (selected != "Stories") {
             statusOpenOwner = null
             statusOpenId = null
+            statusComposerImmersive = false
         }
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
@@ -379,9 +382,16 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
         Scaffold(
             modifier = Modifier.nestedScroll(homeScrollConnection),
-            containerColor = MaterialTheme.colorScheme.background,
+            // Status's immersive creator needs a dark backdrop beneath transparent system bars.
+            // All other surfaces keep their existing theme background.
+            containerColor = if (statusComposerImmersive) Color.Black else MaterialTheme.colorScheme.background,
             topBar = {
-            if (selected == "Home") {
+            if (selected == "Stories") {
+                // Stories and its creator/viewer are immersive surfaces. Do not reserve
+                // the global page-title/back header above them; their own controls live
+                // inside the Status UI, giving the creator the full available height.
+                Spacer(Modifier.height(0.dp))
+            } else if (selected == "Home") {
                 // Home header is part of the normal top-bar flow, not a floating overlay.
                 // This keeps the feed clear while preserving the profile, FYNX title,
                 // camera, Settings and notification controls.
@@ -650,8 +660,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 // Individual screens own their intentional horizontal content spacing.
                 // Do not add a second global side gutter here: it was shrinking every
                 // screen and making phone controls/composers unnecessarily cramped.
-                .padding(vertical = 6.dp)
-                .then(if (selected == "Home") Modifier else Modifier.navigationBarsPadding())
+                .padding(vertical = if (selected == "Stories") 0.dp else 6.dp)
+                .then(if (selected == "Home" || selected == "Stories") Modifier else Modifier.navigationBarsPadding())
             Box(screenContentModifier) {
                 AnimatedContent(
                     targetState = selected,
@@ -663,7 +673,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     label = "FYNX page swipe"
                 ) { page ->
                     when (page) {
-            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusOpenOwner = null; selected = "Stories" }, onOpenStatusOwner = { statusOpenOwner = it; selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
+            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
             "Search" -> FynxUniversalSearchPanel(
                 onOpenProfile = { username -> profileUser = username; selected = "Home" }
             )
@@ -710,6 +720,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
             "Calendar" -> CalendarPanel()
             "Stories" -> FynxStatusHubPanel(
+                startWithCreator = statusCreatorRequested,
+                onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false; selected = "Home" },
+                onComposerVisibilityChange = { statusComposerImmersive = it },
                 openOwnerUsername = statusOpenOwner,
                 openStatusId = statusOpenId,
                 onOpenCommandConsumed = { statusOpenOwner = null; statusOpenId = null },

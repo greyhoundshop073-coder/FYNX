@@ -129,6 +129,31 @@ def dump_ui(name:str)->str:
         return raw.decode("utf-8","replace")
     return ""
 
+def read_ui_unpersisted()->str:
+    """Read sensitive login UI in memory only; never place credentials in CI artifacts."""
+    result=run("adb","shell","uiautomator","dump","/sdcard/fynx-authenticated-login-live.xml")
+    if result.returncode != 0: return ""
+    raw=subprocess.run(["adb","exec-out","cat","/sdcard/fynx-authenticated-login-live.xml"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=False).stdout
+    return raw.decode("utf-8","replace") if raw.startswith(b"<?xml") else ""
+
+def backend_health_probe()->tuple[bool,str]:
+    """Distinguish a live-service outage from a rejected account without logging response bodies."""
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    request=urllib.request.Request(base+"/health",headers={"Accept":"application/json"},method="GET")
+    try:
+        with urllib.request.urlopen(request,timeout=12) as response:
+            payload=json.loads(response.read().decode("utf-8","replace"))
+        if payload.get("ok") is True and payload.get("service")=="fynx-backend" and payload.get("database")=="ready":
+            return True,""
+        return False,"health endpoint did not report a ready backend/database"
+    except urllib.error.HTTPError as exc:
+        return False,f"HTTP {exc.code}"
+    except (urllib.error.URLError,TimeoutError) as exc:
+        return False,type(exc).__name__
+    except (ValueError,TypeError):
+        return False,"invalid health response"
+
+
 def nodes(xml_text:str):
     if not xml_text: return []
     try: return list(ET.fromstring(xml_text).iter("node"))
@@ -500,63 +525,68 @@ def exercise_notification_route(route:str, name:str)->bool:
     return True
 
 def login():
-    global LOGIN_MODE
+    global LOGIN_MODE, BACKEND_BLOCKED_REASON
+    backend_ready, backend_reason = backend_health_probe()
+    BACKEND_BLOCKED_REASON = "" if backend_ready else backend_reason
+
     run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
-    xml=dump_ui("authenticated-before-login.xml"); screenshot("authenticated-before-login.png")
+    xml=read_ui_unpersisted()
     sign_in_gate=find_control(xml,["Sign In"])
     if not sign_in_gate: return xml,"authentication gate was not visible"
-    _,x,y=sign_in_gate; run("adb","shell","input","tap",str(x),str(y))
+    _,x,y=sign_in_gate
+    run("adb","shell","input","tap",str(x),str(y))
     xml=""
     for _ in range(12):
-        time.sleep(1); xml=dump_ui("authenticated-login-screen.xml")
+        time.sleep(1)
+        xml=read_ui_unpersisted()
         if find_control(xml,["Username"]) or len(find_edit_fields(xml))>=2: break
-    screenshot("authenticated-login-screen.png")
+
     user_control=find_control(xml,["Username"])
     if not user_control:
         fields=find_edit_fields(xml)
         if not fields: return xml,"username control was not visible"
         user_control=("username",fields[0][0],fields[0][1])
-    _,x,y=user_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
+    _,x,y=user_control
+    run("adb","shell","input","tap",str(x),str(y))
+    time.sleep(.3)
     result=input_text(USERNAME)
     if result.returncode!=0: return xml,"adb input text failed for username"
-    run("adb","shell","input","keyevent","4"); time.sleep(.5)
-    xml=dump_ui("authenticated-after-username.xml")
-    # Debug APKs intentionally expose a passwordless local UI-entry path when no
-    # local account is stored. Exercise that explicit affordance rather than
-    # incorrectly failing because the Password field is intentionally absent.
-    if find_control(xml,["Saved-device login for this debug APK"]):
-        LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
-        home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
-        if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
-            return home_xml,""
-        return home_xml or xml,"debug saved-device entry did not reach Home"
+    run("adb","shell","input","keyevent","4")
+    time.sleep(.5)
+    xml=read_ui_unpersisted()
+
+    debug_option=find_control(xml,["Leave password blank for quick local entry","Saved-device login for this debug APK"])
+    if not backend_ready and debug_option:
+        return enter_debug_local_ui(xml, "backend health preflight was unavailable ("+backend_reason+")", password_was_entered=False)
+
     pass_control=find_control(xml,["Password"])
     if not pass_control:
         fields=find_edit_fields(xml)
         if len(fields)<2: return xml,f"password control was not visible after username entry (edittexts found {len(fields)})"
         pass_control=("password",fields[1][0],fields[1][1])
-    _,x,y=pass_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
+    _,x,y=pass_control
+    run("adb","shell","input","tap",str(x),str(y))
+    time.sleep(.3)
     result=input_text(PASSWORD)
     if result.returncode!=0: return xml,"adb input text failed for password"
-    run("adb","shell","input","keyevent","4"); time.sleep(1)
-    xml=dump_ui("authenticated-login-filled.xml"); screenshot("authenticated-login-filled.png")
+    run("adb","shell","input","keyevent","4")
+    time.sleep(.7)
+    xml=read_ui_unpersisted()
     sign_in=find_control(xml,["Sign In"])
     if not sign_in: return xml,"Sign In control disappeared after credentials were entered"
     _,x,y=sign_in
     run("adb","shell","input","tap",str(x),str(y))
 
-    # A tapped Sign In button is not proof of authentication. The backend request
-    # is asynchronous and can take several seconds; wait until the actual Home
-    # controls appear, or return a specific authentication failure without running
-    # Home navigation checks on top of the login form.
+    # Credentials are never dumped or screenshotted after entry. A 502 is an
+    # external backend outage, not evidence that the account password is invalid.
     deadline=time.monotonic()+65.0
     last_xml=xml
     last_markers=""
     while time.monotonic()<deadline:
         time.sleep(1.0)
-        last_xml=dump_ui("authenticated-login-wait.xml")
+        last_xml=read_ui_unpersisted()
         if not last_xml:
             continue
         if (find_control(last_xml,["Open FYNX camera"])
@@ -572,22 +602,67 @@ def login():
                 return last_xml,"Home feed did not leave its loading state within 30 seconds after authenticated navigation"
             (ROOT/"authenticated-home.xml").write_text(last_xml,encoding="utf-8")
             screenshot("authenticated-home.png")
+            BACKEND_BLOCKED_REASON=""
             return last_xml,""
         last_markers=visible_marker_summary(last_xml)
         combined=" ".join((node.attrib.get("text") or "")+" "+(node.attrib.get("content-desc") or "") for node in nodes(last_xml)).casefold()
         login_form_visible=bool(find_control(last_xml,["Username"]) and find_control(last_xml,["Password"]))
         sign_in_visible=bool(find_control(last_xml,["Sign In"]))
         if time.monotonic() > deadline-60.0 and login_form_visible and sign_in_visible and "signing in" not in combined:
-            screenshot("authenticated-login-rejected.png")
-            if any(marker in combined for marker in ("invalid username","invalid password","incorrect password","invalid credentials")):
-                reason="the server rejected the supplied credentials"
-            elif any(marker in combined for marker in ("timeout","timed out","network","connection failed","fetch failed","unable to connect")):
-                reason="the login form returned a network/backend error"
-            else:
-                reason="the login form returned without opening authenticated Home"
-            return last_xml, f"{reason}; visible markers: {last_markers}"
-    screenshot("authenticated-home-timeout.png")
+            invalid_credentials=any(marker in combined for marker in ("invalid username","invalid password","incorrect password","invalid credentials"))
+            backend_unavailable=any(marker in combined for marker in ("application failed to respond","bad gateway","service unavailable","http 502",'"code":502',"502 bad gateway"))
+            if invalid_credentials:
+                return last_xml, f"the server rejected the supplied credentials; visible markers: {last_markers}"
+            if backend_unavailable:
+                BACKEND_BLOCKED_REASON="HTTP 502 from the backend login request"
+                if debug_option:
+                    return enter_debug_local_ui(last_xml, BACKEND_BLOCKED_REASON, password_was_entered=True)
+                return last_xml, "server authentication is blocked by an external HTTP 502; no debug-only local entry option was available"
+            if any(marker in combined for marker in ("timeout","timed out","network","connection failed","fetch failed","unable to connect")):
+                return last_xml, f"the login form returned a network/backend error; visible markers: {last_markers}"
+            return last_xml, f"the login form returned without opening authenticated Home; visible markers: {last_markers}"
     return last_xml, "login did not reach authenticated Home within 65 seconds; last visible markers: " + (last_markers or visible_marker_summary(last_xml))
+
+
+def enter_debug_local_ui(xml:str, reason:str, password_was_entered:bool)->tuple[str,str]:
+    """Use only the app's explicit existing debug-only path when the live backend is blocked."""
+    global LOGIN_MODE, BACKEND_BLOCKED_REASON
+    helper=find_control(xml,["Leave password blank for quick local entry","Saved-device login for this debug APK"])
+    if not helper:
+        return xml,"backend is unavailable and the app did not expose its explicit debug-only local-entry option"
+    if password_was_entered:
+        password_control=find_control(xml,["Password"])
+        if not password_control:
+            return xml,"backend returned HTTP 502 after credential entry; could not safely clear the password field for local-only fallback"
+        _,px,py=password_control
+        run("adb","shell","input","tap",str(px),str(py))
+        run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+        run("adb","shell","input","keyevent","KEYCODE_DEL")
+        run("adb","shell","input","keyevent","4")
+        time.sleep(.4)
+        xml=read_ui_unpersisted()
+        if not find_control(xml,["Leave password blank for quick local entry","Saved-device login for this debug APK"]):
+            return xml,"backend returned HTTP 502, but the existing local-only option was no longer available after clearing password"
+    sign_in=find_control(xml,["Sign In"])
+    if not sign_in:
+        return xml,"the existing debug-only local-entry Sign In button was not available"
+    _,x,y=sign_in
+    run("adb","shell","input","tap",str(x),str(y))
+    deadline=time.monotonic()+35.0
+    latest=""
+    while time.monotonic()<deadline:
+        time.sleep(.7)
+        latest=read_ui_unpersisted()
+        if (find_control(latest,["Open FYNX camera"])
+                and find_control(latest,["Chat"])
+                and find_control(latest,["Friends"])):
+            LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
+            BACKEND_BLOCKED_REASON=reason
+            (ROOT/"authenticated-home.xml").write_text(latest,encoding="utf-8")
+            screenshot("authenticated-home.png")
+            return latest,""
+    return latest,"explicit debug-only local entry did not reach Home after the backend outage"
+
 
 def dismiss_runtime_permission_prompt()->str:
     for _ in range(6):
@@ -627,7 +702,8 @@ def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[st
 report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
-        "This journey uses a real FYNX account supplied through GitHub Actions secrets.",
+        "This verifier uses real FYNX account credentials when FYNX_E2E_USERNAME and FYNX_E2E_PASSWORD are configured.",
+        "If credentials are absent, any debug-only local UI journey is explicitly labelled as not server-authenticated.",
         "No fabricated users, posts, messages, listings or application records are created.",
         "Credentials are never written to the APK or repository."]
 
@@ -642,12 +718,15 @@ if install.returncode!=0:
     report.append("- "+install.stdout.strip().replace("\n"," | ")); raise SystemExit(1)
 
 xml,error=login()
+if BACKEND_BLOCKED_REASON:
+    report.append("- BLOCKED live backend authentication: " + BACKEND_BLOCKED_REASON + ".")
+    report.append("- This run may certify only the explicitly debug-only local UI journey; it does not certify server-backed Status publishing, retrieval, reactions, or music playback.")
 if error: FAILURES.append("real account sign-in: "+error)
 else:
     if find_control(xml,["Sign In"]) and find_control(xml,["Create Account"]): FAILURES.append("authentication did not leave the login gate")
     else:
         if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
-            report.append("- PASS debug-only saved-device UI entry; this does not certify server authentication")
+            report.append("- PASS debug-only local UI entry; this does not certify server authentication")
         else:
             report.append("- PASS real account authenticated through the FYNX login flow")
 
@@ -682,46 +761,607 @@ if not FAILURES:
         if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
         else: FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
-    # The debug saved-device entry is intentionally a local UI-only route, not
-    # server authentication. Do not cold-start it: that returns to Sign In and
-    # makes unrelated navigation checks fail for the wrong reason. Certify the
-    # Status create affordance on the same live Home session instead.
-    if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
-        home_xml = ""
-        for _ in range(4):
-            home_xml = dump_ui("authenticated-status-home.xml")
-            if (find_control(home_xml, ["Open FYNX camera"])
-                    and find_control(home_xml, ["Chat"])
-                    and find_control(home_xml, ["Friends"])):
-                break
-            run("adb", "shell", "input", "keyevent", "4")
-            time.sleep(0.8)
+    # Exercise Status creation on the current Home session in both supported
+    # runtime modes. Do not alter or re-enter the login flow: the debug-only
+    # saved-device path is deliberately local UI entry, not server auth.
+    home_xml = ""
+    for _ in range(4):
+        home_xml = dump_ui("authenticated-status-home.xml")
         if (find_control(home_xml, ["Open FYNX camera"])
                 and find_control(home_xml, ["Chat"])
                 and find_control(home_xml, ["Friends"])):
-            screenshot("authenticated-status-home.png")
-            status_add_xml = tap_control(
-                home_xml, ["Create your status"], "status-create",
-                ["Add status", "Voice", "Text"]
+            break
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.8)
+    if (find_control(home_xml, ["Open FYNX camera"])
+            and find_control(home_xml, ["Chat"])
+            and find_control(home_xml, ["Friends"])):
+        screenshot("authenticated-status-home.png")
+        status_add_xml = tap_control(
+            home_xml, ["Create your status"], "status-create",
+            ["Add status", "Voice", "Text"]
+        )
+        if status_add_xml and find_control(status_add_xml, ["Voice"]) and find_control(status_add_xml, ["Text"]):
+            screenshot("authenticated-status-create.png")
+            report.append("- PASS Home own-Status + button opens the real Add status panel")
+            report.append("- PASS Add status panel exposes both Voice and Text creation choices")
+
+            # Test the real Status camera route with actual emulator capture and discard.
+            # Never tap Send here: this runtime entry is not server-authenticated and no
+            # dummy Status should be created or published by the visual test.
+            status_camera_xml = tap_control(
+                status_add_xml, ["Take photo"], "status-camera-photo-open",
+                ["Take photo", "Allow camera", "FYNX needs camera access"]
             )
-            if status_add_xml and find_control(status_add_xml, ["Voice"]) and find_control(status_add_xml, ["Text"]):
-                report.append("- PASS Home own-Status + button opens the real Add status panel")
-                report.append("- PASS Add status panel exposes both Voice and Text creation choices")
+            if status_camera_xml and find_control(status_camera_xml, ["Allow camera"]) and not find_control(status_camera_xml, ["Close camera"]):
+                status_camera_xml = tap_control(
+                    status_camera_xml, ["Allow camera"], "status-camera-permission",
+                    ["Take photo", "FYNX needs camera access"]
+                )
+            camera_ready = bool(
+                status_camera_xml
+                and find_control(status_camera_xml, ["Close camera"])
+                and find_control(status_camera_xml, ["Take photo"])
+            )
+            if camera_ready:
+                screenshot("authenticated-status-camera-photo.png")
+                report.append("- PASS Add status -> Take photo opens the real CameraX photo capture UI")
+                photo_preview_xml = tap_control(
+                    status_camera_xml, ["Take photo"], "status-camera-capture-photo",
+                    ["Retake", "Send"]
+                )
+                if photo_preview_xml and find_control(photo_preview_xml, ["Retake"]):
+                    screenshot("authenticated-status-camera-photo-preview.png")
+                    report.append("- PASS camera photo capture opens a preview with Retake and Send controls")
+                    status_camera_xml = tap_control(
+                        photo_preview_xml, ["Retake"], "status-camera-photo-retake",
+                        ["Close camera", "Take photo"]
+                    )
+                    if status_camera_xml and find_control(status_camera_xml, ["Close camera"]):
+                        status_add_xml = tap_control(
+                            status_camera_xml, ["Close camera"], "status-camera-photo-close",
+                            ["Add status", "Voice", "Text"]
+                        )
+                    else:
+                        FAILURES.append("Retake did not return the Status photo flow to the CameraX capture screen")
+                else:
+                    FAILURES.append("Status camera photo capture did not expose the real Retake/Send preview")
+                    # Do not keep using the chooser's stale accessibility tree while a
+                    # full-screen camera Dialog is still open. Attempt the normal Close
+                    # control first, then Android Back as a recovery route; preserve the
+                    # capture failure above so this cannot turn a broken journey GREEN.
+                    recovery_xml = dump_ui("authenticated-status-camera-photo-recovery.xml")
+                    if find_control(recovery_xml, ["Close camera"]):
+                        recovery_xml = tap_control(
+                            recovery_xml, ["Close camera"], "status-camera-photo-recovery-close",
+                            ["Add status", "Voice", "Text"]
+                        )
+                    elif not find_control(recovery_xml, ["Add status"]):
+                        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                        time.sleep(0.8)
+                        recovery_xml = dump_ui("authenticated-status-camera-photo-recovery-after-back.xml")
+                    for _ in range(4):
+                        if find_control(recovery_xml, ["Add status"]) and find_control(recovery_xml, ["Voice"]) and find_control(recovery_xml, ["Text"]):
+                            break
+                        time.sleep(0.5)
+                        recovery_xml = dump_ui("authenticated-status-camera-photo-recovery-retry.xml")
+                    status_add_xml = recovery_xml
+            elif status_camera_xml and find_control(status_camera_xml, ["FYNX needs camera access"]):
+                # Explicitly separate an unavailable runner camera from a passing capture.
+                report.append("- BLOCKED Status photo/video runtime capture: emulator camera permission or hardware is unavailable")
+                close_camera = find_control(status_camera_xml, ["Close camera", "Close"])
+                if close_camera:
+                    _, camera_x, camera_y = close_camera
+                    run("adb", "shell", "input", "tap", str(camera_x), str(camera_y))
+                    time.sleep(0.7)
+                    status_add_xml = dump_ui("authenticated-status-camera-unavailable-return.xml")
             else:
-                FAILURES.append("Home own-Status + button did not open Add status with both Voice and Text choices")
+                FAILURES.append("Add status -> Take photo did not expose a usable CameraX capture screen")
+                # Always recover from the LIVE hierarchy before continuing. The old
+                # Add-status hierarchy is stale while the full-screen camera Dialog
+                # is open; tapping its Text coordinates was causing a second, misleading
+                # Text-composer failure after the camera readiness check.
+                recovery_xml = dump_ui("authenticated-status-camera-photo-not-ready-live.xml")
+                close_camera = find_control(recovery_xml, ["Close camera", "Close"])
+                if close_camera:
+                    recovery_xml = tap_control(
+                        recovery_xml, ["Close camera", "Close"], "status-camera-photo-not-ready-close",
+                        ["Add status", "Voice", "Text"]
+                    )
+                else:
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(0.8)
+                    recovery_xml = dump_ui("authenticated-status-camera-photo-not-ready-back.xml")
+                for _ in range(8):
+                    if (find_control(recovery_xml, ["Add status"])
+                            and find_control(recovery_xml, ["Voice"])
+                            and find_control(recovery_xml, ["Text"])):
+                        break
+                    time.sleep(0.5)
+                    recovery_xml = dump_ui("authenticated-status-camera-photo-not-ready-retry.xml")
+                if (find_control(recovery_xml, ["Add status"])
+                        and find_control(recovery_xml, ["Voice"])
+                        and find_control(recovery_xml, ["Text"])):
+                    status_add_xml = recovery_xml
+                    report.append("- PASS recovered to Add status after camera readiness failure; Text/Voice checks can continue")
+                else:
+                    status_add_xml = ""
+                    FAILURES.append("Camera readiness failure left Status stuck outside the Add status chooser")
+
+            # Video capture records audio as well as video. CI's debug-only UI path
+            # can have CAMERA granted from a prior step while RECORD_AUDIO remains
+            # denied; in that state the shutter opens a permission prompt instead of
+            # starting recording. Grant the runtime permission in this disposable
+            # emulator test environment, without changing app auth or repository secrets.
+            audio_grant = run("adb", "shell", "pm", "grant", PACKAGE, "android.permission.RECORD_AUDIO")
+            if audio_grant.returncode != 0:
+                report.append("- WARN Could not pre-grant RECORD_AUDIO in emulator; video flow will still be tested and any permission prompt must be handled")
+            else:
+                audio_state = run("adb", "shell", "dumpsys", "package", PACKAGE).stdout
+                if re.search(r"android\.permission\.RECORD_AUDIO: granted=true", audio_state):
+                    report.append("- PASS emulator RECORD_AUDIO permission is granted for Status video capture")
+                else:
+                    report.append("- WARN RECORD_AUDIO grant command returned success but package state did not confirm it")
+
+            # Only exercise video recording when the photo camera is available.
+            if camera_ready and status_add_xml and find_control(status_add_xml, ["Add status"]):
+                video_camera_xml = tap_control(
+                    status_add_xml, ["Record video"], "status-camera-video-open",
+                    ["Record video", "Allow camera", "FYNX needs camera access"]
+                )
+                if video_camera_xml and find_control(video_camera_xml, ["Allow camera"]) and not find_control(video_camera_xml, ["Close camera"]):
+                    video_camera_xml = tap_control(
+                        video_camera_xml, ["Allow camera"], "status-camera-video-permission",
+                        ["Record video", "FYNX needs camera access"]
+                    )
+                if video_camera_xml and find_control(video_camera_xml, ["Close camera"]) and find_control(video_camera_xml, ["Record video"]):
+                    screenshot("authenticated-status-camera-video.png")
+                    report.append("- PASS Add status -> Record video opens the real CameraX video capture UI")
+                    video_recording_xml = tap_control(
+                        video_camera_xml, ["Record video"], "status-camera-video-record-start",
+                        ["Stop video recording"]
+                    )
+                    if video_recording_xml and find_control(video_recording_xml, ["Stop video recording"]):
+                        time.sleep(1.6)
+                        video_recording_xml = dump_ui("authenticated-status-camera-video-recording.xml")
+                        screenshot("authenticated-status-camera-video-recording.png")
+                        video_preview_xml = tap_control(
+                            video_recording_xml, ["Stop video recording"], "status-camera-video-record-stop",
+                            ["Retake", "Send"]
+                        )
+                        if video_preview_xml and find_control(video_preview_xml, ["Retake"]):
+                            screenshot("authenticated-status-camera-video-preview.png")
+                            report.append("- PASS real Status video recording opens a preview with Retake and Send controls")
+                            video_camera_xml = tap_control(
+                                video_preview_xml, ["Retake"], "status-camera-video-retake",
+                                ["Close camera", "Record video"]
+                            )
+                            if video_camera_xml and find_control(video_camera_xml, ["Close camera"]):
+                                status_add_xml = tap_control(
+                                    video_camera_xml, ["Close camera"], "status-camera-video-close",
+                                    ["Add status", "Voice", "Text"]
+                                )
+                            else:
+                                FAILURES.append("Retake did not return the Status video flow to the CameraX capture screen")
+                        else:
+                            FAILURES.append("Status video recording did not expose the real Retake/Send preview")
+                    else:
+                        FAILURES.append("Status video camera did not enter the recording state")
+                elif video_camera_xml and find_control(video_camera_xml, ["FYNX needs camera access"]):
+                    report.append("- BLOCKED Status video runtime capture: emulator camera permission or hardware is unavailable")
+                else:
+                    FAILURES.append("Add status -> Record video did not expose the video recording controls")
+            else:
+                report.append("- BLOCKED Status video runtime capture: photo camera capture was unavailable in this emulator run")
+
+            # Normalize the real screen after the video journey before attempting Text.
+            # A failed recording must not leave a full-screen camera Dialog open while
+            # the test reuses stale Add-status coordinates. Preserve the original video
+            # failure, but recover independently so Text/Music/Voice still get tested.
+            live_after_video_xml = dump_ui("authenticated-status-video-postcheck-live.xml")
+            if not (find_control(live_after_video_xml, ["Add status"])
+                    and find_control(live_after_video_xml, ["Voice"])
+                    and find_control(live_after_video_xml, ["Text"])):
+                if find_control(live_after_video_xml, ["Stop video recording"]):
+                    live_after_video_xml = tap_control(
+                        live_after_video_xml, ["Stop video recording"], "status-video-recovery-stop",
+                        ["Retake", "Send"]
+                    )
+                if find_control(live_after_video_xml, ["Retake"]):
+                    live_after_video_xml = tap_control(
+                        live_after_video_xml, ["Retake"], "status-video-recovery-retake",
+                        ["Close camera", "Record video"]
+                    )
+                if find_control(live_after_video_xml, ["Close camera"]):
+                    live_after_video_xml = tap_control(
+                        live_after_video_xml, ["Close camera"], "status-video-recovery-close",
+                        ["Add status", "Voice", "Text"]
+                    )
+                if not (find_control(live_after_video_xml, ["Add status"])
+                        and find_control(live_after_video_xml, ["Voice"])
+                        and find_control(live_after_video_xml, ["Text"])):
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(0.8)
+                    live_after_video_xml = dump_ui("authenticated-status-video-recovery-after-back.xml")
+                for _ in range(8):
+                    if (find_control(live_after_video_xml, ["Add status"])
+                            and find_control(live_after_video_xml, ["Voice"])
+                            and find_control(live_after_video_xml, ["Text"])):
+                        break
+                    time.sleep(0.5)
+                    live_after_video_xml = dump_ui("authenticated-status-video-recovery-retry.xml")
+            if (find_control(live_after_video_xml, ["Add status"])
+                    and find_control(live_after_video_xml, ["Voice"])
+                    and find_control(live_after_video_xml, ["Text"])):
+                status_add_xml = live_after_video_xml
+                report.append("- PASS returned to the live Add status chooser after video capture check")
+            else:
+                status_add_xml = ""
+                FAILURES.append("Video capture check left Status outside the Add status chooser; Text/Voice checks cannot safely continue")
+
+            # This run covers Text/Music plus Voice below; media is discarded, not published.
+            text_composer_xml = ""
+            if (status_add_xml and find_control(status_add_xml, ["Add status"])
+                    and find_control(status_add_xml, ["Text"])):
+                text_composer_xml = tap_control(
+                    status_add_xml, ["Text"], "status-text-composer",
+                    ["Type a Status", "Text styling", "Send"]
+                )
+            else:
+                FAILURES.append("Skipped Status Text tap because the live Add status chooser was not recovered; stale screen coordinates were not used")
+            if text_composer_xml and (
+                find_control(text_composer_xml, ["Type a Status"])
+                or find_control(text_composer_xml, ["Text styling"])
+            ):
+                screenshot("authenticated-status-text-composer.png")
+                report.append("- PASS Add status -> Text opens the actual Status text composer")
+                fields = find_edit_fields(text_composer_xml)
+                if fields:
+                    tx, ty = fields[0]
+                    run("adb", "shell", "input", "tap", str(tx), str(ty))
+                    input_text("FYNX runtime text Status check")
+                    time.sleep(0.7)
+                    text_filled_xml = dump_ui("authenticated-status-text-filled.xml")
+                    screenshot("authenticated-status-text-filled.png")
+                    if find_control(text_filled_xml, ["Send"]):
+                        report.append("- PASS Text Status editor accepts text and exposes Send")
+                    else:
+                        report.append("- PARTIAL Text Status editor accepts text; Send control was not exposed in hierarchy")
+                else:
+                    report.append("- PARTIAL Text composer opened, but its editor was not exposed as an Android EditText")
+                # Typing opens the Android IME and shifts the Compose layout.
+                # Never reuse pre-keyboard coordinates: hide the IME, dump the
+                # current hierarchy, then resolve the styling button afresh.
+                run("adb", "shell", "input", "keyevent", "4")
+                time.sleep(0.6)
+                text_composer_xml = dump_ui("authenticated-status-text-composer-ready-for-styling.xml")
+                style_xml = tap_control(
+                    text_composer_xml, ["Text styling", "Text style"], "status-text-styling",
+                    ["Done"]
+                )
+                if style_xml and find_control(style_xml, ["Done"]):
+                    screenshot("authenticated-status-text-styling.png")
+                    report.append("- PASS Text styling panel opens and exposes Done")
+                    text_composer_xml = tap_control(style_xml, ["Done"], "status-text-styling-done")
+                    # Verify optional music can be attached from the existing text
+                    # draft, without replacing the draft with a music-only Status.
+                    media_tools_xml = tap_control(
+                        text_composer_xml, ["Add photo or media"], "status-text-open-media-tools",
+                        ["Add music", "Change music"]
+                    )
+                    if media_tools_xml and find_control(media_tools_xml, ["Add music", "Change music"]):
+                        attach_music_xml = tap_control(
+                            media_tools_xml, ["Add music", "Change music"], "status-text-add-music",
+                            ["FYNX Music", "Search music"]
+                        )
+                        if attach_music_xml:
+                            attach_terminal_markers = [
+                                "No FYNX music is published yet.",
+                                "Sign in to FYNX to browse published music.",
+                                "Music catalogue couldn't be loaded",
+                                "Music catalogue took too long",
+                                "Add",
+                            ]
+                            attach_deadline = time.monotonic() + 18.0
+                            while time.monotonic() < attach_deadline and not any(
+                                find_control(attach_music_xml, [marker])
+                                for marker in attach_terminal_markers
+                            ):
+                                time.sleep(0.5)
+                                attach_music_xml = dump_ui("authenticated-status-text-music-picker-state.xml")
+                            screenshot("authenticated-status-text-music-picker.png")
+                            if any(find_control(attach_music_xml, [marker]) for marker in attach_terminal_markers):
+                                report.append("- PASS Text composer can open the catalogue to attach optional music")
+                            else:
+                                FAILURES.append("Text composer music picker never reached a terminal state")
+                            run("adb", "shell", "input", "keyevent", "4")
+                            time.sleep(0.6)
+                            draft_after_music_xml = dump_ui("authenticated-status-text-draft-after-music-picker.xml")
+                            if find_control(draft_after_music_xml, ["FYNX runtime text Status check"]) and find_control(draft_after_music_xml, ["Send"]):
+                                report.append("- PASS Closing music picker preserves the existing text draft")
+                            else:
+                                FAILURES.append("Opening/closing the music picker did not preserve the existing text draft")
+                        else:
+                            FAILURES.append("Text composer Add music action did not open the catalogue")
+                    else:
+                        FAILURES.append("Text composer does not expose Add music/Change music from media tools")
+                else:
+                    report.append("- PARTIAL Text styling panel could not be verified in this runtime")
+            else:
+                FAILURES.append("Status Add status -> Text composer did not expose expected editor controls")
+
+            # Return to Home/Add status for Music without restarting or touching login.
+            for _ in range(4):
+                home_xml = dump_ui("authenticated-status-text-return.xml")
+                if find_control(home_xml, ["Create your status"]):
+                    break
+                run("adb", "shell", "input", "keyevent", "4")
+                time.sleep(0.7)
+            status_add_music_xml = ""
+            if find_control(home_xml, ["Create your status"]):
+                status_add_music_xml = tap_control(
+                    home_xml, ["Create your status"], "status-music-create",
+                    ["Add status", "Music", "Text"]
+                )
+            if status_add_music_xml and find_control(status_add_music_xml, ["Music"]):
+                music_catalogue_xml = tap_control(
+                    status_add_music_xml, ["Music"], "status-music-catalogue",
+                    ["FYNX Music", "Search music"]
+                )
+                if music_catalogue_xml:
+                    # Wait for a real terminal state, not just the search field
+                    # which exists while the backend request is still loading.
+                    terminal_music_markers = [
+                        "No FYNX music is published yet.",
+                        "Sign in to FYNX to browse published music.",
+                        "Music catalogue couldn't be loaded",
+                        "Music catalogue took too long",
+                        "Add",
+                    ]
+                    music_deadline = time.monotonic() + 18.0
+                    while time.monotonic() < music_deadline and not any(
+                        find_control(music_catalogue_xml, [marker])
+                        for marker in terminal_music_markers
+                    ):
+                        time.sleep(0.5)
+                        music_catalogue_xml = dump_ui("authenticated-status-music-catalogue-state.xml")
+                    screenshot("authenticated-status-music-catalogue.png")
+                    report.append("- PASS Add status -> Music opens the real music catalogue/search UI")
+                    if find_control(music_catalogue_xml, ["Sign in to FYNX to browse published music."]):
+                        report.append("- PASS Music picker exits loading and correctly explains that catalogue access needs a server-authenticated FYNX session")
+                    elif find_control(music_catalogue_xml, ["No FYNX music is published yet."]):
+                        report.append("- BLOCKED Music track selection/publish: catalogue reports no published FYNX music")
+                    elif find_control(music_catalogue_xml, ["Music catalogue couldn't be loaded", "Music catalogue took too long"]):
+                        report.append("- PARTIAL Music catalogue request ended with a visible retryable error instead of an endless loading spinner")
+                    elif find_control(music_catalogue_xml, ["Add"]):
+                        add_music_xml = tap_control(
+                            music_catalogue_xml, ["Add"], "status-music-select",
+                            ["Send", "Choose a song"]
+                        )
+                        if add_music_xml:
+                            screenshot("authenticated-status-music-composer.png")
+                            if find_control(add_music_xml, ["Send"]):
+                                report.append("- PASS selecting a catalogue track opens Music Status composer with Send")
+                            else:
+                                report.append("- PARTIAL a catalogue track was selected, but Music composer Send was not exposed")
+                    else:
+                        FAILURES.append("Music catalogue did not reach a track, explicit empty state, sign-in explanation, or retryable error within 18 seconds")
+                else:
+                    FAILURES.append("Status Music choice did not open the music catalogue")
+            else:
+                FAILURES.append("Could not reopen Add status to test the Music creation path")
+
+            # Exercise the real Voice capture and local preview path without publishing.
+            # This is intentionally a local-media check only; it does not claim that a
+            # debug-only UI session can persist a Status to the authenticated backend.
+            voice_home_xml = ""
+            for _ in range(6):
+                voice_home_xml = dump_ui("authenticated-status-voice-return-home.xml")
+                if find_control(voice_home_xml, ["Create your status"]):
+                    break
+                if (find_control(voice_home_xml, ["Open FYNX camera"])
+                        and find_control(voice_home_xml, ["Chat"])
+                        and find_control(voice_home_xml, ["Friends"])):
+                    break
+                run("adb", "shell", "input", "keyevent", "4")
+                time.sleep(0.7)
+
+            voice_add_xml = ""
+            if find_control(voice_home_xml, ["Create your status"]):
+                voice_add_xml = tap_control(
+                    voice_home_xml, ["Create your status"], "status-voice-add",
+                    ["Add status", "Voice", "Text"]
+                )
+            elif find_control(voice_home_xml, ["Voice"]) and find_control(voice_home_xml, ["Text"]):
+                # Reuse a currently displayed Add status chooser rather than opening
+                # an additional copy of the sheet.
+                voice_add_xml = voice_home_xml
+
+            if voice_add_xml and find_control(voice_add_xml, ["Voice"]):
+                voice_composer_xml = tap_control(
+                    voice_add_xml, ["Voice"], "status-voice-composer",
+                    ["Start recording"]
+                )
+                if voice_composer_xml and find_control(voice_composer_xml, ["Start recording"]):
+                    report.append("- PASS Add status -> Voice opens the actual recording composer")
+                    recording_xml = tap_control(
+                        voice_composer_xml, ["Start recording"], "status-voice-record-start",
+                        ["Stop •", "Pause"]
+                    )
+                    if recording_xml:
+                        # Give MediaRecorder enough time to write a playable local file.
+                        time.sleep(1.4)
+                        recording_xml = dump_ui("authenticated-status-voice-recording.xml")
+                        screenshot("authenticated-status-voice-recording.png")
+                        if find_control(recording_xml, ["Stop •", "Pause"]):
+                            report.append("- PASS Voice Status recording state is visible in the running emulator")
+                        else:
+                            FAILURES.append("Voice recorder did not remain in the recording state after Start recording")
+
+                        stopped_xml = tap_control(
+                            recording_xml, ["Stop •"], "status-voice-stop",
+                            ["Voice Status ready", "Play voice preview", "Delete"]
+                        )
+                        if stopped_xml and find_control(stopped_xml, ["Voice Status ready"]):
+                            screenshot("authenticated-status-voice-preview.png")
+                            report.append("- PASS stopping voice capture opens the local recording preview without publishing")
+
+                            # Exercise caption input while the keyboard is visible. This is
+                            # a local draft check only; never tap Send from a debug-only session.
+                            caption_text = "FYNX voice caption runtime check"
+                            caption_fields = find_edit_fields(stopped_xml)
+                            if caption_fields:
+                                caption_x, caption_y = caption_fields[0]
+                                run("adb", "shell", "input", "tap", str(caption_x), str(caption_y))
+                                input_text(caption_text)
+                                time.sleep(0.8)
+                                caption_xml = dump_ui("authenticated-status-voice-caption-keyboard.xml")
+                                screenshot("authenticated-status-voice-caption-keyboard.png")
+                                if caption_text in caption_xml and find_control(caption_xml, ["Send"]):
+                                    report.append("- PASS Voice Status caption is visible with the keyboard open; captured authenticated-status-voice-caption-keyboard.png")
+                                else:
+                                    FAILURES.append("Voice Status caption was not retained/usable while the keyboard was open")
+                                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                                time.sleep(0.6)
+                                caption_return_xml = dump_ui("authenticated-status-voice-caption-keyboard-dismissed.xml")
+                                if caption_text in caption_return_xml and find_control(caption_return_xml, ["Play voice preview"]):
+                                    report.append("- PASS voice caption and local recording preview survive keyboard dismissal")
+                                    stopped_xml = caption_return_xml
+                                else:
+                                    FAILURES.append("Voice caption or local recording preview was lost after keyboard dismissal")
+                                    if caption_return_xml:
+                                        stopped_xml = caption_return_xml
+                            else:
+                                FAILURES.append("Recorded Voice Status did not expose an editable caption field")
+
+                            preview_xml = tap_control(
+                                stopped_xml, ["Play voice preview"], "status-voice-preview-play",
+                                ["Stop voice preview"]
+                            )
+                            if preview_xml and find_control(preview_xml, ["Stop voice preview"]):
+                                screenshot("authenticated-status-voice-playing.png")
+                                report.append("- PASS local voice preview plays from the recorded file")
+                                preview_stopped_xml = tap_control(
+                                    preview_xml, ["Stop voice preview"], "status-voice-preview-stop",
+                                    ["Play voice preview"]
+                                )
+                            else:
+                                preview_stopped_xml = stopped_xml
+                                FAILURES.append("Local voice preview did not enter its playing state after Play voice preview")
+                            if preview_stopped_xml:
+                                discarded_xml = tap_control(
+                                    preview_stopped_xml, ["Delete"], "status-voice-discard",
+                                    ["Start recording"]
+                                )
+                                if discarded_xml and find_control(discarded_xml, ["Start recording"]):
+                                    report.append("- PASS voice draft can be discarded before publishing")
+                        else:
+                            FAILURES.append("Stopping the voice recording did not expose its preview/delete controls")
+                else:
+                    FAILURES.append("Add status -> Voice did not expose Start recording")
+            else:
+                FAILURES.append("Could not reopen Add status to exercise Voice recording and preview")
+
+            # Leave Voice without publishing and prove the app returns to Home.
+            # Try the visible close action once, then use Android Back only if the
+            # composer is still present. This avoids repeatedly tapping stale coordinates
+            # during an AnimatedContent navigation transition.
+            voice_closed_xml = dump_ui("authenticated-status-voice-close-check.xml")
+            for attempt in range(10):
+                if (find_control(voice_closed_xml, ["Open FYNX camera"])
+                        and find_control(voice_closed_xml, ["Chat"])
+                        and find_control(voice_closed_xml, ["Friends"])):
+                    break
+                close_control = find_control(voice_closed_xml, ["Back from Status composer"])
+                if close_control and attempt == 0:
+                    _, close_x, close_y = close_control
+                    run("adb", "shell", "input", "tap", str(close_x), str(close_y))
+                    time.sleep(0.8)
+                    voice_closed_xml = dump_ui("authenticated-status-voice-close-after-tap.xml")
+                    if (find_control(voice_closed_xml, ["Open FYNX camera"])
+                            and find_control(voice_closed_xml, ["Chat"])
+                            and find_control(voice_closed_xml, ["Friends"])):
+                        break
+                # If the close button did not complete navigation, Android Back invokes
+                # the composer's own BackHandler and uses the same onClose path.
+                if find_control(voice_closed_xml, ["Back from Status composer"]):
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                else:
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.7)
+                voice_closed_xml = dump_ui("authenticated-status-voice-close-retry.xml")
+            # Observe a fresh screen before recording a return-navigation failure.
+            voice_closed_xml = dump_ui("authenticated-status-voice-close-final.xml")
+            if (find_control(voice_closed_xml, ["Open FYNX camera"])
+                    and find_control(voice_closed_xml, ["Chat"])
+                    and find_control(voice_closed_xml, ["Friends"])):
+                report.append("- PASS closing the unsubmitted Voice draft returns to Home")
+            else:
+                FAILURES.append("Voice recording/preview flow did not return to Home cleanly")
+
+            # Do not publish dummy content from a debug-only local UI session.
+            # This path is not server-authenticated, so backend persistence,
+            # own-Status refresh, viewer playback, and reactions are not certifiable here.
+            if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+                report.append("- SKIP actual Status publish/retrieve/viewer/reactions: runtime session is debug-only and not server-authenticated; no dummy Status was submitted")
+            else:
+                report.append("- NOTE actual publish/retrieve/viewer checks require an authenticated test account and are not inferred from composer UI alone")
         else:
-            FAILURES.append("could not return to Home through in-app Back navigation for Status runtime check")
-        report += ["", "## Captured Status surfaces",
-                   "- authenticated-status-home.png", "- authenticated-status-create.png",
-                   "", "Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only saved-device UI entry, which explicitly does not certify server authentication."]
+            FAILURES.append("Home own-Status + button did not open Add status with both Voice and Text choices")
+    else:
+        FAILURES.append("could not return to Home through in-app Back navigation for Status runtime check")
+
+    # Return to Home using in-app Back so later Stories and navigation checks
+    # can continue in the same session. This deliberately avoids force-stopping
+    # the debug-only UI session and does not change authentication behaviour.
+    for _ in range(4):
+        home_xml = dump_ui("authenticated-status-return-home.xml")
+        if (find_control(home_xml, ["Open FYNX camera"])
+                and find_control(home_xml, ["Chat"])
+                and find_control(home_xml, ["Friends"])):
+            break
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.8)
+    if not (find_control(home_xml, ["Open FYNX camera"])
+            and find_control(home_xml, ["Chat"])
+            and find_control(home_xml, ["Friends"])):
+        FAILURES.append("Status runtime checks did not return to Home for remaining navigation checks")
+    report += ["", "## Captured Status surfaces",
+               "- authenticated-status-home.png",
+               "- authenticated-status-create.png",
+               "- authenticated-status-text-composer.png",
+               "- authenticated-status-text-filled.png",
+               "- authenticated-status-text-styling.png",
+               "- authenticated-status-music-catalogue.png",
+               "- authenticated-status-music-composer.png",
+               "- authenticated-status-voice-composer.png",
+               "- authenticated-status-voice-recording.png",
+               "- authenticated-status-voice-preview.png",
+               "- authenticated-status-voice-caption-keyboard.png",
+               "- authenticated-status-voice-playing.png",
+               "- authenticated-status-camera-photo.png",
+               "- authenticated-status-camera-photo-preview.png",
+               "- authenticated-status-camera-video.png",
+               "- authenticated-status-camera-video-recording.png",
+               "- authenticated-status-camera-video-preview.png"]
+    if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+        # This APK's saved-device path deliberately provides local UI access,
+        # not a server-authenticated session. Certify the Status journey above,
+        # then stop before unrelated account-backed chat/friends/marketplace
+        # journeys would be misreported as Status regressions.
+        report += ["", "## Authenticated-only journeys",
+                   "- SKIP chat/friends/features/marketplace checks: this run entered through the debug-only local UI path and is not server-authenticated."]
         report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
         if FAILURES:
-            report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+            report += ["", "Failures:"] + ["- " + x for x in FAILURES]
         (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
         print("\n".join(report))
         raise SystemExit(1 if FAILURES else 0)
 
-    xml=restore_home_after_restart("authenticated-home-camera-reset") or xml
+    if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
+        xml=restore_home_after_restart("authenticated-home-camera-reset") or xml
+    else:
+        xml=dump_ui("authenticated-home-camera-reset.xml") or home_xml
 
     for name,labels,expected in (
         ("chat",["Chat"],["Messages and groups in one place"]),

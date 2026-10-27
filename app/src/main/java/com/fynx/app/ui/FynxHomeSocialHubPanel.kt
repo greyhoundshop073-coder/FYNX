@@ -63,6 +63,7 @@ fun FynxHomeSocialHubPanel(
     onOpenChats: () -> Unit = {},
     onOpenStories: () -> Unit = {},
     onOpenStatusOwner: (String) -> Unit = {},
+    onCreateStatus: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
     onOpenMarketplace: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
@@ -490,6 +491,7 @@ fun FynxHomeSocialHubPanel(
                 showCamera = true
             },
             onCreatePost = { showComposer = true; notice = null },
+            onCreateStatus = onCreateStatus,
             onOpenFastCamera = {
                 if (!posting) {
                     capturedUris = emptyList()
@@ -511,7 +513,8 @@ fun FynxHomeSocialHubPanel(
                 showComposer = false
                 showFastCamera = true
             },
-            onOpenAuthorProfile = onOpenAuthorProfile
+            onOpenAuthorProfile = onOpenAuthorProfile,
+            onOpenStatusOwner = onOpenStatusOwner
         )
     }
 

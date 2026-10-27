@@ -47,6 +47,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
@@ -70,7 +74,8 @@ fun FynxCameraCapturePanel(
     liveProofListingTitle: String = "",
     liveProofSellerUsername: String = "",
     onLiveProofStart: () -> Unit = {},
-    onDismiss: () -> Unit = {}
+    onDismiss: () -> Unit = {},
+    statusCapture: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -113,11 +118,14 @@ fun FynxCameraCapturePanel(
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recordingStartedAt by remember { mutableLongStateOf(0L) }
     var recordingElapsed by remember { mutableLongStateOf(0L) }
-    BackHandler { if (recording == null) onDismiss() }
+    var activeRecordingFile by remember { mutableStateOf<File?>(null) }
+    var recordingNotice by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
     var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
     var pendingType by remember { mutableStateOf<String?>(null) }
+    var preparingPhoto by remember { mutableStateOf(false) }
+    BackHandler { if (recording == null && !preparingPhoto) onDismiss() }
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
     var filterIntensity by remember { mutableFloatStateOf(1f) }
     var enhancing by remember { mutableStateOf(false) }
@@ -127,13 +135,40 @@ fun FynxCameraCapturePanel(
     var showGrid by remember { mutableStateOf(false) }
 
     LaunchedEffect(recording != null, recordingStartedAt) { while (recording != null) { recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L); delay(200L) } }
-    LaunchedEffect(recording, recordingStartedAt, videoNoteMode) {
-        if (recording != null && videoNoteMode) {
-            delay(60_000L)
-            recording?.stop()
+    LaunchedEffect(recording, recordingStartedAt, videoNoteMode, statusCapture, activeRecordingFile) {
+        val active = recording ?: return@LaunchedEffect
+        val maximumDurationMs: Long? = when {
+            videoNoteMode -> 60_000L
+            statusCapture -> FYNX_STATUS_MAX_VIDEO_DURATION_MS
+            else -> null
+        }
+        while (recording == active) {
+            if (statusCapture && (activeRecordingFile?.length() ?: 0L) >= FYNX_STATUS_MAX_VIDEO_BYTES) {
+                recordingNotice = "Status video reached the upload-size limit. Your clip is ready to preview."
+                active.stop()
+                break
+            }
+            if (maximumDurationMs != null &&
+                System.currentTimeMillis() - recordingStartedAt >= maximumDurationMs
+            ) {
+                if (statusCapture && !videoNoteMode) {
+                    recordingNotice = "Status video reached its 90-second limit. Your clip is ready to preview."
+                }
+                active.stop()
+                break
+            }
+            delay(200L)
         }
     }
-    LaunchedEffect(showCaptureControls, pendingUri, recording, cameraControl, hasCamera) { if (showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0 && cameraControl != null && hasCamera) { delay(5000L); showCaptureControls = false } }
+    // Status creation must keep its capture/close controls visible. The ordinary
+    // camera may auto-hide secondary controls, but hiding Status's shutter made the
+    // creator appear broken and left accessibility automation unable to capture.
+    LaunchedEffect(showCaptureControls, pendingUri, recording, cameraControl, hasCamera, preparingPhoto, statusCapture) {
+        if (!statusCapture && showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0 && cameraControl != null && hasCamera && !preparingPhoto) {
+            delay(5000L)
+            if (!preparingPhoto) showCaptureControls = false
+        }
+    }
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
         val generation = bindGeneration + 1; bindGeneration = generation
@@ -150,13 +185,25 @@ fun FynxCameraCapturePanel(
                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .setTargetRotation(targetRotation)
                     .build()
-                val qualitySelector = QualitySelector.fromOrderedList(
-                    listOf(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD),
-                    FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
-                )
-                val recorder = Recorder.Builder()
-                    .setQualitySelector(qualitySelector)
-                    .build()
+                val qualitySelector = if (statusCapture) {
+                    QualitySelector.fromOrderedList(
+                        listOf(Quality.SD, Quality.HD),
+                        FallbackStrategy.lowerQualityOrHigherThan(Quality.HD)
+                    )
+                } else {
+                    QualitySelector.fromOrderedList(
+                        listOf(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD),
+                        FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+                    )
+                }
+                val recorderBuilder = Recorder.Builder().setQualitySelector(qualitySelector)
+                if (statusCapture) {
+                    // CameraX's target is approximate; the live file-size guard below
+                    // is the hard stop. This target keeps typical 90-second Status clips
+                    // safely below the backend's 12 MiB upload ceiling.
+                    recorderBuilder.setTargetVideoEncodingBitRate(700_000)
+                }
+                val recorder = recorderBuilder.build()
                 val video = VideoCapture.Builder(recorder)
                     .setTargetRotation(targetRotation)
                     .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
@@ -173,7 +220,7 @@ fun FynxCameraCapturePanel(
     }
     DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
-    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; filterIntensity = 1f; enhancing = false; error = null }
+    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingType = null; pendingUri = null; pendingOriginalUri = null; filter = CameraFilter.NATURAL; filterIntensity = 1f; enhancing = false; recordingNotice = null; error = null }
     fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
     fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) { val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val strength = intensity.coerceIn(0f, 1f)
             val matrix = ColorMatrix().apply {
@@ -190,13 +237,46 @@ fun FynxCameraCapturePanel(
         val stamp = System.currentTimeMillis()
         val file = File(context.cacheDir, "fynx_photo_"+stamp+".jpg")
         val original = File(context.cacheDir, "fynx_photo_original_"+stamp+".jpg")
+        if (preparingPhoto) return
+        preparingPhoto = true
         capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(result: ImageCapture.OutputFileResults) {
-                runCatching { normalizeCapturedPhoto(file, lens == CameraSelector.LENS_FACING_FRONT); file.copyTo(original, overwrite = true) }
-                    .onSuccess { pendingUri = Uri.fromFile(file); pendingOriginalUri = Uri.fromFile(original); pendingType = "image"; filter = CameraFilter.NATURAL; error = null; showCaptureControls = true }
-                    .onFailure { file.delete(); original.delete(); error = it.message ?: "Photo could not be prepared"; showCaptureControls = true }
+                // JPEG decoding, EXIF normalization, recompression, and copying can be
+                // expensive on emulator/device camera output. Keep all of that off the
+                // main thread so the preview UI and its accessibility hierarchy stay live.
+                scope.launch {
+                    try {
+                        val prepared = withContext(Dispatchers.IO) {
+                            runCatching {
+                                normalizeCapturedPhoto(file, lens == CameraSelector.LENS_FACING_FRONT)
+                                file.copyTo(original, overwrite = true)
+                            }
+                        }
+                        prepared
+                            .onSuccess {
+                                pendingUri = Uri.fromFile(file)
+                                pendingOriginalUri = Uri.fromFile(original)
+                                pendingType = "image"
+                                filter = CameraFilter.NATURAL
+                                error = null
+                                showCaptureControls = true
+                            }
+                            .onFailure {
+                                file.delete()
+                                original.delete()
+                                error = it.message ?: "Photo could not be prepared"
+                                showCaptureControls = true
+                            }
+                    } finally {
+                        preparingPhoto = false
+                    }
+                }
             }
-            override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed"; showCaptureControls = true }
+            override fun onError(exception: ImageCaptureException) {
+                preparingPhoto = false
+                error = exception.message ?: "Photo capture failed"
+                showCaptureControls = true
+            }
         })
     }
 
@@ -205,7 +285,17 @@ fun FynxCameraCapturePanel(
     if(previewUri!=null && previewType!=null){
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp)){
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    // Editing tools stay above a dedicated bottom action dock.
+                    .padding(bottom = 104.dp)
+                    .fillMaxHeight(0.62f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 18.dp, end = 18.dp, top = 8.dp)
+            ){
+                recordingNotice?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp)) }
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}
                 if(previewType=="image"){Text("Edit photo",style=MaterialTheme.typography.labelLarge)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){
@@ -225,7 +315,20 @@ fun FynxCameraCapturePanel(
                         }
                     }
                     OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}}
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing)retake()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing)rotatePhoto()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing)onCaptured(previewUri,previewType)},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
+            }
+            Row(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .imePadding()
+                    .padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(onClick = { if (!enhancing) retake() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Retake") }
+                if (previewType == "image") OutlinedButton(onClick = { if (!enhancing) rotatePhoto() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.RotateRight, null); Spacer(Modifier.width(4.dp)); Text("Rotate") }
+                Button(onClick = { if (!enhancing) onCaptured(previewUri, previewType) }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(4.dp)); Text("Send") }
             }
         };return
     }
@@ -243,6 +346,23 @@ fun FynxCameraCapturePanel(
         if (timerCountingDown > 0) {
             Surface(modifier = Modifier.align(Alignment.Center), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)) {
                 Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge, modifier = Modifier.padding(horizontal = 28.dp, vertical = 18.dp))
+            }
+        }
+        if (preparingPhoto) {
+            Surface(
+                modifier = Modifier.align(Alignment.Center),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                tonalElevation = 4.dp
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    Text("Preparing photo…")
+                }
             }
         }
         if (pendingUri == null && liveProofMode) {
@@ -282,7 +402,7 @@ fun FynxCameraCapturePanel(
                 }
             }
         }
-        if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp),horizontalAlignment=Alignment.CenterHorizontally){
+        if (showCaptureControls || recording != null || statusCapture) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp),horizontalAlignment=Alignment.CenterHorizontally){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")}}
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
             if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
@@ -294,16 +414,112 @@ fun FynxCameraCapturePanel(
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null){mode=CameraMode.PHOTO;showCaptureControls=true}},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(onClick={
-                if(mode==CameraMode.PHOTO){if(captureTimerSeconds>0){if(timerCountingDown==0){timerCountingDown=captureTimerSeconds;showCaptureControls=false;scope.launch{delay(captureTimerSeconds*1000L);timerCountingDown=0;capturePhotoNow()}}}else capturePhotoNow()}else{val active=recording;if(active!=null)active.stop()else{if(!hasAudio){audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);return@FilledIconButton};val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingType=if(videoNoteMode)"video_note" else "video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},modifier=Modifier.size(80.dp),shape=androidx.compose.foundation.shape.CircleShape,colors=IconButtonDefaults.filledIconButtonColors(containerColor=Color.White,contentColor=Color.Black)){
-                                Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) {
-                                    if (videoNoteMode && recording != null) {
-                                        val progress = (recordingElapsed.toFloat() / 60_000f).coerceIn(0f, 1f)
-                                        Canvas(Modifier.fillMaxSize().padding(2.dp)) { drawArc(Color(0xFF8B7BE8), -90f, 360f * progress, false, style = androidx.compose.ui.graphics.drawscope.Stroke(5.dp.toPx())) }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Keep the shutter inaccessible until CameraX has actually bound the
+                // requested capture use case. This prevents an early tap being lost
+                // while the preview is still starting.
+                val shutterActionLabel = when {
+                    recording != null -> if (videoNoteMode) "Stop video note" else "Stop video recording"
+                    mode == CameraMode.PHOTO && imageCapture == null -> "Camera starting"
+                    mode == CameraMode.VIDEO && videoCapture == null -> "Camera starting"
+                    mode == CameraMode.PHOTO -> "Take photo"
+                    videoNoteMode -> "Record video note"
+                    else -> "Record video"
+                }
+                val shutterReady = !preparingPhoto && (
+                    if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null
+                )
+                FilterChip(
+                    selected = mode == CameraMode.PHOTO,
+                    onClick = { if (recording == null) { mode = CameraMode.PHOTO; showCaptureControls = true } },
+                    label = { Text("Photo") },
+                    leadingIcon = { Icon(Icons.Default.PhotoCamera, null) }
+                )
+                FilledIconButton(
+                    onClick = {
+                        if (mode == CameraMode.PHOTO) {
+                            if (captureTimerSeconds > 0) {
+                                if (timerCountingDown == 0) {
+                                    timerCountingDown = captureTimerSeconds
+                                    showCaptureControls = false
+                                    scope.launch {
+                                        delay(captureTimerSeconds * 1000L)
+                                        timerCountingDown = 0
+                                        capturePhotoNow()
                                     }
-                                    Icon(if(mode==CameraMode.PHOTO)Icons.Default.PhotoCamera else if(recording!=null)Icons.Default.Stop else Icons.Default.Videocam,if(recording!=null)"Stop video note" else if(mode==CameraMode.PHOTO)"Take photo" else "Record video note")
                                 }
-                            };FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null){mode=CameraMode.VIDEO;showCaptureControls=true}},label={Text("Video")},leadingIcon={Icon(Icons.Default.Videocam,null)})}
+                            } else capturePhotoNow()
+                        } else {
+                            val active = recording
+                            if (active != null) active.stop()
+                            else {
+                                if (!hasAudio) {
+                                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    return@FilledIconButton
+                                }
+                                val capture = videoCapture ?: run {
+                                    error = "Video camera is still starting"
+                                    return@FilledIconButton
+                                }
+                                val file = File(context.cacheDir, "fynx_video_${System.currentTimeMillis()}.mp4")
+                                val pending = capture.output.prepareRecording(context, FileOutputOptions.Builder(file).build())
+                                val withAudio = if (hasAudio) pending.withAudioEnabled() else pending
+                                recordingStartedAt = System.currentTimeMillis()
+                                activeRecordingFile = file
+                                recordingNotice = null
+                                recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
+                                    if (event is VideoRecordEvent.Finalize) {
+                                        if (!event.hasError() && file.exists() && file.length() > 0L) {
+                                            pendingUri = Uri.fromFile(file)
+                                            pendingType = if (videoNoteMode) "video_note" else "video"
+                                            error = null
+                                        } else {
+                                            file.delete()
+                                            recordingNotice = null
+                                            error = "Video capture failed (${event.error})"
+                                        }
+                                        recording = null
+                                        activeRecordingFile = null
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    enabled = shutterReady,
+                    modifier = Modifier.size(80.dp).semantics(mergeDescendants = true) {
+                        contentDescription = shutterActionLabel
+                        role = Role.Button
+                    },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Color.Black)
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        if (videoNoteMode && recording != null) {
+                            val progress = (recordingElapsed.toFloat() / 60_000f).coerceIn(0f, 1f)
+                            Canvas(Modifier.fillMaxSize().padding(2.dp)) {
+                                drawArc(Color(0xFF8B7BE8), -90f, 360f * progress, false,
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(5.dp.toPx()))
+                            }
+                        }
+                        Icon(
+                            if (mode == CameraMode.PHOTO) Icons.Default.PhotoCamera
+                            else if (recording != null) Icons.Default.Stop
+                            else Icons.Default.Videocam,
+                            shutterActionLabel
+                        )
+                    }
+                }
+                FilterChip(
+                    selected = mode == CameraMode.VIDEO,
+                    onClick = { if (recording == null) { mode = CameraMode.VIDEO; showCaptureControls = true } },
+                    label = { Text("Video") },
+                    leadingIcon = { Icon(Icons.Default.Videocam, null) }
+                )
+            }
         }
     }
 }

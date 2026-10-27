@@ -326,6 +326,24 @@ export function registerStatusInteractionRoutes({ app }) {
       if (!status) return res.status(404).json({ error: 'status not found or not visible' });
       const replyId = randomUUID();
       const deliveredToChat = String(status.owner_id) !== String(req.user.sub);
+      // A Status reply must not become an unsolicited private message.
+      // Keep public Status visibility independent from the mutual-follow rule
+      // for opening a direct-chat delivery path.
+      if (deliveredToChat) {
+        const relationship = await pool.query(`
+          SELECT
+            EXISTS (SELECT 1 FROM social_follows f WHERE f.follower_id=$1 AND f.followed_id=$2) AS sender_follows_owner,
+            EXISTS (SELECT 1 FROM social_follows f WHERE f.follower_id=$2 AND f.followed_id=$1) AS owner_follows_sender,
+            EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=$2) OR (b.blocker_id=$2 AND b.blocked_id=$1)) AS blocked
+        `, [req.user.sub, status.owner_id]);
+        const relation = relationship.rows[0];
+        if (relation?.blocked) {
+          return res.status(403).json({ error: 'messaging is unavailable for this account relationship' });
+        }
+        if (!relation?.sender_follows_owner || !relation?.owner_follows_sender) {
+          return res.status(403).json({ error: 'mutual following is required to send a Status reply as a private message' });
+        }
+      }
       let messageRow = null;
 
       // Keep Status history and the owner's private-chat message atomic. Otherwise

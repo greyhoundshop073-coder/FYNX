@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 home = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt").read_text(encoding="utf-8")
@@ -13,7 +14,7 @@ checks = [
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
     ("Camera dismiss returns to an existing composer draft", "cameraOpenedFromComposer && !posting" in home),
     ("Camera preview supports retake before handoff", 'Text("Retake")' in camera and "retake()" in camera),
-    ("Camera preview sends the captured asset to the composer", 'Text("Send")' in camera and "onCaptured(previewUri,previewType)" in camera),
+    ("Camera preview sends the captured asset to the composer", 'Text("Send")' in camera and re.search(r"onCaptured\s*\(\s*previewUri\s*,\s*previewType\s*\)", camera) is not None),
     ("Captured media uses the authoritative media type resolver", "FynxMultiMediaPostClient.mediaKind(context, it)" in home),
     ("Gallery media is deduplicated and capped at four", "uris.distinct().take(4)" in home and ".take(4)" in home),
     ("Combined camera and gallery media remains capped at four", "(capturedUris + uri).distinct().take(4)" in home),

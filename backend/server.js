@@ -412,7 +412,7 @@ const statusSchema = async () => {
   await pool.query(`CREATE TABLE IF NOT EXISTS statuses (
     id UUID PRIMARY KEY,
     owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK (type IN ('TEXT','PHOTO','VIDEO','VOICE')),
+    type TEXT NOT NULL CHECK (type IN ('TEXT','PHOTO','VIDEO','VOICE','MUSIC')),
     text TEXT NOT NULL DEFAULT '',
     media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL,
     background_color BIGINT NOT NULL DEFAULT 4279308561,
@@ -430,6 +430,14 @@ const statusSchema = async () => {
     expires_at TIMESTAMPTZ NOT NULL
   );
   `);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'statuses_type_check' AND pg_get_constraintdef(oid) NOT LIKE '%MUSIC%') THEN
+      ALTER TABLE statuses DROP CONSTRAINT statuses_type_check;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'statuses_type_check') THEN
+      ALTER TABLE statuses ADD CONSTRAINT statuses_type_check CHECK (type IN ('TEXT','PHOTO','VIDEO','VOICE','MUSIC'));
+    END IF;
+  END $$;`);
   await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS audience TEXT");
   await pool.query("UPDATE statuses SET audience = CASE WHEN private_status THEN 'FRIENDS' ELSE 'EVERYONE' END WHERE audience IS NULL");
   await pool.query("ALTER TABLE statuses ALTER COLUMN audience SET DEFAULT 'EVERYONE'");
@@ -486,9 +494,10 @@ app.post("/api/statuses", auth, async (req, res) => {
       musicArtist = music.rows[0].artist;
       musicDurationMs = Math.max(0, Number(music.rows[0].duration_ms) || 0);
     }
-    if (!id || !/^[0-9a-f-]{36}$/i.test(id) || !["TEXT","PHOTO","VIDEO","VOICE"].includes(type) || (type==="TEXT" && !text) || !Number.isFinite(backgroundColor) || !Number.isFinite(foregroundColor) || !Number.isInteger(alignment) || alignment<0 || alignment>2 || !["EVERYONE","FRIENDS","ONLY_ME"].includes(audience) || !Number.isFinite(voiceDurationMs) || voiceDurationMs<0 || voiceDurationMs>30000) return res.status(400).json({error:"invalid status"});
-    if (type !== "TEXT" && (!Number.isInteger(mediaId) || mediaId < 1)) return res.status(400).json({error:"media is required"});
-    if (mediaId != null) { const media=await pool.query("SELECT id FROM message_media WHERE id=$1 AND owner_id=$2",[mediaId,req.user.sub]); if(!media.rows[0]) return res.status(403).json({error:"media is not owned by this account"}); }
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id) || !["TEXT","PHOTO","VIDEO","VOICE","MUSIC"].includes(type) || (type==="TEXT" && !text) || (type==="MUSIC" && musicCatalogueId == null) || !Number.isFinite(backgroundColor) || !Number.isFinite(foregroundColor) || !Number.isInteger(alignment) || alignment<0 || alignment>2 || !["EVERYONE","FRIENDS","ONLY_ME"].includes(audience) || !Number.isFinite(voiceDurationMs) || voiceDurationMs<0 || voiceDurationMs>30000) return res.status(400).json({error:"invalid status"});
+    if (!["TEXT","MUSIC"].includes(type) && (!Number.isInteger(mediaId) || mediaId < 1)) return res.status(400).json({error:"media is required"});
+    if (type === "MUSIC" && mediaId != null) return res.status(400).json({error:"music-only Status must not include uploaded media"});
+    if (mediaId != null) { const media=await pool.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2",[mediaId,req.user.sub]); if(!media.rows[0]) return res.status(403).json({error:"media is not owned by this account"}); const mimeType=String(media.rows[0].mime_type || "").toLowerCase(); const expectedPrefix={PHOTO:"image/",VIDEO:"video/",VOICE:"audio/"}[type]; if(!["TEXT","MUSIC"].includes(type) && (!expectedPrefix || !mimeType.startsWith(expectedPrefix))) return res.status(400).json({error:"media type does not match status"}); }
     const result=await pool.query("INSERT INTO statuses (id,owner_id,type,text,media_id,background_color,foreground_color,font,alignment,private_status,audience,voice_duration_ms,music_catalogue_id,music_title,music_artist,music_duration_ms,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW()+INTERVAL '24 hours') RETURNING id,created_at,expires_at",[id,req.user.sub,type,text,mediaId,backgroundColor,foregroundColor,font,alignment,privateStatus,audience,voiceDurationMs,musicCatalogueId,musicTitle,musicArtist,musicDurationMs]);
     return res.status(201).json({status:{id:String(result.rows[0].id),createdAtMillis:new Date(result.rows[0].created_at).getTime(),expiresAtMillis:new Date(result.rows[0].expires_at).getTime()}});
   } catch (error) { if(error?.code==="23505") return res.status(409).json({error:"status already exists"}); console.error("status create",error); return res.status(500).json({error:"status creation failed"}); }

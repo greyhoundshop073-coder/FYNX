@@ -19,4 +19,13 @@ if [ "$TEST_EXIT" -eq 0 ]; then
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 fi
 
+# Certify a real server-authenticated Status lifecycle only after the existing
+# emulator and navigation suite passes. An unavailable live backend is recorded
+# as BLOCKED by that certification report; it is never claimed as successful.
+if [ "$TEST_EXIT" -eq 0 ]; then
+  python3 scripts/verify_authenticated_status_lifecycle.py
+  TEST_EXIT=$?
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+fi
+
 exit "$TEST_EXIT"
