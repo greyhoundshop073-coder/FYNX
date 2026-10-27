@@ -1175,6 +1175,8 @@ fun FynxCameraCapturePanel(
                             }
                         }
 
+                    }
+
                     // Keep the camera action semantically discoverable, and disabled until CameraX binds.
                     val shutterActionLabel = when {
                         recording != null -> if (videoNoteMode) "Stop video note" else "Stop video recording"
@@ -1187,7 +1189,6 @@ fun FynxCameraCapturePanel(
                     val shutterReady = !preparingPhoto && (
                         if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null
                     )
-                    }
                     if (liveProofMode) {
                         Button(onClick = onLiveProofStart, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Icon(Icons.Default.Videocam, null)
