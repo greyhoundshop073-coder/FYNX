@@ -47,6 +47,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -388,17 +389,7 @@ fun FynxCameraCapturePanel(
                     )
                     setShadowLayer(5f, 1f, 2f, android.graphics.Color.BLACK)
                 }
-                val lines = buildList {
-                    textOverlay.lines().forEach { originalLine ->
-                        var remaining = originalLine
-                        while (remaining.isNotEmpty() && size < 4) {
-                            val count = paint.breakText(remaining, true, bitmap.width * 0.82f, null)
-                                .coerceAtLeast(1)
-                            add(remaining.take(count))
-                            remaining = remaining.drop(count).trimStart()
-                        }
-                    }
-                }.take(4)
+                val lines = wrapFynxCameraOverlayText(textOverlay, paint, bitmap.width * 0.82f)
                 val lineHeight = paint.textSize * 1.18f
                 val firstBaseline = bitmap.height * 0.43f - (lines.size - 1) * lineHeight / 2f
                 lines.forEachIndexed { index, line ->
@@ -701,26 +692,16 @@ fun FynxCameraCapturePanel(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            if (previewType == "image" && (photoTextOverlay.isNotBlank() || selectedPhotoSticker != null)) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center)
-                        .padding(horizontal = 24.dp)
-                        .background(Color.Black.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
-                        .padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    if (photoTextOverlay.isNotBlank()) {
-                        Text(
-                            photoTextOverlay,
-                            color = Color.White,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    selectedPhotoSticker?.let { sticker ->
-                        Text(sticker, fontSize = 56.sp, textAlign = TextAlign.Center)
-                    }
+            if (previewType == "image" && photoPixelWidth > 0 && photoPixelHeight > 0 &&
+                (photoTextOverlay.isNotBlank() || selectedPhotoSticker != null)
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawFynxCameraPhotoPreviewOverlays(
+                        textOverlay = photoTextOverlay,
+                        sticker = selectedPhotoSticker,
+                        imageWidth = photoPixelWidth,
+                        imageHeight = photoPixelHeight
+                    )
                 }
             }
             if (previewType == "image" && photoPixelWidth > 0 && photoPixelHeight > 0 &&
@@ -1248,5 +1229,69 @@ private fun DrawScope.drawFynxCameraDrawingStrokes(
         } else {
             drawPath(path, color, style = Stroke(width = penWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
+    }
+}
+
+private fun wrapFynxCameraOverlayText(
+    text: String,
+    paint: android.graphics.Paint,
+    maxWidth: Float
+): List<String> = buildList {
+    text.lines().forEach { originalLine ->
+        var remaining = originalLine
+        while (remaining.isNotEmpty() && size < 4) {
+            val count = paint.breakText(remaining, true, maxWidth, null).coerceAtLeast(1)
+            add(remaining.take(count))
+            remaining = remaining.drop(count).trimStart()
+        }
+    }
+}.take(4)
+
+private fun DrawScope.drawFynxCameraPhotoPreviewOverlays(
+    textOverlay: String,
+    sticker: String?,
+    imageWidth: Int,
+    imageHeight: Int
+) {
+    if (imageWidth <= 0 || imageHeight <= 0 || (textOverlay.isBlank() && sticker.isNullOrBlank())) return
+    val imageScale = minOf(size.width / imageWidth.toFloat(), size.height / imageHeight.toFloat())
+    if (!imageScale.isFinite() || imageScale <= 0f) return
+    val renderedWidth = imageWidth * imageScale
+    val renderedHeight = imageHeight * imageScale
+    val left = (size.width - renderedWidth) / 2f
+    val top = (size.height - renderedHeight) / 2f
+    val canvas = drawContext.canvas.nativeCanvas
+    val save = canvas.save()
+    try {
+        canvas.translate(left, top)
+        canvas.scale(imageScale, imageScale)
+        if (textOverlay.isNotBlank()) {
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                textSize = (imageWidth * 0.055f).coerceIn(24f, 84f)
+                textAlign = android.graphics.Paint.Align.CENTER
+                typeface = android.graphics.Typeface.create(
+                    "sans-serif-medium", android.graphics.Typeface.BOLD
+                )
+                setShadowLayer(5f, 1f, 2f, android.graphics.Color.BLACK)
+            }
+            val lines = wrapFynxCameraOverlayText(textOverlay, paint, imageWidth * 0.82f)
+            val lineHeight = paint.textSize * 1.18f
+            val firstBaseline = imageHeight * 0.43f - (lines.size - 1) * lineHeight / 2f
+            lines.forEachIndexed { index, line ->
+                canvas.drawText(line, imageWidth / 2f, firstBaseline + index * lineHeight, paint)
+            }
+        }
+        if (!sticker.isNullOrBlank()) {
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                textSize = (imageWidth * 0.15f).coerceIn(56f, 180f)
+                textAlign = android.graphics.Paint.Align.CENTER
+                setShadowLayer(7f, 1f, 2f, android.graphics.Color.BLACK)
+            }
+            canvas.drawText(sticker, imageWidth * 0.78f, imageHeight * 0.82f, paint)
+        }
+    } finally {
+        canvas.restoreToCount(save)
     }
 }

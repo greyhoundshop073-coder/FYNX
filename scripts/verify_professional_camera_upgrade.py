@@ -29,6 +29,7 @@ checks = {
     "photo crop has a real bitmap pipeline": "fun cropPhotoSquare()" in camera and "Bitmap.createBitmap(bitmap, left, top, side, side)" in camera and "cropPhotoSquare()" in camera,
     "crop keeps the filter source in sync": "squareCrop(current, currentTemp)" in camera and "squareCrop(original, originalTemp)" in camera,
     "text overlay has an editable input and bounded output length": "showPhotoTextDialog" in camera and "OutlinedTextField(" in camera and '"Add text"' in camera and "photoTextOverlay = it.take(96)" in camera and "}.take(4)" in camera,
+    "text/sticker preview uses the same photo-relative geometry as saved output": "drawFynxCameraPhotoPreviewOverlays(" in camera and "wrapFynxCameraOverlayText(textOverlay, paint, imageWidth * 0.82f)" in camera and "imageHeight * 0.43f" in camera and "imageWidth * 0.78f" in camera,
     "sticker picker exposes actual choices": 'listOf("✨", "❤️", "🔥", "😂", "😎", "🎉", "🌈")' in camera and "selectedPhotoSticker" in camera,
     "text is composited into the outgoing image": "fun renderPhotoOverlays(" in camera and "canvas.drawText(line" in camera and "temp.copyTo(destination, overwrite = true)" in camera,
     "sticker is composited into the outgoing image": "canvas.drawText(sticker" in camera and "sendPreview(previewUri, previewType)" in camera,
