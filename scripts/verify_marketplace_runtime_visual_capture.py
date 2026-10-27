@@ -23,6 +23,14 @@ checks = [
         and 'raise SystemExit(1 if FAILURES else 0)' in navigation,
     ),
     (
+        "Marketplace-only visuals use the actual debug entry without weakening normal credential login",
+        'find_control(xml,["Leave password blank for quick local entry"])' in navigation
+        and 'local_visual_username = USERNAME or "marketplace_visual_check"' in navigation
+        and 'if not VISUALS_ONLY and (not USERNAME or not PASSWORD):' in navigation
+        and 'LOGIN_MODE="debug-only local UI entry (not server-authenticated)"' in navigation
+        and "it is not server authentication." in navigation,
+    ),
+    (
         "real Marketplace screenshot and UI hierarchy are captured after destination marker verification",
         'tap_control(\n        xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]' in navigation
         and 'screenshot("authenticated-marketplace-product-detail.png")' in navigation

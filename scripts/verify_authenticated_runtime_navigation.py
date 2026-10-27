@@ -12,6 +12,7 @@ ROOT=Path("fynx-runtime-screenshots"); ROOT.mkdir(parents=True,exist_ok=True)
 PACKAGE="com.fynx.app"
 USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
 LOGIN_MODE="server credential login"
@@ -562,19 +563,26 @@ def login():
         if not fields: return xml,"username control was not visible"
         user_control=("username",fields[0][0],fields[0][1])
     _,x,y=user_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
-    result=input_text(USERNAME)
+    local_visual_username = USERNAME or "marketplace_visual_check"
+    result=input_text(local_visual_username)
     if result.returncode!=0: return xml,"adb input text failed for username"
     run("adb","shell","input","keyevent","4"); time.sleep(.5)
     xml=dump_ui("authenticated-after-username.xml")
     # Debug APKs intentionally expose a passwordless local UI-entry path when no
     # local account is stored. Exercise that explicit affordance rather than
     # incorrectly failing because the Password field is intentionally absent.
-    if find_control(xml,["Saved-device login for this debug APK"]):
+    debug_entry_visible = bool(
+        find_control(xml,["Saved-device login for this debug APK"])
+        or (VISUALS_ONLY and find_control(xml,["Leave password blank for quick local entry"]))
+    )
+    if debug_entry_visible:
         LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
         home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
         if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
             return home_xml,""
-        return home_xml or xml,"debug saved-device entry did not reach Home"
+        return home_xml or xml,"debug-only UI entry did not reach Home"
+    if VISUALS_ONLY and not PASSWORD:
+        return xml,"the passwordless debug-only entry was not visible; refusing to submit a server login without credentials"
     pass_control=find_control(xml,["Password"])
     if not pass_control:
         fields=find_edit_fields(xml)
@@ -670,11 +678,11 @@ def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[st
 report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
-        "This journey uses a real FYNX account supplied through GitHub Actions secrets.",
+        ("Marketplace-only visual capture may use the APK's explicit debug-only local UI entry; it is not server authentication." if VISUALS_ONLY else "This journey uses a real FYNX account supplied through GitHub Actions secrets."),
         "No fabricated users, posts, messages, listings or application records are created.",
         "Credentials are never written to the APK or repository."]
 
-if not USERNAME or not PASSWORD:
+if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     report += ["","## Result: BLOCKED","- FYNX_E2E_USERNAME and FYNX_E2E_PASSWORD repository secrets are required for authenticated visual certification."]
     (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
     print("\n".join(report)); raise SystemExit(2)

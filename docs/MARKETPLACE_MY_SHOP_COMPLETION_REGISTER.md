@@ -220,3 +220,14 @@ All Android Marketplace changes must land in the canonical integration branch ab
 - Added JVM regression cases for valid responses, quote expiry/malformed identity, item mismatch, mixed currency, malformed arithmetic, partial orders, changed aggregate total/state, duplicate orders and price drift.
 - The multi-product delivery/fulfillment fields are locked during the active order request to prevent the visible form changing while an order is being confirmed.
 - **Verification state:** new source-contract and JVM tests are pending exact-head CI. This does not certify real Paystack payment, stock reservation, or backend/database persistence; it ensures the client refuses inconsistent server responses before launching payment.
+
+## P8 — Unblock genuine Marketplace/My Shop visual capture
+
+**Feature branch:** fix/marketplace-checkout-idempotency-quote-validation-20261027  
+**Scope:** Marketplace-only runtime evidence script, its source-contract verifier, and this register. The default authenticated Home/Chat/Groups runtime journey is unchanged. No backend, auth implementation, APK code, Avatar/Profile, Chat/Groups UI, or Status/Story code is changed.
+
+- **Verified capture blocker:** the runtime script looked for the label “Saved-device login for this debug APK”, but the actual debug login screen exposes “Leave password blank for quick local entry. Enter it to connect this account to the live FYNX backend.” The old string did not match the real Android UI, so the Marketplace-only screenshot recovery continued into server login and stopped when the backend/login was unavailable.
+- In FYNX_MARKETPLACE_VISUALS_ONLY=1 mode only, detect the app’s existing passwordless debug-entry hint, use it without submitting a server login, and continue read-only navigation to the rendered Marketplace/My Shop surfaces. When no CI username secret exists, use a local-only visual username and never treat it as a server account.
+- The normal authenticated runtime journey still requires the configured E2E username/password; it does not switch to local UI mode. If visuals-only mode cannot see the app’s debug-entry hint and has no password secret, it fails with an explicit block rather than attempting an empty server login.
+- The runtime report labels debug-only capture as UI/navigation evidence, not live authentication or backend success. Product details still require a real visible priced listing; the capture never creates a listing, order, payment, driver, or seller record.
+- **Verification state:** source-contract change committed; exact-head CI and a new real Android runtime artifact must confirm the change. No Marketplace/My Shop PNG is claimed until it is captured from the emulator and inspected in the uploaded artifact.
