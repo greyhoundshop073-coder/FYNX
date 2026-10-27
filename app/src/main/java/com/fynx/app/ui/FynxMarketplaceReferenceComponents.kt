@@ -52,7 +52,7 @@ internal object FynxMarketplaceReferenceStyle {
     val surface = Color(0xFF0B1A30)
     val surfaceRaised = Color(0xFF10223B)
     val outline = Color(0xFF2B4261)
-    val primary = Color(0xFF155EEF)
+    val primary = FynxDesign.AzureBlue
     val primarySoft = Color(0xFF7FB0FF)
     val text = Color(0xFFF3F6FF)
     val textMuted = Color(0xFFA5B6D0)
