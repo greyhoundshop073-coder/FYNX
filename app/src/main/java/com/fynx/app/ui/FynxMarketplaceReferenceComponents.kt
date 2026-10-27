@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -59,12 +60,15 @@ internal object FynxMarketplaceReferenceStyle {
     val radius = RoundedCornerShape(18.dp)
 }
 
-/** Selected states across Marketplace use the same accessible Azure/pale-blue theme colors. */
+/** Marketplace selections stay blue even when a user's app-wide accent is Purple or Charcoal. */
 @Composable
-internal fun fynxMarketplaceSelectedChipColors() = FilterChipDefaults.filterChipColors(
-    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-)
+internal fun fynxMarketplaceSelectedChipColors() : androidx.compose.material3.SelectableChipColors {
+    val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    return FilterChipDefaults.filterChipColors(
+        selectedContainerColor = if (isLight) FynxDesign.LightSelectedContainer else FynxDesign.SelectedContainer,
+        selectedLabelColor = if (isLight) FynxDesign.LightTextPrimary else FynxDesign.TextPrimary
+    )
+}
 
 @Composable
 internal fun MarketplaceReferenceSearchBar(
