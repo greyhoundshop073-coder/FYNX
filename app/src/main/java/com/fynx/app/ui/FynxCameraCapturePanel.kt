@@ -155,6 +155,7 @@ fun FynxCameraCapturePanel(
     var muteVideoAudio by remember { mutableStateOf(false) }
     var enhancing by remember { mutableStateOf(false) }
     var showCaptureControls by remember { mutableStateOf(true) }
+    var showProControls by remember { mutableStateOf(false) }
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
@@ -1012,81 +1013,213 @@ fun FynxCameraCapturePanel(
                 }
             }
         }
-        if (pendingUri == null && liveProofMode) {
-            Surface(
-                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
-                shape = RoundedCornerShape(18.dp),
-                color = Color.Black.copy(alpha = 0.62f)
-            ) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("LIVE PROOF", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    Text(liveProofListingTitle.ifBlank { "Marketplace item" }, color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                    if (liveProofSellerUsername.isNotBlank()) Text("Seller @${liveProofSellerUsername.removePrefix("@").trim()}", color = Color.White.copy(alpha = .82f), style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
         if (pendingUri == null) {
             Surface(
-                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 8.dp),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(26.dp),
+                color = Color(0xD9151720),
+                tonalElevation = 8.dp
             ) {
-                Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(onClick = { if (recording == null && !preparingPhoto) onDismiss() }, enabled = recording == null && !preparingPhoto, modifier = Modifier.size(42.dp)) {
+                        Icon(Icons.Default.Close, "Close camera", tint = Color.White)
+                    }
                     profilePhotoId?.takeIf { it.isNotBlank() }?.let { photoId ->
-                        FynxRemoteMedia("/api/media/$photoId", "image", Modifier.size(34.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop, rounded = true)
-                    } ?: Surface(Modifier.size(34.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
-                    Spacer(Modifier.width(8.dp))
-                    Text(profileDisplayName.ifBlank { session.username?.removePrefix("@").orEmpty() }, maxLines = 1, style = MaterialTheme.typography.labelLarge)
-                }
-            }
-        }
-        if (showCaptureControls && recording == null && !fastCapture) {
-            Surface(modifier=Modifier.align(Alignment.Center),shape=MaterialTheme.shapes.extraLarge,color=MaterialTheme.colorScheme.surface.copy(alpha=0.88f),tonalElevation=3.dp) {
-                Row(modifier=Modifier.padding(horizontal=6.dp,vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
-                    listOf(1f,2f,3f,4f).forEach { value ->
-                        TextButton(onClick={zoomRatio=value;cameraControl?.setZoomRatio(value);showCaptureControls=true},modifier=Modifier.heightIn(min=44.dp),colors=ButtonDefaults.textButtonColors(contentColor=if(kotlin.math.abs(zoomRatio-value)<0.05f)MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)){Text(value.toInt().toString()+"x")}
+                        FynxRemoteMedia("/api/media/$photoId", "image", Modifier.size(32.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop, rounded = true)
+                    } ?: Surface(Modifier.size(32.dp), shape = androidx.compose.foundation.shape.CircleShape, color = Color.White.copy(alpha = 0.16f)) {}
+                    Column(Modifier.weight(1f).padding(start = 5.dp), verticalArrangement = Arrangement.Center) {
+                        Text(
+                            if (liveProofMode) "LIVE PROOF" else if (statusCapture) "STATUS CAMERA" else if (videoNoteMode) "VIDEO NOTE" else "FYNX CAMERA",
+                            color = Color.White.copy(alpha = 0.72f),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                        Text(
+                            if (liveProofMode) liveProofListingTitle.ifBlank { "Marketplace item" } else profileDisplayName.ifBlank { session.username?.removePrefix("@").orEmpty().ifBlank { "Ready to capture" } },
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(onClick = {
+                        if (recording == null) {
+                            error = null
+                            lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
+                            showCaptureControls = true
+                        }
+                    }, enabled = recording == null, modifier = Modifier.size(38.dp)) {
+                        Icon(Icons.Default.Cameraswitch, "Switch front/back camera", tint = Color.White)
+                    }
+                    IconButton(onClick = {
+                        if (recording == null) {
+                            if (cameraInfo?.hasFlashUnit() == true) {
+                                torchEnabled = !torchEnabled
+                                cameraControl?.enableTorch(torchEnabled)
+                            } else error = "Flash is not available on this camera."
+                            showCaptureControls = true
+                        }
+                    }, enabled = recording == null, modifier = Modifier.size(38.dp)) {
+                        Icon(Icons.Default.FlashOn, if (torchEnabled) "Turn flash off" else "Turn flash on", tint = if (torchEnabled) Color(0xFFFFD166) else Color.White)
+                    }
+                    TextButton(
+                        onClick = { if (recording == null) { showGrid = !showGrid; showCaptureControls = true } },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    ) {
+                        Text(if (showGrid) "Grid ✓" else "Grid", color = Color.White, fontSize = 11.sp)
                     }
                 }
             }
         }
-        if (showCaptureControls || recording != null || statusCapture) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp),horizontalAlignment=Alignment.CenterHorizontally){
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")}}
-            error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
-            if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
-            if (liveProofMode) {
-                Button(onClick = onLiveProofStart, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
-                    Icon(Icons.Default.Videocam, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Start live proof")
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+
+        if (showCaptureControls || recording != null || statusCapture) {
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .imePadding(),
+                shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+                color = Color(0xE6111218),
+                tonalElevation = 12.dp
             ) {
-                // Keep the shutter inaccessible until CameraX has actually bound the
-                // requested capture use case. This prevents an early tap being lost
-                // while the preview is still starting.
-                val shutterActionLabel = when {
-                    recording != null -> if (videoNoteMode) "Stop video note" else "Stop video recording"
-                    mode == CameraMode.PHOTO && imageCapture == null -> "Camera starting"
-                    mode == CameraMode.VIDEO && videoCapture == null -> "Camera starting"
-                    mode == CameraMode.PHOTO -> "Take photo"
-                    videoNoteMode -> "Record video note"
-                    else -> "Record video"
-                }
-                val shutterReady = !preparingPhoto && (
-                    if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null
-                )
-                FilterChip(
-                    selected = mode == CameraMode.PHOTO,
-                    onClick = { if (recording == null) { mode = CameraMode.PHOTO; showCaptureControls = true } },
-                    label = { Text("Photo") },
-                    leadingIcon = { Icon(Icons.Default.PhotoCamera, null) }
-                )
-                FilledIconButton(
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (recording != null) "Recording in progress" else if (mode == CameraMode.PHOTO) "PHOTO STUDIO" else "VIDEO STUDIO",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                if (recording != null) formatCameraRecordingTime(recordingElapsed) else if (mode == CameraMode.PHOTO) "Frame your shot, then capture" else "Record a clip for your post",
+                                color = Color.White.copy(alpha = 0.68f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (recording == null && !fastCapture) {
+                            TextButton(onClick = { showProControls = !showProControls }) {
+                                Text(if (showProControls) "Less controls" else "Adjust")
+                            }
+                        }
+                    }
+                    error?.let { Text(it, color = Color(0xFFFF8D8D), style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth()) }
+                    recordingNotice?.let { Text(it, color = Color(0xFFFFD166), style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth()) }
+
+                    if (recording == null && !fastCapture) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            listOf(1f, 2f, 3f, 4f).forEach { value ->
+                                FilterChip(
+                                    selected = kotlin.math.abs(zoomRatio - value) < 0.05f,
+                                    onClick = { zoomRatio = value; cameraControl?.setZoomRatio(value); showCaptureControls = true },
+                                    label = { Text("${value.toInt()}×") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Color(0xFF6B5CE7),
+                                        selectedLabelColor = Color.White,
+                                        containerColor = Color.White.copy(alpha = 0.10f),
+                                        labelColor = Color.White
+                                    )
+                                )
+                            }
+                            Spacer(Modifier.width(2.dp))
+                            Text(
+                                if (lens == CameraSelector.LENS_FACING_FRONT) "Front camera" else "Back camera",
+                                color = Color.White.copy(alpha = 0.62f),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        if (showProControls) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("Exposure", color = Color.White.copy(alpha = 0.86f), style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(72.dp))
+                                val r = cameraInfo?.exposureState?.exposureCompensationRange
+                                val lower = (r?.lower ?: -2).toFloat()
+                                val upper = (r?.upper ?: 2).toFloat()
+                                Slider(
+                                    value = exposure.toFloat().coerceIn(lower, upper),
+                                    onValueChange = { exposure = it.toInt(); cameraControl?.setExposureCompensationIndex(exposure) },
+                                    valueRange = lower..upper,
+                                    steps = ((upper - lower).toInt() - 1).coerceAtLeast(0),
+                                    modifier = Modifier.weight(1f),
+                                    colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color(0xFF8C80FF), inactiveTrackColor = Color.White.copy(alpha = 0.22f))
+                                )
+                                Text(exposure.toString(), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            }
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Timer", color = Color.White.copy(alpha = 0.86f), style = MaterialTheme.typography.labelMedium)
+                                listOf(0, 3, 10).forEach { seconds ->
+                                    FilterChip(
+                                        selected = captureTimerSeconds == seconds,
+                                        onClick = { captureTimerSeconds = seconds },
+                                        label = { Text(if (seconds == 0) "Off" else "${seconds}s") },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color(0xFF6B5CE7),
+                                            selectedLabelColor = Color.White,
+                                            containerColor = Color.White.copy(alpha = 0.10f),
+                                            labelColor = Color.White
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (liveProofMode) {
+                        Button(onClick = onLiveProofStart, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                            Icon(Icons.Default.Videocam, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Start live proof")
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FilterChip(
+                            selected = mode == CameraMode.PHOTO,
+                            onClick = { if (recording == null) { mode = CameraMode.PHOTO; showCaptureControls = true } },
+                            label = { Text("Photo") },
+                            leadingIcon = { Icon(Icons.Default.PhotoCamera, null) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF6B5CE7),
+                                selectedLabelColor = Color.White,
+                                containerColor = Color.White.copy(alpha = 0.10f),
+                                labelColor = Color.White
+                            )
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        FilterChip(
+                            selected = mode == CameraMode.VIDEO,
+                            onClick = { if (recording == null) { mode = CameraMode.VIDEO; showCaptureControls = true } },
+                            label = { Text("Video") },
+                            leadingIcon = { Icon(Icons.Default.Videocam, null) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF6B5CE7),
+                                selectedLabelColor = Color.White,
+                                containerColor = Color.White.copy(alpha = 0.10f),
+                                labelColor = Color.White
+                            )
+                        )
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Spacer(Modifier.weight(1f))
+                                        FilledIconButton(
                     onClick = {
                         if (mode == CameraMode.PHOTO) {
                             if (captureTimerSeconds > 0) {
@@ -1160,12 +1293,9 @@ fun FynxCameraCapturePanel(
                         )
                     }
                 }
-                FilterChip(
-                    selected = mode == CameraMode.VIDEO,
-                    onClick = { if (recording == null) { mode = CameraMode.VIDEO; showCaptureControls = true } },
-                    label = { Text("Video") },
-                    leadingIcon = { Icon(Icons.Default.Videocam, null) }
-                )
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
             }
         }
     }
