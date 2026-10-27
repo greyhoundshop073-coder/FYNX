@@ -78,7 +78,7 @@ fun FynxMarketplaceReviews(context: Context, orders: List<FynxRemoteSocialClient
                     Text(order.productTitle.ifBlank { "FYNX order" }, style = MaterialTheme.typography.titleMedium)
                     Text("Rating: $rating / 5")
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        (1..5).forEach { value -> FilterChip(selected = rating == value, onClick = { rating = value }, label = { Text("$value ★") }) }
+                        (1..5).forEach { value -> FilterChip(selected = rating == value, onClick = { rating = value }, label = { Text("$value ★") }, colors = fynxMarketplaceSelectedChipColors()) }
                     }
                     OutlinedTextField(value = comment, onValueChange = { comment = it.take(1000) }, label = { Text("Comment (optional)") }, minLines = 3, modifier = Modifier.fillMaxWidth())
                     localError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
