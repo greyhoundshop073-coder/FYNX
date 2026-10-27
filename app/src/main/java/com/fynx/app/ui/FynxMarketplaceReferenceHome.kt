@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,11 +56,22 @@ internal fun MarketplaceReferenceHomeHeader(
                 Text(if (query.isBlank()) "Search products, sellers or categories" else query, color = FynxMarketplaceReferenceStyle.textMuted)
             }
         }
-        Surface(onClick = onNearby, shape = FynxMarketplaceReferenceStyle.radius, color = if (nearbySelected) FynxMarketplaceReferenceStyle.surfaceRaised else FynxMarketplaceReferenceStyle.surface) {
+        Surface(
+            onClick = onNearby,
+            shape = FynxMarketplaceReferenceStyle.radius,
+            color = if (nearbySelected) MaterialTheme.colorScheme.primaryContainer else FynxMarketplaceReferenceStyle.surface
+        ) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.LocationOn, null, tint = FynxMarketplaceReferenceStyle.primarySoft)
+                Icon(
+                    Icons.Default.LocationOn,
+                    contentDescription = null,
+                    tint = if (nearbySelected) MaterialTheme.colorScheme.onPrimaryContainer else FynxMarketplaceReferenceStyle.primarySoft
+                )
                 Spacer(Modifier.width(6.dp))
-                Text(if (nearbySelected) "Near me" else "Nearby products", color = FynxMarketplaceReferenceStyle.text)
+                Text(
+                    if (nearbySelected) "Near me" else "Nearby products",
+                    color = if (nearbySelected) MaterialTheme.colorScheme.onPrimaryContainer else FynxMarketplaceReferenceStyle.text
+                )
             }
         }
     }
