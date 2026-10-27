@@ -34,7 +34,7 @@ check("per-chat sound preference gates actual playback", "FynxConversationPrefer
 check("per-chat vibration preference gates actual incoming-message vibration", "FynxConversationPreferences.chatVibration(context, chatUsername)" in haptics)
 check("incoming message feedback is deduplicated by stable remote message id", "remote.id.isNotBlank() && messages.none { it.id == remote.id }" in conversation)
 check("incoming chat uses the chat-specific sound and vibration preferences", "FynxInChatSound.play(context, chat.username)" in conversation and "FynxHaptics.incomingChatMessage(context, chat.username)" in conversation)
-check("private text and media send confirmations play only after successful delivery response", "FynxInteractionSound.Event.MESSAGE_SENT" in conversation and "FynxInteractionSound.Event.MEDIA_SENT" in conversation and conversation.indexOf("// Only confirm after the backend accepted the send") > conversation.indexOf(".onSuccess { remote ->"))
+check("private text and media send confirmations play only after successful delivery response", "FynxInteractionSound.Event.MESSAGE_SENT" in conversation and "FynxInteractionSound.Event.MEDIA_SENT" in conversation and conversation.index("// Only confirm after the backend accepted the send") > conversation.index(".onSuccess { remote ->"))
 check("voice-message retry success has media confirmation feedback", "FynxInteractionSound.play(context, FynxInteractionSound.Event.MEDIA_SENT)" in conversation)
 check("group success feedback uses shared sound and system haptics", "FynxHaptics.perform(localView)" in group and "FynxInteractionSound.Event.GROUP_MESSAGE_SENT" in group)
 check("group incoming feedback is deduplicated and ignores messages from self", all(token in group for token in [
