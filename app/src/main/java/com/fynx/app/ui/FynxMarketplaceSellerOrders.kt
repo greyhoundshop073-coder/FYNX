@@ -68,50 +68,64 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
     var orders by remember { mutableStateOf<List<SellerOrderRow>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
+    var orderLoadGeneration by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<SellerOrderRow?>(null) }
     val scope = rememberCoroutineScope()
 
     fun load() {
+        val requestGeneration = ++orderLoadGeneration
         loading = true
         error = null
         scope.launch {
-            FynxBackendClient.get(context, "/api/marketplace/seller/orders")
-                .onSuccess { raw ->
+            val result = FynxBackendClient.get(context, "/api/marketplace/seller/orders")
+                .mapCatching { raw ->
                     val array = JSONObject(raw).optJSONArray("orders")
-                    orders = buildList {
-                        if (array != null) for (i in 0 until array.length()) {
-                            val o = array.getJSONObject(i)
-                            add(SellerOrderRow(
-                                id = o.optString("id"),
-                                buyerName = o.optString("buyerDisplayName").ifBlank { o.optString("buyerUsername") },
-                                title = o.optJSONObject("product")?.optString("title").orEmpty().ifBlank { "FYNX order" },
-                                total = o.optDouble("totalAmount"),
-                                currency = o.optString("currency", "NGN"),
-                                status = o.optString("status"),
-                                fulfillment = o.optString("fulfillmentMethod", "DELIVERY"),
-                                fulfillmentStatus = o.optString("fulfillmentStatus").ifBlank { o.optString("status") },
-                                address = o.optJSONObject("shippingAddress"),
-                                tracking = o.optString("trackingReference").takeIf { it.isNotBlank() },
-                                driverId = o.optString("driverId").takeIf { it.isNotBlank() && it != "null" },
-                                driverType = o.optString("driverType").takeUnless { it.isBlank() || it == "null" } ?: "FYNX_ACCOUNT",
-                                localDriverName = o.optString("localDriverName").takeIf { it.isNotBlank() && it != "null" },
-                                localDriverPhone = o.optString("localDriverPhone").takeIf { it.isNotBlank() && it != "null" },
-                                pickupPoint = o.optString("pickupPoint").takeIf { it.isNotBlank() && it != "null" },
-                                pickupInstructions = o.optString("pickupInstructions").takeIf { it.isNotBlank() && it != "null" },
-                                vehicleType = o.optString("vehicleType").takeIf { it.isNotBlank() && it != "null" },
-                                vehicleColor = o.optString("vehicleColor").takeIf { it.isNotBlank() && it != "null" },
-                                vehiclePlate = o.optString("vehiclePlate").takeIf { it.isNotBlank() && it != "null" },
-                                vehicleNote = o.optString("vehicleNote").takeIf { it.isNotBlank() && it != "null" },
-                                driverApprovalActive = o.optBoolean("driverApprovalActive", false),
-                                driverAcceptedAt = o.optString("driverAcceptedAt").takeIf { it.isNotBlank() && it != "null" },
-                                driverHandoverAt = o.optString("driverHandoverAt").takeIf { it.isNotBlank() && it != "null" },
-                                driverDeliveredAt = o.optString("driverDeliveredAt").takeIf { it.isNotBlank() && it != "null" }
-                            ))
-                        }
-                    }
+                                            ?: throw IllegalStateException("Seller orders response was incomplete.")
+                                        buildList {
+                                            for (i in 0 until array.length()) {
+                                                val o = array.optJSONObject(i)
+                                                    ?: throw IllegalStateException("Seller orders response contains an invalid order.")
+                                                if (o.optString("id").isBlank()) throw IllegalStateException("Seller orders response contains an incomplete order.")
+                                                add(SellerOrderRow(
+                                                    id = o.optString("id"),
+                                                    buyerName = o.optString("buyerDisplayName").ifBlank { o.optString("buyerUsername") },
+                                                    title = o.optJSONObject("product")?.optString("title").orEmpty().ifBlank { "FYNX order" },
+                                                    total = o.optDouble("totalAmount"),
+                                                    currency = o.optString("currency", "NGN"),
+                                                    status = o.optString("status"),
+                                                    fulfillment = o.optString("fulfillmentMethod", "DELIVERY"),
+                                                    fulfillmentStatus = o.optString("fulfillmentStatus").ifBlank { o.optString("status") },
+                                                    address = o.optJSONObject("shippingAddress"),
+                                                    tracking = o.optString("trackingReference").takeIf { it.isNotBlank() },
+                                                    driverId = o.optString("driverId").takeIf { it.isNotBlank() && it != "null" },
+                                                    driverType = o.optString("driverType").takeUnless { it.isBlank() || it == "null" } ?: "FYNX_ACCOUNT",
+                                                    localDriverName = o.optString("localDriverName").takeIf { it.isNotBlank() && it != "null" },
+                                                    localDriverPhone = o.optString("localDriverPhone").takeIf { it.isNotBlank() && it != "null" },
+                                                    pickupPoint = o.optString("pickupPoint").takeIf { it.isNotBlank() && it != "null" },
+                                                    pickupInstructions = o.optString("pickupInstructions").takeIf { it.isNotBlank() && it != "null" },
+                                                    vehicleType = o.optString("vehicleType").takeIf { it.isNotBlank() && it != "null" },
+                                                    vehicleColor = o.optString("vehicleColor").takeIf { it.isNotBlank() && it != "null" },
+                                                    vehiclePlate = o.optString("vehiclePlate").takeIf { it.isNotBlank() && it != "null" },
+                                                    vehicleNote = o.optString("vehicleNote").takeIf { it.isNotBlank() && it != "null" },
+                                                    driverApprovalActive = o.optBoolean("driverApprovalActive", false),
+                                                    driverAcceptedAt = o.optString("driverAcceptedAt").takeIf { it.isNotBlank() && it != "null" },
+                                                    driverHandoverAt = o.optString("driverHandoverAt").takeIf { it.isNotBlank() && it != "null" },
+                                                    driverDeliveredAt = o.optString("driverDeliveredAt").takeIf { it.isNotBlank() && it != "null" }
+                                                ))
+                                            }
+                                        }
                 }
-                .onFailure { error = it.message ?: "Seller orders could not load." }
+            if (requestGeneration != orderLoadGeneration) return@launch
+            result
+                .onSuccess { freshOrders ->
+                    orders = freshOrders
+                    error = null
+                }
+                .onFailure { failure ->
+                    // Existing rows remain visible only alongside this explicit refresh error.
+                    error = failure.message ?: "Seller orders could not load."
+                }
             loading = false
         }
     }
@@ -156,7 +170,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { load(); onChanged() }) { Text("Refresh") } },
+        confirmButton = { TextButton(enabled = !loading, onClick = { load() }) { Text("Refresh") } },
         dismissButton = { TextButton(onClick = { open = false }) { Text("Close") } }
     )
 

@@ -116,4 +116,28 @@ All Android Marketplace changes must land in the canonical integration branch ab
 
 - Proposed repair: introduce a read-only, Marketplace/My Shop-only capture mode that records genuine adb screenshots and UIAutomator hierarchies for Marketplace discovery; Product Details only when an actual priced listing is visible; the publishing form without submission; private My Shop Overview, Shop profile, Listings, Orders, Delivery & drivers, and Earnings & payouts where the screen exposes their real controls.
 - On instrumentation failure, the runner should attempt this focused capture but preserve the original instrumentation exit status. A capture attempt must not change a red test to green, create sample products/orders, submit payment, or claim backend success.
-- Status: implementation and CI verification are pending on the feature branch. Do not mark screenshot coverage complete until the run artifact is downloaded and inspected for real PNG/XML evidence. Live listing/detail data and authenticated backend operations remain independently unverified while the Railway 404 / backend deployment issue is unresolved.
+- Status: merged via PR #373 as canonical commit `1a52b42ab44474efbe1a1ad0bc08048340c9657f`; all PR-head Android build/test/lint, the visual-capture regression verifier, Backend CI, and the repository layout/parity check were green on `a0cebc5f2a234f54dc2d3896200574e854ca7547`. Post-merge canonical workflow run `40460202455` was still reported in progress with screenshot/build steps pending at this audit; screenshot coverage remains unverified until that run produces an artifact with real PNG/XML files. Live listing/detail data and authenticated backend operations remain independently unverified while the Railway 404 / backend deployment issue is unresolved.
+
+
+## P4 — My Shop refresh and order-read reliability
+
+**Starting canonical SHA:** `1a52b42ab44474efbe1a1ad0bc08048340c9657f`  
+**Feature branch:** `fix/marketplace-myshop-refresh-reliability-20261027`  
+**Scope:** Marketplace/My Shop Android-side response handling only. No backend routes, database schema, auth, shared network configuration, Avatar/Profile, Chat/Groups, or Status/Story files are changed.
+
+### Verified source defects
+- My Shop refresh had no response-generation guard. If refresh A returned after refresh B, an older seller inventory, shop profile, or payout-account response could overwrite B’s newer state.
+- Shop-profile and payout-account GET parsing occurred inside `onSuccess` callbacks instead of `mapCatching`. Malformed JSON could throw out of the coroutine before the loading flags were reset.
+- Inventory failures retained the previous listing rows while the overview still displayed their count.
+- A failed payout-account refresh left the previous account object rendered—including a previously verified state—next to the error message.
+- Shop-profile save had the same unguarded response-parse pattern and could leave `shopSaving` set when a malformed successful response threw.
+- Seller-order parsing also occurred in `onSuccess` and had no response-generation guard. The dialog’s read-only “Refresh” additionally called the parent callback, triggering a redundant second My Shop refresh and several unnecessary GET requests.
+
+### P4 repair and regression tests
+- Add generation guards for My Shop refreshes, earnings, and seller-order reads.
+- Parse seller shop/payout/order response JSON inside `Result.mapCatching`, so malformed server responses follow the explicit failure path.
+- On failed inventory refresh, clear previous rows and label the count unavailable. On failed payout-account refresh, clear old account/verification data.
+- Disable refresh controls while their respective request is loading; remove the read-only seller-order Refresh callback that redundantly reloads the whole parent screen.
+- Extend the existing Marketplace seller-flow regression verifier with assertions for each behaviour above.
+
+**Status at audit write:** implementation is on the feature branch; regression checks and the exact-head Android/CI results still need to run. This is not yet merged or claimed complete.

@@ -56,6 +56,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     var listings by remember { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
     var archivedListings by remember { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
     var loading by remember { mutableStateOf(true) }
+    var refreshGeneration by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     var deletingId by remember { mutableStateOf<String?>(null) }
     var republishingId by remember { mutableStateOf<String?>(null) }
@@ -82,6 +83,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     var accountNumber by remember { mutableStateOf("") }
     var accountName by remember { mutableStateOf("") }
     var moneyLoading by remember { mutableStateOf(true) }
+    var moneyRequestGeneration by remember { mutableIntStateOf(0) }
     var moneyError by remember { mutableStateOf<String?>(null) }
     var moneyRecords by remember { mutableStateOf(emptyList<SellerMoneyRecord>()) }
     var moneyTotals by remember { mutableStateOf(emptyMap<String, SellerMoneyTotals>()) }
@@ -98,6 +100,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     var shopMessage by remember { mutableStateOf<String?>(null) }
 
     fun loadMoney() {
+        val requestGeneration = ++moneyRequestGeneration
         scope.launch {
             moneyLoading = true
             moneyError = null
@@ -140,6 +143,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     SellerMoneySnapshot(records, if (totalsArray != null) totals else null)
                 }
+            if (requestGeneration != moneyRequestGeneration) return@launch
             result.onSuccess { snapshot ->
                 moneyRecords = snapshot.records.sortedByDescending { it.updatedAt }
                 moneyTotals = snapshot.totals.orEmpty()
@@ -156,44 +160,83 @@ fun FynxMarketplaceSellerCenterPanel() {
     }
 
     fun refresh() {
+        val requestGeneration = ++refreshGeneration
         scope.launch {
             loading = true
             error = null
-            FynxMarketplaceClient.myListings(context)
+
+            val inventoryResult = FynxMarketplaceClient.myListings(context)
+            if (requestGeneration != refreshGeneration) return@launch
+            inventoryResult
                 .onSuccess { inventory ->
                     listings = inventory.filter { listing -> listing.active }
                     archivedListings = inventory.filterNot { listing -> listing.active }
                     listingActionError = null
                     listingActionMessage = null
                 }
-                .onFailure { error = it.message ?: "Could not load your listings." }
+                .onFailure { failure ->
+                    // Never present a previous inventory snapshot as current after refresh fails.
+                    listings = emptyList()
+                    archivedListings = emptyList()
+                    listingActionError = null
+                    listingActionMessage = null
+                    error = failure.message ?: "Could not load your listings."
+                }
+
             shopLoading = true
             shopError = null
-            FynxBackendClient.get(context, "/api/marketplace/my-shop")
-                .onSuccess { raw ->
-                    val profile = JSONObject(raw).optJSONObject("shop") ?: JSONObject()
+            val shopResult = FynxBackendClient.get(context, "/api/marketplace/my-shop")
+                .mapCatching { raw ->
+                    JSONObject(raw).optJSONObject("shop")
+                        ?: throw IllegalStateException("Shop profile response was incomplete.")
+                }
+            if (requestGeneration != refreshGeneration) return@launch
+            shopResult
+                .onSuccess { profile ->
                     shopName = profile.optString("shopName")
                     shopDescription = profile.optString("description")
                     shopLocation = profile.optString("location")
                     shopContactPhone = profile.optString("contactPhone")
                 }
-                .onFailure { shopError = it.message ?: "Shop profile could not load." }
+                .onFailure { failure ->
+                    // Do not show profile values from an earlier successful refresh as live.
+                    shopName = ""
+                    shopDescription = ""
+                    shopLocation = ""
+                    shopContactPhone = ""
+                    shopError = failure.message ?: "Shop profile could not load."
+                }
             shopLoading = false
+
             accountLoading = true
-            FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account")
-                .onSuccess { raw ->
+            val payoutResult = FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account")
+                .mapCatching { raw ->
                     val payload = JSONObject(raw)
                     val parsed = mutableListOf<JSONObject>()
                     val accounts = payload.optJSONArray("payoutAccounts")
                     if (accounts != null) {
-                        for (i in 0 until accounts.length()) accounts.optJSONObject(i)?.let { parsed += it }
+                        for (i in 0 until accounts.length()) {
+                            accounts.optJSONObject(i)?.let { parsed += it }
+                        }
                     }
                     if (parsed.isEmpty()) payload.optJSONObject("payoutAccount")?.let { parsed += it }
+                    parsed.toList()
+                }
+            if (requestGeneration != refreshGeneration) return@launch
+            payoutResult
+                .onSuccess { parsed ->
                     payoutAccounts = parsed
-                    payoutAccount = parsed.firstOrNull { it.optString("currency").trim().uppercase() == payoutCurrency } ?: parsed.firstOrNull()
+                    payoutAccount = parsed.firstOrNull {
+                        it.optString("currency").trim().uppercase() == payoutCurrency
+                    } ?: parsed.firstOrNull()
                     accountMessage = null
                 }
-                .onFailure { accountMessage = it.message ?: "Payout account status could not load." }
+                .onFailure { failure ->
+                    // A failed or malformed response must not leave an old verified account on screen.
+                    payoutAccounts = emptyList()
+                    payoutAccount = null
+                    accountMessage = failure.message ?: "Payout account status could not load."
+                }
             accountLoading = false
             loading = false
             loadMoney()
@@ -217,7 +260,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Spacer(Modifier.height(4.dp))
                     Text("Manage your storefront, listings, orders, deliveries and earnings from one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { refresh() }) { Icon(Icons.Default.Refresh, "Refresh My Shop") }
+                IconButton(onClick = { refresh() }, enabled = !loading) { Icon(Icons.Default.Refresh, "Refresh My Shop") }
             }
         }
         item {
@@ -233,7 +276,9 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Your shop at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text(if (shopName.isBlank()) "Set up your shop identity so buyers can recognize your business." else shopName, style = MaterialTheme.typography.titleMedium)
-                        Text("${listings.size} listing${if (listings.size == 1) "" else "s"} • ${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (error != null) "Listing count unavailable until refresh succeeds • ${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)" else "${listings.size} listing${if (listings.size == 1) "" else "s"} • ${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        error?.let { Text("Inventory is not current. Retry refresh before relying on listing availability.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                        shopError?.let { Text("Shop profile could not be refreshed.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(onClick = { activeSection = "Shop profile" }, modifier = Modifier.weight(1f)) { Text("Shop profile") }
                             OutlinedButton(onClick = { activeSection = "Listings" }, modifier = Modifier.weight(1f)) { Text("Manage listings") }
@@ -310,8 +355,11 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     .put("location", shopLocation.trim())
                                     .put("contactPhone", shopContactPhone.trim())
                                 FynxBackendClient.patchJson(context, "/api/marketplace/my-shop", payload.toString())
-                                    .onSuccess { raw ->
-                                        val profile = JSONObject(raw).optJSONObject("shop") ?: JSONObject()
+                                    .mapCatching { raw ->
+                                        JSONObject(raw).optJSONObject("shop")
+                                            ?: throw IllegalStateException("Shop profile response was incomplete.")
+                                    }
+                                    .onSuccess { profile ->
                                         shopName = profile.optString("shopName")
                                         shopDescription = profile.optString("description")
                                         shopLocation = profile.optString("location")
@@ -319,7 +367,9 @@ fun FynxMarketplaceSellerCenterPanel() {
                                         shopMessage = "Shop profile saved."
                                         shopError = null
                                     }
-                                    .onFailure { shopError = it.message ?: "Shop profile could not be saved." }
+                                    .onFailure { failure ->
+                                        shopError = failure.message ?: "Shop profile could not be saved."
+                                    }
                                 shopSaving = false
                             }
                         },
