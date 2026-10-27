@@ -1400,7 +1400,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
 
     if (showCamera) {
         Dialog(onDismissRequest = { showCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-            Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(initialMode = cameraInitialMode, videoNoteMode = videoNoteMode, onCaptured = { uri, type -> attachment = uri; attachmentType = if (videoNoteMode && type == "video") "video_note" else type; videoNoteMode = false; showCamera = false }, onDismiss = { videoNoteMode = false; showCamera = false }) } }
+            Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) { FynxCameraCapturePanel(initialMode = cameraInitialMode, videoNoteMode = videoNoteMode, onCaptured = { uri, type -> attachment = uri; attachmentType = if (videoNoteMode && type == "video") "video_note" else type; videoNoteMode = false; showCamera = false }, onDismiss = { videoNoteMode = false; showCamera = false }) } }
         }
     }
 

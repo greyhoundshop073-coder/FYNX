@@ -67,9 +67,9 @@ fun FynxGroupCameraPicker(context: Context, videoNoteMode: Boolean = false, onMe
     if (uploading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
     error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
     if (openCamera) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { if (!uploading) openCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { if (!uploading) openCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                Box(Modifier.fillMaxSize()) {
                     FynxCameraCapturePanel(
                         initialMode = if (videoNoteMode) CameraMode.VIDEO else CameraMode.PHOTO,
                         videoNoteMode = videoNoteMode,

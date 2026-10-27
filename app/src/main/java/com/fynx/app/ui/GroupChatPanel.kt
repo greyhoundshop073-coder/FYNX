@@ -724,10 +724,10 @@ fun GroupChatPanel(
     if (showCamera) {
         Dialog(
             onDismissRequest = { videoNoteMode = false; showCamera = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Surface(Modifier.fillMaxSize()) {
-                Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                Box(Modifier.fillMaxSize()) {
                 FynxCameraCapturePanel(
                     initialMode = cameraInitialMode,
                     videoNoteMode = videoNoteMode,

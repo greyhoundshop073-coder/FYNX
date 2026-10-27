@@ -5,6 +5,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ui = ROOT / "app/src/main/java/com/fynx/app/ui"
 camera = (ui / "FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
+camera_parent_sources = {
+    "Home": (ui / "FynxHomeSocialHubPanel.kt").read_text(encoding="utf-8"),
+    "Private chat": (ui / "ConversationPanel.kt").read_text(encoding="utf-8"),
+    "Group chat": (ui / "GroupChatPanel.kt").read_text(encoding="utf-8"),
+    "Group social composer": (ui / "FynxGroupSocialBatch.kt").read_text(encoding="utf-8"),
+    "Marketplace listing": (ui / "FynxMarketplacePanel.kt").read_text(encoding="utf-8"),
+    "Status hub": (ui / "FynxStatusHubPanel.kt").read_text(encoding="utf-8"),
+    "Mature Status composer": (ui / "FynxMatureStatusComposerPanel.kt").read_text(encoding="utf-8"),
+    "Marketplace live proof": (ui / "FynxMarketplaceLiveProof.kt").read_text(encoding="utf-8"),
+}
+def camera_parent_has_duplicate_insets(content: str) -> bool:
+    index = content.find("FynxCameraCapturePanel(")
+    if index < 0:
+        return True
+    parent_context = content[max(0, index - 340):index]
+    return "safeDrawingPadding()" in parent_context or "windowInsetsPadding(WindowInsets.safeDrawing)" in parent_context
 mature_status = (ui / "FynxMatureStatusComposerPanel.kt").read_text(encoding="utf-8")
 video_editor = (ui / "FynxCameraVideoEditor.kt").read_text(encoding="utf-8")
 unit_tests = (ROOT / "app/src/test/java/com/fynx/app/ui/CameraMediaReliabilityTest.kt").read_text(encoding="utf-8")
@@ -32,6 +48,8 @@ checks = {
     "drawing has undo, clear, finish and palette controls": 'Text("Draw")' in camera and 'Text("Undo")' in camera and 'Text("Clear")' in camera and 'Text("Finish drawing")' in camera and "selectedDrawingColorArgb" in camera,
     "drawing geometry has unit regression tests": "drawingPointMapsToImageCoordinatesInsideFitCenterImage" in unit_tests and "drawingPointRejectsLetterboxAreaOutsideTheActualPhoto" in unit_tests,
     "drawing color palette uses the ARGB-int constructor safely": "Color(argb)" in camera and "Color(stroke.colorArgb)" in camera and "Color(argb.toLong())" not in camera and "Color(stroke.colorArgb.toLong())" not in camera,
+    "every shared camera caller leaves system-inset management to CameraX panel": all(not camera_parent_has_duplicate_insets(content) for content in camera_parent_sources.values()),
+    "all shared-camera dialogs use edge-to-edge window fitting": all("decorFitsSystemWindows = false" in content for content in camera_parent_sources.values()),
     "video-edit unit regression tests are present": "videoEditRangeIsClampedToValidMinimumAndSourceBounds" in unit_tests and "videoEditRangeClampsNegativeAndOverlongSelections" in unit_tests,
 }
 caller_files = [

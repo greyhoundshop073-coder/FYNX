@@ -941,7 +941,7 @@ fun FynxHomeSocialHubPanel(
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                Box(Modifier.fillMaxSize()) {
                     FynxCameraCapturePanel(
                         fastCapture = showFastCamera,
                         onCaptured = { uri, type ->
