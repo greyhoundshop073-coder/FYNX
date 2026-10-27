@@ -301,7 +301,7 @@ internal suspend fun requestMarketplaceCheckoutQuote(
             expectedCurrency = listing.currency,
             expectedQuantity = quantity,
             expectedFulfillmentMethod = method,
-            expectedQuote = quote
+            expectedQuote = expectedQuote
         )
     }
 }
@@ -428,7 +428,8 @@ internal suspend fun createProtectedMarketplaceCheckoutOrder(
     quantity: Int,
     fulfillmentMethod: String,
     address: FynxMarketplaceCheckoutAddress?,
-    orderId: String
+    orderId: String,
+    expectedQuote: FynxMarketplaceCheckoutQuote
 ): Result<FynxRemoteSocialClient.MarketplaceOrder> {
     val method = fulfillmentMethod.uppercase(Locale.US)
     val body = JSONObject().apply {
@@ -594,7 +595,8 @@ internal fun FynxMarketplaceCheckoutDialog(
                             q.quantity,
                             q.fulfillmentMethod,
                             checkoutAddress,
-                            stableOrderId
+                            stableOrderId,
+                            q
                         ).onSuccess { order ->
                             // The order may still be PAYMENT_PENDING. Keep the idempotency key
                             // until the payment-verification callback confirms payment.
