@@ -255,6 +255,17 @@ fun FynxMarketplaceSellerCenterPanel() {
     // Include currencies from all-history totals even if recent detail rows omit them.
     val currencies = (moneyRecords.map { it.currency } + moneyTotals.keys).distinct().sorted()
 
+    val listingSummary = when {
+        loading -> "Loading listings…"
+        error != null -> "Listing count unavailable until refresh succeeds"
+        else -> "${listings.size} listing${if (listings.size == 1) "" else "s"}"
+    }
+    val settlementSummary = when {
+        moneyLoading -> "Checking recent earnings…"
+        moneyError != null -> "Recent earnings unavailable until refresh succeeds"
+        else -> "${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)"
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -283,7 +294,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Your shop at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text(if (shopName.isBlank()) "Set up your shop identity so buyers can recognize your business." else shopName, style = MaterialTheme.typography.titleMedium)
-                        Text(if (error != null) "Listing count unavailable until refresh succeeds • ${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)" else "${listings.size} listing${if (listings.size == 1) "" else "s"} • ${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("$listingSummary • $settlementSummary", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         error?.let { Text("Inventory is not current. Retry refresh before relying on listing availability.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         shopError?.let { Text("Shop profile could not be refreshed.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {

@@ -210,6 +210,16 @@ checks.extend([
      and all("marketplaceSafeError(" in source for source in (marketplace, checkout, seller_center, seller_orders, storefront, saved_products_panel, order_lifecycle))),
 ])
 
+checks.extend([
+    ("My Shop overview avoids showing zero inventory/earnings while requests are still loading or have failed",
+     'val listingSummary = when {' in seller_center
+     and 'loading -> "Loading listings…"' in seller_center
+     and 'error != null -> "Listing count unavailable until refresh succeeds"' in seller_center
+     and 'moneyLoading -> "Checking recent earnings…"' in seller_center
+     and 'moneyError != null -> "Recent earnings unavailable until refresh succeeds"' in seller_center
+     and 'Text("$listingSummary • $settlementSummary"' in seller_center),
+])
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
