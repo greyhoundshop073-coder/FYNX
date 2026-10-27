@@ -35,6 +35,21 @@ check("per-chat vibration preference gates actual incoming-message vibration", "
 check("incoming message feedback is deduplicated by stable remote message id", "remote.id.isNotBlank() && messages.none { it.id == remote.id }" in conversation)
 check("incoming chat uses the chat-specific sound and vibration preferences", "FynxInChatSound.play(context, chat.username)" in conversation and "FynxHaptics.incomingChatMessage(context, chat.username)" in conversation)
 check("group success feedback uses shared sound and system haptics", "FynxHaptics.perform(localView)" in group and "FynxInteractionSound.Event.GROUP_MESSAGE_SENT" in group)
+check("group incoming feedback is deduplicated and ignores messages from self", all(token in group for token in [
+    "latestMessages.none { it.id == incomingId }", "groupFeedbackMessageIds.add(incomingId)",
+    "senderUsername.equals(currentUsername.removePrefix(\"@\"), ignoreCase = true)",
+    "FynxInteractionSound.playIncomingGroupMessage(context, group.id)",
+    "FynxHaptics.incomingGroupMessage(context, group.id)"
+]))
+check("group incoming feedback respects mute and notification settings", all(token in interaction for token in [
+    "FynxConversationPreferences.groupNotifications(context, groupId)",
+    "FynxConversationPreferences.groupMuted(context, groupId)",
+    "Event.GROUP_MESSAGE_RECEIVED"
+]) and all(token in haptics for token in [
+    "FynxConversationPreferences.groupNotifications(context, groupId)",
+    "FynxConversationPreferences.groupMuted(context, groupId)",
+    "fun incomingGroupMessage(context: Context, groupId: String)"
+]))
 check("group send confirmation happens only after server success", group.index("FynxGroupRemoteClient.sendMessage") < group.index("// Confirmation feedback is only emitted after the server accepts the message.") and "Confirmation feedback is only emitted after the server accepts the message." in group)
 check("social feedback routes through shared category and silent-mode policy", "ToneGenerator" not in social and "FynxInteractionSound.Event.SOCIAL_REACTION" in social)
 check("in-app sounds respect Android Silent and Vibrate modes", "audio.ringerMode != AudioManager.RINGER_MODE_NORMAL" in interaction)

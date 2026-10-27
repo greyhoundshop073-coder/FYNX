@@ -36,7 +36,18 @@ object FynxHaptics {
     fun incomingChatMessage(context: Context, chatUsername: String) {
         if (!isEnabled(context)) return
         if (!FynxConversationPreferences.chatVibration(context, chatUsername)) return
+        vibrateIncomingMessage(context)
+    }
 
+    /** Incoming group feedback obeys the shared haptics switch and the group's mute policy. */
+    fun incomingGroupMessage(context: Context, groupId: String) {
+        if (!isEnabled(context)) return
+        if (!FynxConversationPreferences.groupNotifications(context, groupId)) return
+        if (FynxConversationPreferences.groupMuted(context, groupId)) return
+        vibrateIncomingMessage(context)
+    }
+
+    private fun vibrateIncomingMessage(context: Context) {
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         if (audio?.ringerMode == AudioManager.RINGER_MODE_SILENT) return
 

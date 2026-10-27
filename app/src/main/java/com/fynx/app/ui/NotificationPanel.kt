@@ -186,7 +186,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                         privateChatSoundsEnabled = it
                         FynxInteractionSound.setCategoryEnabled(context, FynxInteractionSound.Category.CHAT, it)
                     }
-                    NotificationPreferenceSwitch("Group chat sounds", "Subtle sounds for successfully sent group messages", groupSoundsEnabled) {
+                    NotificationPreferenceSwitch("Group chat sounds", "Subtle sounds for incoming and successfully sent group messages", groupSoundsEnabled) {
                         groupSoundsEnabled = it
                         FynxInteractionSound.setCategoryEnabled(context, FynxInteractionSound.Category.GROUP, it)
                     }

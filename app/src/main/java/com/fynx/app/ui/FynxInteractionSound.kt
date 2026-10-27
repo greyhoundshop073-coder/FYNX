@@ -119,6 +119,16 @@ object FynxInteractionSound {
         }.start()
     }
 
+    /**
+     * Plays a foreground group-message alert only while this group's local alert policy allows it.
+     * Notification channels still own background alert behavior.
+     */
+    fun playIncomingGroupMessage(context: Context, groupId: String) {
+        if (!FynxConversationPreferences.groupNotifications(context, groupId)) return
+        if (FynxConversationPreferences.groupMuted(context, groupId)) return
+        play(context, Event.GROUP_MESSAGE_RECEIVED)
+    }
+
     fun setMasterEnabled(context: Context, enabled: Boolean) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(MASTER, enabled).apply()
 

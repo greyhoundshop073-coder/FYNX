@@ -69,6 +69,8 @@ fun GroupChatPanel(
     var description by remember { mutableStateOf(group.description) }
     var text by remember { mutableStateOf("") }
     var messages by remember(group.id) { mutableStateOf(loadGroupMessages(context, group.id)) }
+    val latestMessages by rememberUpdatedState(messages)
+    val groupFeedbackMessageIds = remember(group.id) { mutableSetOf<String>() }
     var isNewGroupConversation by remember(group.id) { mutableStateOf(false) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
     var attachmentType by remember { mutableStateOf("image") }
@@ -219,6 +221,20 @@ fun GroupChatPanel(
             onEvent = { event ->
                 if (event is FynxRealtimeClient.Event.GroupMessage && event.groupId == group.id) {
                     scope.launch {
+                        val incoming = runCatching { org.json.JSONObject(event.messageJson) }.getOrNull()
+                        val incomingId = incoming?.optString("id").orEmpty()
+                        val senderUsername = incoming?.optString("senderUsername").orEmpty().removePrefix("@")
+                        val fromAnotherMember = senderUsername.isNotBlank() &&
+                            !senderUsername.equals(currentUsername.removePrefix("@"), ignoreCase = true)
+                        if (fromAnotherMember && incomingId.isNotBlank() &&
+                            latestMessages.none { it.id == incomingId } &&
+                            groupFeedbackMessageIds.add(incomingId)
+                        ) {
+                            // The foreground group suppresses its own push alert, so deliver one
+                            // in-app tone and haptic for each newly received remote message instead.
+                            FynxInteractionSound.playIncomingGroupMessage(context, group.id)
+                            FynxHaptics.incomingGroupMessage(context, group.id)
+                        }
                         FynxGroupRemoteClient.loadMessages(context, group.id)
                             .onSuccess { remote ->
                                 val remoteMessages = remote.map {
