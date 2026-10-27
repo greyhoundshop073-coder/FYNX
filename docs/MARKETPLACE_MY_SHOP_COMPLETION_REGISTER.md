@@ -95,3 +95,25 @@ All Android Marketplace changes must land in the canonical integration branch ab
 - [ ] Latest Android workflow green after the backend/network owner restores the configured endpoint.
 - [ ] APK binary SHA-256 and install/runtime verification recorded.
 - [ ] Live authenticated Marketplace flows verified against restored backend/database.
+
+
+## Re-audit addendum — 2026-10-27 (Marketplace/My Shop runtime evidence)
+
+**Canonical starting head:** `1ddb70d7e2a82c92aa19f7578afd5caabc14b9c8`  
+**Feature branch:** `fix/marketplace-runtime-visual-capture-20261027`  
+**Purpose:** recover genuine Marketplace/My Shop visual evidence when an unrelated or infrastructure-dependent instrumentation assertion fails, without weakening the failed test or changing backend/network ownership.
+
+### Exact current Android failure evidence
+
+- Canonical Android workflow run [#40454293485](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40454293485), run 8379, checked out `1ddb70d7e2a82c92aa19f7578afd5caabc14b9c8`.
+- Fast build/test/lint and full build/test/lint completed successfully. Marketplace seller-flow, checkout fee, protection, integration/security and Smart Marketplace verifiers all passed.
+- Instrumentation ran 43 tests; exactly one failed: `FynxNetworkRecoveryContractTest.debugAndroidRuntimeCanReachLiveRailwayBackend`. The observed response was HTTP 404 `Application not found` from Railway request `WZooeglnSv2lKzL19fVATg`. This is a backend endpoint/reachability failure owned by the separate backend/network workstream; it is not a Marketplace UI test failure and is not patched here.
+- Backend CI [#40454293520](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40454293520) passed at the same SHA. Chat Group Parity + Layout Safety [#40454293319](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40454293319) also passed at the same SHA; this is reported for provenance only, not as Marketplace certification.
+- The workflow did upload APK artifact [`FYNX-debug-apk-1ddb70d7e2a82c92aa19f7578afd5caabc14b9c8`](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40454293485) and visual artifact [`FYNX-runtime-visual-check-1ddb70d7e2a82c92aa19f7578afd5caabc14b9c8`](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40454293485). The visual ZIP was inspected: it contained only instrumentation logcat, activity and package dumps—no PNG screenshots or UI hierarchy XML. The emulator activity dump ended on the Android launcher.
+- Root cause in the evidence pipeline: `scripts/run_android_runtime_certification.sh` only invoked `scripts/verify_authenticated_runtime_navigation.py` when `connectedDebugAndroidTest` returned zero. A red test therefore skipped all screen navigation/capture even though the workflow’s artifact step still ran. The APK artifact exists, but is not runtime-certified while instrumentation is red.
+
+### P3 — Marketplace/My Shop runtime evidence recovery
+
+- Proposed repair: introduce a read-only, Marketplace/My Shop-only capture mode that records genuine adb screenshots and UIAutomator hierarchies for Marketplace discovery; Product Details only when an actual priced listing is visible; the publishing form without submission; private My Shop Overview, Shop profile, Listings, Orders, Delivery & drivers, and Earnings & payouts where the screen exposes their real controls.
+- On instrumentation failure, the runner should attempt this focused capture but preserve the original instrumentation exit status. A capture attempt must not change a red test to green, create sample products/orders, submit payment, or claim backend success.
+- Status: implementation and CI verification are pending on the feature branch. Do not mark screenshot coverage complete until the run artifact is downloaded and inspected for real PNG/XML evidence. Live listing/detail data and authenticated backend operations remain independently unverified while the Railway 404 / backend deployment issue is unresolved.

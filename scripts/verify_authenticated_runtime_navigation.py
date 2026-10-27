@@ -388,6 +388,49 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         return ""
     return next_xml
 
+
+def marketplace_product_card_target(xml_text: str):
+    """Find a visible, clickable real listing card by its actual displayed currency/price."""
+    if not xml_text:
+        return None
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("clickable", "false").lower() != "true":
+            continue
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        center = _center(node)
+        bounds = node.attrib.get("bounds", "")
+        if not center or "][" not in bounds:
+            continue
+        try:
+            left_top, right_bottom = bounds.split("][", 1)
+            left, top = map(int, left_top.strip("[]").split(","))
+            right, bottom = map(int, right_bottom.strip("[]").split(","))
+        except (ValueError, IndexError):
+            continue
+        width, height = right - left, bottom - top
+        # Exclude tiny buttons and full-screen containers; product/deal cards are larger.
+        if not (250 <= width <= 1200 and 220 <= height <= 1450):
+            continue
+        values = [
+            (child.attrib.get("text") or "").strip()
+            for child in node.iter("node")
+            if child.attrib.get("visible-to-user", "true").lower() != "false"
+        ]
+        payload = " ".join(value for value in values if value)
+        if len(values) < 2 or not re.search(r"(?i)(?:\bNGN\b|\bUSD\b|₦|\$)", payload):
+            continue
+        candidates.append((center[1], width * height, center))
+    if not candidates:
+        return None
+    # Prefer the first visible real-priced card on the page; no test listing is created.
+    return min(candidates, key=lambda item: (item[0], item[1]))[2]
+
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
     base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
@@ -641,7 +684,154 @@ report.append(f"- APK install: {'PASS' if install.returncode==0 else 'FAIL'}")
 if install.returncode!=0:
     report.append("- "+install.stdout.strip().replace("\n"," | ")); raise SystemExit(1)
 
+
 xml,error=login()
+
+# Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an
+# unrelated instrumentation test fails. This branch performs read-only navigation:
+# it never publishes a listing, changes inventory, creates an order, or initiates payment.
+if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
+    report.append("- Capture scope: Marketplace and My Shop only; no listing/order/payment mutations.")
+    if error:
+        report += [
+            "",
+            "## Marketplace and My Shop screenshots",
+            "- BLOCKED: the app could not reach Home through the available login path: " + error,
+            "- The captured pre-login/login UI, if present, is retained as genuine evidence.",
+            "- Live Marketplace and My Shop screens were not reached; no screenshots are claimed.",
+            "",
+            "## Result: BLOCKED",
+        ]
+        (ROOT/"FYNX-marketplace-visual-capture.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(2)
+
+    if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+        report.append("- Session: debug-only local UI entry; screenshots certify rendered UI/navigation only, not live account data.")
+    else:
+        report.append("- Session: the existing login flow reached Home; live Marketplace data remains unverified unless its API loads successfully.")
+
+    marketplace_xml = tap_control(
+        xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
+    )
+    if marketplace_xml:
+        report.append("- PASS: captured the real Marketplace discovery/search/cart surface.")
+        (ROOT/"authenticated-marketplace.xml").write_text(marketplace_xml+"\n", encoding="utf-8")
+
+        # Product details are only captured when an actual visible listing card exposes a price.
+        # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
+        product_target = marketplace_product_card_target(marketplace_xml)
+        if product_target:
+            px, py = product_target
+            run("adb", "logcat", "-c")
+            run("adb", "shell", "input", "tap", str(px), str(py))
+            time.sleep(1.2)
+            detail_xml = dump_ui("marketplace-product-detail-probe.xml")
+            detail_markers = ["Add to cart", "Buy now", "Message seller", "Your listing"]
+            if detail_xml and any(find_control(detail_xml, [label]) for label in detail_markers):
+                screenshot("authenticated-marketplace-product-detail.png")
+                (ROOT/"authenticated-marketplace-product-detail.xml").write_text(detail_xml+"\n", encoding="utf-8")
+                report.append("- PASS: opened a real visible Marketplace listing and captured Product Details.")
+            else:
+                report.append("- BLOCKED: a visible priced card was present, but Product Details markers were not confirmed; no detail screenshot is claimed.")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.8)
+            marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
+        else:
+            report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
+
+        # Scroll the real Marketplace list to its sell action; do not fill or submit the form.
+        sell_labels = ["Sell something", "Start selling", "Sell your first product"]
+        for attempt in range(6):
+            if find_control(marketplace_xml, sell_labels):
+                break
+            run("adb", "shell", "input", "swipe", "720", "2450", "720", "700", "450")
+            time.sleep(0.4)
+            marketplace_xml = dump_ui("marketplace-publish-cta-scroll-"+str(attempt)+".xml") or marketplace_xml
+        if find_control(marketplace_xml, sell_labels):
+            publish_xml = tap_control(
+                marketplace_xml, sell_labels, "marketplace-publishing-flow",
+                ["Product name", "Choose media", "Product media"]
+            )
+            if publish_xml:
+                report.append("- PASS: captured the real product-publishing form without submitting or creating a listing.")
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.7)
+                marketplace_xml = dump_ui("marketplace-after-publishing.xml") or marketplace_xml
+            else:
+                report.append("- BLOCKED: the sell action was visible, but the publishing form did not expose its expected fields.")
+        else:
+            report.append("- BLOCKED: the Sell action was not exposed by the rendered Marketplace state; publishing flow not captured.")
+
+        # Return the actual Marketplace screen to its top before opening My Shop.
+        for attempt in range(5):
+            if find_control(marketplace_xml, ["My Shop"]):
+                break
+            run("adb", "shell", "input", "swipe", "720", "700", "720", "2450", "450")
+            time.sleep(0.35)
+            marketplace_xml = dump_ui("marketplace-return-top-"+str(attempt)+".xml") or marketplace_xml
+        shop_xml = tap_control(
+            marketplace_xml, ["My Shop"], "marketplace-my-shop-overview",
+            ["Your shop at a glance", "Manage your storefront", "Shop profile"]
+        )
+        if shop_xml:
+            report.append("- PASS: captured the actual private My Shop overview.")
+            (ROOT/"authenticated-marketplace-my-shop-overview.xml").write_text(shop_xml+"\n", encoding="utf-8")
+
+            shop_sections = [
+                ("profile", "Shop profile", ["Shop identity"]),
+                ("listings", "Listings", ["Your listings", "You have no active listings yet", "Retry loading listings", "Archived listings"]),
+                ("orders", "Orders", ["Review buyer orders, fulfillment progress, protected payment status"]),
+                ("delivery-drivers", "Delivery & drivers", ["Manage driver assignments and delivery coordination separately from order review and payout settings"]),
+                ("earnings-payouts", "Earnings & payouts", ["Marketplace earnings"]),
+            ]
+            current_shop_xml = shop_xml
+            for slug, label, expected in shop_sections:
+                control = find_control(current_shop_xml, [label])
+                # Tabs live in one horizontal row; reveal a real off-screen tab rather than
+                # tapping guessed coordinates or claiming it was visited.
+                for attempt in range(4):
+                    if control:
+                        break
+                    overview_control = find_control(current_shop_xml, ["Overview"])
+                    tab_y = overview_control[2] if overview_control else 600
+                    run("adb", "shell", "input", "swipe", "1270", str(tab_y), "230", str(tab_y), "450")
+                    time.sleep(0.35)
+                    current_shop_xml = dump_ui("marketplace-my-shop-tabs-"+slug+"-"+str(attempt)+".xml") or current_shop_xml
+                    control = find_control(current_shop_xml, [label])
+                if not control:
+                    report.append("- BLOCKED: My Shop "+label+" tab was not visible to the accessibility navigator; no section screenshot claimed.")
+                    continue
+                section_xml = tap_control(
+                    current_shop_xml, [label], "marketplace-my-shop-"+slug, expected
+                )
+                if section_xml:
+                    report.append("- PASS: captured My Shop "+label+" section.")
+                    (ROOT/("authenticated-marketplace-my-shop-"+slug+".xml")).write_text(section_xml+"\n", encoding="utf-8")
+                    current_shop_xml = section_xml
+                else:
+                    report.append("- BLOCKED: My Shop "+label+" content markers were not confirmed.")
+                    current_shop_xml = dump_ui("marketplace-my-shop-"+slug+"-after-attempt.xml") or current_shop_xml
+        else:
+            report.append("- BLOCKED: Marketplace -> My Shop did not reach the seller control center.")
+    else:
+        report.append("- BLOCKED: Home -> Marketplace did not reach the real Marketplace search surface.")
+
+    report += [
+        "",
+        "## Evidence boundary",
+        "- Screenshots are captured from the installed APK using adb screencap; UI hierarchies come from Android UIAutomator.",
+        "- No products, orders, payments, earnings, drivers, or seller records are fabricated.",
+        "- A visible page or screenshot does not prove that a backend request succeeded.",
+        "",
+        f"## Result: {'GREEN' if not FAILURES else 'RED'}",
+    ]
+    if FAILURES:
+        report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
+    (ROOT/"FYNX-marketplace-visual-capture.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
+
 if error: FAILURES.append("real account sign-in: "+error)
 else:
     if find_control(xml,["Sign In"]) and find_control(xml,["Create Account"]): FAILURES.append("authentication did not leave the login gate")

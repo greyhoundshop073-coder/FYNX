@@ -17,6 +17,15 @@ if [ "$TEST_EXIT" -eq 0 ]; then
   python3 scripts/verify_authenticated_runtime_navigation.py
   TEST_EXIT=$?
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+else
+  # A red instrumentation test must not suppress Marketplace/My Shop screenshot evidence.
+  # The focused run is read-only and its result never replaces TEST_EXIT.
+  FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  VISUAL_EXIT=$?
+  if [ "$VISUAL_EXIT" -ne 0 ]; then
+    echo "::warning::Marketplace/My Shop visual capture did not complete (exit $VISUAL_EXIT); the instrumentation result remains $TEST_EXIT."
+  fi
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 fi
 
 exit "$TEST_EXIT"
