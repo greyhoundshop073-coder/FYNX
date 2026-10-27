@@ -143,6 +143,7 @@ fun FynxCameraCapturePanel(
     var photoTextOverlay by remember { mutableStateOf("") }
     var selectedPhotoSticker by remember { mutableStateOf<String?>(null) }
     var showPhotoTextDialog by remember { mutableStateOf(false) }
+    var photoEditorTab by remember { mutableStateOf("Filters") }
     var selectedDrawingColorArgb by remember { mutableIntStateOf(0xFFFFD54F.toInt()) }
     var drawingStrokes by remember { mutableStateOf<List<FynxCameraDrawStroke>>(emptyList()) }
     var activeDrawingPoints by remember { mutableStateOf<List<FynxCameraDrawPoint>>(emptyList()) }
@@ -769,102 +770,100 @@ fun FynxCameraCapturePanel(
             Column(
                 Modifier
                     .align(Alignment.BottomCenter)
+                    .background(Color(0xF0111218), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .fillMaxWidth()
                     // Editing tools stay above a dedicated bottom action dock.
-                    .padding(bottom = 104.dp)
-                    .fillMaxHeight(0.62f)
+                    .padding(bottom = 108.dp)
+                    .fillMaxHeight(0.40f)
                     .verticalScroll(rememberScrollState())
                     .padding(start = 18.dp, end = 18.dp, top = 8.dp)
             ){
                 recordingNotice?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp)) }
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}
-                if(previewType=="image"){Text("Edit photo",style=MaterialTheme.typography.labelLarge)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                        CameraFilter.values().forEach{option->
-                            FilterChip(
-                                selected=filter==option,
-                                enabled=!enhancing,
-                                onClick={applyFilterToPhoto(option, if(option==CameraFilter.NATURAL) 0f else filterIntensity)},
-                                label={Text(option.label)}
-                            )
-                        }
-                    }
+                if (previewType == "image") {
+                    Text("EDIT PHOTO", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    Text("Make it yours", style = MaterialTheme.typography.bodySmall, color = Color(0xFFB9B9C8), modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
                     Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { cropPhotoSquare() },
-                            enabled = !enhancing
-                        ) { Text(if (enhancing) "Processing…" else "Crop square") }
-                        OutlinedButton(
-                            onClick = { cropPhotoPortrait() },
-                            enabled = !enhancing
-                        ) { Text("Portrait 4:5") }
-                        OutlinedButton(
-                            onClick = { cropPhotoLandscape() },
-                            enabled = !enhancing
-                        ) { Text("Landscape 16:9") }
-                        OutlinedButton(
-                            onClick = { showPhotoTextDialog = true },
-                            enabled = !enhancing
-                        ) { Text(if (photoTextOverlay.isBlank()) "Add text" else "Edit text") }
-                    }
-                    Text("Stickers", style = MaterialTheme.typography.labelMedium)
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf("✨", "❤️", "🔥", "😂", "😎", "🎉", "🌈").forEach { sticker ->
-                            FilterChip(
-                                selected = selectedPhotoSticker == sticker,
-                                enabled = !enhancing,
-                                onClick = {
-                                    selectedPhotoSticker =
-                                        if (selectedPhotoSticker == sticker) null else sticker
-                                },
-                                label = { Text(sticker) }
-                            )
+                        listOf("Filters", "Crop", "Creative", "Enhance").forEach { tab ->
+                            val selected = photoEditorTab == tab
+                            Surface(
+                                modifier = Modifier.weight(1f).clickable { photoEditorTab = tab },
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (selected) Color(0xFF6B5CE7) else Color(0xFF292B35),
+                                contentColor = Color.White
+                            ) {
+                                Text(
+                                    tab,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 11.dp),
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            }
                         }
                     }
-                    if(filter != CameraFilter.NATURAL){
-                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                            Text("Intensity",style=MaterialTheme.typography.labelMedium,modifier=Modifier.width(56.dp))
-                            Slider(value=filterIntensity,onValueChange={filterIntensity=it},onValueChangeFinished={applyFilterToPhoto(filter, filterIntensity)},valueRange=0f..1f,modifier=Modifier.weight(1f))
+                    when (photoEditorTab) {
+                        "Filters" -> {
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CameraFilter.values().forEach { option ->
+                                    FilterChip(
+                                        selected = filter == option,
+                                        enabled = !enhancing,
+                                        onClick = { applyFilterToPhoto(option, if (option == CameraFilter.NATURAL) 0f else filterIntensity) },
+                                        label = { Text(option.label) }
+                                    )
+                                }
+                            }
+                            if (filter != CameraFilter.NATURAL) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Strength", color = Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(64.dp))
+                                    Slider(value = filterIntensity, onValueChange = { filterIntensity = it }, onValueChangeFinished = { applyFilterToPhoto(filter, filterIntensity) }, valueRange = 0f..1f, modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                        "Crop" -> {
+                            Text("Choose a crop shape", color = Color(0xFFCACAD5), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("Square", "Portrait 4:5", "Landscape 16:9").forEach { label ->
+                                    OutlinedButton(
+                                        onClick = { when (label) { "Square" -> cropPhotoSquare(); "Portrait 4:5" -> cropPhotoPortrait(); else -> cropPhotoLandscape() } },
+                                        enabled = !enhancing,
+                                        modifier = Modifier.weight(1f),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                    ) { Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall) }
+                                }
+                            }
+                        }
+                        "Creative" -> {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { showPhotoTextDialog = true }, enabled = !enhancing, modifier = Modifier.weight(1f)) { Text(if (photoTextOverlay.isBlank()) "Add text" else "Edit text") }
+                                OutlinedButton(onClick = { drawingMode = true }, enabled = !enhancing && photoPixelWidth > 0 && photoPixelHeight > 0, modifier = Modifier.weight(1f)) { Text("Draw") }
+                            }
+                            Text("Stickers", color = Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf("✨", "❤️", "🔥", "😂", "😎", "🎉", "🌈").forEach { sticker ->
+                                    FilterChip(selected = selectedPhotoSticker == sticker, enabled = !enhancing, onClick = { selectedPhotoSticker = if (selectedPhotoSticker == sticker) null else sticker }, label = { Text(sticker) })
+                                }
+                            }
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { if (drawingStrokes.isNotEmpty()) drawingStrokes = drawingStrokes.dropLast(1) }, enabled = !enhancing && drawingStrokes.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("Undo") }
+                                OutlinedButton(onClick = { drawingStrokes = emptyList(); activeDrawingPoints = emptyList() }, enabled = !enhancing && drawingStrokes.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("Clear") }
+                            }
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(0xFFFFD54F.toInt(), 0xFFF44336.toInt(), 0xFF42A5F5.toInt(), 0xFF66BB6A.toInt(), 0xFFFFFFFF.toInt()).forEach { argb ->
+                                    FilterChip(selected = selectedDrawingColorArgb == argb, enabled = !enhancing, onClick = { selectedDrawingColorArgb = argb }, label = { Box(Modifier.size(18.dp).background(Color(argb), androidx.compose.foundation.shape.CircleShape)) })
+                                }
+                            }
+                        }
+                        else -> {
+                            Text("Improve lighting and contrast automatically.", color = Color(0xFFCACAD5), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
+                            Button(onClick = { enhancePhoto() }, enabled = !enhancing, modifier = Modifier.fillMaxWidth()) { Text(if (enhancing) "Enhancing…" else "✨ Auto Enhance") }
                         }
                     }
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { drawingMode = true },
-                            enabled = !enhancing && photoPixelWidth > 0 && photoPixelHeight > 0
-                        ) { Text("Draw") }
-                        OutlinedButton(
-                            onClick = { if (drawingStrokes.isNotEmpty()) drawingStrokes = drawingStrokes.dropLast(1) },
-                            enabled = !enhancing && drawingStrokes.isNotEmpty()
-                        ) { Text("Undo") }
-                        OutlinedButton(
-                            onClick = { drawingStrokes = emptyList(); activeDrawingPoints = emptyList() },
-                            enabled = !enhancing && drawingStrokes.isNotEmpty()
-                        ) { Text("Clear") }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(0xFFFFD54F.toInt(), 0xFFF44336.toInt(), 0xFF42A5F5.toInt(), 0xFF66BB6A.toInt(), 0xFFFFFFFF.toInt()).forEach { argb ->
-                            FilterChip(
-                                selected = selectedDrawingColorArgb == argb,
-                                enabled = !enhancing,
-                                onClick = { selectedDrawingColorArgb = argb },
-                                label = { Box(Modifier.size(18.dp).background(Color(argb), androidx.compose.foundation.shape.CircleShape)) }
-                            )
-                        }
-                    }
-                    OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}
-                } else {
+                }  else {
                     Text("Edit video", style = MaterialTheme.typography.labelLarge)
                     if (videoDurationMs > FynxCameraVideoEditRange.MIN_CLIP_DURATION_MS) {
                         val minClip = FynxCameraVideoEditRange.MIN_CLIP_DURATION_MS
@@ -938,10 +937,10 @@ fun FynxCameraCapturePanel(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .background(Color(0xFF171820))
                     .imePadding()
-                    .padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 12.dp),
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedButton(onClick = { if (!enhancing) retake() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Retake") }
