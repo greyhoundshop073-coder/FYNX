@@ -294,6 +294,37 @@ checks.extend([
      and 'shopProfileError?.let { message ->' in storefront
      and 'TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }' in storefront),
 ])
+checks.extend([
+    ("Marketplace listing values fail closed instead of defaulting missing price/currency/quantity",
+     "marketplaceRequiredListingPrice(o.opt(\"price\"))" in marketplace_client
+     and "marketplaceRequiredMarketplaceCurrency(o.opt(\"currency\"))" in marketplace_client
+     and "marketplaceRequiredInventoryQuantity(stockValue)" in marketplace_client
+     and "o.optDouble(\"price\", 0.0)" not in marketplace_client
+     and "o.optString(\"currency\", \"NGN\")" not in marketplace_client),
+    ("discovery uses the canonical strict Marketplace listing parser",
+     "FynxMarketplaceClient.parseListings(raw, preferAvailableStock = true)" in discovery_client
+     and "private fun parseListings(raw: String): List<FynxMarketplaceClient.Listing>" not in discovery_client),
+    ("active Marketplace list/storefront parser rejects malformed listing prices and missing currencies",
+     "marketplaceRequiredListingPrice(o.opt(\"price\"))" in remote_client
+     and "marketplaceRequiredMarketplaceCurrency(o.opt(\"currency\"))" in remote_client
+     and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client
+     and "o.optDouble(\"price\")" not in remote_client
+     and "o.optString(\"currency\", \"NGN\")" not in remote_client),
+    ("verified order receipts validate identity, signature, item money and reconciled totals before UI exposure",
+     "validateMarketplaceOrderReceipt(receipt)" in receipt
+     and "marketplaceReceiptAmountsMatch(lineSubtotal, expectedSubtotal)" in receipt
+     and "marketplaceReceiptAmountsMatch(marketplaceFee, buyerFee + sellerFee)" in receipt
+     and "marketplaceReceiptAmountsMatch(buyerTotal, subtotal + delivery + buyerFee - discount)" in receipt
+     and "marketplaceRequiredReceiptAmount(receipt.opt(\"buyerTotal\"))" in receipt
+     and "signatureAlgorithm" in receipt and "?signature=$signature" in receipt),
+    ("combined checkout receipts validate every item and reconcile all aggregate totals before UI exposure",
+     "validateMarketplaceCheckoutReceipt(receipt)" in receipt
+     and "items.length() !in 1..20" in receipt
+     and "marketplaceReceiptAmountsMatch(subtotal, sumSubtotal)" in receipt
+     and "marketplaceReceiptAmountsMatch(delivery, sumDelivery)" in receipt
+     and "marketplaceReceiptAmountsMatch(marketplaceFee, sumMarketplaceFee)" in receipt
+     and "marketplaceReceiptAmountsMatch(buyerTotal, sumBuyerTotal)" in receipt),
+])
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
