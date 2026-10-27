@@ -37,7 +37,12 @@ checks = [
         and '"authenticated-marketplace.xml"' in navigation
         and "def wait_for_marketplace_settled(timeout: float = 20.0)" in navigation
         and "wait_for_marketplace_settled(timeout=20.0)" in navigation
-        and "Marketplace discovery remained in loading state after 20 seconds" in navigation,
+        and "Marketplace discovery remained in loading state after 20 seconds" in navigation
+        and "def wait_for_my_shop_section_settled(slug: str, timeout: float = 20.0)" in navigation
+        and 'wait_for_my_shop_section_settled("overview", timeout=20.0)' in navigation
+        and "section_xml, section_settled = wait_for_my_shop_section_settled(slug, timeout=20.0)" in navigation
+        and "My Shop overview remained loading after 20 seconds" in navigation
+        and "remained in a loading state after 20 seconds; the screenshot is retained for diagnosis." in navigation,
     ),
     (
         "product details require an actual clickable card carrying a displayed NGN/USD price",

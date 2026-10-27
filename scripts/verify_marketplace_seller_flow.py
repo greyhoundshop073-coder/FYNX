@@ -129,6 +129,25 @@ checks = [
     ("My Shop keeps seller-order review in Orders and driver assignments in Delivery & drivers", 'if (activeSection == "Orders")' in seller_center and "FynxMarketplaceSellerOrders(context = context" in seller_center and 'if (activeSection == "Delivery & drivers")' in seller_center and "showDriverAssignments = true" in seller_center),
     ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Recent earnings history (latest 100; showing 20)"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
     ("My Shop earnings use one authenticated seller-scoped summary query rather than per-order settlement requests", 'app.get(\'/api/marketplace/settlement/seller/summary\', auth' in settlement_routes and 'WHERE o.seller_id = $1' in settlement_routes and '"/api/marketplace/settlement/seller/summary"' in seller_center and 'settlements' in seller_center and '"/api/marketplace/settlement/order/$orderId"' not in seller_center and "payoutStatus: String(row.payout_status || row.funds || 'UNKNOWN')" in settlement_routes and 'moneyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }' in seller_center),
+    ("My Shop fails closed on missing or malformed payout balances, amounts, and currency instead of defaulting to zero",
+     all(fragment in seller_center for fragment in (
+         "marketplaceRequiredCurrency(row.opt(\"currency\"))",
+         "marketplaceRequiredBalance(row.opt(\"protectedFunds\"))",
+         "marketplaceRequiredBalance(row.opt(\"availableForPayout\"))",
+         "marketplaceRequiredBalance(row.opt(\"payoutPending\"))",
+         "marketplaceRequiredBalance(row.opt(\"paidOut\"))",
+         "marketplaceRequiredAmount(row.opt(\"sellerNetAmount\"))",
+         "marketplaceRequiredBalance(row.opt(\"marketplaceFee\"))",
+     ))
+     and all(fragment in support for fragment in (
+         "internal fun marketplaceRequiredAmount(value: Any?): Double",
+         "internal fun marketplaceRequiredBalance(value: Any?): Double",
+         "internal fun marketplaceRequiredCurrency(value: Any?): String",
+         "if (!amount.isFinite())",
+         "amount < 0.0",
+     ))
+     and 'row.optDouble("availableForPayout", 0.0)' not in seller_center
+     and 'row.optDouble("sellerNetAmount", 0.0)' not in seller_center),
     ("My Shop hides current payout totals while refreshing and clears previous totals after a failed earnings request", "if (!moneyLoading && moneyError == null) {\n                        currencies.forEach { currency ->" in seller_center and "Checking current balances…" in seller_center and "Current balances are hidden until refresh succeeds." in seller_center and "moneyRecords = emptyList()\n                moneyTotals = emptyMap()\n                moneyTotalsFromBackend = false" in seller_center),
     ("My Shop earnings history distinguishes a failed empty load from a genuine empty history and offers retry", 'moneyError?.let { message ->' in seller_center and 'TextButton(onClick = { loadMoney() }, enabled = !moneyLoading)' in seller_center and 'Text("Retry earnings")' in seller_center and "moneyRecords.isEmpty() && moneyError == null" in seller_center),
 
@@ -172,9 +191,9 @@ checks.extend([
 ])
 
 checks.extend([
-    ("My Shop refresh starts earnings loading immediately and never waits on inventory/profile/payout before hiding old figures", 'error = null\n            shopLoading = true\n            shopError = null\n            accountLoading = true\n            accountMessage = null\n            // Refresh earnings immediately so old amounts/history are hidden during the other requests.\n            loadMoney()\n\n            val inventoryResult = FynxMarketplaceClient.myListings(context)' in seller_center and 'accountLoading = false\n            loading = false\n            loadMoney()' not in seller_center),
+    ("My Shop inventory, profile and payout refreshes are independent and each drops stale responses", 'scope.launch {\n            val inventoryResult = runCatching { FynxMarketplaceClient.myListings(context).getOrThrow() }' in seller_center and 'scope.launch {\n            val shopResult = runCatching {\n                val raw = FynxBackendClient.get(context, "/api/marketplace/my-shop").getOrThrow()' in seller_center and 'scope.launch {\n            val payoutResult = runCatching {\n                val raw = FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account").getOrThrow()' in seller_center and seller_center.count("if (requestGeneration != refreshGeneration) return@launch") >= 3 and "loading = false" in seller_center and "shopLoading = false" in seller_center and "accountLoading = false" in seller_center and "loadMoney()" in seller_center),
     ("My Shop refresh rejects stale overlapping inventory/profile/payout responses", "var refreshGeneration by remember { mutableIntStateOf(0) }" in seller_center and "val requestGeneration = ++refreshGeneration" in seller_center and seller_center.count("if (requestGeneration != refreshGeneration) return@launch") >= 3),
-    ("My Shop profile and payout GET responses are parsed inside Result.mapCatching", 'FynxBackendClient.get(context, "/api/marketplace/my-shop")\n                .mapCatching { raw ->' in seller_center and 'FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account")\n                .mapCatching { raw ->' in seller_center),
+    ("My Shop profile and payout GET responses are parsed inside exception-safe result boundaries", ('FynxBackendClient.get(context, "/api/marketplace/my-shop")\n                .mapCatching { raw ->' in seller_center or 'val raw = FynxBackendClient.get(context, "/api/marketplace/my-shop").getOrThrow()' in seller_center) and ('FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account")\n                .mapCatching { raw ->' in seller_center or 'val raw = FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account").getOrThrow()' in seller_center) and 'val shopResult = runCatching {' in seller_center and 'val payoutResult = runCatching {' in seller_center),
     ("failed inventory refresh clears old listing rows and labels the overview count unavailable", "Inventory is not current. Retry refresh before relying on listing availability." in seller_center and 'listings = emptyList()\n                    archivedListings = emptyList()' in seller_center and 'Listing count unavailable until refresh succeeds' in seller_center),
     ("failed or malformed payout-account refresh clears previous account and verification state", "payoutAccounts = emptyList()" in seller_center and "payoutAccount = null" in seller_center and 'accountMessage = marketplaceSafeError(failure, "Payout account status could not load.")' in seller_center),
     ("My Shop refresh button is disabled while the refresh is active", 'IconButton(onClick = { refresh() }, enabled = !loading) { Icon(Icons.Default.Refresh, "Refresh My Shop") }' in seller_center),

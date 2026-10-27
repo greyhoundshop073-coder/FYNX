@@ -455,6 +455,36 @@ def wait_for_marketplace_settled(timeout: float = 20.0) -> tuple[str, str]:
     return latest, "loading timeout"
 
 
+def wait_for_my_shop_section_settled(slug: str, timeout: float = 20.0) -> tuple[str, bool]:
+    """Wait for one real My Shop section to finish loading before taking a screenshot."""
+    expected_markers = {
+        "overview": ["Your shop at a glance"],
+        "profile": ["Shop identity"],
+        "listings": ["Could not load your listings.", "Retry loading listings", "Your listings", "You have no active listings yet"],
+        "orders": ["Seller orders", "No buyer orders yet.", "Seller orders could not load."],
+        "delivery-drivers": ["Manage driver assignments and delivery coordination separately from order review and payout settings."],
+        "earnings-payouts": ["Marketplace earnings"],
+    }
+    deadline = time.monotonic() + timeout
+    latest = ""
+    while time.monotonic() < deadline:
+        latest = dump_ui(f"authenticated-marketplace-my-shop-{slug}-settled.xml")
+        if latest and any(find_control(latest, [marker]) for marker in expected_markers.get(slug, [])):
+            visible_progress = any(
+                node.attrib.get("class") == "android.widget.ProgressBar"
+                and node.attrib.get("visible-to-user", "true").lower() != "false"
+                for node in nodes(latest)
+            )
+            overview_waiting = slug == "overview" and any(
+                marker in latest
+                for marker in ("Loading listings", "Checking recent earnings", "Refreshing your shop information")
+            )
+            earnings_waiting = slug == "earnings-payouts" and "Checking current balances" in latest
+            if not visible_progress and not overview_waiting and not earnings_waiting:
+                return latest, True
+        time.sleep(0.5)
+    return latest, False
+
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
     base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
@@ -814,8 +844,15 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             ["Your shop at a glance", "Manage your storefront", "Shop profile"]
         )
         if shop_xml:
-            report.append("- PASS: captured the actual private My Shop overview.")
-            (ROOT/"authenticated-marketplace-my-shop-overview.xml").write_text(shop_xml+"\n", encoding="utf-8")
+            shop_xml, overview_settled = wait_for_my_shop_section_settled("overview", timeout=20.0)
+            if shop_xml:
+                screenshot("authenticated-marketplace-my-shop-overview.png")
+                (ROOT/"authenticated-marketplace-my-shop-overview.xml").write_text(shop_xml+"\n", encoding="utf-8")
+            if overview_settled:
+                report.append("- PASS: captured the actual private My Shop overview after all overview loading indicators settled.")
+            else:
+                report.append("- FAIL: My Shop overview remained in a loading state after 20 seconds; the screenshot is retained for diagnosis.")
+                FAILURES.append("My Shop overview remained loading after 20 seconds")
 
             shop_sections = [
                 ("profile", "Shop profile", ["Shop identity"]),
@@ -845,9 +882,16 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                     current_shop_xml, [label], "marketplace-my-shop-"+slug, expected
                 )
                 if section_xml:
-                    report.append("- PASS: captured My Shop "+label+" section.")
-                    (ROOT/("authenticated-marketplace-my-shop-"+slug+".xml")).write_text(section_xml+"\n", encoding="utf-8")
-                    current_shop_xml = section_xml
+                    section_xml, section_settled = wait_for_my_shop_section_settled(slug, timeout=20.0)
+                    if section_xml:
+                        screenshot("authenticated-marketplace-my-shop-"+slug+".png")
+                        (ROOT/("authenticated-marketplace-my-shop-"+slug+".xml")).write_text(section_xml+"\n", encoding="utf-8")
+                        current_shop_xml = section_xml
+                    if section_settled:
+                        report.append("- PASS: captured My Shop "+label+" section after its loading indicators settled.")
+                    else:
+                        report.append("- FAIL: My Shop "+label+" remained in a loading state after 20 seconds; the screenshot is retained for diagnosis.")
+                        FAILURES.append("My Shop "+label+" remained loading after 20 seconds")
                 else:
                     report.append("- BLOCKED: My Shop "+label+" content markers were not confirmed.")
                     current_shop_xml = dump_ui("marketplace-my-shop-"+slug+"-after-attempt.xml") or current_shop_xml
