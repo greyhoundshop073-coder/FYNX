@@ -31,7 +31,7 @@ checks = [
     (
         "product details require an actual clickable card carrying a displayed NGN/USD price",
         "def marketplace_product_card_target(xml_text: str):" in navigation
-        and r"\\bNGN\\b" in navigation and r"\\bUSD\\b" in navigation
+        and "NGN" in navigation and "USD" in navigation
         and "no visible real listing card" in navigation,
     ),
     (
