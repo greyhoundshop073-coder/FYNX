@@ -300,7 +300,8 @@ internal suspend fun requestMarketplaceCheckoutQuote(
             expectedListingId = listing.id,
             expectedCurrency = listing.currency,
             expectedQuantity = quantity,
-            expectedFulfillmentMethod = method
+            expectedFulfillmentMethod = method,
+            expectedQuote = quote
         )
     }
 }
@@ -310,7 +311,8 @@ internal fun parseProtectedMarketplaceCheckoutOrderResponse(
     expectedListingId: String,
     expectedCurrency: String,
     expectedQuantity: Int,
-    expectedFulfillmentMethod: String
+    expectedFulfillmentMethod: String,
+    expectedQuote: FynxMarketplaceCheckoutQuote? = null
 ): FynxRemoteSocialClient.MarketplaceOrder {
     val order = JSONObject(raw).optJSONObject("order")
         ?: throw IllegalStateException("Protected checkout response was incomplete.")
@@ -375,6 +377,21 @@ internal fun parseProtectedMarketplaceCheckoutOrderResponse(
     val expectedTotal = Math.round((productSubtotal + deliveryFee + marketplaceFeeBuyer - discountAmount) * 100.0) / 100.0
     if (kotlin.math.abs(totalAmount - expectedTotal) > 0.02) {
         throw IllegalStateException("Protected order total does not match its fee breakdown. Do not continue to payment.")
+    }
+    expectedQuote?.let { reviewed ->
+        fun matches(actual: Double, expected: Double): Boolean =
+            kotlin.math.abs(actual - expected) <= 0.02
+        if (!matches(unitPrice, reviewed.unitPrice) ||
+            !matches(productSubtotal, reviewed.subtotal) ||
+            !matches(deliveryFee, reviewed.deliveryFee) ||
+            !matches(marketplaceFee, reviewed.marketplaceFee) ||
+            !matches(marketplaceFeeBuyer, reviewed.marketplaceFeeBuyer) ||
+            !matches(marketplaceFeeSeller, reviewed.marketplaceFee - reviewed.marketplaceFeeBuyer) ||
+            !matches(discountAmount, reviewed.discountAmount) ||
+            !matches(totalAmount, reviewed.total)
+        ) {
+            throw IllegalStateException("The final order total changed after review. No payment was started; review the exact total again.")
+        }
     }
 
     val status = requiredText("status").uppercase(Locale.US)

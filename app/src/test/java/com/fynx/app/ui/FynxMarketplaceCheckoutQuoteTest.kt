@@ -186,4 +186,29 @@ class FynxMarketplaceCheckoutQuoteTest {
         assertInvalidOrder(validOrder { it.put("deliveryFee", -1.0) })
     }
 
+    @Test
+    fun protectedOrderRejectsValidButRepricedResponse() {
+        val reviewedQuote = parse(validQuote())
+        val repricedOrder = validOrder {
+            it.put("unitPrice", 11.0)
+                .put("productSubtotal", 22.0)
+                .put("marketplaceFee", 1.1)
+                .put("marketplaceFeeBuyer", 0.55)
+                .put("marketplaceFeeSeller", 0.55)
+                .put("buyerTotal", 22.55)
+                .put("totalAmount", 22.55)
+        }
+        val result = runCatching {
+            parseProtectedMarketplaceCheckoutOrderResponse(
+                raw = repricedOrder,
+                expectedListingId = "42",
+                expectedCurrency = "NGN",
+                expectedQuantity = 2,
+                expectedFulfillmentMethod = "PICKUP",
+                expectedQuote = reviewedQuote
+            )
+        }
+        assertTrue("A repriced order must not pass to payment after the buyer reviewed an earlier amount.", result.isFailure)
+    }
+
 }

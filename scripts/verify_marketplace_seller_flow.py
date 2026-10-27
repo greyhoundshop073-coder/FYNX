@@ -194,6 +194,13 @@ checks.extend([
      and 'createMultiOrder(context,lines(),q)' in marketplace),
 ])
 
+checks.extend([
+    ("single-item order rejects price drift from the reviewed quote before payment",
+     "expectedQuote: FynxMarketplaceCheckoutQuote? = null" in checkout
+     and "expectedQuote = quote" in checkout
+     and "No payment was started; review the exact total again." in checkout),
+])
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
