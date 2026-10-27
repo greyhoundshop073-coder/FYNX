@@ -145,7 +145,7 @@ All Android Marketplace changes must land in the canonical integration branch ab
 
 ## P5 — Fail-closed seller-order refresh and financial field validation
 
-**Starting canonical SHA:** `1f2a06b65545ef327dad78eb9bbb622daa69a5`
+**Starting canonical SHA:** `1f2a06b65545ef327dad78ebde9bbb622daa69a5`
 **Feature branch:** `fix/marketplace-seller-orders-fail-closed-20261027`
 **Scope:** Marketplace seller-order Android UI and the existing Marketplace source-contract verifier only. No backend, database, authentication, shared network configuration, Avatar/Profile, Chat/Groups, or Status/Story files are changed.
 
