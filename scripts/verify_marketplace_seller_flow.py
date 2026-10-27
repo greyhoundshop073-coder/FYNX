@@ -231,6 +231,9 @@ checks.extend([
      "val selectedChipColors = fynxMarketplaceSelectedChipColors()" in marketplace
      and marketplace.count("colors = selectedChipColors") >= 3
      and "private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 15_000L" in marketplace),
+    ("multi-product checkout Delivery and Pickup selections keep Marketplace cobalt colors",
+     'label={Text("Delivery")},enabled=!busy,colors=fynxMarketplaceSelectedChipColors()' in marketplace
+     and 'label={Text("Pickup")},enabled=!busy,colors=fynxMarketplaceSelectedChipColors()' in marketplace),
     ("My Shop selected section tab scrolls fully into view on narrow screens",
      "val shopSectionsScrollState = rememberLazyListState()" in seller_center
      and "LaunchedEffect(activeSection)" in seller_center
