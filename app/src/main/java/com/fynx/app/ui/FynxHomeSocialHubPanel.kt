@@ -946,6 +946,8 @@ fun FynxHomeSocialHubPanel(
                 Box(Modifier.fillMaxSize()) {
                     FynxCameraCapturePanel(
                         fastCapture = showFastCamera,
+                        initialMusic = selectedCatalogueMusic,
+                        onMusicSelected = { track -> selectedCatalogueMusic = track; musicPlaying = false; musicPreviewId = null },
                         onCaptured = { uri, type ->
                             val nextUris = (capturedUris + uri).distinct().take(4)
                             capturedUris = nextUris

@@ -319,7 +319,9 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                         onCaptured = { uri, type -> openCapturedStatus(uri, type) },
                         initialMode = cameraInitialMode,
                         onDismiss = { cameraOpen = false },
-                        statusCapture = true
+                        statusCapture = true,
+                        initialMusic = selectedStatusMusic,
+                        onMusicSelected = { track -> selectedStatusMusic = track; statusMusicPreviewId = null; statusMusicError = null }
                     )
                 }
             }

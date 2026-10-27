@@ -10,6 +10,35 @@ import org.junit.Test
 /** Regression guards for the existing camera/media capture contract. */
 class CameraMediaReliabilityTest {
     @Test
+    fun regularVideoDurationOptionsAre15SecondsOneMinuteThreeMinutesAndTenMinutes() {
+        assertEquals(listOf(15_000L, 60_000L, 180_000L, 600_000L), FynxCameraRecordingDuration.videoOptions.map { it.first })
+        assertEquals(listOf("15s", "60s", "3m", "10m"), FynxCameraRecordingDuration.videoOptions.map { it.second })
+    }
+
+    @Test
+    fun regularVideoDurationDefaultsSafelyForUnsupportedSelections() {
+        assertEquals(FynxCameraRecordingDuration.SIXTY_SECONDS_MS,
+            FynxCameraRecordingDuration.maximumDurationMs(false, false, CameraMode.VIDEO, 7_000L))
+    }
+
+    @Test
+    fun statusCaptureKeepsExistingNinetySecondMaximum() {
+        assertEquals(FYNX_STATUS_MAX_VIDEO_DURATION_MS,
+            FynxCameraRecordingDuration.maximumDurationMs(false, true, CameraMode.VIDEO, FynxCameraRecordingDuration.TEN_MINUTES_MS))
+    }
+
+    @Test
+    fun videoNotesRemainLimitedToSixtySeconds() {
+        assertEquals(FynxCameraRecordingDuration.SIXTY_SECONDS_MS,
+            FynxCameraRecordingDuration.maximumDurationMs(true, false, CameraMode.VIDEO, FynxCameraRecordingDuration.TEN_MINUTES_MS))
+    }
+
+    @Test
+    fun photoModeHasNoVideoDurationLimit() {
+        assertEquals(null, FynxCameraRecordingDuration.maximumDurationMs(false, false, CameraMode.PHOTO, FynxCameraRecordingDuration.SIXTY_SECONDS_MS))
+    }
+
+    @Test
     fun cameraModesRemainPhotoAndVideo() {
         assertEquals(listOf(CameraMode.PHOTO, CameraMode.VIDEO), CameraMode.values().toList())
     }

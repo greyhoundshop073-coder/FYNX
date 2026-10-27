@@ -55,10 +55,18 @@ checks = {
     "every shared camera caller leaves system-inset management to CameraX panel": all(not camera_parent_has_duplicate_insets(content) for content in camera_parent_sources.values()),
     "all shared-camera dialogs use edge-to-edge window fitting": all("decorFitsSystemWindows = false" in content for content in camera_parent_sources.values()),
     "video-edit unit regression tests are present": "videoEditRangeIsClampedToValidMinimumAndSourceBounds" in unit_tests and "videoEditRangeClampsNegativeAndOverlongSelections" in unit_tests,
-    "capture screen has a dedicated studio header with dismiss, lens, flash and grid actions": '\"FYNX CAMERA\"' in camera and '\"Close camera\"' in camera and '\"Switch front/back camera\"' in camera and '\"Turn flash on\"' in camera and '\"Grid ✓\"' in camera,
+    "capture screen exposes close, add sound and the right-side control rail": '"FYNX CAMERA"' in camera and '"Close camera"' in camera and '"Add sound"' in camera and 'title = "Flash"' in camera and 'title = "Timer"' in camera and 'title = "Grid"' in camera and 'title = "Effects"' in camera,
     "capture screen uses a rounded dark studio tray": "RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)" in camera and "Color(0xE6111218)" in camera and '\"PHOTO STUDIO\"' in camera and '\"VIDEO STUDIO\"' in camera,
     "photo and video mode chips remain in the camera capture path": camera.count('selected = mode == CameraMode.PHOTO') >= 1 and camera.count('selected = mode == CameraMode.VIDEO') >= 1 and "FilledIconButton(" in camera,
     "advanced exposure and timer controls are expandable and functional": "showProControls" in camera and '\"Exposure\"' in camera and '\"Timer\"' in camera and "cameraControl?.setExposureCompensationIndex(exposure)" in camera,
+    "regular video duration selector has four real limits and a hard-stop guard": "FynxCameraRecordingDuration.videoOptions" in camera and '"15s"' in camera and '"60s"' in camera and '"3m"' in camera and '"10m"' in camera and "maximumDurationMs" in camera and "active.stop()" in camera,
+    "Status duration and upload-size caps remain enforced on recording and gallery import": "FYNX_STATUS_MAX_VIDEO_DURATION_MS" in camera and "FYNX_STATUS_MAX_VIDEO_BYTES" in camera and "Status videos must be no longer than 90 seconds." in camera,
+    "camera Gallery imports photo and video into the local editor": 'galleryPicker.launch(arrayOf("image/*", "video/*"))' in camera and "normalizeImportedPhotoToJpeg(file)" in camera and "pendingUri = Uri.fromFile(file)" in camera,
+    "Add sound reads and previews published FYNX catalogue tracks": "FynxMusicCatalogueClient.listPublished(context, cameraMusicSearch)" in camera and '"/api/social/music/catalogue/"' in camera and "FynxRemoteAudio(" in camera and "onMusicSelected(track)" in camera,
+    "photo looks apply real bitmap filters to captured media": "captureStyleFilter" in camera and "LaunchedEffect(pendingUri, pendingType, captureStyleFilter)" in camera and "applyFilterToPhoto(captureStyleFilter, 1f)" in camera,
+    "camera controls persist without hiding the shutter after five seconds": "FynxCameraRailAction(" in camera and "showCaptureControls, pendingUri, recording, cameraControl, hasCamera" not in camera,
+    "Home composer receives selected camera music": "initialMusic = selectedCatalogueMusic" in camera_parent_sources["Home"] and "onMusicSelected = { track -> selectedCatalogueMusic = track" in camera_parent_sources["Home"],
+    "Status composer receives selected camera music": "initialMusic = selectedStatusMusic" in camera_parent_sources["Status hub"] and "onMusicSelected = { track -> selectedStatusMusic = track" in camera_parent_sources["Status hub"],
 
 }
 caller_files = [
