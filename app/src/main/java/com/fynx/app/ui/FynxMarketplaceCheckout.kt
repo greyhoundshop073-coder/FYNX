@@ -300,8 +300,7 @@ internal suspend fun requestMarketplaceCheckoutQuote(
             expectedListingId = listing.id,
             expectedCurrency = listing.currency,
             expectedQuantity = quantity,
-            expectedFulfillmentMethod = method,
-            expectedQuote = expectedQuote
+            expectedFulfillmentMethod = method
         )
     }
 }
@@ -453,7 +452,8 @@ internal suspend fun createProtectedMarketplaceCheckoutOrder(
             expectedListingId = listing.id,
             expectedCurrency = listing.currency,
             expectedQuantity = quantity,
-            expectedFulfillmentMethod = method
+            expectedFulfillmentMethod = method,
+            expectedQuote = expectedQuote
         )
     }
 }
