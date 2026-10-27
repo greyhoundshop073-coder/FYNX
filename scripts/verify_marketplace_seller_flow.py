@@ -211,6 +211,16 @@ checks.extend([
 ])
 
 checks.extend([
+    ("Marketplace sell-form category, condition and currency chips use the local cobalt palette",
+     "val selectedChipColors = fynxMarketplaceSelectedChipColors()" in marketplace
+     and marketplace.count("colors = selectedChipColors") >= 3
+     and "private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 15_000L" in marketplace),
+    ("My Shop selected section tab scrolls fully into view on narrow screens",
+     "val shopSectionsScrollState = rememberLazyListState()" in seller_center
+     and "LaunchedEffect(activeSection)" in seller_center
+     and "shopSectionsScrollState.animateScrollToItem(selectedIndex)" in seller_center
+     and "LazyRow(" in seller_center
+     and "itemsIndexed(shopSections, key = { _, section -> section })" in seller_center),
     ("My Shop overview avoids showing zero inventory/earnings while requests are still loading or have failed",
      'val listingSummary = when {' in seller_center
      and 'loading -> "Loading listings…"' in seller_center

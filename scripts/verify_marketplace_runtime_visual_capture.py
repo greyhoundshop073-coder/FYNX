@@ -34,7 +34,10 @@ checks = [
         "real Marketplace screenshot and UI hierarchy are captured after destination marker verification",
         'tap_control(\n        xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]' in navigation
         and 'screenshot("authenticated-marketplace-product-detail.png")' in navigation
-        and '"authenticated-marketplace.xml"' in navigation,
+        and '"authenticated-marketplace.xml"' in navigation
+        and "def wait_for_marketplace_settled(timeout: float = 20.0)" in navigation
+        and "wait_for_marketplace_settled(timeout=20.0)" in navigation
+        and "Marketplace discovery remained in loading state after 20 seconds" in navigation,
     ),
     (
         "product details require an actual clickable card carrying a displayed NGN/USD price",

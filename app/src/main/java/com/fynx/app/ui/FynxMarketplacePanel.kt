@@ -68,9 +68,8 @@ import org.json.JSONObject
 import java.util.Locale
 import java.util.UUID
 
-// Bound the visible listing wait so Marketplace always reaches its retry/error state before the runtime watchdog (75s).
-// The backend client may retry slow GETs, but the UI must not remain in an endless loading state.
-private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 60_000L
+// Keep a stalled Marketplace request from trapping users behind a spinner; retry remains available after timeout.
+private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 15_000L
 
 internal fun advanceMarketplaceListingsOffset(currentOffset: Int, requestedLimit: Int): Int =
     currentOffset + requestedLimit.coerceAtLeast(1)
@@ -1300,6 +1299,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             }
         } else sellerLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
+    val selectedChipColors = fynxMarketplaceSelectedChipColors()
     val listingDescription = remember(desc, category, brand, model, size, color, material, dimensions, warranty, vehicleYear, mileage, beautyDetails, serviceDetails, generalDetails) {
         val specifications = when (category) {
             "Electronics" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty)
@@ -1326,12 +1326,12 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("1. Product basics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(title, { title = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) }, label = { Text("Product name") }, supportingText = { Text("Use a clear name buyers can search for.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Category", style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }, colors = selectedChipColors) } }
         Text("Condition", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }) } }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }, colors = selectedChipColors) } }
         Text("2. Price and stock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("Choose one currency for this listing. Buyers see the price exactly in the selected currency.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FynxMarketplaceSellerFlowSupport.SUPPORTED_CURRENCIES.forEach { code -> FilterChip(selected = currency == code, onClick = { currency = code }, label = { Text(code) }) } }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FynxMarketplaceSellerFlowSupport.SUPPORTED_CURRENCIES.forEach { code -> FilterChip(selected = currency == code, onClick = { currency = code }, label = { Text(code) }, colors = selectedChipColors) } }
         OutlinedTextField(price, { price = it.filter { ch -> ch.isDigit() || ch == '.' }.take(14) }, label = { Text("Price ($currency)") }, supportingText = { Text("Enter a positive amount.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit).take(9) }, label = { Text("Available quantity") }, supportingText = { Text("How many units can you supply?") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("3. Details buyers care about", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)

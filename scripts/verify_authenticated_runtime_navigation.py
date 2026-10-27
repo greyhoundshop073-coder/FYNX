@@ -432,6 +432,29 @@ def marketplace_product_card_target(xml_text: str):
     # Prefer the first visible real-priced card on the page; no test listing is created.
     return min(candidates, key=lambda item: (item[0], item[1]))[2]
 
+def wait_for_marketplace_settled(timeout: float = 20.0) -> tuple[str, str]:
+    """Wait for a real priced listing or an explicit empty/error state before capture."""
+    deadline = time.monotonic() + timeout
+    latest = ""
+    terminal_markers = (
+        "No products yet",
+        "No matching products",
+        "Live listings could not load",
+        "Marketplace is taking longer than expected",
+        "Marketplace could not load",
+    )
+    while time.monotonic() < deadline:
+        latest = dump_ui("authenticated-marketplace-settled.xml")
+        if latest and find_control(latest, ["Search products, sellers or categories"]):
+            if marketplace_product_card_target(latest) is not None:
+                return latest, "real priced listing"
+            for marker in terminal_markers:
+                if find_control(latest, [marker]):
+                    return latest, marker
+        time.sleep(0.5)
+    return latest, "loading timeout"
+
+
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
     base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
@@ -723,8 +746,16 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
     )
     if marketplace_xml:
-        report.append("- PASS: captured the real Marketplace discovery/search/cart surface.")
+        settled_xml, settle_state = wait_for_marketplace_settled(timeout=20.0)
+        if settled_xml:
+            marketplace_xml = settled_xml
+        screenshot("authenticated-marketplace.png")
         (ROOT/"authenticated-marketplace.xml").write_text(marketplace_xml+"\n", encoding="utf-8")
+        if settle_state == "loading timeout":
+            report.append("- FAIL: Marketplace discovery remained in loading state after 20 seconds; the capture is retained for diagnosis.")
+            FAILURES.append("Marketplace discovery remained in loading state after 20 seconds")
+        else:
+            report.append(f"- PASS: captured the real Marketplace surface after it settled to: {settle_state}.")
 
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
