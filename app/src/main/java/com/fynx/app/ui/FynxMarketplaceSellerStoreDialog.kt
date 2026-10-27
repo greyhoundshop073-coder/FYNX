@@ -110,7 +110,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
             .onFailure { failure ->
                 followedByViewer = null
                 followerCount = null
-                followError = failure.message ?: "Follow status could not load."
+                followError = marketplaceSafeError(failure, "Follow status could not load.")
             }
         storeName = listings.firstOrNull()?.storeName.orEmpty()
         FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())
@@ -199,7 +199,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                                     followedByViewer = nowFollowing
                                                 }
                                                 .onFailure { failure ->
-                                                    followError = failure.message ?: "Could not update shop follow status."
+                                                    followError = marketplaceSafeError(failure, "Could not update shop follow status.")
                                                 }
                                             followBusy = false
                                         }

@@ -67,7 +67,7 @@ fun FynxMarketplaceOrderLifecycle(
             scope.launch {
                 val uploaded = FynxProductionMessaging.uploadMedia(context, uri)
                 if (uploaded.isFailure) {
-                    error = uploaded.exceptionOrNull()?.message ?: "Photo upload failed."
+                    error = marketplaceSafeError(uploaded.exceptionOrNull(), "Photo upload failed.")
                 } else {
                     val media = uploaded.getOrThrow()
                     val allowedImageTypes = setOf("image/jpeg", "image/png", "image/webp", "image/gif")
@@ -76,7 +76,7 @@ fun FynxMarketplaceOrderLifecycle(
                     } else {
                         FynxRemoteSocialClient.submitMarketplaceOrderEvidence(context, order.id, "PHOTO", media.id)
                             .onSuccess { error = "Photo evidence uploaded and attached to this order." }
-                            .onFailure { error = it.message ?: "Photo evidence could not be attached." }
+                            .onFailure { error = marketplaceSafeError(it, "Photo evidence could not be attached.") }
                     }
                 }
                 busy = false
@@ -98,7 +98,7 @@ fun FynxMarketplaceOrderLifecycle(
                         .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
                         ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
                 }
-                .onFailure { deliveryDetailsError = it.message ?: "Delivery and driver details could not load." }
+                .onFailure { deliveryDetailsError = marketplaceSafeError(it, "Delivery and driver details could not load.") }
             deliveryDetailsLoading = false
         }
     }
@@ -139,7 +139,7 @@ fun FynxMarketplaceOrderLifecycle(
                                 note.trim().take(500)
                             )
                                 .onSuccess { showFulfillment = false; onChanged() }
-                                .onFailure { error = it.message ?: "Fulfillment could not be saved." }
+                                .onFailure { error = marketplaceSafeError(it, "Fulfillment could not be saved.") }
                             busy = false
                         }
                     }
@@ -238,7 +238,7 @@ fun FynxMarketplaceOrderLifecycle(
                                 disputeDetails.trim()
                             )
                                 .onSuccess { onChanged() }
-                                .onFailure { error = it.message ?: "The dispute could not be opened." }
+                                .onFailure { error = marketplaceSafeError(it, "The dispute could not be opened.") }
                             busy = false
                         }
                     }
@@ -254,7 +254,7 @@ fun FynxMarketplaceOrderLifecycle(
                         scope.launch {
                             FynxRemoteSocialClient.confirmMarketplaceDelivery(context, order.id)
                                 .onSuccess { onChanged() }
-                                .onFailure { error = it.message ?: "Delivery confirmation failed." }
+                                .onFailure { error = marketplaceSafeError(it, "Delivery confirmation failed.") }
                             busy = false
                         }
                     }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Confirm received") }
@@ -264,7 +264,7 @@ fun FynxMarketplaceOrderLifecycle(
                         scope.launch {
                             FynxRemoteSocialClient.completeMarketplaceOrder(context, order.id, true, true)
                                 .onSuccess { onChanged() }
-                                .onFailure { error = it.message ?: "Order could not be completed." }
+                                .onFailure { error = marketplaceSafeError(it, "Order could not be completed.") }
                             busy = false
                         }
                     }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Complete order") }

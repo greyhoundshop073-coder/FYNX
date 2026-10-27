@@ -154,7 +154,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                 moneyRecords = emptyList()
                 moneyTotals = emptyMap()
                 moneyTotalsFromBackend = false
-                moneyError = failure.message ?: "Seller earnings could not load."
+                moneyError = marketplaceSafeError(failure, "Seller earnings could not load.")
             }
             moneyLoading = false
         }
@@ -187,7 +187,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     archivedListings = emptyList()
                     listingActionError = null
                     listingActionMessage = null
-                    error = failure.message ?: "Could not load your listings."
+                    error = marketplaceSafeError(failure, "Could not load your listings.")
                 }
 
             shopName = ""
@@ -213,7 +213,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     shopDescription = ""
                     shopLocation = ""
                     shopContactPhone = ""
-                    shopError = failure.message ?: "Shop profile could not load."
+                    shopError = marketplaceSafeError(failure, "Shop profile could not load.")
                 }
             shopLoading = false
 
@@ -243,7 +243,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     // A failed or malformed response must not leave an old verified account on screen.
                     payoutAccounts = emptyList()
                     payoutAccount = null
-                    accountMessage = failure.message ?: "Payout account status could not load."
+                    accountMessage = marketplaceSafeError(failure, "Payout account status could not load.")
                 }
             accountLoading = false
             loading = false
@@ -375,7 +375,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                         shopError = null
                                     }
                                     .onFailure { failure ->
-                                        shopError = failure.message ?: "Shop profile could not be saved."
+                                        shopError = marketplaceSafeError(failure, "Shop profile could not be saved.")
                                     }
                                 shopSaving = false
                             }
@@ -567,7 +567,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                                 listingActionError = null
                                                 error = null
                                             }
-                                            .onFailure { listingActionError = it.message ?: "Listing could not be removed." }
+                                            .onFailure { listingActionError = marketplaceSafeError(it, "Listing could not be removed.") }
                                         deletingId = null
                                     }
                                 }) { Icon(Icons.Default.Delete, "Remove listing") }
@@ -643,7 +643,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                             listings = listOf(listing.copy(active = true)) + listings.filterNot { it.id == listing.id }
                                             listingActionMessage = "${listing.title} is live in Marketplace again."
                                         }
-                                        .onFailure { listingActionError = it.message ?: "Listing could not be republished." }
+                                        .onFailure { listingActionError = marketplaceSafeError(it, "Listing could not be republished.") }
                                     republishingId = null
                                 }
                             },
@@ -784,7 +784,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     editingListing = null
                                     error = null
                                 }
-                                .onFailure { editError = it.message ?: "Listing could not be updated." }
+                                .onFailure { editError = marketplaceSafeError(it, "Listing could not be updated.") }
                             editSaving = false
                         }
                     }
@@ -841,7 +841,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 accountMessage = "Payout account verified and connected."
                                 bankCode = ""; accountNumber = ""; accountName = ""
                             }
-                            .onFailure { accountMessage = it.message ?: "Payout account could not be verified." }
+                            .onFailure { accountMessage = marketplaceSafeError(it, "Payout account could not be verified.") }
                         accountSaving = false
                     }
                 }) { if (accountSaving) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Verify & save") }

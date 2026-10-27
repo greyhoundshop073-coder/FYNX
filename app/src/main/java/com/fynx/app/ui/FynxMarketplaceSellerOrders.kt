@@ -148,7 +148,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     // assigning drivers, recording custody, or displaying stale order state.
                     orders = emptyList()
                     selected = null
-                    error = failure.message ?: "Seller orders could not load."
+                    error = marketplaceSafeError(failure, "Seller orders could not load.")
                 }
             loading = false
         }
@@ -234,7 +234,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
             settlement = null
             FynxBackendClient.get(context, "/api/marketplace/settlement/order/${order.id}")
                 .onSuccess { raw -> settlement = JSONObject(raw) }
-                .onFailure { settlementError = it.message ?: "Settlement details could not load." }
+                .onFailure { settlementError = marketplaceSafeError(it, "Settlement details could not load.") }
             settlementLoading = false
         }
 
@@ -249,7 +249,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
                         ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
                 }
-                .onFailure { deliveryEvidenceError = it.message ?: "Delivery evidence could not load." }
+                .onFailure { deliveryEvidenceError = marketplaceSafeError(it, "Delivery evidence could not load.") }
         }
 
         fun progress(state: String, note: String = "") {
@@ -263,7 +263,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     selected = null
                     load()
                     onChanged()
-                }.onFailure { message = it.message ?: "Could not update fulfillment progress." }
+                }.onFailure { message = marketplaceSafeError(it, "Could not update fulfillment progress.") }
                 busy = false
             }
         }
@@ -400,7 +400,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                 scope.launch {
                                     FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/driver-assignment", payload.toString())
                                         .onSuccess { selected = null; load(); onChanged() }
-                                        .onFailure { message = it.message ?: "Could not save the delivery driver." }
+                                        .onFailure { message = marketplaceSafeError(it, "Could not save the delivery driver.") }
                                     busy = false
                                 }
                             }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(when {
@@ -426,7 +426,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                     if (photoUri != null) {
                                         val uploaded = FynxProductionMessaging.uploadMedia(context, photoUri)
                                         if (uploaded.isFailure) {
-                                            message = uploaded.exceptionOrNull()?.message ?: "Handover photo upload failed."
+                                            message = marketplaceSafeError(uploaded.exceptionOrNull(), "Handover photo upload failed.")
                                             busy = false
                                             return@launch
                                         }
@@ -443,7 +443,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                     if (photoReference != null) payload.put("photoReference", photoReference)
                                     FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/driver-handover", payload.toString())
                                         .onSuccess { handoverPhotoUri = null; selected = null; load(); onChanged() }
-                                        .onFailure { message = it.message ?: "Could not record driver handover." }
+                                        .onFailure { message = marketplaceSafeError(it, "Could not record driver handover.") }
                                     busy = false
                                 }
                             }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.driverType == "SELLER_LOCAL") "Confirm local driver handover" else "Confirm driver handover") }
@@ -462,7 +462,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         scope.launch {
                             FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/ship", JSONObject().put("trackingReference", tracking.trim()).toString())
                                 .onSuccess { selected = null; load(); onChanged() }
-                                .onFailure { message = it.message ?: "Could not mark order as dispatched." }
+                                .onFailure { message = marketplaceSafeError(it, "Could not mark order as dispatched.") }
                             busy = false
                         }
                     }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark dispatched") }
@@ -488,7 +488,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         scope.launch {
                             FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/pickup-handover", JSONObject().toString())
                                 .onSuccess { selected = null; load(); onChanged() }
-                                .onFailure { message = it.message ?: "Could not confirm pickup handover." }
+                                .onFailure { message = marketplaceSafeError(it, "Could not confirm pickup handover.") }
                             busy = false
                         }
                     }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Confirm pickup handover") }
@@ -497,7 +497,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         scope.launch {
                             FynxBackendClient.postJson(context, "/api/marketplace/settlement/release/${order.id}", JSONObject().toString())
                                 .onSuccess { payoutQueued = true; onChanged() }
-                                .onFailure { message = it.message ?: "Payout is not currently eligible." }
+                                .onFailure { message = marketplaceSafeError(it, "Payout is not currently eligible.") }
                             busy = false
                         }
                     }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (payoutQueued) "Payout queued" else "Request payout") }
@@ -517,7 +517,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         scope.launch {
                             FynxBackendClient.postJson(context, "/api/marketplace/settlement/retry/${order.id}", JSONObject().toString())
                                 .onSuccess { retryQueued = true; onChanged() }
-                                .onFailure { message = it.message ?: "Payout retry is not currently available." }
+                                .onFailure { message = marketplaceSafeError(it, "Payout retry is not currently available.") }
                             busy = false
                         }
                     }) { Text(if (retryQueued) "Retry queued" else "Retry payout") }
@@ -555,7 +555,7 @@ fun FynxMarketplaceDriverAssignmentsDialog(context: Context, onDismiss: () -> Un
             error = null
             FynxRemoteSocialClient.marketplaceDriverAssignments(context)
                 .onSuccess { assignments = it }
-                .onFailure { error = it.message ?: "Driver deliveries could not load. Check that this account is approved." }
+                .onFailure { error = marketplaceSafeError(it, "Driver deliveries could not load. Check that this account is approved.") }
             loading = false
         }
     }
@@ -589,7 +589,7 @@ fun FynxMarketplaceDriverAssignmentsDialog(context: Context, onDismiss: () -> Un
                                             scope.launch {
                                                 FynxRemoteSocialClient.acceptMarketplaceDriverAssignment(context, assignment.orderId)
                                                     .onSuccess { refreshKey++ }
-                                                    .onFailure { error = it.message ?: "Assignment could not be accepted." }
+                                                    .onFailure { error = marketplaceSafeError(it, "Assignment could not be accepted.") }
                                                 busyOrderId = null
                                             }
                                         }
@@ -644,7 +644,7 @@ fun FynxMarketplaceDriverAssignmentsDialog(context: Context, onDismiss: () -> Un
                                                     if (photoUri != null) {
                                                         val uploaded = FynxProductionMessaging.uploadMedia(context, photoUri)
                                                         if (uploaded.isFailure) {
-                                                            error = uploaded.exceptionOrNull()?.message ?: "Delivery photo upload failed."
+                                                            error = marketplaceSafeError(uploaded.exceptionOrNull(), "Delivery photo upload failed.")
                                                             busyOrderId = null
                                                             return@launch
                                                         }
@@ -666,7 +666,7 @@ fun FynxMarketplaceDriverAssignmentsDialog(context: Context, onDismiss: () -> Un
                                                     ).onSuccess {
                                                         deliveryPhotoUris = deliveryPhotoUris - assignment.orderId
                                                         refreshKey++
-                                                    }.onFailure { error = it.message ?: "Delivery evidence could not be recorded." }
+                                                    }.onFailure { error = marketplaceSafeError(it, "Delivery evidence could not be recorded.") }
                                                     busyOrderId = null
                                                 }
                                             }
