@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Guard real Marketplace/My Shop visual evidence capture and failure preservation."""
+from pathlib import Path
+import sys
+
+runner = Path("scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
+navigation = Path("scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
+
+checks = [
+    (
+        "Android CI attempts focused Marketplace/My Shop capture after instrumentation failure",
+        'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
+        and 'else\n  # A red instrumentation test must not suppress Marketplace/My Shop screenshot evidence.' in runner,
+    ),
+    (
+        "visual capture failure cannot turn a red instrumentation run green",
+        'if [ "$VISUAL_EXIT" -ne 0 ]; then' in runner and 'exit "$TEST_EXIT"' in runner,
+    ),
+    (
+        "focused navigation mode is isolated from unrelated Home/Chat/Status journey loops",
+        'if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":' in navigation
+        and 'raise SystemExit(1 if FAILURES else 0)' in navigation,
+    ),
+    (
+        "real Marketplace screenshot and UI hierarchy are captured after destination marker verification",
+        'tap_control(\n        xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]' in navigation
+        and 'screenshot("authenticated-marketplace-product-detail.png")' in navigation
+        and '"authenticated-marketplace.xml"' in navigation,
+    ),
+    (
+        "product details require an actual clickable card carrying a displayed NGN/USD price",
+        "def marketplace_product_card_target(xml_text: str):" in navigation
+        and r"\\bNGN\\b" in navigation and r"\\bUSD\\b" in navigation
+        and "no visible real listing card" in navigation,
+    ),
+    (
+        "product-publishing form is captured without submitting a listing",
+        '["Sell something", "Start selling", "Sell your first product"]' in navigation
+        and "without submitting or creating a listing" in navigation,
+    ),
+    (
+        "My Shop overview and each management section have verified destination markers",
+        '"Your shop at a glance"' in navigation
+        and all(f'"{name}"' in navigation for name in ("Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts"))
+        and "Marketplace earnings" in navigation,
+    ),
+    (
+        "visual report explicitly separates screenshots from live backend proof and forbids fabricated records",
+        "A visible page or screenshot does not prove that a backend request succeeded." in navigation
+        and "No products, orders, payments, earnings, drivers, or seller records are fabricated." in navigation,
+    ),
+    (
+        "the CI workflow executes this visual-capture regression guard",
+        "python3 scripts/verify_marketplace_runtime_visual_capture.py" in workflow,
+    ),
+]
+
+failed = 0
+for name, passed in checks:
+    print(f"{'PASS' if passed else 'FAIL'}: {name}")
+    failed += not passed
+print(f"Marketplace visual-capture contract: {'GREEN' if not failed else 'RED'} ({len(checks)-failed}/{len(checks)})")
+sys.exit(1 if failed else 0)
