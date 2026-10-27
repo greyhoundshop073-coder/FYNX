@@ -83,6 +83,41 @@ class CameraMediaReliabilityTest {
     }
 
     @Test
+    fun squareCropRectProducesOneToOneAspect() {
+        val rect = calculateFynxCameraCropRect(4000, 3000, 1f)!!
+        assertEquals(500, rect.left)
+        assertEquals(0, rect.top)
+        assertEquals(3000, rect.cropWidth)
+        assertEquals(3000, rect.cropHeight)
+    }
+
+    @Test
+    fun portraitCropRectProducesFourByFiveAspect() {
+        val rect = calculateFynxCameraCropRect(4000, 3000, 4f / 5f)!!
+        assertEquals(800, rect.left)
+        assertEquals(0, rect.top)
+        assertEquals(2400, rect.cropWidth)
+        assertEquals(3000, rect.cropHeight)
+    }
+
+    @Test
+    fun landscapeCropRectProducesSixteenByNineAspect() {
+        val rect = calculateFynxCameraCropRect(4000, 3000, 16f / 9f)!!
+        assertEquals(0, rect.left)
+        assertEquals(375, rect.top)
+        assertEquals(4000, rect.cropWidth)
+        assertEquals(2250, rect.cropHeight)
+    }
+
+    @Test
+    fun cropRectRejectsInvalidDimensionsAndAspectRatio() {
+        assertEquals(null, calculateFynxCameraCropRect(0, 3000, 1f))
+        assertEquals(null, calculateFynxCameraCropRect(4000, -1, 1f))
+        assertEquals(null, calculateFynxCameraCropRect(4000, 3000, Float.NaN))
+        assertEquals(null, calculateFynxCameraCropRect(4000, 3000, 0f))
+    }
+
+    @Test
     fun drawingPointMapsToImageCoordinatesInsideFitCenterImage() {
         val point = normalizeFynxCameraDrawPoint(
             x = 150f, y = 300f, canvasWidth = 300f, canvasHeight = 600f,

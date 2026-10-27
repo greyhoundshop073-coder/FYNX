@@ -324,24 +324,35 @@ fun FynxCameraCapturePanel(
             enhancing = false
         }
     }
-    fun cropPhotoSquare() {
+    fun cropPhotoAspect(aspectRatio: Float, presetName: String) {
         if (pendingType != "image" || enhancing) return
+        if (!aspectRatio.isFinite() || aspectRatio <= 0f) {
+            error = "Choose a supported crop aspect ratio."
+            return
+        }
         val current = pendingUri?.path?.let(::File) ?: return
         val original = pendingOriginalUri?.path?.let(::File)
         enhancing = true
+        error = null
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    fun squareCrop(source: File, output: File) {
+                    fun cropToPreset(source: File, output: File) {
                         val bitmap = BitmapFactory.decodeFile(source.absolutePath)
                             ?: error("Unable to decode photo for cropping")
-                        val side = minOf(bitmap.width, bitmap.height)
-                        val left = (bitmap.width - side) / 2
-                        val top = (bitmap.height - side) / 2
-                        val cropped = android.graphics.Bitmap.createBitmap(bitmap, left, top, side, side)
+                        val rect = calculateFynxCameraCropRect(bitmap.width, bitmap.height, aspectRatio)
+                            ?: run {
+                                bitmap.recycle()
+                                error("Photo dimensions do not support this crop.")
+                            }
+                        val cropped = android.graphics.Bitmap.createBitmap(
+                            bitmap, rect.left, rect.top, rect.cropWidth, rect.cropHeight
+                        )
                         try {
                             FileOutputStream(output).use {
-                                check(cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it))
+                                check(cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) {
+                                    "Cropped photo could not be saved"
+                                }
                             }
                         } finally {
                             bitmap.recycle()
@@ -351,9 +362,9 @@ fun FynxCameraCapturePanel(
                     val currentTemp = File(context.cacheDir, "fynx_crop_current_${System.nanoTime()}.jpg")
                     val originalTemp = File(context.cacheDir, "fynx_crop_original_${System.nanoTime()}.jpg")
                     try {
-                        squareCrop(current, currentTemp)
+                        cropToPreset(current, currentTemp)
                         if (original != null && original.absolutePath != current.absolutePath) {
-                            squareCrop(original, originalTemp)
+                            cropToPreset(original, originalTemp)
                         }
                         currentTemp.copyTo(current, overwrite = true)
                         if (original != null && original.absolutePath != current.absolutePath) {
@@ -365,11 +376,20 @@ fun FynxCameraCapturePanel(
                     }
                 }
             }
-            result.onFailure { error = it.message ?: "Photo crop failed" }
-            result.onSuccess { photoGeometryRevision++; drawingStrokes = emptyList(); activeDrawingPoints = emptyList(); drawingMode = false }
+            result.onFailure { error = it.message ?: "Could not apply the $presetName crop." }
+            result.onSuccess {
+                photoGeometryRevision++
+                drawingStrokes = emptyList()
+                activeDrawingPoints = emptyList()
+                drawingMode = false
+                error = null
+            }
             enhancing = false
         }
     }
+    fun cropPhotoSquare() = cropPhotoAspect(1f, "square")
+    fun cropPhotoPortrait() = cropPhotoAspect(4f / 5f, "portrait 4:5")
+    fun cropPhotoLandscape() = cropPhotoAspect(16f / 9f, "landscape 16:9")
     fun renderPhotoOverlays(uri: Uri, textOverlay: String, sticker: String?, drawStrokes: List<FynxCameraDrawStroke>) {
         if (textOverlay.isBlank() && sticker.isNullOrBlank() && drawStrokes.isEmpty()) return
         val destination = uri.path?.let(::File) ?: error("Captured photo is not a local file")
@@ -776,6 +796,14 @@ fun FynxCameraCapturePanel(
                             onClick = { cropPhotoSquare() },
                             enabled = !enhancing
                         ) { Text(if (enhancing) "Processing…" else "Crop square") }
+                        OutlinedButton(
+                            onClick = { cropPhotoPortrait() },
+                            enabled = !enhancing
+                        ) { Text("Portrait 4:5") }
+                        OutlinedButton(
+                            onClick = { cropPhotoLandscape() },
+                            enabled = !enhancing
+                        ) { Text("Landscape 16:9") }
                         OutlinedButton(
                             onClick = { showPhotoTextDialog = true },
                             enabled = !enhancing
@@ -1293,5 +1321,42 @@ private fun DrawScope.drawFynxCameraPhotoPreviewOverlays(
         }
     } finally {
         canvas.restoreToCount(save)
+    }
+}
+
+internal data class FynxCameraCropRect(
+    val left: Int,
+    val top: Int,
+    val cropWidth: Int,
+    val cropHeight: Int
+)
+
+internal fun calculateFynxCameraCropRect(
+    sourceWidth: Int,
+    sourceHeight: Int,
+    targetAspectRatio: Float
+): FynxCameraCropRect? {
+    if (sourceWidth <= 0 || sourceHeight <= 0 || !targetAspectRatio.isFinite() || targetAspectRatio <= 0f) {
+        return null
+    }
+    val sourceAspectRatio = sourceWidth.toFloat() / sourceHeight.toFloat()
+    return if (sourceAspectRatio > targetAspectRatio) {
+        val cropHeight = sourceHeight
+        val cropWidth = (cropHeight * targetAspectRatio).toInt().coerceIn(1, sourceWidth)
+        FynxCameraCropRect(
+            left = (sourceWidth - cropWidth) / 2,
+            top = 0,
+            cropWidth = cropWidth,
+            cropHeight = cropHeight
+        )
+    } else {
+        val cropWidth = sourceWidth
+        val cropHeight = (cropWidth / targetAspectRatio).toInt().coerceIn(1, sourceHeight)
+        FynxCameraCropRect(
+            left = 0,
+            top = (sourceHeight - cropHeight) / 2,
+            cropWidth = cropWidth,
+            cropHeight = cropHeight
+        )
     }
 }
