@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,12 +53,19 @@ internal object FynxMarketplaceReferenceStyle {
     val surface = Color(0xFF0B1A30)
     val surfaceRaised = Color(0xFF10223B)
     val outline = Color(0xFF2B4261)
-    val primary = FynxDesign.AzureBlue
     val primarySoft = Color(0xFF7FB0FF)
     val text = Color(0xFFF3F6FF)
     val textMuted = Color(0xFFA5B6D0)
     val radius = RoundedCornerShape(18.dp)
 }
+
+/** Selected states across Marketplace use the same accessible Azure/pale-blue theme colors. */
+@Composable
+internal fun fynxMarketplaceSelectedChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+)
+
 @Composable
 internal fun MarketplaceReferenceSearchBar(
     value: String,
@@ -116,6 +124,7 @@ internal fun MarketplaceReferenceCategoryRow(
     nearbyLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val selectedChipColors = fynxMarketplaceSelectedChipColors()
     Row(
         modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -123,6 +132,7 @@ internal fun MarketplaceReferenceCategoryRow(
         FilterChip(
             selected = nearbySelected,
             onClick = onNearby,
+            colors = selectedChipColors,
             label = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (nearbyLoading) {
@@ -136,7 +146,12 @@ internal fun MarketplaceReferenceCategoryRow(
             }
         )
         categories.forEach { category ->
-            FilterChip(selected = selected == category, onClick = { onSelect(category) }, label = { Text(category) })
+            FilterChip(
+                selected = selected == category,
+                onClick = { onSelect(category) },
+                label = { Text(category) },
+                colors = selectedChipColors
+            )
         }
     }
 }

@@ -240,7 +240,8 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             androidx.compose.material3.FilterChip(
                                 selected = tab == label,
                                 onClick = { tab = label },
-                                label = { Text(label) }
+                                label = { Text(label) },
+                                colors = fynxMarketplaceSelectedChipColors()
                             )
                         }
                     }

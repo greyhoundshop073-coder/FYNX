@@ -20,16 +20,35 @@ ROOT = Path(__file__).resolve().parents[1]
 design = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt").read_text(encoding="utf-8")
 picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt").read_text(encoding="utf-8")
 guidelines = (ROOT / "docs/FYNX_MASTER_UI_GUIDELINES.md").read_text(encoding="utf-8")
-marketplace_style = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text(encoding="utf-8")
+marketplace_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text(encoding="utf-8")
+marketplace_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
+my_shop = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text(encoding="utf-8")
+marketplace_seller_orders = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt").read_text(encoding="utf-8")
+marketplace_reviews = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReviews.kt").read_text(encoding="utf-8")
+marketplace_checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text(encoding="utf-8")
+marketplace_lifecycle = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text(encoding="utf-8")
+marketplace_store_dialog = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt").read_text(encoding="utf-8")
+app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 
 checks = [
-    ("Marketplace reference components use the shared Azure Blue token instead of a competing hard-coded primary blue", "val primary = FynxDesign.AzureBlue" in marketplace_style and "val primary = Color(0xFF155EEF)" not in marketplace_style),
+    ("Marketplace exposes one shared accessible Azure selected-chip palette and applies it to Nearby/category filters", "internal fun fynxMarketplaceSelectedChipColors()" in marketplace_components and "selectedContainerColor = MaterialTheme.colorScheme.primaryContainer" in marketplace_components and "selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer" in marketplace_components and marketplace_components.count("colors = selectedChipColors") >= 2 and "MarketplaceReferenceCategoryRow(" in marketplace_panel),
+    ("My Shop section, product condition, and payout currency chips reuse the shared Azure selected palette", "val selectedChipColors = fynxMarketplaceSelectedChipColors()" in my_shop and my_shop.count("colors = selectedChipColors") >= 3 and "selected = activeSection == section" in my_shop and "selected = editCondition == condition" in my_shop and "selected = payoutCurrency == currency" in my_shop),
+    ("seller delivery mode chips use shared Azure selected colors", marketplace_seller_orders.count("colors = fynxMarketplaceSelectedChipColors()") >= 2 and 'selected = driverMode == "FYNX_ACCOUNT"' in marketplace_seller_orders and 'selected = driverMode == "SELLER_LOCAL"' in marketplace_seller_orders),
+    ("seller review rating choices use shared Azure selected colors", "colors = fynxMarketplaceSelectedChipColors()" in marketplace_reviews and "selected = rating == value" in marketplace_reviews),
+    ("checkout delivery/pickup selections use shared Azure selected colors without changing quote invalidation", marketplace_checkout.count("colors = fynxMarketplaceSelectedChipColors()") >= 2 and "invalidateQuote()" in marketplace_checkout),
+    ("order delivery/pickup and dispute reasons use shared Azure selected colors", marketplace_lifecycle.count("colors = fynxMarketplaceSelectedChipColors()") >= 3 and "disputeReason == code" in marketplace_lifecycle),
+    ("public storefront Products/About tabs use shared Azure selected colors", "colors = fynxMarketplaceSelectedChipColors()" in marketplace_store_dialog and "selected = tab == label" in marketplace_store_dialog),
+    ("active bottom navigation uses the Azure selected container and contrast-safe on-container foreground", "indicatorColor = MaterialTheme.colorScheme.primaryContainer" in app_shell and "indicatorColor = MaterialTheme.colorScheme.secondaryContainer" not in app_shell and "selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer" in app_shell and "selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer" in app_shell),
+    ("Marketplace reference links and action icons use the shared Material primary token, without a competing local primary token", "Text(action, color = MaterialTheme.colorScheme.primary)" in marketplace_components and "tint = MaterialTheme.colorScheme.primary" in marketplace_components and "val primary =" not in marketplace_components),
     ("default blue accent uses the Azure Blue token and preserves the existing companion and Classic Green", "Blue(FynxDesign.AzureBlue, Color(0xFF3C73BD), FynxDesign.ClassicGreen)" in design),
     ("Azure Blue token is the exact user-approved primary blue", "val AzureBlue = Color(0xFF007FFF)" in design),
     ("legacy Cobalt Blue is not still used as the default primary", "Blue(Color(0xFF0047AB)" not in design),
     ("primary foreground selection uses the WCAG black/white crossover", "effectiveAccent.primary.luminance() > 0.179f" in design and "onPrimary = onAccent" in design),
     ("black foreground on Azure Blue meets WCAG AA for normal text",
      contrast_ratio("#007FFF", "#000000") >= 4.5 and contrast_ratio("#007FFF", "#000000") > contrast_ratio("#007FFF", "#FFFFFF")),
+    ("light-mode selected pale-blue container has WCAG AA text contrast", contrast_ratio("#E8EEFA", "#17202A") >= 4.5),
+    ("dark-mode blue selected container has WCAG AA text contrast", contrast_ratio("#132B49", "#F5F8FF") >= 4.5),
+    ("Charcoal and AMOLED selected containers retain WCAG AA text contrast", contrast_ratio("#37434B", "#F2F5F7") >= 4.5 and contrast_ratio("#1C1C1C", "#FFFFFF") >= 4.5),
     ("success token is the exact Classic Green", "val ClassicGreen = Color(0xFF008000)" in design),
     ("brand error token is the exact Crimson Red", "val CrimsonRed = Color(0xFFDC143C)" in design),
     ("dark mode uses a contrast-safe red for error text", "error = FynxDesign.DarkModeError" in design and "val DarkModeError = Color(0xFFFF7086)" in design),

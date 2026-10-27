@@ -159,7 +159,7 @@ fun FynxMarketplaceOrderLifecycle(
                     Text("Choose the problem that best matches your order. Opening a dispute places protected funds on hold while the case is reviewed.")
                     listOf("ITEM_NOT_RECEIVED" to "Not received", "WRONG_ITEM" to "Wrong item", "DAMAGED" to "Damaged", "NOT_AS_DESCRIBED" to "Not as described", "SUSPECTED_SCAM" to "Suspected scam", "OTHER" to "Other").chunked(2).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            row.forEach { (code, label) -> FilterChip(selected = disputeReason == code, onClick = { disputeReason = code }, label = { Text(label) }, enabled = !busy) }
+                            row.forEach { (code, label) -> FilterChip(selected = disputeReason == code, onClick = { disputeReason = code }, label = { Text(label) }, enabled = !busy, colors = fynxMarketplaceSelectedChipColors()) }
                         }
                     }
                     OutlinedTextField(
@@ -315,8 +315,8 @@ private fun MarketplaceFulfillmentDialog(
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Text("Choose an available fulfillment method. Your protected order remains governed by the existing FYNX order lifecycle.")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (order.deliveryAvailable) FilterChip(method == "DELIVERY", { method = "DELIVERY" }, label = { Text("Delivery") })
-                    if (order.pickupAvailable) FilterChip(method == "PICKUP", { method = "PICKUP" }, label = { Text("Pickup") })
+                    if (order.deliveryAvailable) FilterChip(method == "DELIVERY", { method = "DELIVERY" }, label = { Text("Delivery") }, colors = fynxMarketplaceSelectedChipColors())
+                    if (order.pickupAvailable) FilterChip(method == "PICKUP", { method = "PICKUP" }, label = { Text("Pickup") }, colors = fynxMarketplaceSelectedChipColors())
                 }
                 if (method == "DELIVERY") {
                     OutlinedTextField(name, { name = it.take(120) }, label = { Text("Full name") }, singleLine = true, enabled = !busy)
