@@ -5,7 +5,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Delete
@@ -265,6 +268,12 @@ fun FynxMarketplaceSellerCenterPanel() {
         moneyError != null -> "Recent earnings unavailable until refresh succeeds"
         else -> "${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)"
     }
+    val shopSections = listOf("Overview", "Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts")
+    val shopSectionsScrollState = rememberLazyListState()
+    LaunchedEffect(activeSection) {
+        val selectedIndex = shopSections.indexOf(activeSection)
+        if (selectedIndex >= 0) shopSectionsScrollState.animateScrollToItem(selectedIndex)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(12.dp),
@@ -282,9 +291,19 @@ fun FynxMarketplaceSellerCenterPanel() {
             }
         }
         item {
-            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Overview", "Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts").forEach { section ->
-                    FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section, maxLines = 1) }, colors = selectedChipColors)
+            LazyRow(
+                state = shopSectionsScrollState,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(end = 12.dp)
+            ) {
+                itemsIndexed(shopSections, key = { _, section -> section }) { _, section ->
+                    FilterChip(
+                        selected = activeSection == section,
+                        onClick = { activeSection = section },
+                        label = { Text(section, maxLines = 1) },
+                        colors = selectedChipColors
+                    )
                 }
             }
         }

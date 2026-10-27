@@ -90,7 +90,7 @@ fun FynxMarketplaceReviews(context: Context, orders: List<FynxRemoteSocialClient
                     scope.launch {
                         submitMarketplaceReview(context, order.id, rating, comment)
                             .onSuccess { selected = null; onChanged() }
-                            .onFailure { localError = it.message ?: "Review could not be submitted." }
+                            .onFailure { localError = marketplaceSafeError(it, "Review could not be submitted.") }
                         busy = false
                     }
                 }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Submit review") }

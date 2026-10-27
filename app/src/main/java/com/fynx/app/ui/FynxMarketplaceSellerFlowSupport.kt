@@ -55,6 +55,16 @@ internal fun marketplaceSafeError(error: Throwable?, fallback: String): String {
             normalized.startsWith("http ") ||
             normalized.contains("request_id") ||
             normalized.contains("\"status\":\"error\"") ||
+            normalized.startsWith("java.net.") ||
+            normalized.startsWith("javax.net.") ||
+            normalized.contains("unknownhostexception") ||
+            normalized.contains("sockettimeoutexception") ||
+            normalized.contains("connection reset") ||
+            normalized.contains("failed to connect") ||
+            normalized.contains("unable to resolve host") ||
+            normalized.contains("cleartext communication") ||
+            normalized.startsWith("<html") ||
+            normalized.startsWith("<!doctype html") ||
             (normalized.startsWith("{") && normalized.endsWith("}"))
     return if (isRawTransportResponse) fallback else message.take(240)
 }

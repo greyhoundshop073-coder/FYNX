@@ -16,6 +16,13 @@ remote_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClien
 marketplace_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt").read_text()
 discovery_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDiscoveryClient.kt").read_text()
 order_lifecycle = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text()
+receipt = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReceipt.kt").read_text()
+order_timeline = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderTimeline.kt").read_text()
+marketplace_payments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt").read_text()
+buy_together = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceBuyTogether.kt").read_text()
+seller_manager = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerManager.kt").read_text()
+shipping_settings = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceShippingSettingsCard.kt").read_text()
+marketplace_reviews = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReviews.kt").read_text()
 discovery_routes = (ROOT / "backend/discoveryRoutes.js").read_text()
 social_routes = (ROOT / "backend/socialRoutes.js").read_text()
 marketplace_checkout_route = (ROOT / "backend/marketplaceCheckout.js").read_text()
@@ -204,6 +211,15 @@ checks.extend([
 ])
 
 checks.extend([
+    ("Marketplace share, seller inventory, shipping settings and review errors also sanitize transport details",
+     all("marketplaceSafeError(" in source for source in (buy_together, seller_manager, shipping_settings, marketplace_reviews))
+     and "marketplaceSafeError(it, \"Unable to load your listings.\")" in seller_manager
+     and "marketplaceSafeError(it, \"Shipping settings could not be saved.\")" in shipping_settings
+     and "marketplaceSafeError(it, \"Review could not be submitted.\")" in marketplace_reviews),
+    ("Marketplace receipts, order timelines and payment failures also sanitize transport details",
+     all("marketplaceSafeError(" in source for source in (receipt, order_timeline, marketplace_payments))
+     and "marketplaceSafeError(error, \"Could not start protected payment.\")" in marketplace_payments
+     and "normalized.startsWith(\"java.net.\")" in support),
     ("Marketplace and My Shop sanitize raw HTTP/JSON error bodies before displaying errors",
      "internal fun marketplaceSafeError(error: Throwable?, fallback: String): String" in support
      and "request_id" in support
@@ -211,6 +227,19 @@ checks.extend([
 ])
 
 checks.extend([
+    ("Marketplace sell-form category, condition and currency chips use the local cobalt palette",
+     "val selectedChipColors = fynxMarketplaceSelectedChipColors()" in marketplace
+     and marketplace.count("colors = selectedChipColors") >= 3
+     and "private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 15_000L" in marketplace),
+    ("multi-product checkout Delivery and Pickup selections keep Marketplace cobalt colors",
+     'label={Text("Delivery")},enabled=!busy,colors=fynxMarketplaceSelectedChipColors()' in marketplace
+     and 'label={Text("Pickup")},enabled=!busy,colors=fynxMarketplaceSelectedChipColors()' in marketplace),
+    ("My Shop selected section tab scrolls fully into view on narrow screens",
+     "val shopSectionsScrollState = rememberLazyListState()" in seller_center
+     and "LaunchedEffect(activeSection)" in seller_center
+     and "shopSectionsScrollState.animateScrollToItem(selectedIndex)" in seller_center
+     and "LazyRow(" in seller_center
+     and "itemsIndexed(shopSections, key = { _, section -> section })" in seller_center),
     ("My Shop overview avoids showing zero inventory/earnings while requests are still loading or have failed",
      'val listingSummary = when {' in seller_center
      and 'loading -> "Loading listings…"' in seller_center

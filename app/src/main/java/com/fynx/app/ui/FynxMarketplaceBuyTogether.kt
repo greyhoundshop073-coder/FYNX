@@ -102,7 +102,7 @@ internal fun FynxMarketplaceBuyTogether(
                                                 openExistingGroup(context, group.id)
                                             }
                                             .onFailure {
-                                                message = it.message ?: "The product could not be shared to ${group.name}."
+                                                message = marketplaceSafeError(it, "The product could not be shared to ${group.name}.")
                                                 sendingGroupId = null
                                             }
                                     }
