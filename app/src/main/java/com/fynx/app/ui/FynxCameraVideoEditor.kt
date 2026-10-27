@@ -30,6 +30,21 @@ data class FynxCameraVideoEditRange private constructor(
     }
 }
 
+/** Maps extractor-only sample flags to the distinct flags accepted by MediaMuxer. */
+internal fun toMuxerBufferFlags(extractorFlags: Int): Int {
+    require(extractorFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED == 0) {
+        "Encrypted or DRM-protected video cannot be trimmed in FYNX."
+    }
+    var muxerFlags = 0
+    if (extractorFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
+        muxerFlags = muxerFlags or MediaCodec.BUFFER_FLAG_KEY_FRAME
+    }
+    if (extractorFlags and MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME != 0) {
+        muxerFlags = muxerFlags or MediaCodec.BUFFER_FLAG_PARTIAL_FRAME
+    }
+    return muxerFlags
+}
+
 /** Losslessly trims and/or mutes CameraX MP4 clips by remuxing their original tracks. */
 object FynxCameraVideoEditor {
     private const val DEFAULT_SAMPLE_BUFFER_BYTES = 1 * 1024 * 1024
@@ -112,7 +127,7 @@ object FynxCameraVideoEditor {
                     buffer.clear()
                     val sampleSize = extractor.readSampleData(buffer, 0)
                     if (sampleSize > 0) {
-                        info.set(0, sampleSize, sampleTimeUs - firstPtsUs, flags)
+                        info.set(0, sampleSize, sampleTimeUs - firstPtsUs, toMuxerBufferFlags(flags))
                         activeMuxer.writeSampleData(outputTrack, buffer, info)
                         if (inputTrack == videoInputTrack) copiedVideoSamples++
                     }

@@ -1,5 +1,7 @@
 package com.fynx.app.ui
 
+import android.media.MediaCodec
+import android.media.MediaExtractor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -37,6 +39,18 @@ class CameraMediaReliabilityTest {
     fun blackAndWhiteFilterRemovesSaturation() {
         assertEquals(0f, CameraFilter.BW.saturation, 0f)
         assertFalse(CameraFilter.BW.saturation > 0f)
+    }
+
+    @Test
+    fun extractorSampleFlagsAreMappedToMuxerBufferFlags() {
+        assertEquals(0, toMuxerBufferFlags(0))
+        assertEquals(MediaCodec.BUFFER_FLAG_KEY_FRAME, toMuxerBufferFlags(MediaExtractor.SAMPLE_FLAG_SYNC))
+        assertEquals(MediaCodec.BUFFER_FLAG_PARTIAL_FRAME, toMuxerBufferFlags(MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun videoEditorRejectsEncryptedExtractorSamples() {
+        toMuxerBufferFlags(MediaExtractor.SAMPLE_FLAG_ENCRYPTED)
     }
 
     @Test
