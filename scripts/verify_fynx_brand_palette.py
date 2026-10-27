@@ -22,9 +22,11 @@ picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt").read_
 guidelines = (ROOT / "docs/FYNX_MASTER_UI_GUIDELINES.md").read_text(encoding="utf-8")
 marketplace_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text(encoding="utf-8")
 marketplace_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
+my_shop = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text(encoding="utf-8")
 
 checks = [
     ("live Marketplace Nearby and category chips use shared Azure selected-container and readable foreground tokens", "selectedChipColors = FilterChipDefaults.filterChipColors(" in marketplace_components and "selectedContainerColor = MaterialTheme.colorScheme.primaryContainer" in marketplace_components and "selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer" in marketplace_components and marketplace_components.count("colors = selectedChipColors") >= 2 and "MarketplaceReferenceCategoryRow(" in marketplace_panel),
+    ("My Shop section, product condition, and payout currency chips use Azure selected-container colors", "val selectedChipColors = FilterChipDefaults.filterChipColors(" in my_shop and "selectedContainerColor = MaterialTheme.colorScheme.primaryContainer" in my_shop and "selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer" in my_shop and my_shop.count("colors = selectedChipColors") >= 3 and "selected = activeSection == section" in my_shop and "selected = editCondition == condition" in my_shop and "selected = payoutCurrency == currency" in my_shop),
     ("Marketplace reference links and action icons use the shared Material primary token, without a competing local primary token", "Text(action, color = MaterialTheme.colorScheme.primary)" in marketplace_components and "tint = MaterialTheme.colorScheme.primary" in marketplace_components and "val primary =" not in marketplace_components),
     ("default blue accent uses the Azure Blue token and preserves the existing companion and Classic Green", "Blue(FynxDesign.AzureBlue, Color(0xFF3C73BD), FynxDesign.ClassicGreen)" in design),
     ("Azure Blue token is the exact user-approved primary blue", "val AzureBlue = Color(0xFF007FFF)" in design),
