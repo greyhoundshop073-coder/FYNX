@@ -95,7 +95,7 @@ fun FynxMarketplaceOrderTimeline(
                 events = parsedEvents
                 deliveryEvidence = parsedEvidence
             }.onFailure { error = "Order timeline could not be read." }
-        }.onFailure { error = it.message ?: "Order timeline could not be loaded." }
+        }.onFailure { error = marketplaceSafeError(it, "Order timeline could not be loaded.") }
         loading = false
     }
 

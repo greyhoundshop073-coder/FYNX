@@ -353,7 +353,7 @@ internal fun MarketplaceReceiptAction(context: Context, orderId: String) {
             scope.launch {
                 fetchMarketplaceReceipt(context, orderId)
                     .onSuccess { receipt = it }
-                    .onFailure { error = it.message ?: "Verified receipt is not available yet." }
+                    .onFailure { error = marketplaceSafeError(it, "Verified receipt is not available yet. Please try again.") }
                 loading = false
             }
         },
@@ -382,7 +382,7 @@ internal fun MarketplaceCheckoutReceiptAction(context: Context, checkoutId: Stri
             scope.launch {
                 fetchMarketplaceCheckoutReceipt(context, checkoutId)
                     .onSuccess { receipt = it }
-                    .onFailure { error = it.message ?: "Checkout receipt is not available yet. Please retry." }
+                    .onFailure { error = marketplaceSafeError(it, "Checkout receipt is not available yet. Please retry.") }
                 loading = false
             }
         },
@@ -470,7 +470,7 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
                     createMarketplaceReceiptPdf(context, receipt).onSuccess { file ->
                         shareReceipt(context, file)
                         message = "The signed PDF is ready to share."
-                    }.onFailure { message = it.message ?: "Could not create receipt PDF." }
+                    }.onFailure { message = marketplaceSafeError(it, "Could not create receipt PDF.") }
                     busy = false
                 }
             }) { if (busy) CircularProgressIndicator() else Text("Share PDF") }
@@ -481,8 +481,8 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
                     busy = true
                     scope.launch {
                         createMarketplaceReceiptPdf(context, receipt).onSuccess { file ->
-                            saveReceiptToDownloads(context, file).onSuccess { message = "Saved to Downloads/FYNX Receipts." }.onFailure { message = it.message ?: "Could not save receipt." }
-                        }.onFailure { message = it.message ?: "Could not create receipt PDF." }
+                            saveReceiptToDownloads(context, file).onSuccess { message = "Saved to Downloads/FYNX Receipts." }.onFailure { message = marketplaceSafeError(it, "Could not save receipt to Downloads.") }
+                        }.onFailure { message = marketplaceSafeError(it, "Could not create receipt PDF.") }
                         busy = false
                     }
                 }) { Text("Download PDF") }

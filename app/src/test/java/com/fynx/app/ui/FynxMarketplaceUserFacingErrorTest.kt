@@ -20,6 +20,12 @@ class FynxMarketplaceUserFacingErrorTest {
     }
 
     @Test
+    fun lowLevelNetworkHostDetailsUseTheUserFacingFallback() {
+        val failure = IOException("java.net.UnknownHostException: fynx-backend-testing.up.railway.app")
+        assertEquals("Marketplace could not load.", marketplaceSafeError(failure, "Marketplace could not load."))
+    }
+
+    @Test
     fun usefulDomainValidationMessageIsPreserved() {
         val failure = IllegalArgumentException("Choose delivery or pickup.")
         assertEquals("Choose delivery or pickup.", marketplaceSafeError(failure, "Checkout could not continue."))

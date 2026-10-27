@@ -16,6 +16,9 @@ remote_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClien
 marketplace_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt").read_text()
 discovery_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDiscoveryClient.kt").read_text()
 order_lifecycle = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text()
+receipt = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReceipt.kt").read_text()
+order_timeline = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderTimeline.kt").read_text()
+marketplace_payments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt").read_text()
 discovery_routes = (ROOT / "backend/discoveryRoutes.js").read_text()
 social_routes = (ROOT / "backend/socialRoutes.js").read_text()
 marketplace_checkout_route = (ROOT / "backend/marketplaceCheckout.js").read_text()
@@ -204,6 +207,10 @@ checks.extend([
 ])
 
 checks.extend([
+    ("Marketplace receipts, order timelines and payment failures also sanitize transport details",
+     all("marketplaceSafeError(" in source for source in (receipt, order_timeline, marketplace_payments))
+     and "marketplaceSafeError(error, \"Could not start protected payment.\")" in marketplace_payments
+     and "normalized.startsWith(\"java.net.\")" in support),
     ("Marketplace and My Shop sanitize raw HTTP/JSON error bodies before displaying errors",
      "internal fun marketplaceSafeError(error: Throwable?, fallback: String): String" in support
      and "request_id" in support
