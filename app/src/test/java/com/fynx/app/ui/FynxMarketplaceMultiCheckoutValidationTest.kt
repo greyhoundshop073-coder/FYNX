@@ -114,7 +114,7 @@ class FynxMarketplaceMultiCheckoutValidationTest {
         val checkout = JSONObject()
             .put("id", "550e8400-e29b-41d4-a716-446655440001")
             .put("buyer_id", "buyer-1").put("currency", "NGN").put("status", "PAYMENT_PENDING")
-            .put("subtotal", 50.0).put("delivery_fee", 5.0).put("marketplace_fee", 2.5).put("buyer_total", 56.25)
+            .put("subtotal", 50.0).put("delivery_fee", 5.0).put("marketplace_fee", 1.25).put("buyer_total", 56.25)
         val orders = JSONArray()
             .put(orderFor("11", "550e8400-e29b-41d4-a716-446655440011", 2, 10.0, 20.0, 0.0, 1.0, 0.5, 0.5, 20.5, "PICKUP"))
             .put(orderFor("22", "550e8400-e29b-41d4-a716-446655440022", 1, 30.0, 30.0, 5.0, 1.5, 0.75, 0.75, 35.75, "DELIVERY"))

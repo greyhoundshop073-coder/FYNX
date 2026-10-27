@@ -1713,7 +1713,7 @@ internal fun parseMarketplaceMultiCheckoutOrderResponse(
     val total = amount(checkout, "buyer_total")
     if (!close(subtotal, expectedQuote.subtotal) ||
         !close(deliveryFee, expectedQuote.deliveryFee) ||
-        !close(marketplaceFee, expectedQuote.marketplaceFeeTotal) ||
+        !close(marketplaceFee, expectedQuote.fee) ||
         !close(total, expectedQuote.total) ||
         !close(total, subtotal + deliveryFee + expectedQuote.fee)
     ) {
