@@ -79,7 +79,7 @@ fun FynxMarketplaceShippingSettingsCard(
                     coverage.clear()
                     coverage.addAll(settings.coverage)
                 }
-                .onFailure { error = it.message ?: "Shipping settings could not be loaded." }
+                .onFailure { error = marketplaceSafeError(it, "Shipping settings could not be loaded.") }
             loading = false
         }
     }
@@ -232,7 +232,7 @@ fun FynxMarketplaceShippingSettingsCard(
                             ).onSuccess {
                                 message = "Shipping settings saved."
                             }.onFailure {
-                                error = it.message ?: "Shipping settings could not be saved."
+                                error = marketplaceSafeError(it, "Shipping settings could not be saved.")
                             }
                             saving = false
                         }

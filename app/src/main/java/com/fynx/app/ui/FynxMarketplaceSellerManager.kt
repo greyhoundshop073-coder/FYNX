@@ -32,7 +32,7 @@ fun FynxMarketplaceSellerManager(context: Context, onChanged: () -> Unit) {
             try {
                 FynxRemoteSocialClient.myListings(context)
                     .onSuccess { listings = it }
-                    .onFailure { error = it.message ?: "Unable to load your listings." }
+                    .onFailure { error = marketplaceSafeError(it, "Unable to load your listings.") }
             } finally {
                 loading = false
                 refreshInFlight = false
@@ -91,7 +91,7 @@ fun FynxMarketplaceSellerManager(context: Context, onChanged: () -> Unit) {
                     scope.launch {
                         updateMarketplaceListing(context, listing.id, title, price.toDoubleOrNull() ?: -1.0, quantity.toIntOrNull() ?: -1)
                             .onSuccess { selected = null; load(); onChanged() }
-                            .onFailure { dialogError = it.message ?: "Listing update failed." }
+                            .onFailure { dialogError = marketplaceSafeError(it, "Listing update failed.") }
                         busy = false
                     }
                 }) {
@@ -107,7 +107,7 @@ fun FynxMarketplaceSellerManager(context: Context, onChanged: () -> Unit) {
                         scope.launch {
                             FynxRemoteSocialClient.deleteMarketplaceListing(context, listing.id)
                                 .onSuccess { selected = null; load(); onChanged() }
-                                .onFailure { dialogError = it.message ?: "Listing removal failed." }
+                                .onFailure { dialogError = marketplaceSafeError(it, "Listing removal failed.") }
                             busy = false
                         }
                     }) { Text("Remove") }
