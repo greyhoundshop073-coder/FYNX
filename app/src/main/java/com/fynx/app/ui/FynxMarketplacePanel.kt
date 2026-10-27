@@ -898,6 +898,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     sellerStoreUsername?.let { username ->
         FynxMarketplaceSellerStoreDialog(
             username = username,
+            viewerUsername = currentUsername,
             listings = listings.filter { it.sellerUsername.removePrefix("@").trim().equals(username.removePrefix("@").trim(), ignoreCase = true) },
             reputation = sellerReputations[username.removePrefix("@").trim().lowercase()],
             photoId = sellerPhotoIds[username.removePrefix("@").trim().lowercase()],
