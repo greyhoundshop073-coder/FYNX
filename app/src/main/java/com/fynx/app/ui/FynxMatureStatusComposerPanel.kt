@@ -716,7 +716,8 @@ fun FynxMatureStatusComposerPanel(
             )
         ) {
             Surface(Modifier.fillMaxSize(), color = Color.Black) {
-                Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                // FynxCameraCapturePanel owns its own status/navigation insets; avoid double padding.
+                Box(Modifier.fillMaxSize()) {
                     FynxCameraCapturePanel(
                         onCaptured = { uri, capturedType ->
                             mediaUri = uri
@@ -724,7 +725,8 @@ fun FynxMatureStatusComposerPanel(
                             cameraOpen = false
                             error = null
                         },
-                        onDismiss = { if (!publishing && !recording) cameraOpen = false }
+                        onDismiss = { if (!publishing && !recording) cameraOpen = false },
+                        statusCapture = true
                     )
                 }
             }

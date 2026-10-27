@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ui = ROOT / "app/src/main/java/com/fynx/app/ui"
 camera = (ui / "FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
+mature_status = (ui / "FynxMatureStatusComposerPanel.kt").read_text(encoding="utf-8")
 video_editor = (ui / "FynxCameraVideoEditor.kt").read_text(encoding="utf-8")
 unit_tests = (ROOT / "app/src/test/java/com/fynx/app/ui/CameraMediaReliabilityTest.kt").read_text(encoding="utf-8")
 
@@ -18,6 +19,8 @@ checks = {
     "the established camera-to-caller URI and type callback is retained": "onCaptured(previewUri, previewType)" in camera and 'pendingType = if (videoNoteMode) "video_note" else "video"' in camera,
     "retake removes the draft and resets creative edits": "fun retake()" in camera and 'photoTextOverlay = ""' in camera and "selectedPhotoSticker = null" in camera,
     "photo/video status upload protections remain": "FYNX_STATUS_MAX_VIDEO_BYTES" in camera and "FYNX_STATUS_MAX_VIDEO_DURATION_MS" in camera and "recorderBuilder.setTargetVideoEncodingBitRate(700_000)" in camera,
+    "mature Status camera opts into Status video size and duration limits": "statusCapture = true" in mature_status and "FynxCameraCapturePanel(" in mature_status,
+    "mature Status camera does not double-apply safe drawing insets": "Box(Modifier.fillMaxSize()) {" in mature_status and "Box(Modifier.fillMaxSize().safeDrawingPadding()) {" not in mature_status,
     "video trim uses real MP4 track remuxing": "MediaExtractor" in video_editor and "MediaMuxer" in video_editor and "SEEK_TO_NEXT_SYNC" in video_editor and "writeSampleData" in video_editor,
     "mute removes audio track instead of only muting preview": "muteAudio" in video_editor and "if (!isVideo && (!isAudio || muteAudio))" in video_editor,
     "video rotation metadata is preserved during editing": "METADATA_KEY_VIDEO_ROTATION" in video_editor and "setOrientationHint(rotation)" in video_editor,
