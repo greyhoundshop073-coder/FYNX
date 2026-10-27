@@ -1158,6 +1158,19 @@ fun FynxCameraCapturePanel(
                     ) {
                         Text(if (selectedCameraMusic == null) "♫ Add sound" else "♫ Change", color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
+                    IconButton(
+                        onClick = {
+                            if (recording == null && !preparingPhoto && !galleryImporting) {
+                                error = null
+                                lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
+                                showCaptureControls = true
+                            }
+                        },
+                        enabled = recording == null && !preparingPhoto && !galleryImporting,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Icon(Icons.Default.Cameraswitch, "Flip camera", tint = Color.White)
+                    }
                 }
             }
         }
@@ -1408,13 +1421,7 @@ fun FynxCameraCapturePanel(
                                 )
                             }
                         }
-                        FynxCameraRailAction("Flip", "⇄", enabled = recording == null) {
-                            if (recording == null) {
-                                error = null
-                                lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
-                                showCaptureControls = true
-                            }
-                        }
+                        Spacer(Modifier.width(52.dp))
                     }
 
                     if (mode == CameraMode.PHOTO && showEffectCarousel && recording == null) {
