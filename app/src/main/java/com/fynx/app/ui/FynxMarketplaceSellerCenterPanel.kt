@@ -171,17 +171,24 @@ fun FynxMarketplaceSellerCenterPanel() {
 
     fun refresh() {
         val requestGeneration = ++refreshGeneration
-        scope.launch {
-            loading = true
-            error = null
-            shopLoading = true
-            shopError = null
-            accountLoading = true
-            accountMessage = null
-            // Refresh earnings immediately so old amounts/history are hidden during the other requests.
-            loadMoney()
+        loading = true
+        error = null
+        shopLoading = true
+        shopError = null
+        accountLoading = true
+        accountMessage = null
+        // Do not show stale shop identity while the current account is being refreshed.
+        shopName = ""
+        shopDescription = ""
+        shopLocation = ""
+        shopContactPhone = ""
+        // Hide stale amounts/history immediately; earnings manage their own request lifetime.
+        loadMoney()
 
-            val inventoryResult = FynxMarketplaceClient.myListings(context)
+        // Inventory owns the Listings loading state. Profile/payout requests must not keep
+        // the Listings screen spinning after its inventory request has already finished.
+        scope.launch {
+            val inventoryResult = runCatching { FynxMarketplaceClient.myListings(context).getOrThrow() }
             if (requestGeneration != refreshGeneration) return@launch
             inventoryResult
                 .onSuccess { inventory ->
@@ -191,23 +198,22 @@ fun FynxMarketplaceSellerCenterPanel() {
                     listingActionMessage = null
                 }
                 .onFailure { failure ->
-                    // Never present a previous inventory snapshot as current after refresh fails.
                     listings = emptyList()
                     archivedListings = emptyList()
                     listingActionError = null
                     listingActionMessage = null
                     error = marketplaceSafeError(failure, "Could not load your listings.")
                 }
+            loading = false
+        }
 
-            shopName = ""
-            shopDescription = ""
-            shopLocation = ""
-            shopContactPhone = ""
-            val shopResult = FynxBackendClient.get(context, "/api/marketplace/my-shop")
-                .mapCatching { raw ->
-                    JSONObject(raw).optJSONObject("shop")
-                        ?: throw IllegalStateException("Shop profile response was incomplete.")
-                }
+        // Shop profile is independent of inventory and payout-account status.
+        scope.launch {
+            val shopResult = runCatching {
+                val raw = FynxBackendClient.get(context, "/api/marketplace/my-shop").getOrThrow()
+                JSONObject(raw).optJSONObject("shop")
+                    ?: throw IllegalStateException("Shop profile response was incomplete.")
+            }
             if (requestGeneration != refreshGeneration) return@launch
             shopResult
                 .onSuccess { profile ->
@@ -217,7 +223,6 @@ fun FynxMarketplaceSellerCenterPanel() {
                     shopContactPhone = profile.optString("contactPhone")
                 }
                 .onFailure { failure ->
-                    // Do not show profile values from an earlier successful refresh as live.
                     shopName = ""
                     shopDescription = ""
                     shopLocation = ""
@@ -225,20 +230,23 @@ fun FynxMarketplaceSellerCenterPanel() {
                     shopError = marketplaceSafeError(failure, "Shop profile could not load.")
                 }
             shopLoading = false
+        }
 
-            val payoutResult = FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account")
-                .mapCatching { raw ->
-                    val payload = JSONObject(raw)
-                    val parsed = mutableListOf<JSONObject>()
-                    val accounts = payload.optJSONArray("payoutAccounts")
-                    if (accounts != null) {
-                        for (i in 0 until accounts.length()) {
-                            accounts.optJSONObject(i)?.let { parsed += it }
-                        }
+        // A slow payout-account request must not block Listings or the shop profile form.
+        scope.launch {
+            val payoutResult = runCatching {
+                val raw = FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account").getOrThrow()
+                val payload = JSONObject(raw)
+                val parsed = mutableListOf<JSONObject>()
+                val accounts = payload.optJSONArray("payoutAccounts")
+                if (accounts != null) {
+                    for (i in 0 until accounts.length()) {
+                        accounts.optJSONObject(i)?.let { parsed += it }
                     }
-                    if (parsed.isEmpty()) payload.optJSONObject("payoutAccount")?.let { parsed += it }
-                    parsed.toList()
                 }
+                if (parsed.isEmpty()) payload.optJSONObject("payoutAccount")?.let { parsed += it }
+                parsed.toList()
+            }
             if (requestGeneration != refreshGeneration) return@launch
             payoutResult
                 .onSuccess { parsed ->
@@ -249,13 +257,11 @@ fun FynxMarketplaceSellerCenterPanel() {
                     accountMessage = null
                 }
                 .onFailure { failure ->
-                    // A failed or malformed response must not leave an old verified account on screen.
                     payoutAccounts = emptyList()
                     payoutAccount = null
                     accountMessage = marketplaceSafeError(failure, "Payout account status could not load.")
                 }
             accountLoading = false
-            loading = false
         }
     }
 
