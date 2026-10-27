@@ -68,6 +68,10 @@ import java.util.Locale
 @Composable
 fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
     val context = LocalContext.current
+    DisposableEffect(chat.username) {
+        FynxNotificationForegroundState.setActivePrivateChat(chat.username)
+        onDispose { FynxNotificationForegroundState.clearActivePrivateChat(chat.username) }
+    }
     val screenWidthDp = context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density
     val messageBubbleMaxWidth = (screenWidthDp.dp * 0.82f).coerceAtMost(360.dp)
     val voiceNoteMaxWidth = (screenWidthDp.dp * 0.68f).coerceAtMost(300.dp)

@@ -43,6 +43,10 @@ fun GroupChatPanel(
     onGroupChanged: (GroupChat) -> Unit = {}
 ) {
     val context = LocalContext.current
+    DisposableEffect(group.id) {
+        FynxNotificationForegroundState.setActiveGroup(group.id)
+        onDispose { FynxNotificationForegroundState.clearActiveGroup(group.id) }
+    }
     val localView = LocalView.current
     val scope = rememberCoroutineScope()
     val groupAppearance = FynxConversationPreferences.groupAppearance(context, group.id)
