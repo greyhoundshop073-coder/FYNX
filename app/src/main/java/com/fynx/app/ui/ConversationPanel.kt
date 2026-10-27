@@ -475,6 +475,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         .onSuccess { remote ->
                             isNewConversation = false
                             currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
+                            FynxInteractionSound.play(context, FynxInteractionSound.Event.MEDIA_SENT)
                             pendingFile.delete()
                             pendingVoiceRetry = null
                             uploadedVoiceCache = null
@@ -607,6 +608,12 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         currentUserId?.let { myId ->
                             messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
                         }
+                        // Only confirm after the backend accepted the send; failed/retried sends stay silent.
+                        FynxInteractionSound.play(
+                            context,
+                            if (selectedAttachment != null) FynxInteractionSound.Event.MEDIA_SENT
+                            else FynxInteractionSound.Event.MESSAGE_SENT
+                        )
                         if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
                             FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
                                 .onSuccess { marketplaceContextAttached = true }
