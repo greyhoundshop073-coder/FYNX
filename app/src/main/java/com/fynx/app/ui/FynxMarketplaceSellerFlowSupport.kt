@@ -42,6 +42,30 @@ internal object FynxMarketplaceSellerFlowSupport {
             media.isNotEmpty() && media.size <= MAX_PRODUCT_MEDIA
 }
 
+/** Accepts only real JSON numeric values; missing, string, NaN and infinite amounts fail closed. */
+internal fun marketplaceRequiredAmount(value: Any?): Double {
+    val amount = (value as? Number)?.toDouble()
+        ?: throw IllegalStateException("Seller earnings data is incomplete.")
+    if (!amount.isFinite()) throw IllegalStateException("Seller earnings data is invalid.")
+    return amount
+}
+
+/** Balance buckets cannot be negative; do not turn malformed values into a plausible zero balance. */
+internal fun marketplaceRequiredBalance(value: Any?): Double {
+    val amount = marketplaceRequiredAmount(value)
+    if (amount < 0.0) throw IllegalStateException("Seller earnings data is invalid.")
+    return amount
+}
+
+/** Currency codes are required explicitly rather than defaulting missing money to NGN. */
+internal fun marketplaceRequiredCurrency(value: Any?): String {
+    val currency = (value as? String)?.trim()?.uppercase(Locale.US).orEmpty()
+    if (!currency.matches(Regex("[A-Z]{3}"))) {
+        throw IllegalStateException("Seller earnings data is incomplete.")
+    }
+    return currency
+}
+
 /**
  * Keep transport/HTTP implementation details out of Marketplace user-facing error text.
  * Domain validation messages remain useful to the user; raw server bodies and request IDs do not.

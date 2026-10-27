@@ -129,6 +129,25 @@ checks = [
     ("My Shop keeps seller-order review in Orders and driver assignments in Delivery & drivers", 'if (activeSection == "Orders")' in seller_center and "FynxMarketplaceSellerOrders(context = context" in seller_center and 'if (activeSection == "Delivery & drivers")' in seller_center and "showDriverAssignments = true" in seller_center),
     ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Recent earnings history (latest 100; showing 20)"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
     ("My Shop earnings use one authenticated seller-scoped summary query rather than per-order settlement requests", 'app.get(\'/api/marketplace/settlement/seller/summary\', auth' in settlement_routes and 'WHERE o.seller_id = $1' in settlement_routes and '"/api/marketplace/settlement/seller/summary"' in seller_center and 'settlements' in seller_center and '"/api/marketplace/settlement/order/$orderId"' not in seller_center and "payoutStatus: String(row.payout_status || row.funds || 'UNKNOWN')" in settlement_routes and 'moneyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }' in seller_center),
+    ("My Shop fails closed on missing or malformed payout balances, amounts, and currency instead of defaulting to zero",
+     all(fragment in seller_center for fragment in (
+         "marketplaceRequiredCurrency(row.opt(\"currency\"))",
+         "marketplaceRequiredBalance(row.opt(\"protectedFunds\"))",
+         "marketplaceRequiredBalance(row.opt(\"availableForPayout\"))",
+         "marketplaceRequiredBalance(row.opt(\"payoutPending\"))",
+         "marketplaceRequiredBalance(row.opt(\"paidOut\"))",
+         "marketplaceRequiredAmount(row.opt(\"sellerNetAmount\"))",
+         "marketplaceRequiredBalance(row.opt(\"marketplaceFee\"))",
+     ))
+     and all(fragment in support for fragment in (
+         "internal fun marketplaceRequiredAmount(value: Any?): Double",
+         "internal fun marketplaceRequiredBalance(value: Any?): Double",
+         "internal fun marketplaceRequiredCurrency(value: Any?): String",
+         "if (!amount.isFinite())",
+         "amount < 0.0",
+     ))
+     and 'row.optDouble("availableForPayout", 0.0)' not in seller_center
+     and 'row.optDouble("sellerNetAmount", 0.0)' not in seller_center),
     ("My Shop hides current payout totals while refreshing and clears previous totals after a failed earnings request", "if (!moneyLoading && moneyError == null) {\n                        currencies.forEach { currency ->" in seller_center and "Checking current balances…" in seller_center and "Current balances are hidden until refresh succeeds." in seller_center and "moneyRecords = emptyList()\n                moneyTotals = emptyMap()\n                moneyTotalsFromBackend = false" in seller_center),
     ("My Shop earnings history distinguishes a failed empty load from a genuine empty history and offers retry", 'moneyError?.let { message ->' in seller_center and 'TextButton(onClick = { loadMoney() }, enabled = !moneyLoading)' in seller_center and 'Text("Retry earnings")' in seller_center and "moneyRecords.isEmpty() && moneyError == null" in seller_center),
 

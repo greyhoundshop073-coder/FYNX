@@ -117,29 +117,35 @@ fun FynxMarketplaceSellerCenterPanel() {
                     val totals = mutableMapOf<String, SellerMoneyTotals>()
                     if (totalsArray != null) {
                         for (i in 0 until totalsArray.length()) {
-                            val row = totalsArray.optJSONObject(i) ?: continue
-                            val currency = row.optString("currency", "NGN").uppercase()
+                            val row = totalsArray.optJSONObject(i)
+                                ?: throw IllegalStateException("Seller earnings response was incomplete.")
+                            val currency = marketplaceRequiredCurrency(row.opt("currency"))
+                            if (totals.containsKey(currency)) {
+                                throw IllegalStateException("Seller earnings response contained duplicate currency totals.")
+                            }
                             totals[currency] = SellerMoneyTotals(
-                                protectedFunds = row.optDouble("protectedFunds", 0.0),
-                                availableForPayout = row.optDouble("availableForPayout", 0.0),
-                                payoutPending = row.optDouble("payoutPending", 0.0),
-                                paidOut = row.optDouble("paidOut", 0.0)
+                                protectedFunds = marketplaceRequiredBalance(row.opt("protectedFunds")),
+                                availableForPayout = marketplaceRequiredBalance(row.opt("availableForPayout")),
+                                payoutPending = marketplaceRequiredBalance(row.opt("payoutPending")),
+                                paidOut = marketplaceRequiredBalance(row.opt("paidOut"))
                             )
                         }
                     }
                     val records = mutableListOf<SellerMoneyRecord>()
                     for (i in 0 until settlements.length()) {
-                        val row = settlements.optJSONObject(i) ?: continue
-                        val orderId = row.optString("orderId")
-                        if (orderId.isBlank()) continue
+                        val row = settlements.optJSONObject(i)
+                            ?: throw IllegalStateException("Seller earnings history was incomplete.")
+                        val orderId = row.optString("orderId").trim()
+                        if (orderId.isBlank()) throw IllegalStateException("Seller earnings history was incomplete.")
+                        val currency = marketplaceRequiredCurrency(row.opt("currency"))
                         val funds = row.optString("funds").ifBlank { "UNKNOWN" }
                         val payoutStatus = row.optString("payoutStatus").ifBlank { funds }
                         records += SellerMoneyRecord(
                             orderId = orderId,
                             title = row.optString("title").ifBlank { "FYNX order" },
-                            currency = row.optString("currency", "NGN").uppercase(),
-                            sellerNet = row.optDouble("sellerNetAmount", 0.0),
-                            marketplaceFee = row.optDouble("marketplaceFee", 0.0),
+                            currency = currency,
+                            sellerNet = marketplaceRequiredAmount(row.opt("sellerNetAmount")),
+                            marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFee")),
                             funds = funds,
                             payoutStatus = payoutStatus,
                             updatedAt = row.optString("updatedAt")
