@@ -28,7 +28,7 @@ unit_tests = (ROOT / "app/src/test/java/com/fynx/app/ui/CameraMediaReliabilityTe
 checks = {
     "photo crop has real bitmap geometry and ratio presets": "fun cropPhotoAspect(aspectRatio: Float, presetName: String)" in camera and "Bitmap.createBitmap(" in camera and "rect.cropWidth, rect.cropHeight" in camera and "fun cropPhotoSquare()" in camera and "fun cropPhotoPortrait()" in camera and "fun cropPhotoLandscape()" in camera,
     "photo editor exposes square, portrait 4:5 and landscape 16:9 crop actions": "Crop square" in camera and "Portrait 4:5" in camera and "Landscape 16:9" in camera,
-    "crop keeps the filter source in sync": "squareCrop(current, currentTemp)" in camera and "squareCrop(original, originalTemp)" in camera,
+    "crop keeps the filter source in sync": "cropToPreset(current, currentTemp)" in camera and "cropToPreset(original, originalTemp)" in camera,
     "text overlay has an editable input and bounded output length": "showPhotoTextDialog" in camera and "OutlinedTextField(" in camera and '"Add text"' in camera and "photoTextOverlay = it.take(96)" in camera and "}.take(4)" in camera,
     "text/sticker preview uses the same photo-relative geometry as saved output": "drawFynxCameraPhotoPreviewOverlays(" in camera and "wrapFynxCameraOverlayText(textOverlay, paint, imageWidth * 0.82f)" in camera and "imageHeight * 0.43f" in camera and "imageWidth * 0.78f" in camera,
     "sticker picker exposes actual choices": 'listOf("✨", "❤️", "🔥", "😂", "😎", "🎉", "🌈")' in camera and "selectedPhotoSticker" in camera,
