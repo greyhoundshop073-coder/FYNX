@@ -48,6 +48,14 @@ private data class SellerOrderRow(
 
 private fun money(currency: String, amount: Double): String = "$currency ${String.format(Locale.US, "%,.2f", amount)}"
 
+/** Never turn absent, non-numeric, non-finite or negative accounting values into a plausible zero. */
+internal fun marketplaceMoneyOrUnavailable(value: Any?, currency: String): String {
+    val normalizedCurrency = currency.trim().uppercase(Locale.US)
+    val amount = (value as? Number)?.toDouble() ?: return "Not available"
+    if (!normalizedCurrency.matches(Regex("[A-Z]{3}")) || !amount.isFinite() || amount < 0.0) return "Not available"
+    return money(normalizedCurrency, amount)
+}
+
 private fun fulfillmentLabel(state: String): String = when (state) {
     "PAID" -> "Paid — ready to prepare"
     "PREPARING" -> "Preparing"
@@ -233,7 +241,14 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
             settlementError = null
             settlement = null
             FynxBackendClient.get(context, "/api/marketplace/settlement/order/${order.id}")
-                .onSuccess { raw -> settlement = JSONObject(raw) }
+                .mapCatching { raw ->
+                    val response = JSONObject(raw)
+                    if (response.optJSONObject("accounting") == null) {
+                        throw IllegalStateException("Settlement details were incomplete.")
+                    }
+                    response
+                }
+                .onSuccess { response -> settlement = response }
                 .onFailure { settlementError = marketplaceSafeError(it, "Settlement details could not load.") }
             settlementLoading = false
         }
@@ -242,13 +257,14 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
             deliveryEvidenceError = null
             handoverPhotoMediaId = null
             FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
-                .onSuccess { raw ->
+                .mapCatching { raw ->
                     val evidence = JSONObject(raw).optJSONArray("evidence")
-                    handoverPhotoMediaId = if (evidence == null) null else (0 until evidence.length())
+                    if (evidence == null) null else (0 until evidence.length())
                         .mapNotNull { evidence.optJSONObject(it) }
                         .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
                         ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
                 }
+                .onSuccess { photoMediaId -> handoverPhotoMediaId = photoMediaId }
                 .onFailure { deliveryEvidenceError = marketplaceSafeError(it, "Delivery evidence could not load.") }
         }
 
@@ -292,7 +308,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         TextButton(enabled = !busy, onClick = { settlementRetryCount += 1 }) { Text("Retry settlement details") }
                     }
                     if (!settlementLoading && deliveryEvidenceError != null) {
-                        Text("Delivery evidence could not load: ${deliveryEvidenceError!!}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        Text(deliveryEvidenceError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         TextButton(enabled = !busy, onClick = { deliveryEvidenceRetryCount += 1 }) { Text("Retry delivery evidence") }
                     }
                     settlement?.let { s ->
@@ -302,23 +318,23 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         val operations = s.optJSONArray("operations")
                         val ledger = s.optJSONArray("ledger")
                         if (accounting != null) {
-                            Text("Product subtotal: ${money(accounting.optString("currency", order.currency), accounting.optDouble("productSubtotal", 0.0))}", style = MaterialTheme.typography.bodySmall)
-                            Text("Delivery fee: ${money(accounting.optString("currency", order.currency), accounting.optDouble("deliveryFee", 0.0))}", style = MaterialTheme.typography.bodySmall)
-                            Text("Marketplace fee: ${money(accounting.optString("currency", order.currency), accounting.optDouble("marketplaceFee", 0.0))}", style = MaterialTheme.typography.bodySmall)
-                            Text("Provider fee: ${money(accounting.optString("currency", order.currency), accounting.optDouble("paymentProviderFee", 0.0))}", style = MaterialTheme.typography.bodySmall)
-                            Text("Discount: ${money(accounting.optString("currency", order.currency), accounting.optDouble("discountAmount", 0.0))}", style = MaterialTheme.typography.bodySmall)
-                            Text("Buyer paid: ${money(accounting.optString("currency", order.currency), accounting.optDouble("buyerTotal", 0.0))}", style = MaterialTheme.typography.bodySmall)
-                            Text("Seller net: ${money(accounting.optString("currency", order.currency), accounting.optDouble("sellerNetAmount", 0.0))}", style = MaterialTheme.typography.bodyMedium)
+                            Text("Product subtotal: ${marketplaceMoneyOrUnavailable(accounting.opt("productSubtotal"), accounting.optString("currency", order.currency))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Delivery fee: ${marketplaceMoneyOrUnavailable(accounting.opt("deliveryFee"), accounting.optString("currency", order.currency))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Marketplace fee: ${marketplaceMoneyOrUnavailable(accounting.opt("marketplaceFee"), accounting.optString("currency", order.currency))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Provider fee: ${marketplaceMoneyOrUnavailable(accounting.opt("paymentProviderFee"), accounting.optString("currency", order.currency))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Discount: ${marketplaceMoneyOrUnavailable(accounting.opt("discountAmount"), accounting.optString("currency", order.currency))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Buyer paid: ${marketplaceMoneyOrUnavailable(accounting.opt("buyerTotal"), accounting.optString("currency", order.currency))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Seller net: ${marketplaceMoneyOrUnavailable(accounting.opt("sellerNetAmount"), accounting.optString("currency", order.currency))}", style = MaterialTheme.typography.bodyMedium)
                         }
                         if (protection != null) Text("Protected funds: ${protection.optString("funds", "UNKNOWN")}", style = MaterialTheme.typography.bodySmall)
-                        if (escrow != null) Text("Escrow: ${escrow.optString("status", "UNKNOWN")} • ${money(escrow.optString("currency", order.currency), escrow.optDouble("amount", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                        if (escrow != null) Text("Escrow: ${escrow.optString("status", "UNKNOWN")} • ${marketplaceMoneyOrUnavailable(escrow.opt("amount"), escrow.optString("currency", order.currency))}", style = MaterialTheme.typography.bodySmall)
                         if (operations != null && operations.length() > 0) {
                             Text("Financial operations", style = MaterialTheme.typography.titleSmall)
                             for (i in 0 until operations.length()) {
                                 val op = operations.optJSONObject(i) ?: continue
                                 val ref = op.optString("provider_reference").ifBlank { "No provider reference" }
                                 val reason = op.optString("failure_reason")
-                                Text("${op.optString("operation_type")} • ${op.optString("status")} • ${money(op.optString("currency", order.currency), op.optDouble("amount", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                                Text("${op.optString("operation_type")} • ${op.optString("status")} • ${marketplaceMoneyOrUnavailable(op.opt("amount"), op.optString("currency", order.currency))}", style = MaterialTheme.typography.bodySmall)
                                 if (ref != "No provider reference") Text("Provider: $ref", style = MaterialTheme.typography.bodySmall)
                                 if (reason.isNotBlank()) Text("Reason: $reason", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             }
@@ -327,7 +343,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                             Text("Ledger history", style = MaterialTheme.typography.titleSmall)
                             for (i in 0 until ledger.length()) {
                                 val entry = ledger.optJSONObject(i) ?: continue
-                                Text("${entry.optString("entry_type")} • ${money(entry.optString("currency", order.currency), entry.optDouble("amount", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                                Text("${entry.optString("entry_type")} • ${marketplaceMoneyOrUnavailable(entry.opt("amount"), entry.optString("currency", order.currency))}", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }

@@ -76,6 +76,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var shopLocation by remember(username) { mutableStateOf("") }
     var shopContactPhone by remember(username) { mutableStateOf("") }
     var profileLoading by remember(username) { mutableStateOf(true) }
+    var shopProfileError by remember(username) { mutableStateOf<String?>(null) }
     var followedByViewer by remember(username, viewerUsername) { mutableStateOf<Boolean?>(null) }
     var followerCount by remember(username) { mutableStateOf<Int?>(null) }
     var followBusy by remember(username, viewerUsername) { mutableStateOf(false) }
@@ -88,6 +89,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
         storefrontLoading = true
         storefrontError = null
         profileLoading = true
+        shopProfileError = null
         followError = null
         FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())
             .onSuccess { fetched ->
@@ -114,15 +116,17 @@ internal fun FynxMarketplaceSellerStoreDialog(
             }
         storeName = listings.firstOrNull()?.storeName.orEmpty()
         FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())
-            .onSuccess { raw ->
-                val shop = org.json.JSONObject(raw).optJSONObject("shop")
-                if (shop != null) {
-                    storeName = shop.optString("shopName").ifBlank { storeName }
-                    profileBio = shop.optString("description").ifBlank { profileBio }
-                    shopLocation = shop.optString("location")
-                    shopContactPhone = shop.optString("contactPhone")
-                }
+            .mapCatching { raw ->
+                org.json.JSONObject(raw).optJSONObject("shop")
+                    ?: throw IllegalStateException("Public shop profile response was incomplete.")
             }
+            .onSuccess { shop ->
+                storeName = shop.optString("shopName").ifBlank { storeName }
+                profileBio = shop.optString("description").ifBlank { profileBio }
+                shopLocation = shop.optString("location")
+                shopContactPhone = shop.optString("contactPhone")
+            }
+            .onFailure { failure -> shopProfileError = marketplaceSafeError(failure, "Shop details could not load.") }
         profileLoading = false
     }
     val sellerListings = remember(storefrontListings) {
@@ -153,6 +157,10 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             if (storeName.isNotBlank()) Text(storeName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                             Text("@${username.removePrefix("@")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (profileLoading) CircularProgressIndicator(Modifier.size(18.dp))
+                            shopProfileError?.let { message ->
+                                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }
+                            }
                             if (profileBio.isNotBlank()) Text(profileBio, style = MaterialTheme.typography.bodyMedium)
                             if (shopLocation.isNotBlank()) Text("Location: " + shopLocation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (shopContactPhone.isNotBlank()) Text("Shop contact: " + shopContactPhone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

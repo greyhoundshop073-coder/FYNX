@@ -268,6 +268,32 @@ checks.extend([
      and 'Text("$listingSummary • $settlementSummary"' in seller_center),
 ])
 
+checks.extend([
+    ("multi-product checkout quote failures sanitize raw transport responses",
+     'result.onSuccess{quote=it}.onFailure{message=marketplaceSafeError(it, "Checkout quote could not be prepared.")}' in marketplace
+     and 'message=it.message?:"Checkout quote could not be prepared."' not in marketplace),
+    ("seller order settlement JSON parsing is contained and rejects an incomplete accounting payload",
+     'FynxBackendClient.get(context, "/api/marketplace/settlement/order/${order.id}")\n                .mapCatching { raw ->' in seller_orders
+     and 'response.optJSONObject("accounting") == null' in seller_orders
+     and '.onSuccess { response -> settlement = response }' in seller_orders),
+    ("seller order delivery evidence parsing is exception-safe and never fabricates zero financial detail",
+     'FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")\n                .mapCatching { raw ->' in seller_orders
+     and "internal fun marketplaceMoneyOrUnavailable(value: Any?, currency: String): String" in seller_orders
+     and 'marketplaceMoneyOrUnavailable(accounting.opt("buyerTotal")' in seller_orders
+     and 'accounting.optDouble("buyerTotal", 0.0)' not in seller_orders
+     and 'escrow.optDouble("amount", 0.0)' not in seller_orders
+     and 'op.optDouble("amount", 0.0)' not in seller_orders
+     and 'entry.optDouble("amount", 0.0)' not in seller_orders),
+    ("buyer order lifecycle delivery JSON parsing is inside a caught result boundary",
+     'FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")\n                .mapCatching { raw ->' in order_lifecycle
+     and '.onSuccess { details ->' in order_lifecycle
+     and 'deliveryDetails = details.first' in order_lifecycle),
+    ("public seller shop profile JSON failures are retryable without hiding product listings",
+     'var shopProfileError by remember(username)' in storefront
+     and 'FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())\n            .mapCatching { raw ->' in storefront
+     and 'shopProfileError?.let { message ->' in storefront
+     and 'TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }' in storefront),
+])
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
