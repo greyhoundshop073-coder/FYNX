@@ -6,6 +6,7 @@ import android.content.Context
 object FynxInChatSound {
     fun play(context: Context, chatUsername: String? = null) {
         if (!isEnabled(context)) return
+        if (!chatUsername.isNullOrBlank() && !FynxConversationPreferences.chatNotifications(context, chatUsername)) return
         if (!chatUsername.isNullOrBlank() && !FynxConversationPreferences.chatSounds(context, chatUsername)) return
         FynxInteractionSound.play(context, FynxInteractionSound.Event.MESSAGE_RECEIVED)
     }

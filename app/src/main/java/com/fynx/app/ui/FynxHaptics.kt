@@ -35,6 +35,7 @@ object FynxHaptics {
 
     fun incomingChatMessage(context: Context, chatUsername: String) {
         if (!isEnabled(context)) return
+        if (!FynxConversationPreferences.chatNotifications(context, chatUsername)) return
         if (!FynxConversationPreferences.chatVibration(context, chatUsername)) return
         vibrateIncomingMessage(context)
     }

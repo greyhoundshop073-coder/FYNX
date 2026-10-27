@@ -38,6 +38,7 @@ check("private, group and social sound categories are exposed", all(token in set
     "FynxInteractionSound.Category.SOCIAL"
 ]))
 check("global in-app haptic preference is exposed and persisted", "FynxHaptics.setEnabled(context, it)" in settings and "KEY_ENABLED" in haptics)
+check("per-chat Notifications preference gates private incoming sound and vibration", "FynxConversationPreferences.chatNotifications(context, chatUsername)" in chat_sound and "FynxConversationPreferences.chatNotifications(context, chatUsername)" in haptics)
 check("per-chat sound preference gates actual playback", "FynxConversationPreferences.chatSounds(context, chatUsername)" in chat_sound)
 check("per-chat vibration preference gates actual incoming-message vibration", "FynxConversationPreferences.chatVibration(context, chatUsername)" in haptics)
 check("incoming message feedback is deduplicated by stable remote message id", "remote.id.isNotBlank() && messages.none { it.id == remote.id }" in conversation)
