@@ -4,7 +4,9 @@ import android.content.Context
 
 /** Compatibility facade retained for existing private-chat callers. */
 object FynxInChatSound {
-    fun play(context: Context) {
+    fun play(context: Context, chatUsername: String? = null) {
+        if (!isEnabled(context)) return
+        if (!chatUsername.isNullOrBlank() && !FynxConversationPreferences.chatSounds(context, chatUsername)) return
         FynxInteractionSound.play(context, FynxInteractionSound.Event.MESSAGE_RECEIVED)
     }
 

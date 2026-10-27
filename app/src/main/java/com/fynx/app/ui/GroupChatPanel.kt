@@ -2,14 +2,8 @@ package com.fynx.app.ui
 
 import android.Manifest
 import android.content.Context
-import android.media.AudioManager
 import android.media.MediaRecorder
-import android.media.ToneGenerator
 import android.net.Uri
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
@@ -30,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
@@ -47,6 +42,7 @@ fun GroupChatPanel(
     onGroupChanged: (GroupChat) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val localView = LocalView.current
     val scope = rememberCoroutineScope()
     val groupAppearance = FynxConversationPreferences.groupAppearance(context, group.id)
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == groupAppearance } ?: FynxGlassThemeId.PURE_BLACK
@@ -92,14 +88,8 @@ fun GroupChatPanel(
     var showGroupMenu by remember { mutableStateOf(false) }
 
     fun feedback() {
-        if (Build.VERSION.SDK_INT >= 31) {
-            (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)
-                ?.defaultVibrator?.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)?.vibrate(35)
-        }
-        runCatching { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 60).startTone(ToneGenerator.TONE_PROP_ACK, 70) }
+        FynxHaptics.perform(localView)
+        FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_SENT)
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -257,7 +247,6 @@ fun GroupChatPanel(
         isNewGroupConversation = false
         messages = messages + message
         saveGroupMessages(context, group.id, messages)
-        feedback()
         scope.launch {
             FynxGroupRemoteClient.sendMessage(context, group.id, message)
                 .onSuccess { server ->
@@ -266,6 +255,8 @@ fun GroupChatPanel(
                     }
                     saveGroupMessages(context, group.id, messages)
                     error = null
+                    // Confirmation feedback is only emitted after the server accepts the message.
+                    feedback()
                 }
                 .onFailure { e ->
                     messages = messages.filterNot { it.id == message.id }

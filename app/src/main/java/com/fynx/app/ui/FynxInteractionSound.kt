@@ -5,7 +5,6 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
-import android.media.AudioManager.RINGER_MODE_SILENT
 import android.media.AudioManager.RINGER_MODE_VIBRATE
 import kotlin.math.PI
 import kotlin.math.sin
@@ -58,7 +57,8 @@ object FynxInteractionSound {
         if (!categoryEnabled) return
 
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-        if (audio.ringerMode == RINGER_MODE_SILENT) return
+        // In-app notification tones must stay quiet in both Silent and Vibrate modes.
+        if (audio.ringerMode != AudioManager.RINGER_MODE_NORMAL) return
         if (audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION) <= 0) return
 
         val now = System.currentTimeMillis()
@@ -89,7 +89,7 @@ object FynxInteractionSound {
             // Re-check device state immediately before playback so a silent-mode
             // change made while the short synthesis was running is respected.
             val currentAudio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return@Thread
-            if (currentAudio.ringerMode == RINGER_MODE_SILENT || currentAudio.getStreamVolume(AudioManager.STREAM_NOTIFICATION) <= 0) return@Thread
+            if (currentAudio.ringerMode != AudioManager.RINGER_MODE_NORMAL || currentAudio.getStreamVolume(AudioManager.STREAM_NOTIFICATION) <= 0) return@Thread
 
             val track = runCatching {
                 AudioTrack.Builder()

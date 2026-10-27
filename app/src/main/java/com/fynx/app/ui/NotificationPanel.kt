@@ -1,5 +1,7 @@
 package com.fynx.app.ui
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -40,6 +42,11 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     var selectedType by remember { mutableStateOf<FynxNotificationType?>(null) }
     var unreadOnly by remember { mutableStateOf(false) }
     var speakNotifications by remember { mutableStateOf(FynxNotificationFoundation.isSpeakNotificationsEnabled(context)) }
+    var inAppSoundsEnabled by remember { mutableStateOf(FynxInteractionSound.isMasterEnabled(context)) }
+    var privateChatSoundsEnabled by remember { mutableStateOf(FynxInteractionSound.isCategoryEnabled(context, FynxInteractionSound.Category.CHAT)) }
+    var groupSoundsEnabled by remember { mutableStateOf(FynxInteractionSound.isCategoryEnabled(context, FynxInteractionSound.Category.GROUP)) }
+    var socialSoundsEnabled by remember { mutableStateOf(FynxInteractionSound.isCategoryEnabled(context, FynxInteractionSound.Category.SOCIAL)) }
+    var inAppHapticsEnabled by remember { mutableStateOf(FynxHaptics.isEnabled(context)) }
     val current = remember(localNotifications, remoteNotifications, notifications) { (remoteNotifications + localNotifications + notifications).distinctBy { it.id }.sortedByDescending { it.timestamp } }
     val filtered = FynxNotificationActivityCenter.unreadOnly(FynxNotificationActivityCenter.filterByType(current, selectedType), unreadOnly)
 
@@ -171,9 +178,41 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                     NotificationPreferenceSwitch("Reminders", "FYNX reminders", notificationPreferences.remindersEnabled) { savePreferences(notificationPreferences.copy(remindersEnabled = it)) }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
                     Text("SOUNDS & VIBRATION", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    NotificationPreferenceSwitch("Speak notifications", "Read new alerts aloud", speakNotifications) { speakNotifications = it; FynxNotificationFoundation.setSpeakNotificationsEnabled(context, it) }
-                    Text("Call ringtone and vibration follow your device's FYNX call notification channel.",
+                    NotificationPreferenceSwitch("In-app sounds", "Master switch for FYNX sounds while you use the app", inAppSoundsEnabled) {
+                        inAppSoundsEnabled = it
+                        FynxInteractionSound.setMasterEnabled(context, it)
+                    }
+                    NotificationPreferenceSwitch("Private chat sounds", "Subtle sounds for incoming direct messages", privateChatSoundsEnabled) {
+                        privateChatSoundsEnabled = it
+                        FynxInteractionSound.setCategoryEnabled(context, FynxInteractionSound.Category.CHAT, it)
+                    }
+                    NotificationPreferenceSwitch("Group chat sounds", "Subtle sounds for successfully sent group messages", groupSoundsEnabled) {
+                        groupSoundsEnabled = it
+                        FynxInteractionSound.setCategoryEnabled(context, FynxInteractionSound.Category.GROUP, it)
+                    }
+                    NotificationPreferenceSwitch("Social interaction sounds", "Feedback for completed post and reaction actions", socialSoundsEnabled) {
+                        socialSoundsEnabled = it
+                        FynxInteractionSound.setCategoryEnabled(context, FynxInteractionSound.Category.SOCIAL, it)
+                    }
+                    NotificationPreferenceSwitch("In-app haptics", "Gentle touch feedback and incoming-message vibration", inAppHapticsEnabled) {
+                        inAppHapticsEnabled = it
+                        FynxHaptics.setEnabled(context, it)
+                    }
+                    NotificationPreferenceSwitch("Speak notifications", "Read new alerts aloud", speakNotifications) {
+                        speakNotifications = it
+                        FynxNotificationFoundation.setSpeakNotificationsEnabled(context, it)
+                    }
+                    Text("Phone-level notification sounds, vibration, Do Not Disturb, and the call ringtone remain controlled by Android. You can manage each FYNX notification channel below.",
                         style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                    OutlinedButton(
+                        onClick = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Android notification settings") }
                 }
             }
             Spacer(Modifier.height(8.dp))

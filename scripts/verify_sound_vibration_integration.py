@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""Regression gate for FYNX sound/vibration preference wiring and duplicate feedback."""
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def read(path: str) -> str:
+    value = (ROOT / path).read_text(encoding="utf-8")
+    if not value.strip():
+        raise SystemExit(f"EMPTY: {path}")
+    return value
+
+def check(name: str, condition: bool) -> None:
+    if not condition:
+        raise SystemExit(f"FAIL: {name}")
+    print(f"PASS: {name}")
+
+interaction = read("app/src/main/java/com/fynx/app/ui/FynxInteractionSound.kt")
+chat_sound = read("app/src/main/java/com/fynx/app/ui/FynxInChatSound.kt")
+haptics = read("app/src/main/java/com/fynx/app/ui/FynxHaptics.kt")
+conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
+group = read("app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt")
+social = read("app/src/main/java/com/fynx/app/ui/FynxSocialInteractionSounds.kt")
+settings = read("app/src/main/java/com/fynx/app/ui/NotificationPanel.kt")
+foundation = read("app/src/main/java/com/fynx/app/ui/NotificationFoundation.kt")
+
+check("sound master preference is exposed in settings", "FynxInteractionSound.setMasterEnabled(context, it)" in settings)
+check("private, group and social sound categories are exposed", all(token in settings for token in [
+    "FynxInteractionSound.Category.CHAT", "FynxInteractionSound.Category.GROUP",
+    "FynxInteractionSound.Category.SOCIAL"
+]))
+check("global in-app haptic preference is exposed and persisted", "FynxHaptics.setEnabled(context, it)" in settings and "KEY_ENABLED" in haptics)
+check("per-chat sound preference gates actual playback", "FynxConversationPreferences.chatSounds(context, chatUsername)" in chat_sound)
+check("per-chat vibration preference gates actual incoming-message vibration", "FynxConversationPreferences.chatVibration(context, chatUsername)" in haptics)
+check("incoming message feedback is deduplicated by stable remote message id", "remote.id.isNotBlank() && messages.none { it.id == remote.id }" in conversation)
+check("incoming chat uses the chat-specific sound and vibration preferences", "FynxInChatSound.play(context, chat.username)" in conversation and "FynxHaptics.incomingChatMessage(context, chat.username)" in conversation)
+check("group success feedback uses shared sound and system haptics", "FynxHaptics.perform(localView)" in group and "FynxInteractionSound.Event.GROUP_MESSAGE_SENT" in group)
+check("group send confirmation happens only after server success", group.index("FynxGroupRemoteClient.sendMessage") < group.index("feedback()") and "Confirmation feedback is only emitted after the server accepts the message." in group)
+check("social feedback routes through shared category and silent-mode policy", "ToneGenerator" not in social and "FynxInteractionSound.Event.SOCIAL_REACTION" in social)
+check("in-app sounds respect Android Silent and Vibrate modes", "audio.ringerMode != AudioManager.RINGER_MODE_NORMAL" in interaction)
+check("notification settings provide direct Android channel settings access", "Settings.ACTION_APP_NOTIFICATION_SETTINGS" in settings)
+check("existing notification channels remain the authority for background alert behavior", "NotificationManagerCompat.from(context).notify(id, builder.build())" in foundation)
+
+print("GREEN: FYNX sound/vibration integration gate")

@@ -218,9 +218,13 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUriLatest)
                 }
                 isNewConversation = false
+                val isNewIncomingMessage = remote.id.isNotBlank() && messages.none { it.id == remote.id }
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
-                    FynxInChatSound.play(context)
+                    if (isNewIncomingMessage) {
+                        FynxInChatSound.play(context, chat.username)
+                        FynxHaptics.incomingChatMessage(context, chat.username)
+                    }
                     realtimeClient.acknowledgeMessage(remote.id)
                     conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
                 }

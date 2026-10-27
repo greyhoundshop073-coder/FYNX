@@ -1,21 +1,21 @@
 package com.fynx.app.ui
 
 import android.content.Context
-import android.media.AudioManager
-import android.media.ToneGenerator
 
-/** Short, non-intrusive local feedback sounds for successful social actions. */
+/**
+ * Compatibility facade for social feedback.
+ *
+ * All social feedback goes through the shared controller so the master/category
+ * switches, silent/vibrate-mode rules, stream-volume checks and event throttling
+ * are applied consistently.
+ */
 object FynxSocialInteractionSounds {
-    private fun play(context: Context, tone: Int) {
-        runCatching {
-            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 55).apply {
-                startTone(tone, 90)
-                Thread { Thread.sleep(140); release() }.start()
-            }
-        }
-    }
+    fun postPublished(context: Context) =
+        FynxInteractionSound.play(context, FynxInteractionSound.Event.SOCIAL_INTERACTION)
 
-    fun postPublished(context: Context) = play(context, ToneGenerator.TONE_PROP_ACK)
-    fun liked(context: Context) = play(context, ToneGenerator.TONE_PROP_ACK)
-    fun reaction(context: Context) = play(context, ToneGenerator.TONE_PROP_BEEP)
+    fun liked(context: Context) =
+        FynxInteractionSound.play(context, FynxInteractionSound.Event.SOCIAL_REACTION)
+
+    fun reaction(context: Context) =
+        FynxInteractionSound.play(context, FynxInteractionSound.Event.SOCIAL_REACTION)
 }
