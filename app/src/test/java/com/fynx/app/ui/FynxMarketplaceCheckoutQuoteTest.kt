@@ -116,4 +116,74 @@ class FynxMarketplaceCheckoutQuoteTest {
         assertNotEquals(base, marketplaceCheckoutIntentFingerprint(jwtToken("buyer-1", "signature-two"), "42", 2, "DELIVERY", address.copy(address = "Road 2")))
         assertNotEquals(base, marketplaceCheckoutIntentFingerprint(jwtToken("buyer-1", "signature-two"), "42", 2, "PICKUP", null))
     }
+    private fun validOrder(edit: (JSONObject) -> Unit = {}): String {
+        val order = JSONObject()
+            .put("id", "550e8400-e29b-41d4-a716-446655440000")
+            .put("buyerId", "buyer-1")
+            .put("sellerId", "seller-1")
+            .put("listingId", "42")
+            .put("quantity", 2)
+            .put("unitPrice", 10.0)
+            .put("productSubtotal", 20.0)
+            .put("deliveryFee", 0.0)
+            .put("marketplaceFee", 1.0)
+            .put("marketplaceFeeBuyer", 0.5)
+            .put("marketplaceFeeSeller", 0.5)
+            .put("discountAmount", 0.0)
+            .put("buyerTotal", 20.5)
+            .put("totalAmount", 20.5)
+            .put("currency", "NGN")
+            .put("product", JSONObject().put("title", "Phone").put("sellerUsername", "selleruser"))
+            .put("status", "PAYMENT_PENDING")
+            .put("fulfillmentMethod", "PICKUP")
+        edit(order)
+        return JSONObject().put("order", order).toString()
+    }
+
+    private fun parseOrder(raw: String): FynxRemoteSocialClient.MarketplaceOrder =
+        parseProtectedMarketplaceCheckoutOrderResponse(raw, "42", "NGN", 2, "PICKUP")
+
+    private fun assertInvalidOrder(raw: String) {
+        val result = runCatching { parseOrder(raw) }
+        assertTrue("Expected protected order to be rejected, but it was accepted.", result.isFailure)
+    }
+
+    @Test
+    fun validProtectedOrderMapsServerIdentityAndPayableTotal() {
+        val order = parseOrder(validOrder())
+        assertEquals("550e8400-e29b-41d4-a716-446655440000", order.id)
+        assertEquals("42", order.listingId)
+        assertEquals(2, order.quantity)
+        assertEquals("NGN", order.currency)
+        assertEquals("PAYMENT_PENDING", order.status)
+        assertEquals(20.5, order.totalAmount, 0.001)
+    }
+
+    @Test
+    fun protectedOrderMustHaveValidIdentityAndStateBeforePayment() {
+        assertInvalidOrder(validOrder { it.remove("id") })
+        assertInvalidOrder(validOrder { it.put("id", "not-a-uuid") })
+        assertInvalidOrder(validOrder { it.remove("status") })
+        assertInvalidOrder(JSONObject().put("unexpected", true).toString())
+    }
+
+    @Test
+    fun protectedOrderMustMatchTheRequestedListingQuantityCurrencyAndFulfillment() {
+        assertInvalidOrder(validOrder { it.put("listingId", "99") })
+        assertInvalidOrder(validOrder { it.put("quantity", 3) })
+        assertInvalidOrder(validOrder { it.put("currency", "USD") })
+        assertInvalidOrder(validOrder { it.put("fulfillmentMethod", "DELIVERY") })
+    }
+
+    @Test
+    fun protectedOrderRejectsMissingMalformedAndInconsistentFinancialValues() {
+        assertInvalidOrder(validOrder { it.remove("productSubtotal") })
+        assertInvalidOrder(validOrder { it.put("unitPrice", "not-a-number") })
+        assertInvalidOrder(validOrder { it.put("productSubtotal", 19.0) })
+        assertInvalidOrder(validOrder { it.put("buyerTotal", 22.0) })
+        assertInvalidOrder(validOrder { it.put("marketplaceFeeBuyer", 1.5) })
+        assertInvalidOrder(validOrder { it.put("marketplaceFeeSeller", 0.1) })
+        assertInvalidOrder(validOrder { it.put("deliveryFee", -1.0) })
+    }
+
 }

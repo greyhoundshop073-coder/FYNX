@@ -194,3 +194,14 @@ All Android Marketplace changes must land in the canonical integration branch ab
 - Canonical integration advanced from `52fac216543d34aed5d5f812f52b560aac8a5948` to `dfc6bd1a552ef978f77569b024eacf2ec2d66105` via commit `dfc6bd1a552ef978f77569b024eacf2ec2d66105` (`Adopt Azure Blue as FYNX primary UI accent (#377)`).
 - That canonical commit changed only `FynxChatWallpaper.kt`, `FynxDesignSystem.kt`, the master UI guideline/spec docs, and `verify_fynx_brand_palette.py`. None overlaps the six P6 checkout files.
 - P6 was reconciled onto the newer canonical tree while retaining all six checkout-related files. Fresh CI is required on the rebased exact PR head; results from earlier heads are not evidence for this head.
+
+
+## P6 — Protected checkout order-response validation
+
+**Feature branch:** `fix/marketplace-checkout-idempotency-quote-validation-20261027`  
+**Scope:** Android Marketplace checkout response validation and JVM regression tests only. No backend route, payment provider, database, shared network configuration, Avatar/Profile, Chat/Groups or Status/Story code is changed.
+
+- The quote response is validated before it can be shown, but the order-creation response also needs its own fail-closed boundary. The previous mapper allowed missing order IDs, defaulted missing status to `PAYMENT_PENDING`, defaulted missing amounts to zero, and could accept an order for a different listing, quantity, currency or fulfillment method.
+- Add a pure order-response parser that validates the returned order ID, state and requested checkout identity; checks finite/nonnegative financial fields; reconciles product subtotal, full Marketplace fee shares and buyer-payable total; and only then constructs the order passed to payment initialization.
+- Add JVM tests for valid mapping, missing/malformed identity and status, request mismatch, missing/malformed amounts, and arithmetic reconciliation.
+- **Verification state:** pending exact-head JVM/build/lint CI. This source change is not a claim that payment, order persistence, payout or delivery has been live-tested. The independent live-backend/payment-provider dependency remains unchanged.

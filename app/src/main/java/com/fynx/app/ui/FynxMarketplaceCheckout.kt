@@ -305,6 +305,106 @@ internal suspend fun requestMarketplaceCheckoutQuote(
     }
 }
 
+internal fun parseProtectedMarketplaceCheckoutOrderResponse(
+    raw: String,
+    expectedListingId: String,
+    expectedCurrency: String,
+    expectedQuantity: Int,
+    expectedFulfillmentMethod: String
+): FynxRemoteSocialClient.MarketplaceOrder {
+    val order = JSONObject(raw).optJSONObject("order")
+        ?: throw IllegalStateException("Protected checkout response was incomplete.")
+
+    fun optionalText(field: String): String =
+        order.optString(field).trim().takeIf { it.isNotBlank() && it != "null" }.orEmpty()
+
+    fun requiredText(field: String): String =
+        optionalText(field).takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Protected order is missing $field.")
+
+    val id = requiredText("id")
+    if (runCatching { UUID.fromString(id) }.isFailure) {
+        throw IllegalStateException("Protected order returned an invalid order ID.")
+    }
+    val listingId = requiredText("listingId")
+    val quantity = order.optInt("quantity", -1)
+    val currency = requiredText("currency").uppercase(Locale.US)
+    val method = requiredText("fulfillmentMethod").uppercase(Locale.US)
+    if (listingId != expectedListingId.trim()) {
+        throw IllegalStateException("Protected order belongs to a different product. Review checkout again.")
+    }
+    if (quantity != expectedQuantity || quantity <= 0) {
+        throw IllegalStateException("Protected order quantity does not match checkout. Review checkout again.")
+    }
+    if (currency !in setOf("NGN", "USD") || currency != expectedCurrency.trim().uppercase(Locale.US)) {
+        throw IllegalStateException("Protected order currency does not match checkout. Review checkout again.")
+    }
+    if (method !in setOf("DELIVERY", "PICKUP") || method != expectedFulfillmentMethod.trim().uppercase(Locale.US)) {
+        throw IllegalStateException("Protected order fulfillment does not match checkout. Review checkout again.")
+    }
+
+    val unitPrice = order.optDouble("unitPrice", Double.NaN)
+    val productSubtotal = order.optDouble("productSubtotal", Double.NaN)
+    val deliveryFee = order.optDouble("deliveryFee", Double.NaN)
+    val marketplaceFee = order.optDouble("marketplaceFee", Double.NaN)
+    val marketplaceFeeBuyer = order.optDouble("marketplaceFeeBuyer", Double.NaN)
+    val marketplaceFeeSeller = order.optDouble("marketplaceFeeSeller", Double.NaN)
+    val discountAmount = order.optDouble("discountAmount", Double.NaN)
+    val totalAmount = order.optDouble("buyerTotal", order.optDouble("totalAmount", Double.NaN))
+    val amounts = listOf(
+        unitPrice, productSubtotal, deliveryFee, marketplaceFee,
+        marketplaceFeeBuyer, marketplaceFeeSeller, discountAmount, totalAmount
+    )
+    if (amounts.any { !it.isFinite() }) {
+        throw IllegalStateException("Protected order contains an invalid price or fee. Do not continue to payment.")
+    }
+    if (unitPrice <= 0.0 || productSubtotal <= 0.0 || deliveryFee < 0.0 ||
+        marketplaceFee < 0.0 || marketplaceFeeBuyer < 0.0 || marketplaceFeeSeller < 0.0 ||
+        discountAmount < 0.0 || totalAmount <= 0.0 ||
+        marketplaceFeeBuyer > marketplaceFee + 0.02 ||
+        kotlin.math.abs(marketplaceFee - marketplaceFeeBuyer - marketplaceFeeSeller) > 0.02 ||
+        discountAmount > productSubtotal + deliveryFee + marketplaceFeeBuyer + 0.02 ||
+        (method == "PICKUP" && deliveryFee > 0.02)
+    ) {
+        throw IllegalStateException("Protected order contains inconsistent prices or fees. Do not continue to payment.")
+    }
+    val expectedSubtotal = Math.round(unitPrice * quantity * 100.0) / 100.0
+    if (kotlin.math.abs(productSubtotal - expectedSubtotal) > 0.02) {
+        throw IllegalStateException("Protected order subtotal does not match the product quantity. Review checkout again.")
+    }
+    val expectedTotal = Math.round((productSubtotal + deliveryFee + marketplaceFeeBuyer - discountAmount) * 100.0) / 100.0
+    if (kotlin.math.abs(totalAmount - expectedTotal) > 0.02) {
+        throw IllegalStateException("Protected order total does not match its fee breakdown. Do not continue to payment.")
+    }
+
+    val status = requiredText("status").uppercase(Locale.US)
+    val product = order.optJSONObject("product")
+    val productTitle = product?.optString("title").orEmpty().trim()
+        .takeIf { it.isNotBlank() && it != "null" }
+        ?: requiredText("productTitle")
+    return FynxRemoteSocialClient.MarketplaceOrder(
+        id = id,
+        buyerId = optionalText("buyerId"),
+        sellerId = optionalText("sellerId"),
+        listingId = listingId,
+        quantity = quantity,
+        unitPrice = unitPrice,
+        deliveryFee = deliveryFee,
+        totalAmount = totalAmount,
+        currency = currency,
+        productTitle = productTitle,
+        sellerUsername = product?.optString("sellerUsername")?.trim()?.takeIf { it.isNotBlank() && it != "null" },
+        status = status,
+        trackingReference = null,
+        fulfillmentMethod = method,
+        shippingAddress = order.optJSONObject("shippingAddress"),
+        buyerNote = optionalText("buyerNote"),
+        inspectionDeadline = null,
+        deliveryAvailable = product?.optBoolean("deliveryAvailable", false) ?: false,
+        pickupAvailable = product?.optBoolean("pickupAvailable", false) ?: false
+    )
+}
+
 internal suspend fun createProtectedMarketplaceCheckoutOrder(
     context: Context,
     listing: FynxRemoteSocialClient.MarketplaceListing,
@@ -330,28 +430,12 @@ internal suspend fun createProtectedMarketplaceCheckoutOrder(
         }
     }
     return FynxBackendClient.postJson(context, "/api/marketplace/checkout/order", body.toString()).mapCatching { raw ->
-        val o = JSONObject(raw).getJSONObject("order")
-        val product = o.optJSONObject("product")
-        FynxRemoteSocialClient.MarketplaceOrder(
-            id = o.optString("id"),
-            buyerId = o.optString("buyerId"),
-            sellerId = o.optString("sellerId"),
-            listingId = o.optString("listingId"),
-            quantity = o.optInt("quantity"),
-            unitPrice = o.optDouble("unitPrice"),
-            deliveryFee = o.optDouble("deliveryFee"),
-            totalAmount = o.optDouble("buyerTotal", o.optDouble("totalAmount")),
-            currency = o.optString("currency", listing.currency).trim().uppercase().ifBlank { listing.currency.trim().uppercase() },
-            productTitle = product?.optString("title").orEmpty().ifBlank { o.optString("productTitle") },
-            sellerUsername = product?.optString("sellerUsername")?.takeIf { it.isNotBlank() },
-            status = o.optString("status", "PAYMENT_PENDING"),
-            trackingReference = null,
-            fulfillmentMethod = o.optString("fulfillmentMethod", method),
-            shippingAddress = o.optJSONObject("shippingAddress"),
-            buyerNote = o.optString("buyerNote"),
-            inspectionDeadline = null,
-            deliveryAvailable = product?.optBoolean("deliveryAvailable", false) ?: false,
-            pickupAvailable = product?.optBoolean("pickupAvailable", false) ?: false
+        parseProtectedMarketplaceCheckoutOrderResponse(
+            raw = raw,
+            expectedListingId = listing.id,
+            expectedCurrency = listing.currency,
+            expectedQuantity = quantity,
+            expectedFulfillmentMethod = method
         )
     }
 }
