@@ -5,6 +5,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ui = ROOT / "app/src/main/java/com/fynx/app/ui"
 camera = (ui / "FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
+video_editor = (ui / "FynxCameraVideoEditor.kt").read_text(encoding="utf-8")
+unit_tests = (ROOT / "app/src/test/java/com/fynx/app/ui/CameraMediaReliabilityTest.kt").read_text(encoding="utf-8")
 
 checks = {
     "photo crop has a real bitmap pipeline": "fun cropPhotoSquare()" in camera and "Bitmap.createBitmap(bitmap, left, top, side, side)" in camera and "cropPhotoSquare()" in camera,
@@ -16,6 +18,13 @@ checks = {
     "the established camera-to-caller URI and type callback is retained": "onCaptured(previewUri, previewType)" in camera and 'pendingType = if (videoNoteMode) "video_note" else "video"' in camera,
     "retake removes the draft and resets creative edits": "fun retake()" in camera and 'photoTextOverlay = ""' in camera and "selectedPhotoSticker = null" in camera,
     "photo/video status upload protections remain": "FYNX_STATUS_MAX_VIDEO_BYTES" in camera and "FYNX_STATUS_MAX_VIDEO_DURATION_MS" in camera and "recorderBuilder.setTargetVideoEncodingBitRate(700_000)" in camera,
+    "video trim uses real MP4 track remuxing": "MediaExtractor" in video_editor and "MediaMuxer" in video_editor and "SEEK_TO_NEXT_SYNC" in video_editor and "writeSampleData" in video_editor,
+    "mute removes audio track instead of only muting preview": "muteAudio" in video_editor and "if (!isVideo && (!isAudio || muteAudio))" in video_editor,
+    "video rotation metadata is preserved during editing": "METADATA_KEY_VIDEO_ROTATION" in video_editor and "setOrientationHint(rotation)" in video_editor,
+    "video editor enforces a minimum valid clip range": "MIN_CLIP_DURATION_MS" in video_editor and "normalize(startMs, endMs, durationMs)" in video_editor,
+    "camera exposes real trim controls and apply action": '"Edit video"' in camera and '"Apply video edits"' in camera and "applyVideoEdits(previewUri)" in camera,
+    "mute toggle changes the saved output": 'Text("Mute original audio"' in camera and "onCheckedChange = { muteVideoAudio = it }" in camera and "muteAudio = muteVideoAudio" in camera,
+    "video-edit unit regression tests are present": "videoEditRangeIsClampedToValidMinimumAndSourceBounds" in unit_tests and "videoEditRangeClampsNegativeAndOverlongSelections" in unit_tests,
 }
 caller_files = [
     "FynxHomeSocialHubPanel.kt",

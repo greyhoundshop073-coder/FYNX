@@ -133,6 +133,10 @@ fun FynxCameraCapturePanel(
     var photoTextOverlay by remember { mutableStateOf("") }
     var selectedPhotoSticker by remember { mutableStateOf<String?>(null) }
     var showPhotoTextDialog by remember { mutableStateOf(false) }
+    var videoDurationMs by remember { mutableLongStateOf(0L) }
+    var videoTrimStartMs by remember { mutableLongStateOf(0L) }
+    var videoTrimEndMs by remember { mutableLongStateOf(0L) }
+    var muteVideoAudio by remember { mutableStateOf(false) }
     var enhancing by remember { mutableStateOf(false) }
     var showCaptureControls by remember { mutableStateOf(true) }
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
@@ -236,6 +240,10 @@ fun FynxCameraCapturePanel(
         photoTextOverlay = ""
         selectedPhotoSticker = null
         showPhotoTextDialog = false
+        videoDurationMs = 0L
+        videoTrimStartMs = 0L
+        videoTrimEndMs = 0L
+        muteVideoAudio = false
         enhancing = false
         recordingNotice = null
         error = null
@@ -401,6 +409,47 @@ fun FynxCameraCapturePanel(
             if (result.isSuccess) onCaptured(previewUri, previewType)
         }
     }
+    fun applyVideoEdits(previewUri: Uri) {
+        if (enhancing || videoDurationMs < FynxCameraVideoEditRange.MIN_CLIP_DURATION_MS) return
+        val source = previewUri.path?.let(::File) ?: run {
+            error = "This video cannot be edited from its current location."
+            return
+        }
+        val endMs = videoTrimEndMs.coerceIn(FynxCameraVideoEditRange.MIN_CLIP_DURATION_MS, videoDurationMs)
+        val startMs = videoTrimStartMs.coerceIn(0L, (endMs - FynxCameraVideoEditRange.MIN_CLIP_DURATION_MS).coerceAtLeast(0L))
+        val hasTrim = startMs > 0L || endMs < videoDurationMs
+        if (!hasTrim && !muteVideoAudio) return
+        enhancing = true
+        error = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val edited = FynxCameraVideoEditor.edit(source, startMs, endMs, muteVideoAudio)
+                    if (statusCapture && edited.length() > FYNX_STATUS_MAX_VIDEO_BYTES) {
+                        edited.delete()
+                        error("The edited Status video is above the upload-size limit. Shorten the clip further.")
+                    }
+                    edited
+                }
+            }
+            result.onSuccess { edited ->
+                if (edited.absolutePath != source.absolutePath) {
+                    val previous = pendingUri
+                    pendingUri = Uri.fromFile(edited)
+                    videoDurationMs = 0L
+                    videoTrimStartMs = 0L
+                    videoTrimEndMs = 0L
+                    muteVideoAudio = false
+                    error = null
+                    scope.launch {
+                        delay(700L)
+                        if (previous?.path == source.absolutePath) deleteUri(previous)
+                    }
+                }
+            }.onFailure { error = it.message ?: "Video edits could not be applied" }
+            enhancing = false
+        }
+    }
     fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) { val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val strength = intensity.coerceIn(0f, 1f)
             val matrix = ColorMatrix().apply {
                 setFynxFilter(
@@ -463,7 +512,36 @@ fun FynxCameraCapturePanel(
     val previewUri=pendingUri; val previewType=pendingType
     if(previewUri!=null && previewType!=null){
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
-            if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
+            if (previewType == "image") {
+                AndroidView(
+                    factory = { android.widget.ImageView(it).apply { scaleType = android.widget.ImageView.ScaleType.FIT_CENTER } },
+                    update = { it.setImageURI(previewUri) },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                AndroidView(
+                    factory = { viewContext ->
+                        android.widget.VideoView(viewContext).apply {
+                            tag = previewUri.toString()
+                            setOnPreparedListener { player ->
+                                player.isLooping = true
+                                videoDurationMs = player.duration.toLong().coerceAtLeast(0L)
+                                if (videoTrimEndMs <= 0L || videoTrimEndMs > videoDurationMs) videoTrimEndMs = videoDurationMs
+                                if (videoTrimStartMs > videoTrimEndMs - FynxCameraVideoEditRange.MIN_CLIP_DURATION_MS) videoTrimStartMs = 0L
+                                start()
+                            }
+                            setVideoURI(previewUri)
+                        }
+                    },
+                    update = { view ->
+                        if (view.tag != previewUri.toString()) {
+                            view.tag = previewUri.toString()
+                            view.setVideoURI(previewUri)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
             if (previewType == "image" && (photoTextOverlay.isNotBlank() || selectedPhotoSticker != null)) {
                 Column(
                     modifier = Modifier.align(Alignment.Center)
@@ -545,7 +623,58 @@ fun FynxCameraCapturePanel(
                             Slider(value=filterIntensity,onValueChange={filterIntensity=it},onValueChangeFinished={applyFilterToPhoto(filter, filterIntensity)},valueRange=0f..1f,modifier=Modifier.weight(1f))
                         }
                     }
-                    OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}}
+                    OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}
+                } else {
+                    Text("Edit video", style = MaterialTheme.typography.labelLarge)
+                    if (videoDurationMs > FynxCameraVideoEditRange.MIN_CLIP_DURATION_MS) {
+                        val minClip = FynxCameraVideoEditRange.MIN_CLIP_DURATION_MS
+                        val safeEnd = videoTrimEndMs.coerceIn(minClip, videoDurationMs)
+                        val safeStart = videoTrimStartMs.coerceIn(0L, (safeEnd - minClip).coerceAtLeast(0L))
+                        val latestStart = (safeEnd - minClip).coerceAtLeast(0L)
+                        val earliestEnd = (safeStart + minClip).coerceAtMost(videoDurationMs)
+                        Text("Start · ${formatCameraRecordingTime(safeStart)}", style = MaterialTheme.typography.bodyMedium)
+                        Slider(
+                            value = safeStart.toFloat(),
+                            onValueChange = { videoTrimStartMs = it.toLong().coerceIn(0L, latestStart) },
+                            valueRange = 0f..maxOf(1f, latestStart.toFloat()),
+                            enabled = !enhancing && latestStart > 0L
+                        )
+                        Text("End · ${formatCameraRecordingTime(safeEnd)}", style = MaterialTheme.typography.bodyMedium)
+                        Slider(
+                            value = safeEnd.toFloat(),
+                            onValueChange = { videoTrimEndMs = it.toLong().coerceIn(earliestEnd, videoDurationMs) },
+                            valueRange = if (earliestEnd < videoDurationMs) earliestEnd.toFloat()..videoDurationMs.toFloat() else 0f..videoDurationMs.toFloat(),
+                            enabled = !enhancing && earliestEnd < videoDurationMs
+                        )
+                        Text("Selected clip · ${formatCameraRecordingTime((safeEnd - safeStart).coerceAtLeast(0L))}", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Mute original audio", style = MaterialTheme.typography.bodyMedium)
+                                Text("Audio is removed when you apply edits.", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Switch(checked = muteVideoAudio, onCheckedChange = { muteVideoAudio = it }, enabled = !enhancing)
+                        }
+                        val videoHasTrim = safeStart > 0L || safeEnd < videoDurationMs
+                        OutlinedButton(
+                            onClick = { applyVideoEdits(previewUri) },
+                            enabled = !enhancing && (videoHasTrim || muteVideoAudio),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        ) { Text(if (enhancing) "Processing video…" else "Apply video edits") }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text("Preparing video editor…", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
             }
             Row(
                 Modifier

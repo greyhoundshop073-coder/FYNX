@@ -38,4 +38,33 @@ class CameraMediaReliabilityTest {
         assertEquals(0f, CameraFilter.BW.saturation, 0f)
         assertFalse(CameraFilter.BW.saturation > 0f)
     }
+
+    @Test
+    fun videoEditRangeIsClampedToValidMinimumAndSourceBounds() {
+        val range = FynxCameraVideoEditRange.normalize(9_000L, 2_500L, 10_000L)
+        assertEquals(1_500L, range.startMs)
+        assertEquals(2_500L, range.endMs)
+        assertEquals(1_000L, range.clipDurationMs)
+    }
+
+    @Test
+    fun videoEditRangeClampsNegativeAndOverlongSelections() {
+        val range = FynxCameraVideoEditRange.normalize(-500L, 25_000L, 8_000L)
+        assertEquals(0L, range.startMs)
+        assertEquals(8_000L, range.endMs)
+        assertEquals(8_000L, range.clipDurationMs)
+    }
+
+    @Test
+    fun videoEditRangeKeepsAtLeastOneSecond() {
+        val range = FynxCameraVideoEditRange.normalize(4_000L, 4_100L, 9_000L)
+        assertEquals(3_100L, range.startMs)
+        assertEquals(4_100L, range.endMs)
+        assertEquals(FynxCameraVideoEditRange.MIN_CLIP_DURATION_MS, range.clipDurationMs)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun videoEditRejectsSourceShorterThanMinimumDuration() {
+        FynxCameraVideoEditRange.normalize(0L, 500L, 500L)
+    }
 }
