@@ -1,6 +1,6 @@
 # FYNX Marketplace & My Shop — Engineering Completion Register
 
-**Last updated:** 2026-10-26  
+**Last updated:** 2026-10-27  
 **Owner/workstream:** Marketplace and My Shop only  
 **Canonical APK integration target:** `integration/fynx-single-apk-20261013`  
 **Baseline observed before this batch:** `c0977f263e8883efab3ff31fedf2edb613bfa978`  
@@ -140,4 +140,24 @@ All Android Marketplace changes must land in the canonical integration branch ab
 - Disable refresh controls while their respective request is loading; remove the read-only seller-order Refresh callback that redundantly reloads the whole parent screen.
 - Extend the existing Marketplace seller-flow regression verifier with assertions for each behaviour above.
 
-**Status at audit write:** implementation is on the feature branch; regression checks and the exact-head Android/CI results still need to run. This is not yet merged or claimed complete.
+**Status:** merged through [PR #374](https://github.com/greyhoundshop073-coder/FYNX/pull/374) as canonical commit `1f2a06b65545ef327dad78ebde9bbb622daa69a5`. The exact PR-head Android Build workflow [#40461195663](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/40461195663) passed the fast build/test/lint and Marketplace source-contract gates. Full build/runtime instrumentation were skipped on the pull-request event; no live-backend or device-runtime claim is made from that run.
+
+
+## P5 — Fail-closed seller-order refresh and financial field validation
+
+**Starting canonical SHA:** `1f2a06b65545ef327dad78eb9bbb622daa69a5`
+**Feature branch:** `fix/marketplace-seller-orders-fail-closed-20261027`
+**Scope:** Marketplace seller-order Android UI and the existing Marketplace source-contract verifier only. No backend, database, authentication, shared network configuration, Avatar/Profile, Chat/Groups, or Status/Story files are changed.
+
+### Verified root causes
+- `FynxMarketplaceSellerOrders.load()` previously retained already-rendered orders when a later refresh failed. The order details view can expose delivery-driver assignment, handover and other fulfillment actions, so old status must not remain actionable after a failed read.
+- The selected-order dialog was not invalidated when a refresh started or failed. This could leave an old order detail surface open after the order list was no longer trustworthy.
+- The parser accepted missing or malformed `totalAmount` as `0.0` and accepted missing `status` as a blank value, which could render a false zero total or misleading fallback state.
+
+### P5 repair
+- Clear the previous order list and selected-order dialog as soon as a new read begins; clear them again on failure. Loading/error/empty states now replace stale actionable order data.
+- Reject non-finite or negative order totals, missing order status, and missing currency as an invalid response, using the existing `mapCatching` failure path.
+- Normalize the currency to uppercase and give a blank fulfillment method the existing safe DELIVERY default.
+- Add regression assertions that guard stale-order clearing and malformed financial/status fields without removing existing Marketplace checks.
+
+**Verification status:** the source/test changes are staged on the feature branch. Exact-head CI must pass before merge. Live orders, delivery transitions and financial data remain unverified until a backend is available; this batch does not depend on or modify that backend.
