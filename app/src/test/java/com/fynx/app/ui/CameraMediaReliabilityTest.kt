@@ -67,4 +67,35 @@ class CameraMediaReliabilityTest {
     fun videoEditRejectsSourceShorterThanMinimumDuration() {
         FynxCameraVideoEditRange.normalize(0L, 500L, 500L)
     }
+
+    @Test
+    fun drawingPointMapsToImageCoordinatesInsideFitCenterImage() {
+        val point = normalizeFynxCameraDrawPoint(
+            x = 150f, y = 300f, canvasWidth = 300f, canvasHeight = 600f,
+            imageWidth = 1000f, imageHeight = 1000f
+        )
+        assertTrue(point != null)
+        assertEquals(0.5f, point!!.x, 0.001f)
+        assertEquals(0.5f, point.y, 0.001f)
+    }
+
+    @Test
+    fun drawingPointRejectsLetterboxAreaOutsideTheActualPhoto() {
+        val point = normalizeFynxCameraDrawPoint(
+            x = 150f, y = 40f, canvasWidth = 300f, canvasHeight = 600f,
+            imageWidth = 1000f, imageHeight = 1000f
+        )
+        assertEquals(null, point)
+    }
+
+    @Test
+    fun drawingPointAtPhotoEdgeIsNormalizedAndClamped() {
+        val point = normalizeFynxCameraDrawPoint(
+            x = 0f, y = 150f, canvasWidth = 300f, canvasHeight = 600f,
+            imageWidth = 1000f, imageHeight = 1000f
+        )
+        assertTrue(point != null)
+        assertEquals(0f, point!!.x, 0.001f)
+        assertEquals(0f, point.y, 0.001f)
+    }
 }

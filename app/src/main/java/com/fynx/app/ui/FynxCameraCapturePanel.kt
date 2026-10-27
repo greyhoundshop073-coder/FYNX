@@ -29,6 +29,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
@@ -45,6 +46,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -127,12 +135,19 @@ fun FynxCameraCapturePanel(
     var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
     var pendingType by remember { mutableStateOf<String?>(null) }
     var preparingPhoto by remember { mutableStateOf(false) }
-    BackHandler { if (recording == null && !preparingPhoto) onDismiss() }
+    var drawingMode by remember { mutableStateOf(false) }
+    BackHandler { if (drawingMode) drawingMode = false else if (recording == null && !preparingPhoto) onDismiss() }
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
     var filterIntensity by remember { mutableFloatStateOf(1f) }
     var photoTextOverlay by remember { mutableStateOf("") }
     var selectedPhotoSticker by remember { mutableStateOf<String?>(null) }
     var showPhotoTextDialog by remember { mutableStateOf(false) }
+    var selectedDrawingColorArgb by remember { mutableIntStateOf(0xFFFFD54F.toInt()) }
+    var drawingStrokes by remember { mutableStateOf<List<FynxCameraDrawStroke>>(emptyList()) }
+    var activeDrawingPoints by remember { mutableStateOf<List<FynxCameraDrawPoint>>(emptyList()) }
+    var photoPixelWidth by remember { mutableIntStateOf(0) }
+    var photoPixelHeight by remember { mutableIntStateOf(0) }
+    var photoGeometryRevision by remember { mutableIntStateOf(0) }
     var videoDurationMs by remember { mutableLongStateOf(0L) }
     var videoTrimStartMs by remember { mutableLongStateOf(0L) }
     var videoTrimEndMs by remember { mutableLongStateOf(0L) }
@@ -179,6 +194,23 @@ fun FynxCameraCapturePanel(
         }
     }
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
+    LaunchedEffect(pendingUri, pendingType, photoGeometryRevision) {
+        val path = pendingUri?.path
+        if (pendingType != "image" || path.isNullOrBlank()) {
+            photoPixelWidth = 0
+            photoPixelHeight = 0
+            return@LaunchedEffect
+        }
+        val dimensions = withContext(Dispatchers.IO) {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, options)
+            options.outWidth to options.outHeight
+        }
+        if (pendingUri?.path == path && pendingType == "image") {
+            photoPixelWidth = dimensions.first.coerceAtLeast(0)
+            photoPixelHeight = dimensions.second.coerceAtLeast(0)
+        }
+    }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
         val generation = bindGeneration + 1; bindGeneration = generation
         if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
@@ -240,6 +272,11 @@ fun FynxCameraCapturePanel(
         photoTextOverlay = ""
         selectedPhotoSticker = null
         showPhotoTextDialog = false
+        drawingMode = false
+        drawingStrokes = emptyList()
+        activeDrawingPoints = emptyList()
+        photoPixelWidth = 0
+        photoPixelHeight = 0
         videoDurationMs = 0L
         videoTrimStartMs = 0L
         videoTrimEndMs = 0L
@@ -282,6 +319,7 @@ fun FynxCameraCapturePanel(
                 }
             }
             result.onFailure { error = it.message ?: "Photo rotation failed" }
+            result.onSuccess { photoGeometryRevision++; drawingStrokes = emptyList(); activeDrawingPoints = emptyList(); drawingMode = false }
             enhancing = false
         }
     }
@@ -327,11 +365,12 @@ fun FynxCameraCapturePanel(
                 }
             }
             result.onFailure { error = it.message ?: "Photo crop failed" }
+            result.onSuccess { photoGeometryRevision++; drawingStrokes = emptyList(); activeDrawingPoints = emptyList(); drawingMode = false }
             enhancing = false
         }
     }
-    fun renderPhotoOverlays(uri: Uri, textOverlay: String, sticker: String?) {
-        if (textOverlay.isBlank() && sticker.isNullOrBlank()) return
+    fun renderPhotoOverlays(uri: Uri, textOverlay: String, sticker: String?, drawStrokes: List<FynxCameraDrawStroke>) {
+        if (textOverlay.isBlank() && sticker.isNullOrBlank() && drawStrokes.isEmpty()) return
         val destination = uri.path?.let(::File) ?: error("Captured photo is not a local file")
         val bitmap = BitmapFactory.decodeFile(destination.absolutePath)
             ?: error("Unable to decode photo for editing")
@@ -375,6 +414,34 @@ fun FynxCameraCapturePanel(
                 }
                 canvas.drawText(sticker, bitmap.width * 0.78f, bitmap.height * 0.82f, paint)
             }
+            drawStrokes.forEach { stroke ->
+                if (stroke.points.isEmpty()) return@forEach
+                val path = android.graphics.Path().apply {
+                    moveTo(stroke.points.first().x * bitmap.width, stroke.points.first().y * bitmap.height)
+                    stroke.points.drop(1).forEach { point ->
+                        lineTo(point.x * bitmap.width, point.y * bitmap.height)
+                    }
+                }
+                val penWidth = (minOf(bitmap.width, bitmap.height) * 0.012f).coerceAtLeast(3f)
+                val pen = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stroke.colorArgb
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = penWidth
+                    strokeCap = android.graphics.Paint.Cap.ROUND
+                    strokeJoin = android.graphics.Paint.Join.ROUND
+                    setShadowLayer(2f, 0f, 0f, android.graphics.Color.BLACK)
+                }
+                if (stroke.points.size == 1) {
+                    canvas.drawCircle(
+                        stroke.points.first().x * bitmap.width,
+                        stroke.points.first().y * bitmap.height,
+                        penWidth / 2f,
+                        pen
+                    )
+                } else {
+                    canvas.drawPath(path, pen)
+                }
+            }
             val temp = File(context.cacheDir, "fynx_photo_overlay_${System.nanoTime()}.jpg")
             try {
                 FileOutputStream(temp).use {
@@ -391,7 +458,7 @@ fun FynxCameraCapturePanel(
     }
     fun sendPreview(previewUri: Uri, previewType: String) {
         if (previewType != "image" ||
-            (photoTextOverlay.isBlank() && selectedPhotoSticker.isNullOrBlank())
+            (photoTextOverlay.isBlank() && selectedPhotoSticker.isNullOrBlank() && drawingStrokes.isEmpty())
         ) {
             onCaptured(previewUri, previewType)
             return
@@ -399,10 +466,11 @@ fun FynxCameraCapturePanel(
         if (enhancing) return
         val textToRender = photoTextOverlay
         val stickerToRender = selectedPhotoSticker
+        val drawingStrokesToRender = drawingStrokes.toList()
         enhancing = true
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { renderPhotoOverlays(previewUri, textToRender, stickerToRender) }
+                runCatching { renderPhotoOverlays(previewUri, textToRender, stickerToRender, drawingStrokesToRender) }
             }
             result.onFailure { error = it.message ?: "Photo edits could not be applied" }
             enhancing = false
@@ -459,7 +527,7 @@ fun FynxCameraCapturePanel(
                     1f
                 )
             }; val outputBitmap=android.graphics.Bitmap.createBitmap(bitmap.width,bitmap.height,android.graphics.Bitmap.Config.ARGB_8888); android.graphics.Canvas(outputBitmap).drawBitmap(bitmap,0f,0f,android.graphics.Paint().apply { colorFilter=ColorMatrixColorFilter(matrix) }); FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); outputBitmap.recycle(); filter=selected; filterIntensity=intensity; error=null }.onFailure { error=it.message ?: "Filter could not be applied" } }
-    fun enhancePhoto() { val source=pendingUri ?: return; if(pendingType!="image" || enhancing)return; enhancing=true; error=null; scope.launch { val result=withContext(Dispatchers.IO){FynxAiPhotoEnhancer.enhance(context,source)}; result.onSuccess { enhancedUri -> deleteUri(source); pendingUri=enhancedUri; filter=CameraFilter.NATURAL; filterIntensity=1f; error=null }.onFailure { error=it.message ?: "AI photo enhancement failed" }; enhancing=false } }
+    fun enhancePhoto() { val source=pendingUri ?: return; if(pendingType!="image" || enhancing)return; enhancing=true; error=null; scope.launch { val result=withContext(Dispatchers.IO){FynxAiPhotoEnhancer.enhance(context,source)}; result.onSuccess { enhancedUri -> deleteUri(source); pendingUri=enhancedUri; filter=CameraFilter.NATURAL; filterIntensity=1f; drawingStrokes=emptyList(); activeDrawingPoints=emptyList(); drawingMode=false; photoGeometryRevision++; error=null }.onFailure { error=it.message ?: "AI photo enhancement failed" }; enhancing=false } }
     fun capturePhotoNow() {
         val capture = imageCapture ?: run { error = "Camera is still starting"; return }
         val stamp = System.currentTimeMillis()
@@ -564,6 +632,47 @@ fun FynxCameraCapturePanel(
                     }
                 }
             }
+            if (previewType == "image" && photoPixelWidth > 0 && photoPixelHeight > 0 &&
+                (drawingStrokes.isNotEmpty() || drawingMode)
+            ) {
+                val drawingGestureModifier = if (drawingMode) {
+                    Modifier.pointerInput(previewUri, photoPixelWidth, photoPixelHeight, selectedDrawingColorArgb) {
+                        detectDragGestures(
+                            onDragStart = { position ->
+                                val point = normalizeFynxCameraDrawPoint(
+                                    position.x, position.y, size.width.toFloat(), size.height.toFloat(),
+                                    photoPixelWidth.toFloat(), photoPixelHeight.toFloat()
+                                )
+                                activeDrawingPoints = point?.let { listOf(it) } ?: emptyList()
+                            },
+                            onDrag = { change, _ ->
+                                val point = normalizeFynxCameraDrawPoint(
+                                    change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat(),
+                                    photoPixelWidth.toFloat(), photoPixelHeight.toFloat()
+                                )
+                                if (point != null && activeDrawingPoints.isNotEmpty()) {
+                                    activeDrawingPoints = activeDrawingPoints + point
+                                }
+                                change.consume()
+                            },
+                            onDragEnd = {
+                                if (activeDrawingPoints.isNotEmpty()) {
+                                    drawingStrokes = drawingStrokes + FynxCameraDrawStroke(activeDrawingPoints, selectedDrawingColorArgb)
+                                }
+                                activeDrawingPoints = emptyList()
+                            },
+                            onDragCancel = { activeDrawingPoints = emptyList() }
+                        )
+                    }
+                } else Modifier
+                Canvas(Modifier.fillMaxSize().then(drawingGestureModifier)) {
+                    val visibleStrokes = drawingStrokes +
+                        if (activeDrawingPoints.isNotEmpty()) listOf(FynxCameraDrawStroke(activeDrawingPoints, selectedDrawingColorArgb))
+                        else emptyList()
+                    drawFynxCameraDrawingStrokes(visibleStrokes, photoPixelWidth, photoPixelHeight)
+                }
+            }
+            if (!drawingMode) {
             Column(
                 Modifier
                     .align(Alignment.BottomCenter)
@@ -623,6 +732,36 @@ fun FynxCameraCapturePanel(
                             Slider(value=filterIntensity,onValueChange={filterIntensity=it},onValueChangeFinished={applyFilterToPhoto(filter, filterIntensity)},valueRange=0f..1f,modifier=Modifier.weight(1f))
                         }
                     }
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { drawingMode = true },
+                            enabled = !enhancing && photoPixelWidth > 0 && photoPixelHeight > 0
+                        ) { Text("Draw") }
+                        OutlinedButton(
+                            onClick = { if (drawingStrokes.isNotEmpty()) drawingStrokes = drawingStrokes.dropLast(1) },
+                            enabled = !enhancing && drawingStrokes.isNotEmpty()
+                        ) { Text("Undo") }
+                        OutlinedButton(
+                            onClick = { drawingStrokes = emptyList(); activeDrawingPoints = emptyList() },
+                            enabled = !enhancing && drawingStrokes.isNotEmpty()
+                        ) { Text("Clear") }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(0xFFFFD54F.toInt(), 0xFFF44336.toInt(), 0xFF42A5F5.toInt(), 0xFF66BB6A.toInt(), 0xFFFFFFFF.toInt()).forEach { argb ->
+                            FilterChip(
+                                selected = selectedDrawingColorArgb == argb,
+                                enabled = !enhancing,
+                                onClick = { selectedDrawingColorArgb = argb },
+                                label = { Box(Modifier.size(18.dp).background(Color(argb.toLong()), androidx.compose.foundation.shape.CircleShape)) }
+                            )
+                        }
+                    }
                     OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}
                 } else {
                     Text("Edit video", style = MaterialTheme.typography.labelLarge)
@@ -656,7 +795,7 @@ fun FynxCameraCapturePanel(
                                 Text("Mute original audio", style = MaterialTheme.typography.bodyMedium)
                                 Text("Audio is removed when you apply edits.", style = MaterialTheme.typography.bodySmall)
                             }
-                            Switch(checked = muteVideoAudio, onCheckedChange = { muteVideoAudio = it }, enabled = !enhancing)
+                            Switch(checked = muteVideoAudio, onCheckedChange = { muteVideoAudio = it }, enabled = !enhancing, modifier = Modifier.semantics { contentDescription = "Toggle video mute" })
                         }
                         val videoHasTrim = safeStart > 0L || safeEnd < videoDurationMs
                         OutlinedButton(
@@ -676,6 +815,24 @@ fun FynxCameraCapturePanel(
                     }
                 }
             }
+            } else {
+                Surface(
+                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.Black.copy(alpha = 0.68f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("Draw on photo", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                        TextButton(onClick = { if (drawingStrokes.isNotEmpty()) drawingStrokes = drawingStrokes.dropLast(1) }) { Text("Undo") }
+                        TextButton(onClick = { drawingStrokes = emptyList(); activeDrawingPoints = emptyList() }) { Text("Clear") }
+                        Button(onClick = { drawingMode = false; activeDrawingPoints = emptyList() }) { Text("Finish drawing") }
+                    }
+                }
+            }
             Row(
                 Modifier
                     .align(Alignment.BottomCenter)
@@ -688,7 +845,7 @@ fun FynxCameraCapturePanel(
             ) {
                 OutlinedButton(onClick = { if (!enhancing) retake() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Retake") }
                 if (previewType == "image") OutlinedButton(onClick = { if (!enhancing) rotatePhoto() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.RotateRight, null); Spacer(Modifier.width(4.dp)); Text("Rotate") }
-                Button(onClick = { if (!enhancing) sendPreview(previewUri, previewType) }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(4.dp)); Text("Send") }
+                Button(onClick = { if (!enhancing && !drawingMode) sendPreview(previewUri, previewType) }, enabled = !enhancing && !drawingMode, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(4.dp)); Text(if (drawingMode) "Finish drawing first" else "Send") }
             }
             if (showPhotoTextDialog) {
                 AlertDialog(
@@ -949,5 +1106,56 @@ private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) {
     ExifInterface(file.absolutePath).apply {
         setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
         saveAttributes()
+    }
+}
+
+internal data class FynxCameraDrawPoint(val x: Float, val y: Float)
+private data class FynxCameraDrawStroke(val points: List<FynxCameraDrawPoint>, val colorArgb: Int)
+
+internal fun normalizeFynxCameraDrawPoint(
+    x: Float, y: Float, canvasWidth: Float, canvasHeight: Float, imageWidth: Float, imageHeight: Float
+): FynxCameraDrawPoint? {
+    if (canvasWidth <= 0f || canvasHeight <= 0f || imageWidth <= 0f || imageHeight <= 0f) return null
+    if (!x.isFinite() || !y.isFinite()) return null
+    val scale = minOf(canvasWidth / imageWidth, canvasHeight / imageHeight)
+    if (!scale.isFinite() || scale <= 0f) return null
+    val renderedWidth = imageWidth * scale
+    val renderedHeight = imageHeight * scale
+    val left = (canvasWidth - renderedWidth) / 2f
+    val top = (canvasHeight - renderedHeight) / 2f
+    if (x < left || x > left + renderedWidth || y < top || y > top + renderedHeight) return null
+    return FynxCameraDrawPoint(
+        ((x - left) / renderedWidth).coerceIn(0f, 1f),
+        ((y - top) / renderedHeight).coerceIn(0f, 1f)
+    )
+}
+
+private fun DrawScope.drawFynxCameraDrawingStrokes(
+    strokes: List<FynxCameraDrawStroke>, imageWidth: Int, imageHeight: Int
+) {
+    if (imageWidth <= 0 || imageHeight <= 0) return
+    val scale = minOf(size.width / imageWidth.toFloat(), size.height / imageHeight.toFloat())
+    val renderedWidth = imageWidth * scale
+    val renderedHeight = imageHeight * scale
+    val left = (size.width - renderedWidth) / 2f
+    val top = (size.height - renderedHeight) / 2f
+    val penWidth = (minOf(renderedWidth, renderedHeight) * 0.012f).coerceAtLeast(2f)
+    strokes.forEach { stroke ->
+        if (stroke.points.isEmpty()) return@forEach
+        val path = Path()
+        stroke.points.forEachIndexed { index, point ->
+            val x = left + point.x * renderedWidth
+            val y = top + point.y * renderedHeight
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        val color = Color(stroke.colorArgb.toLong())
+        if (stroke.points.size == 1) {
+            drawCircle(color, penWidth / 2f, Offset(
+                left + stroke.points.first().x * renderedWidth,
+                top + stroke.points.first().y * renderedHeight
+            ))
+        } else {
+            drawPath(path, color, style = Stroke(width = penWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
     }
 }

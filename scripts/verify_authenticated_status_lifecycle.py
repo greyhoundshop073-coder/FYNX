@@ -580,6 +580,230 @@ def verify_status_viewer(status: dict, name: str, expected_text: str | None = No
     return True
 
 
+
+def has_checked_control(xml_text: str, description: str) -> bool:
+    wanted = description.casefold()
+    for node in nodes(xml_text):
+        if (node.attrib.get("content-desc") or "").strip().casefold() == wanted:
+            return node.attrib.get("checked", "false").casefold() == "true"
+    return False
+
+
+def certify_camera_capture_and_video_edit() -> bool:
+    """Capture current CameraX UI, create a photo draft, then record/mute a real short clip."""
+    for permission in ("android.permission.CAMERA", "android.permission.RECORD_AUDIO"):
+        granted = run("adb", "shell", "pm", "grant", PACKAGE, permission)
+        if granted.returncode != 0:
+            FAILURES.append("emulator could not grant CameraX test permissions.")
+            return False
+
+    home = dump_ui("authenticated-camera-home-before.xml")
+    if not find_control(home, ["Open FYNX camera"]):
+        FAILURES.append("authenticated Home did not expose its real camera entry point.")
+        screenshot("authenticated-camera-home-missing.png")
+        return False
+
+    preview = tap_control(home, ["Open FYNX camera"], "authenticated-camera-preview", ["Take photo"], timeout=35.0)
+    if not preview:
+        return False
+    for label in ("Switch front/back camera", "Take photo", "Photo", "Video"):
+        if not find_control(preview, [label]):
+            FAILURES.append("live CameraX preview is missing required control: " + label)
+            screenshot("authenticated-camera-preview-controls-failed.png")
+            return False
+    NOTES.append("PASS live CameraX preview opened and exposed photo/video, lens switching, and capture controls.")
+    screenshot("authenticated-camera-preview.png")
+
+    photo = tap_control(preview, ["Take photo"], "authenticated-camera-photo-capture", ["Crop square"], timeout=35.0)
+    if not photo:
+        return False
+    for label in ("Crop square", "Add text", "Draw", "Stickers", "Retake", "Send"):
+        if not find_control(photo, [label]):
+            FAILURES.append("real photo editor is missing required control: " + label)
+            screenshot("authenticated-camera-photo-editor-controls-failed.png")
+            return False
+
+    crop = find_control(photo, ["Crop square"])
+    if crop:
+        run("adb", "shell", "input", "tap", str(crop[1]), str(crop[2]))
+        deadline = time.monotonic() + 25.0
+        while time.monotonic() < deadline:
+            time.sleep(0.4)
+            photo = dump_ui("authenticated-camera-square-crop.xml")
+            if find_control(photo, ["Crop square"]) and not find_control(photo, ["Processing…"]):
+                break
+        if not photo or find_control(photo, ["Processing…"]):
+            FAILURES.append("real photo editor square crop did not finish.")
+            screenshot("authenticated-camera-square-crop-failed.png")
+            return False
+        screenshot("authenticated-camera-square-crop.png")
+
+    draw_ui = tap_control(photo, ["Draw"], "authenticated-camera-draw-mode", ["Finish drawing"], timeout=15.0)
+    if not draw_ui:
+        return False
+    dimensions = run("adb", "shell", "wm", "size").stdout or ""
+    size_match = re.search(r"(\d+)x(\d+)", dimensions)
+    screen_width, screen_height = (
+        (int(size_match.group(1)), int(size_match.group(2))) if size_match else (1080, 2400)
+    )
+    run("adb", "shell", "input", "swipe",
+        str(screen_width // 2), str(screen_height * 42 // 100),
+        str(screen_width * 62 // 100), str(screen_height * 48 // 100), "650")
+    time.sleep(0.4)
+    screenshot("authenticated-camera-drawing-in-progress.png")
+    draw_ui = dump_ui("authenticated-camera-drawing-in-progress.xml")
+    finish = find_control(draw_ui, ["Finish drawing"])
+    if not finish:
+        FAILURES.append("draw mode did not expose its Finish drawing action.")
+        return False
+    run("adb", "shell", "input", "tap", str(finish[1]), str(finish[2]))
+    time.sleep(0.5)
+    photo = dump_ui("authenticated-camera-photo-editor-after-drawing.xml")
+    if not find_control(photo, ["Draw"]) or not find_control(photo, ["Send"]):
+        FAILURES.append("drawing mode did not return to the photo editor.")
+        return False
+
+    dialog = tap_control(photo, ["Add text"], "authenticated-camera-add-text-dialog", ["Add text to photo"], timeout=15.0)
+    if not dialog:
+        return False
+    fields = find_edit_fields(dialog)
+    if not fields:
+        FAILURES.append("photo text editor did not expose its editable text field.")
+        return False
+    run("adb", "shell", "input", "tap", str(fields[0][0]), str(fields[0][1]))
+    if input_text("FYNXCameraProof").returncode != 0:
+        FAILURES.append("emulator could not enter the photo overlay text.")
+        return False
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    time.sleep(0.4)
+    dialog = dump_ui("authenticated-camera-add-text-filled.xml")
+    apply = find_control(dialog, ["Apply"])
+    if not apply:
+        FAILURES.append("photo text editor did not expose Apply after entering text.")
+        return False
+    run("adb", "shell", "input", "tap", str(apply[1]), str(apply[2]))
+    time.sleep(0.5)
+    photo = dump_ui("authenticated-camera-photo-editor-with-text.xml")
+
+    sticker = find_control(photo, ["🔥"])
+    if not sticker:
+        FAILURES.append("photo editor did not expose the selectable fire sticker.")
+        return False
+    run("adb", "shell", "input", "tap", str(sticker[1]), str(sticker[2]))
+    time.sleep(0.4)
+    photo = dump_ui("authenticated-camera-photo-editor-ready.xml")
+    screenshot("authenticated-camera-photo-editor.png")
+    if not find_control(photo, ["Send"]):
+        FAILURES.append("photo editor Send action was lost after applying text, drawing and sticker.")
+        return False
+
+    composer = tap_control(photo, ["Send"], "authenticated-camera-photo-handoff",
+                           ["What's on your mind?", "New post"], timeout=35.0)
+    if not composer:
+        FAILURES.append("edited camera photo did not reach the existing Home post composer.")
+        return False
+    NOTES.append("PASS real captured photo passed crop, draw, text and sticker edits and reached the Home draft composer.")
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    deadline = time.monotonic() + 15.0
+    home = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        home = dump_ui("authenticated-camera-home-after-photo-draft.xml")
+        if find_control(home, ["Open FYNX camera"]):
+            break
+    if not find_control(home, ["Open FYNX camera"]):
+        FAILURES.append("Home did not return after the camera photo draft was dismissed.")
+        return False
+
+    preview = tap_control(home, ["Open FYNX camera"], "authenticated-camera-video-preview", ["Take photo"], timeout=35.0)
+    if not preview:
+        return False
+    video_mode = tap_control(preview, ["Video"], "authenticated-camera-video-mode", ["Record video"], timeout=30.0)
+    if not video_mode:
+        return False
+    recording = tap_control(video_mode, ["Record video"], "authenticated-camera-video-record-start",
+                            ["Stop video recording"], timeout=12.0)
+    if not recording:
+        return False
+    time.sleep(2.2)
+    recording = dump_ui("authenticated-camera-video-recording.xml")
+    stop = find_control(recording, ["Stop video recording"])
+    if not stop:
+        FAILURES.append("CameraX video recording did not expose its Stop action.")
+        screenshot("authenticated-camera-video-recording-failed.png")
+        return False
+    run("adb", "shell", "input", "tap", str(stop[1]), str(stop[2]))
+    deadline = time.monotonic() + 35.0
+    video_editor = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        video_editor = dump_ui("authenticated-camera-video-editor.xml")
+        if (find_control(video_editor, ["Apply video edits"])
+                and find_control(video_editor, ["Toggle video mute"])
+                and find_control(video_editor, ["Mute original audio"])):
+            break
+    if not (find_control(video_editor, ["Apply video edits"])
+            and find_control(video_editor, ["Toggle video mute"])
+            and find_control(video_editor, ["Mute original audio"])):
+        FAILURES.append("captured video did not open the real trim/mute editor.")
+        screenshot("authenticated-camera-video-editor-failed.png")
+        return False
+    screenshot("authenticated-camera-video-editor.png")
+    NOTES.append("PASS real recorded CameraX video opened the trim and original-audio controls.")
+
+    mute = find_control(video_editor, ["Toggle video mute"])
+    run("adb", "shell", "input", "tap", str(mute[1]), str(mute[2]))
+    deadline = time.monotonic() + 8.0
+    muted_ui = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.3)
+        muted_ui = dump_ui("authenticated-camera-video-mute-selected.xml")
+        if has_checked_control(muted_ui, "Toggle video mute"):
+            break
+    if not has_checked_control(muted_ui, "Toggle video mute"):
+        FAILURES.append("video editor mute switch did not transition to checked.")
+        return False
+    apply_edits = find_control(muted_ui, ["Apply video edits"])
+    if not apply_edits:
+        FAILURES.append("video edit apply action disappeared after selecting Mute.")
+        return False
+    run("adb", "shell", "input", "tap", str(apply_edits[1]), str(apply_edits[2]))
+    deadline = time.monotonic() + 40.0
+    edited_video_ui = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        edited_video_ui = dump_ui("authenticated-camera-video-mute-applied.xml")
+        if (find_control(edited_video_ui, ["Mute original audio"])
+                and not find_control(edited_video_ui, ["Processing video…"])
+                and not has_checked_control(edited_video_ui, "Toggle video mute")):
+            break
+    if (not edited_video_ui or find_control(edited_video_ui, ["Processing video…"])
+            or has_checked_control(edited_video_ui, "Toggle video mute")):
+        FAILURES.append("video editor did not finish applying the mute operation to the output clip.")
+        screenshot("authenticated-camera-video-mute-apply-failed.png")
+        return False
+    screenshot("authenticated-camera-video-edited-muted.png")
+    NOTES.append("PASS video mute was applied to an output clip; the editor returned to its unmuted draft state.")
+
+    retake = find_control(edited_video_ui, ["Retake"])
+    if retake:
+        run("adb", "shell", "input", "tap", str(retake[1]), str(retake[2]))
+        time.sleep(0.6)
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    deadline = time.monotonic() + 15.0
+    home = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        home = dump_ui("authenticated-camera-home-after-video-test.xml")
+        if find_control(home, ["Open FYNX camera"]):
+            break
+    if not find_control(home, ["Open FYNX camera"]):
+        FAILURES.append("Home did not return after the video editor certification.")
+        return False
+    NOTES.append("PASS camera retake/close returned to Home without publishing test content.")
+    return True
+
+
 def main() -> int:
     global CURRENT_USERNAME
     CURRENT_USERNAME = USERNAME.lower()
@@ -640,6 +864,7 @@ def main() -> int:
         app_signed_in = sign_in()
         if app_signed_in:
             NOTES.append("PASS non-debuggable runtimeCert installed and normal server sign-in reached authenticated Home.")
+            certify_camera_capture_and_video_edit()
 
             # If the account can actually see another owner's Status, tap that owner's
             # visible Home Status circle; do not create a fake second user or test post.
