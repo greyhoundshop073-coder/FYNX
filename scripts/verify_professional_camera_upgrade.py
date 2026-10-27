@@ -54,7 +54,7 @@ checks = {
     "drawing color palette uses the ARGB-int constructor safely": "Color(argb)" in camera and "Color(stroke.colorArgb)" in camera and "Color(argb.toLong())" not in camera and "Color(stroke.colorArgb.toLong())" not in camera,
     "every shared camera caller leaves system-inset management to CameraX panel": all(not camera_parent_has_duplicate_insets(content) for content in camera_parent_sources.values()),
     "all shared-camera dialogs use edge-to-edge window fitting": all("decorFitsSystemWindows = false" in content for content in camera_parent_sources.values()),
-    "video-edit unit regression tests are present": "videoEditRangeIsClampedToValidMinimumAndSourceBounds" in unit_tests and "videoEditRangeClampsNegativeAndOverlongSelections" in unit_tests,,
+    "video-edit unit regression tests are present": "videoEditRangeIsClampedToValidMinimumAndSourceBounds" in unit_tests and "videoEditRangeClampsNegativeAndOverlongSelections" in unit_tests,
     "capture screen has a dedicated studio header with dismiss, lens, flash and grid actions": '\"FYNX CAMERA\"' in camera and '\"Close camera\"' in camera and '\"Switch front/back camera\"' in camera and '\"Turn flash on\"' in camera and '\"Grid ✓\"' in camera,
     "capture screen uses a rounded dark studio tray": "RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)" in camera and "Color(0xE6111218)" in camera and '\"PHOTO STUDIO\"' in camera and '\"VIDEO STUDIO\"' in camera,
     "photo and video mode chips remain in the camera capture path": camera.count('selected = mode == CameraMode.PHOTO') >= 1 and camera.count('selected = mode == CameraMode.VIDEO') >= 1 and "FilledIconButton(" in camera,
