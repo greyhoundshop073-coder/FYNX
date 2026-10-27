@@ -758,7 +758,7 @@ fun FynxCameraCapturePanel(
                                 selected = selectedDrawingColorArgb == argb,
                                 enabled = !enhancing,
                                 onClick = { selectedDrawingColorArgb = argb },
-                                label = { Box(Modifier.size(18.dp).background(Color(argb.toLong()), androidx.compose.foundation.shape.CircleShape)) }
+                                label = { Box(Modifier.size(18.dp).background(Color(argb), androidx.compose.foundation.shape.CircleShape)) }
                             )
                         }
                     }
@@ -1148,7 +1148,7 @@ private fun DrawScope.drawFynxCameraDrawingStrokes(
             val y = top + point.y * renderedHeight
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        val color = Color(stroke.colorArgb.toLong())
+        val color = Color(stroke.colorArgb)
         if (stroke.points.size == 1) {
             drawCircle(color, penWidth / 2f, Offset(
                 left + stroke.points.first().x * renderedWidth,
