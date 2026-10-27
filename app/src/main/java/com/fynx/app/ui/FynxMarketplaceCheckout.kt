@@ -536,8 +536,8 @@ internal fun FynxMarketplaceCheckoutDialog(
                 OutlinedTextField(quantityText, { quantityText = it.filter(Char::isDigit); invalidateQuote() }, label = { Text("Quantity") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
                 quantityError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (listing.deliveryAvailable) FilterChip(selected = fulfillment == "DELIVERY", onClick = { fulfillment = "DELIVERY"; invalidateQuote() }, label = { Text("Delivery") }, enabled = !busy)
-                    if (listing.pickupAvailable) FilterChip(selected = fulfillment == "PICKUP", onClick = { fulfillment = "PICKUP"; invalidateQuote() }, label = { Text("Pickup") }, enabled = !busy)
+                    if (listing.deliveryAvailable) FilterChip(selected = fulfillment == "DELIVERY", onClick = { fulfillment = "DELIVERY"; invalidateQuote() }, label = { Text("Delivery") }, enabled = !busy, colors = fynxMarketplaceSelectedChipColors())
+                    if (listing.pickupAvailable) FilterChip(selected = fulfillment == "PICKUP", onClick = { fulfillment = "PICKUP"; invalidateQuote() }, label = { Text("Pickup") }, enabled = !busy, colors = fynxMarketplaceSelectedChipColors())
                 }
                 if (fulfillment == "DELIVERY") {
                     OutlinedTextField(name, { name = it; invalidateQuote() }, label = { Text("Full name") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
