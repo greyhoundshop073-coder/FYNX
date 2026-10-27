@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -115,6 +116,10 @@ internal fun MarketplaceReferenceCategoryRow(
     nearbyLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val selectedChipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+    )
     Row(
         modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -122,6 +127,7 @@ internal fun MarketplaceReferenceCategoryRow(
         FilterChip(
             selected = nearbySelected,
             onClick = onNearby,
+            colors = selectedChipColors,
             label = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (nearbyLoading) {
@@ -135,7 +141,12 @@ internal fun MarketplaceReferenceCategoryRow(
             }
         )
         categories.forEach { category ->
-            FilterChip(selected = selected == category, onClick = { onSelect(category) }, label = { Text(category) })
+            FilterChip(
+                selected = selected == category,
+                onClick = { onSelect(category) },
+                label = { Text(category) },
+                colors = selectedChipColors
+            )
         }
     }
 }
