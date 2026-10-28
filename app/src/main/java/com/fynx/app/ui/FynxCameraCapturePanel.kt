@@ -43,8 +43,13 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.RotateRight
@@ -1610,6 +1615,15 @@ private fun FynxCameraRailAction(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    val actionIcon = when (title) {
+        "Flash" -> Icons.Default.FlashOn
+        "Timer" -> Icons.Default.Timer
+        "Grid" -> Icons.Default.GridOn
+        "Effects" -> Icons.Default.AutoAwesome
+        "Adjust" -> Icons.Default.Tune
+        "Gallery" -> Icons.Default.PhotoLibrary
+        else -> null
+    }
     Column(
         modifier = Modifier.width(58.dp).clickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = title; role = Role.Button }.padding(vertical = 2.dp),
@@ -1619,7 +1633,12 @@ private fun FynxCameraRailAction(
         Surface(
             modifier = Modifier.size(40.dp), shape = androidx.compose.foundation.shape.CircleShape,
             color = if (selected) Color(0xFFD92D79) else Color(0xCC151720)
-        ) { Box(contentAlignment = Alignment.Center) { Text(glyph, color = Color.White, style = MaterialTheme.typography.titleLarge) } }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                if (actionIcon != null) Icon(actionIcon, contentDescription = null, tint = Color.White, modifier = Modifier.size(21.dp))
+                else Text(glyph, color = Color.White, style = MaterialTheme.typography.titleLarge)
+            }
+        }
         Text(title, color = if (enabled) Color.White else Color.White.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
