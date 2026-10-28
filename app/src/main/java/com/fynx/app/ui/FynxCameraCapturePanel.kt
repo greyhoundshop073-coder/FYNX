@@ -1296,7 +1296,7 @@ fun FynxCameraCapturePanel(
             }
         }
 
-        if (pendingUri == null && timerCountingDown == 0) {
+        if (pendingUri == null && timerCountingDown == 0 && !showEffectCarousel) {
             Column(
                 modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 78.dp, end = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally
@@ -1341,8 +1341,8 @@ fun FynxCameraCapturePanel(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(26.dp),
-                    color = Color(0xDE111218),
-                    tonalElevation = 8.dp
+                    color = Color.Transparent,
+                    tonalElevation = 0.dp
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
@@ -1350,12 +1350,26 @@ fun FynxCameraCapturePanel(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         error?.let {
-                            Text(it, color = Color(0xFFFF8D8D), style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.fillMaxWidth(), maxLines = 2)
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xDE111218),
+                                tonalElevation = 0.dp
+                            ) {
+                                Text(it, color = Color(0xFFFF8D8D), style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp), maxLines = 2)
+                            }
                         }
                         recordingNotice?.let {
-                            Text(it, color = Color(0xFFFFD166), style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.fillMaxWidth(), maxLines = 2)
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xDE111218),
+                                tonalElevation = 0.dp
+                            ) {
+                                Text(it, color = Color(0xFFFFD166), style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp), maxLines = 2)
+                            }
                         }
                         if (recording != null) {
                             val limit = FynxCameraRecordingDuration.maximumDurationMs(videoNoteMode, statusCapture, mode, selectedVideoDurationMs)
@@ -1596,8 +1610,8 @@ fun FynxCameraCapturePanel(
         if (showEffectCarousel && recording == null) {
             Surface(
                 modifier = Modifier.align(Alignment.CenterEnd)
-                    .padding(end = 8.dp, top = 118.dp, bottom = 204.dp)
-                    .width(132.dp).heightIn(max = 220.dp),
+                    .padding(end = 8.dp, top = 108.dp, bottom = 218.dp)
+                    .width(168.dp).heightIn(max = 252.dp),
                 shape = RoundedCornerShape(22.dp),
                 color = Color(0xD913151D),
                 tonalElevation = 8.dp
