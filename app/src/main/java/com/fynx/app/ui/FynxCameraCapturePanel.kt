@@ -11,6 +11,8 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraEffect
+import androidx.camera.core.UseCaseGroup
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -26,6 +28,13 @@ import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.core.MirrorMode
 import androidx.camera.view.PreviewView
+import androidx.camera.media3.effect.Media3Effect
+import androidx.media3.common.Effect
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.Brightness
+import androidx.media3.effect.Contrast
+import androidx.media3.effect.RgbAdjustment
+import androidx.media3.effect.RgbFilter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -124,6 +133,7 @@ fun FynxCameraCapturePanel(
     var cameraControl by remember { mutableStateOf<androidx.camera.core.CameraControl?>(null) }
     var cameraInfo by remember { mutableStateOf<androidx.camera.core.CameraInfo?>(null) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var liveCameraEffect by remember { mutableStateOf<Media3Effect?>(null) }
     var bindGeneration by remember { mutableIntStateOf(0) }
     var torchEnabled by remember { mutableStateOf(false) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
@@ -311,6 +321,11 @@ fun FynxCameraCapturePanel(
             photoPixelHeight = dimensions.second.coerceAtLeast(0)
         }
     }
+    LaunchedEffect(captureStyleFilter, liveCameraEffect) {
+        val effect = liveCameraEffect ?: return@LaunchedEffect
+        runCatching { effect.setEffects(fynxCameraLiveEffects(captureStyleFilter)) }
+            .onFailure { error = "Camera effect could not be applied: " + (it.message ?: "unsupported effect") }
+    }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
         val generation = bindGeneration + 1; bindGeneration = generation
         if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
@@ -349,17 +364,36 @@ fun FynxCameraCapturePanel(
                     .setTargetRotation(targetRotation)
                     .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
                     .build()
-                provider.unbindAll(); if (generation != bindGeneration || pendingUri != null) return@runCatching
-                val camera = if (mode == CameraMode.PHOTO) provider.bindToLifecycle(lifecycleOwner, selector, preview, capture) else provider.bindToLifecycle(lifecycleOwner, selector, preview, video)
-                cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
-                cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 4f)); val range = cameraInfo?.exposureState?.exposureCompensationRange
-                exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2); cameraControl?.setExposureCompensationIndex(exposure)
-                if (torchEnabled && cameraInfo?.hasFlashUnit() == true) cameraControl?.enableTorch(true) else if (torchEnabled) torchEnabled = false
-                error = null
+                provider.unbindAll()
+                liveCameraEffect?.close()
+                liveCameraEffect = null
+                if (generation != bindGeneration || pendingUri != null) return@runCatching
+                val targets = if (mode == CameraMode.PHOTO) CameraEffect.PREVIEW else (CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE)
+                val cameraEffect = Media3Effect(
+                    context, targets, ContextCompat.getMainExecutor(context)
+                ) { failure ->
+                    error = "Live effect stopped: " + (failure.message ?: "camera effect unavailable")
+                }
+                try {
+                    val groupBuilder = UseCaseGroup.Builder().addUseCase(preview)
+                    if (mode == CameraMode.PHOTO) groupBuilder.addUseCase(capture) else groupBuilder.addUseCase(video)
+                    groupBuilder.addEffect(cameraEffect)
+                    val camera = provider.bindToLifecycle(lifecycleOwner, selector, groupBuilder.build())
+                    liveCameraEffect = cameraEffect
+                    cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
+                    cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f))
+                    val range = cameraInfo?.exposureState?.exposureCompensationRange
+                    exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2); cameraControl?.setExposureCompensationIndex(exposure)
+                    if (torchEnabled && cameraInfo?.hasFlashUnit() == true) cameraControl?.enableTorch(true) else if (torchEnabled) torchEnabled = false
+                    error = null
+                } catch (failure: Throwable) {
+                    cameraEffect.close()
+                    throw failure
+                }
             }.onFailure { if (generation == bindGeneration) error = it.message ?: "Camera could not start" }
         }, ContextCompat.getMainExecutor(context))
     }
-    DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll() } }
+    DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll(); liveCameraEffect?.close() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
     fun retake() {
         deleteUri(pendingUri)
@@ -1220,7 +1254,7 @@ fun FynxCameraCapturePanel(
 
         if (pendingUri == null && timerCountingDown == 0) {
             Column(
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp).offset(y = (-62).dp),
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 78.dp, end = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 FynxCameraRailAction("Flash", "⚡", torchEnabled, recording == null) {
@@ -1242,10 +1276,8 @@ fun FynxCameraCapturePanel(
                 FynxCameraRailAction("Grid", "▦", showGrid, recording == null) {
                     if (recording == null) { showGrid = !showGrid; showCaptureControls = true }
                 }
-                if (mode == CameraMode.PHOTO) {
-                    FynxCameraRailAction("Effects", "✦", showEffectCarousel, recording == null) {
-                        if (recording == null) { showEffectCarousel = !showEffectCarousel; showCaptureControls = true }
-                    }
+                FynxCameraRailAction("Effects", "✦", showEffectCarousel, recording == null) {
+                    if (recording == null) { showEffectCarousel = !showEffectCarousel; showCaptureControls = true }
                 }
                 FynxCameraRailAction("Adjust", "☼", showProControls, recording == null) {
                     if (recording == null) {
@@ -1389,10 +1421,12 @@ fun FynxCameraCapturePanel(
                             Text(exposure.toString(), color = Color.White, style = MaterialTheme.typography.labelSmall)
                         }
                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                            listOf(1f, 2f, 3f, 4f).forEach { value ->
+                            val maxCameraZoom = (cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f).coerceAtLeast(1f)
+                            val zoomStops = listOf(1f, 1.5f, 2f, 3f, 4f).filter { it <= maxCameraZoom + 0.01f }.ifEmpty { listOf(1f) }
+                            zoomStops.forEach { value ->
                                 FilterChip(
                                     selected = kotlin.math.abs(zoomRatio - value) < 0.05f,
-                                    onClick = { zoomRatio = value; cameraControl?.setZoomRatio(value) },
+                                    onClick = { zoomRatio = value.coerceIn(1f, maxCameraZoom); cameraControl?.setZoomRatio(zoomRatio) },
                                     label = { Text(value.toInt().toString() + "×") },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Color(0xFF6B5CE7), selectedLabelColor = Color.White,
@@ -1404,12 +1438,12 @@ fun FynxCameraCapturePanel(
                         }
                     }
 
-                    if (mode == CameraMode.PHOTO && showEffectCarousel && recording == null) {
+                    if (showEffectCarousel && recording == null) {
                         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text("PHOTO LOOKS", color = Color.White.copy(alpha = 0.76f), style = MaterialTheme.typography.labelSmall)
+                                Text("LIVE LOOKS", color = Color.White.copy(alpha = 0.76f), style = MaterialTheme.typography.labelSmall)
                                 Spacer(Modifier.weight(1f))
-                                Text("Applied after capture", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall)
+                                Text("Preview + video", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall)
                             }
                             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                                 CameraFilter.values().forEach { option ->
@@ -1637,6 +1671,29 @@ private fun normalizeImportedPhotoToJpeg(file: File) {
             saveAttributes()
         }
     }
+}
+
+
+@OptIn(UnstableApi::class)
+private fun fynxCameraLiveEffects(filter: CameraFilter): List<Effect> = when (filter) {
+    CameraFilter.NATURAL -> emptyList()
+    CameraFilter.PORTRAIT -> listOf(
+        Contrast(0.04f),
+        RgbAdjustment.Builder().setRedScale(1.02f).setGreenScale(1.0f).setBlueScale(0.98f).build()
+    )
+    CameraFilter.BRIGHT -> listOf(Brightness(0.10f), Contrast(0.04f))
+    CameraFilter.WARM -> listOf(
+        Brightness(0.025f),
+        RgbAdjustment.Builder().setRedScale(1.12f).setGreenScale(1.02f).setBlueScale(0.90f).build()
+    )
+    CameraFilter.COOL -> listOf(
+        RgbAdjustment.Builder().setRedScale(0.90f).setGreenScale(1.02f).setBlueScale(1.12f).build()
+    )
+    CameraFilter.VINTAGE -> listOf(
+        Brightness(0.025f), Contrast(-0.06f),
+        RgbAdjustment.Builder().setRedScale(1.08f).setGreenScale(1.0f).setBlueScale(0.88f).build()
+    )
+    CameraFilter.BW -> listOf(RgbFilter.createGrayscaleFilter(), Contrast(0.06f))
 }
 
 private fun formatCameraRecordingTime(milliseconds:Long):String{val totalSeconds=milliseconds/1000L;return "%02d:%02d".format(totalSeconds/60L,totalSeconds%60L)}
