@@ -320,11 +320,11 @@ checks.extend([
      and "private fun parseListings(raw: String): List<FynxMarketplaceClient.Listing>" not in discovery_client),
     ("active Marketplace list/storefront parser rejects malformed listing prices and missing currencies",
      "private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>" in remote_client
-     and "marketplaceRequiredListingPrice(o.opt(\"price\"))" in remote_client[remote_client.index("private fun parseListings(raw: String): List<MarketplaceListing>"):]
-     and "marketplaceRequiredMarketplaceCurrency(o.opt(\"currency\"))" in remote_client[remote_client.index("private fun parseListings(raw: String): List<MarketplaceListing>"):]
-     and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client[remote_client.index("private fun parseListings(raw: String): List<MarketplaceListing>"):]
-     and "o.optDouble(\"price\")" not in remote_client[remote_client.index("private fun parseListings(raw: String): List<MarketplaceListing>"):]
-     and "o.optString(\"currency\", \"NGN\")" not in remote_client[remote_client.index("private fun parseListings(raw: String): List<MarketplaceListing>"):]),
+     and "marketplaceRequiredListingPrice(o.opt(\"price\"))" in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]
+     and "marketplaceRequiredMarketplaceCurrency(o.opt(\"currency\"))" in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]
+     and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]
+     and "o.optDouble(\"price\")" not in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]
+     and "o.optString(\"currency\", \"NGN\")" not in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]),
     ("verified order receipts validate identity, signature, item money and reconciled totals before UI exposure",
      "validateMarketplaceOrderReceipt(receipt)" in receipt
      and "marketplaceReceiptAmountsMatch(lineSubtotal, expectedSubtotal)" in receipt
