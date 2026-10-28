@@ -557,9 +557,12 @@ def login():
     time.sleep(.5)
     xml=read_ui_unpersisted()
 
-    debug_option=find_control(xml,["Leave password blank for quick local entry","Saved-device login for this debug APK"])
-    if not backend_ready and debug_option:
-        return enter_debug_local_ui(xml, "backend health preflight was unavailable ("+backend_reason+")", password_was_entered=False)
+    debug_option=find_control(xml,["Debug review mode","Leave password blank for quick local entry","Saved-device login for this debug APK"])
+    if debug_option:
+        reason = ("backend health preflight was unavailable ("+backend_reason+")"
+                  if not backend_ready
+                  else "debug APK is intentionally using backend-free local UI entry")
+        return enter_debug_local_ui(xml, reason, password_was_entered=False)
 
     pass_control=find_control(xml,["Password"])
     if not pass_control:
@@ -627,7 +630,7 @@ def login():
 def enter_debug_local_ui(xml:str, reason:str, password_was_entered:bool)->tuple[str,str]:
     """Use only the app's explicit existing debug-only path when the live backend is blocked."""
     global LOGIN_MODE, BACKEND_BLOCKED_REASON
-    helper=find_control(xml,["Leave password blank for quick local entry","Saved-device login for this debug APK"])
+    helper=find_control(xml,["Debug review mode","Leave password blank for quick local entry","Saved-device login for this debug APK"])
     if not helper:
         return xml,"backend is unavailable and the app did not expose its explicit debug-only local-entry option"
     if password_was_entered:
@@ -657,7 +660,7 @@ def enter_debug_local_ui(xml:str, reason:str, password_was_entered:bool)->tuple[
                 and find_control(latest,["Chat"])
                 and find_control(latest,["Friends"])):
             LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
-            BACKEND_BLOCKED_REASON=reason
+            report.append("- Debug local-entry reason: " + reason + ".")
             (ROOT/"authenticated-home.xml").write_text(latest,encoding="utf-8")
             screenshot("authenticated-home.png")
             return latest,""

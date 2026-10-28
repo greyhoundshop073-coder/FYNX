@@ -31,7 +31,6 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var username by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val localDebugLoginAvailable = localDebugAccountForLogin(context, username) != null
     val localDebugBuild = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -175,8 +174,8 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(10.dp))
                             FynxAuthField(password, { password = it }, "Password (optional for saved-device entry)", keyboardType = KeyboardType.Password, password = true)
                             Spacer(Modifier.height(6.dp))
-                            if (localDebugLoginAvailable) {
-                                Text("Leave password blank for quick local entry. Enter it to connect this account to the live FYNX backend.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
+                            if (localDebugBuild) {
+                                Text("Debug review mode: Leave password blank for quick local entry; this debug APK opens a local UI session without contacting the FYNX backend. Server-connected features may remain unavailable until the backend is working.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
                             }
                             Spacer(Modifier.height(10.dp))
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -207,15 +206,14 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 OutlinedButton(
                                     onClick = {
                                         val requestedUsername = username.trim().removePrefix("@")
-                                        val localUsername = localDebugAccountForLogin(context, requestedUsername)
-                                        if (localUsername == null) {
-                                            error = "Enter the username saved on this device for local testing."
+                                        if (requestedUsername.isBlank()) {
+                                            error = "Enter your username."
                                         } else {
-                                            // Debug-only local entry. No remote login request and no fabricated server token.
-                                            FynxAuthStore.save(context, localUsername)
+                                            // Debug-only local UI entry accepts the entered username without a server request or a fabricated token.
+                                            FynxAuthStore.save(context, requestedUsername)
                                             error = null
                                             busy = false
-                                            onAuthenticated(localUsername)
+                                            onAuthenticated(requestedUsername)
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth().height(48.dp),
