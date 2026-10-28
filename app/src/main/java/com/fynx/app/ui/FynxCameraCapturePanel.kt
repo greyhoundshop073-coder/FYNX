@@ -1597,13 +1597,13 @@ fun FynxCameraCapturePanel(
             Surface(
                 modifier = Modifier.align(Alignment.CenterEnd)
                     .padding(end = 8.dp, top = 118.dp, bottom = 204.dp)
-                    .width(100.dp).heightIn(max = 292.dp),
+                    .width(132.dp).heightIn(max = 220.dp),
                 shape = RoundedCornerShape(22.dp),
                 color = Color(0xD913151D),
                 tonalElevation = 8.dp
             ) {
                 Column(
-                    Modifier.fillMaxWidth().heightIn(max = 292.dp).padding(horizontal = 7.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(horizontal = 7.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text("EFFECTS", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -1629,10 +1629,10 @@ fun FynxCameraCapturePanel(
                         "For You" -> CameraFilter.values().toList()
                         else -> CameraFilter.values().filter { it.effectCategory() == selectedEffectCategory }
                     }
-                    Column(
-                        Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         visibleCameraEffects.forEach { option ->
                             FynxCameraEffectTile(
