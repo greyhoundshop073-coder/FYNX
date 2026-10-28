@@ -732,6 +732,18 @@ fun FynxCameraCapturePanel(
                                 1f + (selected.contrast - 1f) * strength,
                                 1f
                             )
+                            // Share channel-tint parameters with the live preview so warm/retro/low-light
+                            // looks do not lose their characteristic colour when the photo is saved.
+                            val (red, green, blue) = selected.rgbScales()
+                            val redScale = 1f + (red - 1f) * strength
+                            val greenScale = 1f + (green - 1f) * strength
+                            val blueScale = 1f + (blue - 1f) * strength
+                            postConcat(ColorMatrix(floatArrayOf(
+                                redScale, 0f, 0f, 0f, 0f,
+                                0f, greenScale, 0f, 0f, 0f,
+                                0f, 0f, blueScale, 0f, 0f,
+                                0f, 0f, 0f, 1f, 0f
+                            )))
                         }
                         outputBitmap = android.graphics.Bitmap.createBitmap(
                             bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888
@@ -1913,6 +1925,32 @@ private fun CameraFilter.effectPalette(): List<Color> = when (this) {
 
 private fun CameraFilter.effectAccent(): Color = effectPalette().last()
 
+/** Channel tint shared by live Media3 effects and saved-photo processing. */
+internal fun CameraFilter.rgbScales(): Triple<Float, Float, Float> = when (this) {
+    CameraFilter.NATURAL -> Triple(1f, 1f, 1f)
+    CameraFilter.PORTRAIT -> Triple(1.02f, 1.0f, 0.98f)
+    CameraFilter.BRIGHT -> Triple(1f, 1f, 1f)
+    CameraFilter.WARM -> Triple(1.12f, 1.02f, 0.90f)
+    CameraFilter.COOL -> Triple(0.90f, 1.02f, 1.12f)
+    CameraFilter.VINTAGE -> Triple(1.08f, 1.0f, 0.88f)
+    CameraFilter.CINEMATIC -> Triple(1.06f, 1.0f, 0.94f)
+    CameraFilter.NEON -> Triple(0.92f, 1.14f, 1.32f)
+    CameraFilter.FADE -> Triple(1f, 1f, 1f)
+    CameraFilter.DREAM -> Triple(1.04f, 1.02f, 1.03f)
+    CameraFilter.NEGATIVE -> Triple(1f, 1f, 1f)
+    CameraFilter.BW -> Triple(1f, 1f, 1f)
+    CameraFilter.GLOW -> Triple(1.05f, 1.03f, 1.0f)
+    CameraFilter.SUNSET -> Triple(1.18f, 1.04f, 0.87f)
+    CameraFilter.ROSE -> Triple(1.10f, 0.99f, 1.05f)
+    CameraFilter.ARCTIC -> Triple(0.88f, 1.03f, 1.16f)
+    CameraFilter.AURORA -> Triple(0.96f, 1.13f, 1.19f)
+    CameraFilter.MATTE -> Triple(1.04f, 1.0f, 0.95f)
+    CameraFilter.NOIR -> Triple(1f, 1f, 1f)
+    CameraFilter.GOLDEN -> Triple(1.16f, 1.07f, 0.88f)
+    CameraFilter.FLASHBACK -> Triple(1.10f, 1.02f, 0.86f)
+    CameraFilter.LOW_LIGHT -> Triple(1.04f, 1.035f, 1.02f)
+}
+
 @Composable
 private fun FynxCameraEffectTile(
     filter: CameraFilter,
@@ -2021,35 +2059,38 @@ private fun fynxCameraLiveEffects(filter: CameraFilter, intensity: Float): List<
     val strength = intensity.coerceIn(0f, 1f)
     fun brightness(amount: Float) = Brightness(amount * strength)
     fun contrast(amount: Float) = Contrast(amount * strength)
-    fun rgb(red: Float, green: Float, blue: Float) = RgbAdjustment.Builder()
-        .setRedScale(1f + (red - 1f) * strength)
-        .setGreenScale(1f + (green - 1f) * strength)
-        .setBlueScale(1f + (blue - 1f) * strength)
-        .build()
+    fun rgb(): Effect {
+        val (red, green, blue) = filter.rgbScales()
+        return RgbAdjustment.Builder()
+            .setRedScale(1f + (red - 1f) * strength)
+            .setGreenScale(1f + (green - 1f) * strength)
+            .setBlueScale(1f + (blue - 1f) * strength)
+            .build()
+    }
 
     return when (filter) {
         CameraFilter.NATURAL -> emptyList()
-        CameraFilter.PORTRAIT -> listOf(contrast(0.04f), rgb(1.02f, 1.0f, 0.98f))
+        CameraFilter.PORTRAIT -> listOf(contrast(0.04f), rgb())
         CameraFilter.BRIGHT -> listOf(brightness(0.10f), contrast(0.04f))
-        CameraFilter.WARM -> listOf(brightness(0.025f), rgb(1.12f, 1.02f, 0.90f))
-        CameraFilter.COOL -> listOf(rgb(0.90f, 1.02f, 1.12f))
-        CameraFilter.VINTAGE -> listOf(brightness(0.025f), contrast(-0.06f), rgb(1.08f, 1.0f, 0.88f))
-        CameraFilter.CINEMATIC -> listOf(brightness(-0.025f), contrast(0.24f), rgb(1.06f, 1.0f, 0.94f))
-        CameraFilter.NEON -> listOf(contrast(0.22f), rgb(0.92f, 1.14f, 1.32f))
+        CameraFilter.WARM -> listOf(brightness(0.025f), rgb())
+        CameraFilter.COOL -> listOf(rgb())
+        CameraFilter.VINTAGE -> listOf(brightness(0.025f), contrast(-0.06f), rgb())
+        CameraFilter.CINEMATIC -> listOf(brightness(-0.025f), contrast(0.24f), rgb())
+        CameraFilter.NEON -> listOf(contrast(0.22f), rgb())
         CameraFilter.FADE -> listOf(contrast(-0.22f), brightness(0.10f))
-        CameraFilter.DREAM -> listOf(contrast(-0.08f), brightness(0.055f), rgb(1.04f, 1.02f, 1.03f))
+        CameraFilter.DREAM -> listOf(contrast(-0.08f), brightness(0.055f), rgb())
         CameraFilter.NEGATIVE -> listOf(RgbFilter.createInvertedFilter())
         CameraFilter.BW -> listOf(RgbFilter.createGrayscaleFilter(), contrast(0.08f))
-        CameraFilter.GLOW -> listOf(brightness(0.045f), contrast(0.035f), rgb(1.05f, 1.03f, 1.0f))
-        CameraFilter.SUNSET -> listOf(brightness(0.04f), contrast(0.10f), rgb(1.18f, 1.04f, 0.87f))
-        CameraFilter.ROSE -> listOf(brightness(0.025f), contrast(0.06f), rgb(1.10f, 0.99f, 1.05f))
-        CameraFilter.ARCTIC -> listOf(contrast(0.06f), rgb(0.88f, 1.03f, 1.16f))
-        CameraFilter.AURORA -> listOf(contrast(0.12f), rgb(0.96f, 1.13f, 1.19f))
-        CameraFilter.MATTE -> listOf(brightness(0.045f), contrast(-0.16f), rgb(1.04f, 1.0f, 0.95f))
+        CameraFilter.GLOW -> listOf(brightness(0.045f), contrast(0.035f), rgb())
+        CameraFilter.SUNSET -> listOf(brightness(0.04f), contrast(0.10f), rgb())
+        CameraFilter.ROSE -> listOf(brightness(0.025f), contrast(0.06f), rgb())
+        CameraFilter.ARCTIC -> listOf(contrast(0.06f), rgb())
+        CameraFilter.AURORA -> listOf(contrast(0.12f), rgb())
+        CameraFilter.MATTE -> listOf(brightness(0.045f), contrast(-0.16f), rgb())
         CameraFilter.NOIR -> listOf(RgbFilter.createGrayscaleFilter(), contrast(0.18f))
-        CameraFilter.GOLDEN -> listOf(brightness(0.03f), contrast(0.08f), rgb(1.16f, 1.07f, 0.88f))
-        CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb(1.10f, 1.02f, 0.86f))
-        CameraFilter.LOW_LIGHT -> listOf(brightness(0.12f), contrast(0.04f), rgb(1.04f, 1.035f, 1.02f))
+        CameraFilter.GOLDEN -> listOf(brightness(0.03f), contrast(0.08f), rgb())
+        CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb())
+        CameraFilter.LOW_LIGHT -> listOf(brightness(0.12f), contrast(0.04f), rgb())
     }
 }
 
