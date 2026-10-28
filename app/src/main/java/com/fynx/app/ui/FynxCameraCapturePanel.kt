@@ -31,6 +31,7 @@ import androidx.camera.view.PreviewView
 import androidx.camera.media3.effect.Media3Effect
 import androidx.media3.common.Effect
 import androidx.media3.common.util.UnstableApi
+import androidx.annotation.OptIn
 import androidx.media3.effect.Brightness
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.RgbAdjustment
@@ -92,7 +93,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
-@androidx.media3.common.util.UnstableApi
 @OptIn(UnstableApi::class)
 @Composable
 fun FynxCameraCapturePanel(
