@@ -1930,6 +1930,9 @@ private fun CameraFilter.effectPalette(): List<Color> = when (this) {
 private fun CameraFilter.effectAccent(): Color = effectPalette().last()
 
 /** Channel tint shared by live Media3 effects and saved-photo processing. */
+internal fun CameraFilter.saturationAdjustmentPercent(intensity: Float): Float =
+    ((saturation - 1f) * 100f * intensity.coerceIn(0f, 1f)).coerceIn(-100f, 100f)
+
 internal fun CameraFilter.rgbScales(): Triple<Float, Float, Float> = when (this) {
     CameraFilter.NATURAL -> Triple(1f, 1f, 1f)
     CameraFilter.PORTRAIT -> Triple(1.02f, 1.0f, 0.98f)
@@ -2072,7 +2075,7 @@ private fun fynxCameraLiveEffects(filter: CameraFilter, intensity: Float): List<
             .build()
     }
     fun saturation(): Effect = HslAdjustment.Builder()
-        .adjustSaturation(((filter.saturation - 1f) * 100f * strength).coerceIn(-100f, 100f))
+        .adjustSaturation(filter.saturationAdjustmentPercent(strength))
         .build()
 
     return when (filter) {
