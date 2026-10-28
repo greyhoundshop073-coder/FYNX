@@ -1620,7 +1620,20 @@ fun FynxCameraCapturePanel(
                     Modifier.fillMaxWidth().heightIn(max = 260.dp).padding(horizontal = 7.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text("EFFECTS", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("EFFECTS", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.weight(1f))
+                        IconButton(
+                            onClick = { showEffectCarousel = false },
+                            modifier = Modifier.size(28.dp)
+                                .semantics { contentDescription = "Close effects" }
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
                     Text(captureStyleFilter.label, color = Color(0xFFFF78B7), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
