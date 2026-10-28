@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
