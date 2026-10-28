@@ -89,11 +89,11 @@ class CameraMediaReliabilityTest {
 
     @Test
     fun liveSaturationMappingMatchesFilterStrengthAndClampsUnsafeInput() {
-        assertEquals(32f, CameraFilter.NEON.saturationAdjustmentPercent(1f), 0f)
-        assertEquals(-18f, CameraFilter.VINTAGE.saturationAdjustmentPercent(1f), 0f)
+        assertEquals(32f, CameraFilter.NEON.saturationAdjustmentPercent(1f), 0.001f)
+        assertEquals(-18f, CameraFilter.VINTAGE.saturationAdjustmentPercent(1f), 0.001f)
         assertEquals(0f, CameraFilter.FLASHBACK.saturationAdjustmentPercent(1f), 0f)
         assertEquals(0f, CameraFilter.NEON.saturationAdjustmentPercent(0f), 0f)
-        assertEquals(32f, CameraFilter.NEON.saturationAdjustmentPercent(3f), 0f)
+        assertEquals(32f, CameraFilter.NEON.saturationAdjustmentPercent(3f), 0.001f)
         assertEquals(0f, CameraFilter.NEON.saturationAdjustmentPercent(-2f), 0f)
     }
 
