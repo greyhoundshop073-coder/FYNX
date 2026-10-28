@@ -1271,7 +1271,19 @@ fun FynxCameraCapturePanel(
                         Modifier.size(32.dp),
                         shape = androidx.compose.foundation.shape.CircleShape,
                         color = Color.White.copy(alpha = 0.16f)
-                    ) {}
+                    ) {
+                        val fallbackName = profileDisplayName.ifBlank {
+                            session.username?.removePrefix("@").orEmpty().ifBlank { "FYNX" }
+                        }
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                fallbackName.take(1).uppercase(),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                         Text(
                             if (liveProofMode) "LIVE PROOF" else if (statusCapture) "STATUS CAMERA" else if (videoNoteMode) "VIDEO NOTE" else "FYNX CAMERA",

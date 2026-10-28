@@ -809,6 +809,31 @@ if not FAILURES:
             if camera_ready:
                 screenshot("authenticated-status-camera-photo.png")
                 report.append("- PASS Add status -> Take photo opens the real CameraX photo capture UI")
+
+                # Verify the real Effects drawer, including its close path, before continuing
+                # with capture. This protects the intended compact camera layout from silent
+                # regressions and leaves the main shutter flow in its original position.
+                effects_xml = tap_control(
+                    status_camera_xml, ["Effects"], "status-camera-effects-open",
+                    ["Close effects"]
+                )
+                if (effects_xml
+                        and find_control(effects_xml, ["Close effects"])
+                        and find_control(effects_xml, ["For You"])
+                        and find_control(effects_xml, ["Natural"])):
+                    screenshot("authenticated-status-camera-effects-open.png")
+                    report.append("- PASS Camera Effects opens with categories and real filter tiles")
+                    status_camera_xml = tap_control(
+                        effects_xml, ["Close effects"], "status-camera-effects-close",
+                        ["Take photo"]
+                    )
+                    if status_camera_xml and find_control(status_camera_xml, ["Take photo"]):
+                        report.append("- PASS closing Camera Effects restores the same capture controls")
+                    else:
+                        FAILURES.append("Camera Effects close did not restore the photo capture controls")
+                else:
+                    FAILURES.append("Camera Effects did not expose its close control, categories, and filter tiles")
+
                 photo_preview_xml = tap_control(
                     status_camera_xml, ["Take photo"], "status-camera-capture-photo",
                     ["Retake", "Send"]
@@ -1343,6 +1368,7 @@ if not FAILURES:
                "- authenticated-status-voice-caption-keyboard.png",
                "- authenticated-status-voice-playing.png",
                "- authenticated-status-camera-photo.png",
+               "- authenticated-status-camera-effects-open.png",
                "- authenticated-status-camera-photo-preview.png",
                "- authenticated-status-camera-video.png",
                "- authenticated-status-camera-video-recording.png",

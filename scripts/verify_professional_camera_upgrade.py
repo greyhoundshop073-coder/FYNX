@@ -97,6 +97,13 @@ for filename in caller_files:
 
 checks["capture controls use the compact floating dock and preserve gallery, shutter, and effects actions"] = all(item in camera for item in ['RoundedCornerShape(26.dp)', 'FynxCameraRailAction("Gallery"', 'FynxCameraRailAction("Effects"', 'contentDescription = shutterActionLabel'])
 
+checks["camera profile header shows a readable initial when no profile photo is available"] = (
+    "val fallbackName = profileDisplayName.ifBlank {" in camera
+    and 'ifBlank { "FYNX" }' in camera
+    and "fallbackName.take(1).uppercase()" in camera
+    and "fontWeight = FontWeight.Bold" in camera
+)
+
 checks["main capture dock is transparent rather than a full-width dark glass panel"] = re.search(
     r"Surface\(\s*modifier = Modifier\.fillMaxWidth\(\),\s*shape = RoundedCornerShape\(26\.dp\),\s*color = Color\.Transparent,\s*tonalElevation = 0\.dp",
     camera,
