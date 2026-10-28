@@ -2117,8 +2117,8 @@ enum class CameraFilter(val label:String,val saturation:Float,val brightness:Flo
     MATTE("Matte",0.90f,0.04f,0.90f),
     NOIR("Noir",0f,0f,1.18f),
     GOLDEN("Golden",1.13f,0.035f,1.08f),
-    FLASHBACK("Flashback",0.88f,0.035f,0.92f),
-    LOW_LIGHT("Low Light",1.02f,0.12f,1.04f)
+    FLASHBACK("Flashback",1.0f,0.035f,0.92f),
+    LOW_LIGHT("Low Light",1.0f,0.12f,1.04f)
 }
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
 private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) {
