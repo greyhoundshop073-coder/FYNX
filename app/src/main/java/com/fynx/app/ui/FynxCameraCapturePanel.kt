@@ -1488,7 +1488,7 @@ fun FynxCameraCapturePanel(
                                     }
                                 },
                                 enabled = shutterReady,
-                                modifier = Modifier.size(74.dp).semantics(mergeDescendants = true) {
+                                modifier = Modifier.size(80.dp).semantics(mergeDescendants = true) {
                                     contentDescription = shutterActionLabel
                                     role = Role.Button
                                 },
