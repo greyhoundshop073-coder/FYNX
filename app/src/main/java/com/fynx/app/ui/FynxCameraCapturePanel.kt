@@ -1442,10 +1442,9 @@ fun FynxCameraCapturePanel(
                         }
 
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            FynxCameraRailAction(
-                                "Gallery", "▧",
-                                enabled = recording == null && !galleryImporting && !preparingPhoto
-                            ) { galleryPicker.launch(arrayOf("image/*", "video/*")) }
+                            FynxCameraRailAction("Gallery", "▧", enabled = recording == null && !galleryImporting && !preparingPhoto) {
+                                galleryPicker.launch(arrayOf("image/*", "video/*"))
+                            }
                             Spacer(Modifier.weight(1f))
                             val shutterActionLabel = when {
                                 recording != null -> if (videoNoteMode) "Stop video note" else "Stop video recording"
