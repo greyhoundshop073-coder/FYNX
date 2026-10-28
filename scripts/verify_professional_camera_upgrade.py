@@ -118,12 +118,23 @@ checks["right-rail actions hide while the effect picker is open to prevent visua
 checks["Status camera keeps Text as a separate action beside Photo and Video"] = 'if (statusCapture) {' in camera and 'Text("Text"' in camera and 'onClick = { if (recording == null) onDismiss() }' in camera
 checks["live effect carousel opens on demand and does not cover the shutter by default"] = 'var showEffectCarousel by remember { mutableStateOf(false) }' in camera and 'Modifier.align(Alignment.CenterEnd)' in camera and 'FynxCameraRailAction("Effects"' in camera
 
-checks["live effect studio shows organized Beauty, Color, Creative and Classic categories"] = all(name in camera for name in ['"For You", "Beauty", "Color", "Creative", "Classic"', 'var selectedEffectCategory by remember', 'val visibleCameraEffects = when (selectedEffectCategory)'])
+checks["live effect studio shows horizontally browsable For You, Beauty, Retro, Color, Creative and Classic categories"] = all(name in camera for name in ['"For You", "Beauty", "Retro", "Color", "Creative", "Classic"', 'var selectedEffectCategory by remember', 'val visibleCameraEffects = when (selectedEffectCategory)'])
 checks["live effect thumbnails are custom-rendered visual cards with a selected-state outline"] = all(name in camera for name in ["FynxCameraEffectTile(", "Brush.linearGradient(filter.effectPalette())", "effectGlyph()", 'if (selected) Color(0xFFFF5BA8)'])
 checks["effect category cards only select real CameraFilter presets wired to Media3"] = "captureStyleFilter = option" in camera and "liveEffectIntensity = 1f" in camera and "fynxCameraLiveEffects(captureStyleFilter, liveEffectIntensity)" in camera and "showEffectCarousel && recording == null" in camera
 
 checks["live effect intensity scales Media3 color/contrast effects and captured photos"] = 'Text("Strength"' in camera and "onValueChange = { liveEffectIntensity = it }" in camera and "setRedScale(1f + (red - 1f) * strength)" in camera and "applyFilterToPhoto(captureStyleFilter, if (captureStyleFilter.supportsLiveIntensity()) liveEffectIntensity else 1f)" in camera
-checks["expanded live effect library maps all new presets to real filter parameters and visual previews"] = all("CameraFilter." + name in camera for name in ["GLOW", "SUNSET", "ROSE", "ARCTIC", "AURORA", "MATTE", "NOIR", "GOLDEN", "FLASHBACK"]) and all(name in camera for name in ['"Glow"', '"Sunset"', '"Rose"', '"Arctic"', '"Aurora"', '"Matte"', '"Noir"', '"Golden"', '"Flashback"'])
+checks["expanded live effect library maps all new presets to real filter parameters and visual previews"] = all("CameraFilter." + name in camera for name in ["GLOW", "SUNSET", "ROSE", "ARCTIC", "AURORA", "MATTE", "NOIR", "GOLDEN", "FLASHBACK", "LOW_LIGHT"]) and all(name in camera for name in ['"Glow"', '"Sunset"', '"Rose"', '"Arctic"', '"Aurora"', '"Matte"', '"Noir"', '"Golden"', '"Flashback"', '"Low Light"'])
+
+
+checks["Low Light uses live and saved photo filter parameters"] = (
+    "CameraFilter.LOW_LIGHT -> listOf(brightness(0.12f), contrast(0.04f), rgb(1.04f, 1.035f, 1.02f))" in camera
+    and 'LOW_LIGHT("Low Light",1.02f,0.12f,1.04f)' in camera
+    and "CameraFilter.LOW_LIGHT -> \"Color\"" in camera
+)
+checks["Retro effect category exposes Flashback alongside Vintage"] = (
+    'CameraFilter.VINTAGE, CameraFilter.FLASHBACK -> "Retro"' in camera
+    and '"For You", "Beauty", "Retro", "Color", "Creative", "Classic"' in camera
+)
 
 failures = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
