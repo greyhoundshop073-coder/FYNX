@@ -48,7 +48,7 @@ object FynxMarketplaceClient {
         val discovery = FynxDiscoveryClient.marketplaceDiscovery(context, query, category)
         if (discovery.isSuccess) return discovery
         return FynxBackendClient.get(context, "/api/marketplace/listings?q=${encode(query)}&category=${encode(category)}")
-            .mapCatching { raw -> parseListings(raw, preferAvailableStock = true) }
+            .mapCatching { raw -> parseListings(raw, preferAvailableStock = true, activeOmittedMeansActive = true) }
     }
 
     suspend fun listingById(context: Context, listingId: String): Result<Listing> {
@@ -210,16 +210,16 @@ object FynxMarketplaceClient {
         }
     }
 
-    internal fun parseListings(raw: String, preferAvailableStock: Boolean): List<Listing> {
+    internal fun parseListings(raw: String, preferAvailableStock: Boolean, activeOmittedMeansActive: Boolean = false): List<Listing> {
         val array = JSONObject(raw).getJSONArray("listings")
         return buildList {
             for (i in 0 until array.length()) {
-                add(parseListingObject(array.getJSONObject(i), preferAvailableStock))
+                add(parseListingObject(array.getJSONObject(i), preferAvailableStock, activeOmittedMeansActive))
             }
         }
     }
 
-    internal fun parseListingObject(o: JSONObject, preferAvailableStock: Boolean): Listing {
+    internal fun parseListingObject(o: JSONObject, preferAvailableStock: Boolean, activeOmittedMeansActive: Boolean = false): Listing {
         val media = o.optJSONArray("media_ids") ?: JSONArray()
         val ids = buildList {
             for (j in 0 until media.length()) {
@@ -254,7 +254,14 @@ object FynxMarketplaceClient {
             pickupAvailable = o.optBoolean("pickup_available", true),
             deliveryFee = marketplaceOptionalListingFee(o.opt("delivery_fee")),
             mediaIds = ids,
-            active = marketplaceRequiredListingActive(o.opt("active")),
+            active = if (o.has("active") && !o.isNull("active")) {
+                marketplaceRequiredListingActive(o.opt("active"))
+            } else if (activeOmittedMeansActive) {
+                // Discovery and the legacy public-list endpoint filter l.active=TRUE server-side.
+                true
+            } else {
+                marketplaceRequiredListingActive(null)
+            },
             mediaTypes = mediaTypes
         )
     }

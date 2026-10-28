@@ -122,7 +122,7 @@ object FynxRemoteSocialClient {
         val path = "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=$safeLimit&offset=$safeOffset&location=${URLEncoder.encode(location.trim(), "UTF-8")}"
         return FynxBackendClient.get(context, path).mapCatching { raw ->
             val root = JSONObject(raw)
-            MarketplaceListingPage(parseListings(raw), root.optBoolean("hasMore", false))
+            MarketplaceListingPage(parseListings(raw, activeOmittedMeansActive = true), root.optBoolean("hasMore", false))
         }
     }
     suspend fun marketplacePriceWatchState(context: Context, listingId: String): Result<Boolean> {

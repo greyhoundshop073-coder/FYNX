@@ -296,12 +296,12 @@ checks.extend([
 ])
 checks.extend([
     ("Marketplace product details receives the Status share callback", "onShareToStatus: (String, String) -> Unit" in marketplace and "onShareToStatus = onShareListingToStatus" in marketplace and "onShareToStatus = onShareToStatus" in marketplace[marketplace.index("private fun MarketplaceDetails("):]),
-    ("missing listing availability never defaults to active except for the explicitly active-only legacy list endpoint",
+    ("missing listing availability never defaults to active except for verified active-only public endpoints",
      "marketplaceRequiredListingActive(o.opt(\"active\"))" in marketplace_client
      and "internal fun marketplaceRequiredListingActive(value: Any?)" in support
-     and "active = o.optBoolean(\"active\", true)" not in marketplace_client
-     and "marketplaceRequiredListingActive(o.opt(\"active\"))" in remote_client
+     and "activeOmittedMeansActive = true" in marketplace_client
      and "activeOmittedMeansActive = true" in remote_client
+     and "active = o.optBoolean(\"active\", true)" not in marketplace_client
      and "active = o.optBoolean(\"active\", true)" not in remote_client),
     ("buyer-facing listing parsers never substitute total stock when available stock is missing",
      "if (preferAvailableStock)" in marketplace_client
