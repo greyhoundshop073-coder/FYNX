@@ -89,6 +89,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
+@androidx.media3.common.util.UnstableApi
 @OptIn(UnstableApi::class)
 @Composable
 fun FynxCameraCapturePanel(
