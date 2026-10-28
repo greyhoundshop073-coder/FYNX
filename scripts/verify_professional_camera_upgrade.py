@@ -126,6 +126,12 @@ checks["effect category cards only select real CameraFilter presets wired to Med
 checks["For You starts with a curated set while specialist categories remain browsable"] = '"For You" -> listOf(' in camera and all("CameraFilter." + name in camera for name in ["NATURAL", "PORTRAIT", "BRIGHT", "GLOW", "CINEMATIC", "GOLDEN", "FLASHBACK", "LOW_LIGHT"]) and "else -> CameraFilter.values().filter { it.effectCategory() == selectedEffectCategory }" in camera
 
 checks["live effect intensity scales Media3 color/contrast effects and captured photos"] = 'Text("Strength"' in camera and "onValueChange = { liveEffectIntensity = it }" in camera and "setRedScale(1f + (red - 1f) * strength)" in camera and "applyFilterToPhoto(captureStyleFilter, if (captureStyleFilter.supportsLiveIntensity()) liveEffectIntensity else 1f)" in camera
+checks["live preview and saved photo share the same RGB tint definition"] = (
+    "internal fun CameraFilter.rgbScales(): Triple<Float, Float, Float>" in camera
+    and "val (red, green, blue) = filter.rgbScales()" in camera
+    and "val (red, green, blue) = selected.rgbScales()" in camera
+    and "postConcat(ColorMatrix(floatArrayOf(" in camera
+)
 checks["expanded live effect library maps all new presets to real filter parameters and visual previews"] = all("CameraFilter." + name in camera for name in ["GLOW", "SUNSET", "ROSE", "ARCTIC", "AURORA", "MATTE", "NOIR", "GOLDEN", "FLASHBACK", "LOW_LIGHT"]) and all(name in camera for name in ['"Glow"', '"Sunset"', '"Rose"', '"Arctic"', '"Aurora"', '"Matte"', '"Noir"', '"Golden"', '"Flashback"', '"Low Light"'])
 
 
