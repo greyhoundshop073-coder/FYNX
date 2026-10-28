@@ -1653,7 +1653,16 @@ fun FynxCameraCapturePanel(
                         }
                     }
                     val visibleCameraEffects = when (selectedEffectCategory) {
-                        "For You" -> CameraFilter.values().toList()
+                        "For You" -> listOf(
+                            CameraFilter.NATURAL,
+                            CameraFilter.PORTRAIT,
+                            CameraFilter.BRIGHT,
+                            CameraFilter.GLOW,
+                            CameraFilter.CINEMATIC,
+                            CameraFilter.GOLDEN,
+                            CameraFilter.FLASHBACK,
+                            CameraFilter.LOW_LIGHT
+                        )
                         else -> CameraFilter.values().filter { it.effectCategory() == selectedEffectCategory }
                     }
                     Row(
