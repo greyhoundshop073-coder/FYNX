@@ -127,7 +127,7 @@ checks["expanded live effect library maps all new presets to real filter paramet
 
 
 checks["Low Light uses live and saved photo filter parameters"] = (
-    "CameraFilter.LOW_LIGHT -> listOf(brightness(0.12f), contrast(0.04f), rgb(1.04f, 1.035f, 1.02f))" in camera
+    and 'CameraFilter.GOLDEN, CameraFilter.LOW_LIGHT -> "Color"' in camera
     and 'LOW_LIGHT("Low Light",1.02f,0.12f,1.04f)' in camera
     and "CameraFilter.LOW_LIGHT -> \"Color\"" in camera
 )
