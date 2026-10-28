@@ -1518,11 +1518,8 @@ fun FynxCameraCapturePanel(
                                 }
                             }
                             val visibleCameraEffects = when (selectedEffectCategory) {
-                                "Beauty" -> listOf(CameraFilter.PORTRAIT, CameraFilter.BRIGHT, CameraFilter.DREAM)
-                                "Color" -> listOf(CameraFilter.NATURAL, CameraFilter.WARM, CameraFilter.COOL, CameraFilter.FADE)
-                                "Creative" -> listOf(CameraFilter.NEON, CameraFilter.DREAM, CameraFilter.NEGATIVE)
-                                "Classic" -> listOf(CameraFilter.VINTAGE, CameraFilter.CINEMATIC, CameraFilter.BW)
-                                else -> CameraFilter.values().toList()
+                                "For You" -> CameraFilter.values().toList()
+                                else -> CameraFilter.values().filter { it.effectCategory() == selectedEffectCategory }
                             }
                             Row(
                                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
