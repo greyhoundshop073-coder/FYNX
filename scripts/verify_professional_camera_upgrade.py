@@ -133,6 +133,13 @@ checks["live preview and saved photo share the same RGB tint definition"] = (
     and "val (red, green, blue) = selected.rgbScales()" in camera
     and "postConcat(ColorMatrix(floatArrayOf(" in camera
 )
+checks["live Media3 effects use saturation values from the saved-photo filter definition"] = (
+    "import androidx.media3.effect.HslAdjustment" in camera
+    and "internal fun CameraFilter.saturationAdjustmentPercent(intensity: Float): Float" in camera
+    and ".adjustSaturation(filter.saturationAdjustmentPercent(strength))" in camera
+    and "CameraFilter.NEON -> listOf(contrast(0.22f), rgb(), saturation())" in camera
+    and "CameraFilter.VINTAGE -> listOf(brightness(0.025f), contrast(-0.06f), rgb(), saturation())" in camera
+)
 checks["expanded live effect library maps all new presets to real filter parameters and visual previews"] = all("CameraFilter." + name in camera for name in ["GLOW", "SUNSET", "ROSE", "ARCTIC", "AURORA", "MATTE", "NOIR", "GOLDEN", "FLASHBACK", "LOW_LIGHT"]) and all(name in camera for name in ['"Glow"', '"Sunset"', '"Rose"', '"Arctic"', '"Aurora"', '"Matte"', '"Noir"', '"Golden"', '"Flashback"', '"Low Light"'])
 
 
