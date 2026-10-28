@@ -36,6 +36,7 @@ import androidx.media3.effect.Contrast
 import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.RgbFilter
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -60,6 +61,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.StrokeCap
@@ -69,6 +71,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -185,6 +188,7 @@ fun FynxCameraCapturePanel(
     }
     var showEffectCarousel by remember { mutableStateOf(true) }
     var captureStyleFilter by remember { mutableStateOf(CameraFilter.NATURAL) }
+    var selectedEffectCategory by remember { mutableStateOf("For You") }
     var galleryImporting by remember { mutableStateOf(false) }
     var showCameraMusicPicker by remember { mutableStateOf(false) }
     var cameraMusicSearch by remember { mutableStateOf("") }
@@ -1476,21 +1480,60 @@ fun FynxCameraCapturePanel(
                     }
 
                     if (showEffectCarousel && recording == null) {
-                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text("LIVE LOOKS", color = Color.White.copy(alpha = 0.76f), style = MaterialTheme.typography.labelSmall)
+                                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                    Text("EFFECT STUDIO", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "Live preview • video capture",
+                                        color = Color.White.copy(alpha = 0.58f),
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
                                 Spacer(Modifier.weight(1f))
-                                Text("Preview + video", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    captureStyleFilter.label.uppercase(),
+                                    color = Color(0xFFFF78B7),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                CameraFilter.values().forEach { option ->
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                listOf("For You", "Beauty", "Color", "Creative", "Classic").forEach { category ->
                                     FilterChip(
-                                        selected = captureStyleFilter == option, onClick = { captureStyleFilter = option },
-                                        label = { Text(option.label) },
+                                        selected = selectedEffectCategory == category,
+                                        onClick = { selectedEffectCategory = category },
+                                        label = { Text(category) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Color(0xFFD92D79), selectedLabelColor = Color.White,
-                                            containerColor = Color.White.copy(alpha = 0.10f), labelColor = Color.White
+                                            selectedContainerColor = Color(0xFF8F3DE8),
+                                            selectedLabelColor = Color.White,
+                                            containerColor = Color.White.copy(alpha = 0.08f),
+                                            labelColor = Color.White.copy(alpha = 0.82f)
                                         )
+                                    )
+                                }
+                            }
+                            val visibleCameraEffects = when (selectedEffectCategory) {
+                                "Beauty" -> listOf(CameraFilter.PORTRAIT, CameraFilter.BRIGHT, CameraFilter.DREAM)
+                                "Color" -> listOf(CameraFilter.NATURAL, CameraFilter.WARM, CameraFilter.COOL, CameraFilter.FADE)
+                                "Creative" -> listOf(CameraFilter.NEON, CameraFilter.DREAM, CameraFilter.NEGATIVE)
+                                "Classic" -> listOf(CameraFilter.VINTAGE, CameraFilter.CINEMATIC, CameraFilter.BW)
+                                else -> CameraFilter.values().toList()
+                            }
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                visibleCameraEffects.forEach { option ->
+                                    FynxCameraEffectTile(
+                                        filter = option,
+                                        selected = captureStyleFilter == option,
+                                        onClick = { captureStyleFilter = option }
                                     )
                                 }
                             }
@@ -1724,6 +1767,148 @@ private fun normalizeImportedPhotoToJpeg(file: File) {
     }
 }
 
+
+private fun CameraFilter.effectCategory(): String = when (this) {
+    CameraFilter.NATURAL, CameraFilter.PORTRAIT, CameraFilter.BRIGHT -> "Beauty"
+    CameraFilter.WARM, CameraFilter.COOL, CameraFilter.FADE -> "Color"
+    CameraFilter.NEON, CameraFilter.DREAM, CameraFilter.NEGATIVE -> "Creative"
+    CameraFilter.VINTAGE, CameraFilter.CINEMATIC, CameraFilter.BW -> "Classic"
+}
+
+private fun CameraFilter.effectGlyph(): String = when (this) {
+    CameraFilter.NATURAL -> "◉"
+    CameraFilter.PORTRAIT -> "✦"
+    CameraFilter.BRIGHT -> "☼"
+    CameraFilter.WARM -> "☀"
+    CameraFilter.COOL -> "❄"
+    CameraFilter.VINTAGE -> "✧"
+    CameraFilter.CINEMATIC -> "▰"
+    CameraFilter.NEON -> "✳"
+    CameraFilter.FADE -> "◌"
+    CameraFilter.DREAM -> "✿"
+    CameraFilter.NEGATIVE -> "◐"
+    CameraFilter.BW -> "◑"
+}
+
+private fun CameraFilter.effectPalette(): List<Color> = when (this) {
+    CameraFilter.NATURAL -> listOf(Color(0xFF384D54), Color(0xFF9BAE9E))
+    CameraFilter.PORTRAIT -> listOf(Color(0xFF60456B), Color(0xFFF2A7B7))
+    CameraFilter.BRIGHT -> listOf(Color(0xFFFFB36B), Color(0xFFFFE9A8))
+    CameraFilter.WARM -> listOf(Color(0xFF9C3B35), Color(0xFFFFB06A))
+    CameraFilter.COOL -> listOf(Color(0xFF145B9B), Color(0xFF7BD9EF))
+    CameraFilter.VINTAGE -> listOf(Color(0xFF75513A), Color(0xFFD5A66E))
+    CameraFilter.CINEMATIC -> listOf(Color(0xFF101B35), Color(0xFF567F84))
+    CameraFilter.NEON -> listOf(Color(0xFF421174), Color(0xFFFF3F93))
+    CameraFilter.FADE -> listOf(Color(0xFF8A9EB4), Color(0xFFD9CDE0))
+    CameraFilter.DREAM -> listOf(Color(0xFF9171CC), Color(0xFFFFBBD7))
+    CameraFilter.NEGATIVE -> listOf(Color(0xFF04B6AC), Color(0xFFFF4F86))
+    CameraFilter.BW -> listOf(Color(0xFF181818), Color(0xFFB6B6B6))
+}
+
+private fun CameraFilter.effectAccent(): Color = effectPalette().last()
+
+@Composable
+private fun FynxCameraEffectTile(
+    filter: CameraFilter,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val tileShape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = Modifier
+            .width(76.dp)
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = "${filter.label} live camera effect" + if (selected) ", selected" else ""
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(78.dp)
+                .clip(tileShape)
+                .background(Brush.linearGradient(filter.effectPalette()))
+                .border(
+                    width = if (selected) 2.5.dp else 1.dp,
+                    color = if (selected) Color(0xFFFF5BA8) else Color.White.copy(alpha = 0.22f),
+                    shape = tileShape
+                )
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val unit = minOf(size.width, size.height)
+                val cx = size.width * 0.5f
+                val cy = size.height * 0.41f
+                val faceRadius = unit * 0.205f
+                drawCircle(
+                    color = filter.effectAccent().copy(alpha = 0.43f),
+                    radius = unit * 0.39f,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = unit * 0.035f)
+                )
+                drawCircle(
+                    color = Color(0xFF352638),
+                    radius = faceRadius * 1.14f,
+                    center = Offset(cx, cy - faceRadius * 0.12f)
+                )
+                drawCircle(
+                    color = Color(0xFFE8B69B),
+                    radius = faceRadius * 0.86f,
+                    center = Offset(cx, cy + faceRadius * 0.12f)
+                )
+                drawCircle(Color(0xFF2D2530), faceRadius * 0.07f, Offset(cx - faceRadius * 0.28f, cy + faceRadius * 0.10f))
+                drawCircle(Color(0xFF2D2530), faceRadius * 0.07f, Offset(cx + faceRadius * 0.28f, cy + faceRadius * 0.10f))
+                drawLine(
+                    color = Color(0xFF8C4F54),
+                    start = Offset(cx - faceRadius * 0.13f, cy + faceRadius * 0.42f),
+                    end = Offset(cx + faceRadius * 0.13f, cy + faceRadius * 0.42f),
+                    strokeWidth = unit * 0.018f,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+                val sparkle = filter.effectAccent().copy(alpha = 0.95f)
+                listOf(
+                    Offset(size.width * 0.18f, size.height * 0.21f),
+                    Offset(size.width * 0.81f, size.height * 0.28f),
+                    Offset(size.width * 0.78f, size.height * 0.63f)
+                ).forEach { p ->
+                    drawLine(sparkle, Offset(p.x - unit * 0.045f, p.y), Offset(p.x + unit * 0.045f, p.y), unit * 0.018f)
+                    drawLine(sparkle, Offset(p.x, p.y - unit * 0.045f), Offset(p.x, p.y + unit * 0.045f), unit * 0.018f)
+                }
+                if (filter == CameraFilter.NEON || filter == CameraFilter.NEGATIVE) {
+                    drawCircle(Color.White.copy(alpha = 0.62f), unit * 0.31f, Offset(cx, cy), style = Stroke(width = unit * 0.014f))
+                }
+            }
+            Text(
+                text = filter.effectGlyph(),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp),
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (selected) {
+                Text(
+                    text = "✓",
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .background(Color(0xFFFF4F9A), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        Text(
+            text = filter.label,
+            color = if (selected) Color.White else Color.White.copy(alpha = 0.76f),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+    }
+}
 
 @OptIn(UnstableApi::class)
 private fun fynxCameraLiveEffects(filter: CameraFilter): List<Effect> = when (filter) {

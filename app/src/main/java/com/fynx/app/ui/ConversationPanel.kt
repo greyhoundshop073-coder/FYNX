@@ -1,3 +1,4 @@
+@file:OptIn(androidx.media3.common.util.UnstableApi::class)
 package com.fynx.app.ui
 
 import android.Manifest

@@ -94,6 +94,10 @@ for filename in caller_files:
     path = ui / filename
     checks[f"{filename} remains wired to shared CameraX"] = path.exists() and "FynxCameraCapturePanel(" in path.read_text(encoding="utf-8")
 
+    "live effect studio shows organized Beauty, Color, Creative and Classic categories": all(name in camera for name in ['"For You", "Beauty", "Color", "Creative", "Classic"', 'var selectedEffectCategory by remember', 'val visibleCameraEffects = when (selectedEffectCategory)']),
+    "live effect thumbnails are custom-rendered visual cards with a selected-state outline": all(name in camera for name in ["FynxCameraEffectTile(", "Brush.linearGradient(filter.effectPalette())", "effectGlyph()", 'if (selected) Color(0xFFFF5BA8)']),
+    "effect category cards only select real CameraFilter presets wired to Media3": "onClick = { captureStyleFilter = option }" in camera and "fynxCameraLiveEffects(captureStyleFilter)" in camera and "showEffectCarousel && recording == null" in camera,
+
 failures = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
     print(("PASS" if ok else "FAIL") + ": " + name)
