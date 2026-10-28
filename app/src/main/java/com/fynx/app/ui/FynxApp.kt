@@ -91,6 +91,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var callVideo by remember { mutableStateOf(false) }
     var pendingIncomingCall by remember { mutableStateOf<FynxRealtimeClient.Event.Call?>(null) }
     var marketplaceListingId by remember { mutableStateOf<String?>(null) }
+    var marketplaceStatusDraft by remember { mutableStateOf<String?>(null) }
     var marketplaceAiListingId by remember { mutableStateOf<String?>(null) }
     var openChatMarketplaceListingId by remember { mutableStateOf<String?>(null) }
     var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); val debugOfflineSession = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 && stored.state == AuthState.SIGNED_IN; if (stored.state == AuthState.SIGNED_IN && (FynxBackendClient.hasAccessToken(context) || debugOfflineSession)) stored else AuthSession() }) }
@@ -703,13 +704,23 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     }
                 }            )
             "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" })
-            "Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenSavedProducts = { selected = "Saved Products" }, initialListingId = marketplaceListingId) }
+            "Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenSavedProducts = { selected = "Saved Products" }, onShareListingToStatus = { listingId, title ->
+                val draft = FynxDeepLinkParser.marketplaceStatusDraftText(listingId, title)
+                if (draft.isNotBlank()) {
+                    marketplaceStatusDraft = draft
+                    statusOpenOwner = null
+                    statusOpenId = null
+                    selected = "Stories"
+                } else android.widget.Toast.makeText(context, "This product cannot be shared to Status yet.", android.widget.Toast.LENGTH_LONG).show()
+            }, initialListingId = marketplaceListingId) }
             "Money Tools" -> MoneyCenterPanel()
             "Business Account" -> FynxBusinessAccountPanel(onBack = { selected = "Features" }, onOpenAdvertising = { selected = "Advertising" }, onOpenDashboard = { selected = "Advertising Dashboard" })
             "Features" -> FynxFeaturesPanel(isAdmin = adminRole != null, onSelect = { if (it != "Admin" || adminRole != null) selected = it })
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
             "Calendar" -> CalendarPanel()
             "Stories" -> FynxStatusHubPanel(
+                initialText = marketplaceStatusDraft,
+                onInitialTextAccepted = { marketplaceStatusDraft = null },
                 openOwnerUsername = statusOpenOwner,
                 openStatusId = statusOpenId,
                 onOpenCommandConsumed = { statusOpenOwner = null; statusOpenId = null },
