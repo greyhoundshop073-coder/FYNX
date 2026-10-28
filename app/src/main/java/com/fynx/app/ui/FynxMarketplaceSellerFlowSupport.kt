@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
+import org.json.JSONObject
 import java.util.Locale
 
 /**
@@ -64,6 +65,89 @@ internal fun marketplaceRequiredCurrency(value: Any?): String {
         throw IllegalStateException("Seller earnings data is incomplete.")
     }
     return currency
+}
+
+/** Listing APIs allow up to 160 characters on edit; the publish form remains capped at 120. */
+internal const val MAX_MARKETPLACE_LISTING_RESPONSE_TITLE_LENGTH = 160
+
+/** Required listing IDs are positive database identifiers, not placeholder/empty values. */
+internal fun marketplaceRequiredListingId(value: Any?): String {
+    val raw = when (value) {
+        is String -> value.trim()
+        is Number -> {
+            val numeric = value.toDouble()
+            if (!numeric.isFinite() || numeric % 1.0 != 0.0 || numeric <= 0.0 || numeric >= Long.MAX_VALUE.toDouble()) {
+                throw IllegalStateException("Product details are incomplete.")
+            }
+            numeric.toLong().toString()
+        }
+        else -> ""
+    }
+    val id = raw.toLongOrNull()?.takeIf { it > 0L }
+        ?: throw IllegalStateException("Product details are incomplete.")
+    return id.toString()
+}
+
+/** Product titles must be real text rather than the JSON parser's blank fallback. */
+internal fun marketplaceRequiredListingTitle(value: Any?): String {
+    val title = (value as? String)?.trim().orEmpty()
+    if (title.length !in 2..MAX_MARKETPLACE_LISTING_RESPONSE_TITLE_LENGTH) {
+        throw IllegalStateException("A product title is missing or invalid.")
+    }
+    return title
+}
+
+/** Product prices must be explicit numeric values greater than zero. */
+internal fun marketplaceRequiredListingPrice(value: Any?): Double {
+    val price = (value as? Number)?.toDouble()
+        ?: throw IllegalStateException("A product price is missing or invalid.")
+    if (!price.isFinite() || price <= 0.0) {
+        throw IllegalStateException("A product price is missing or invalid.")
+    }
+    return price
+}
+
+/** A missing or malformed active flag must never make an unknown listing look purchasable. */
+internal fun marketplaceRequiredListingActive(value: Any?): Boolean =
+    value as? Boolean ?: throw IllegalStateException("Product availability information is missing or invalid.")
+
+/** Listing currencies are restricted to the two currencies the Marketplace currently supports. */
+internal fun marketplaceRequiredMarketplaceCurrency(value: Any?): String {
+    val currency = (value as? String)?.trim()?.uppercase(Locale.US).orEmpty()
+    if (!FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency)) {
+        throw IllegalStateException("A product currency is missing or unsupported.")
+    }
+    return currency
+}
+
+/** Inventory must be a real integer in the supported stock range; zero is valid for an out-of-stock row. */
+internal fun marketplaceRequiredInventoryQuantity(value: Any?): Int {
+    val quantity = (value as? Number)?.toDouble()
+        ?: throw IllegalStateException("Product stock information is missing or invalid.")
+    if (!quantity.isFinite() || quantity % 1.0 != 0.0 || quantity < 0.0 ||
+        quantity > FynxMarketplaceSellerFlowSupport.MAX_QUANTITY.toDouble()) {
+        throw IllegalStateException("Product stock information is missing or invalid.")
+    }
+    return quantity.toInt()
+}
+
+/** Optional delivery fees may be null, but a supplied fee must be a finite, non-negative number. */
+internal fun marketplaceOptionalListingFee(value: Any?): Double? {
+    if (value == null || value === JSONObject.NULL) return null
+    val fee = (value as? Number)?.toDouble()
+        ?: throw IllegalStateException("Product delivery fee is invalid.")
+    if (!fee.isFinite() || fee < 0.0) throw IllegalStateException("Product delivery fee is invalid.")
+    return fee
+}
+
+/** Verified receipt money accepts a true zero fee, but never missing, string, negative or non-finite data. */
+internal fun marketplaceRequiredReceiptAmount(value: Any?): Double {
+    val amount = (value as? Number)?.toDouble()
+        ?: throw IllegalStateException("Receipt totals are incomplete and could not be verified.")
+    if (!amount.isFinite() || amount < 0.0) {
+        throw IllegalStateException("Receipt totals are invalid and could not be verified.")
+    }
+    return amount
 }
 
 /**

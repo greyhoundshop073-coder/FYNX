@@ -62,7 +62,7 @@ private data class FynxRecentMedia(
 
 /** Single Status/Stories surface. */
 @Composable
-fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}) {
+fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}, initialText: String? = null, onInitialTextAccepted: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var addStatusOpen by remember { mutableStateOf(startWithCreator) }
@@ -73,7 +73,17 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
     var selectedInitialMedia by remember { mutableStateOf<FynxRecentMedia?>(null) }
     var selectedInitialType by remember { mutableStateOf<FynxStatusType?>(null) }
     var selectedStatusMusic by remember { mutableStateOf<FynxMusicCatalogueTrack?>(null) }
+    var initialTextDraft by remember { mutableStateOf<String?>(null) }
     var showStatusMusicPicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialText) {
+        val draft = initialText?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        initialTextDraft = draft
+        selectedInitialType = FynxStatusType.TEXT
+        composing = true
+        addStatusOpen = false
+        onInitialTextAccepted()
+    }
     var statusMusicSearch by remember { mutableStateOf("") }
     var statusMusicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
     var statusMusicLoading by remember { mutableStateOf(false) }
@@ -108,10 +118,11 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
         Box(Modifier.fillMaxSize()) {
             when {
                 composing -> FynxMatureStatusComposerPanel(
+                    initialText = initialTextDraft,
                     initialMediaUri = selectedInitialMedia?.uri,
                     initialType = selectedInitialMedia?.let { if (it.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO } ?: selectedInitialType,
                     initialMusic = selectedStatusMusic,
-                    onClose = { selectedInitialMedia = null; selectedInitialType = null; selectedStatusMusic = null; composing = false; if (startWithCreator) onExitCreator() }
+                    onClose = { selectedInitialMedia = null; selectedInitialType = null; selectedStatusMusic = null; initialTextDraft = null; composing = false; if (startWithCreator) onExitCreator() }
                 )
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { if (startWithCreator) onExitCreator() else addStatusOpen = false },

@@ -192,7 +192,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
@@ -858,7 +858,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onContact = { contactSeller(listing.sellerUsername, listing.id) },
             onBuyNow = { selected = null; checkoutListing = listing },
             onAddToCart = { if (cart.none { it.id == listing.id }) { if (cart.size >= 20) error = "Your FYNX cart can contain at most 20 different products." else { cart = cart + listing; cartQuantities = cartQuantities + (listing.id to 1) } }; selected = null },
-            onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title)) },
+            onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title), onShareToStatus = onShareListingToStatus) },
+            onShareToStatus = onShareListingToStatus,
             onLiveProof = { onLiveProof(listing.sellerUsername) },
             watchedPrice = priceWatchListingId == listing.id,
             priceWatchBusy = priceWatchBusy,
@@ -1100,6 +1101,7 @@ private fun MarketplaceDetails(
     onBuyNow: () -> Unit,
     onAddToCart: () -> Unit,
     onBuyTogether: () -> Unit,
+    onShareToStatus: (String, String) -> Unit,
     onLiveProof: () -> Unit,
     watchedPrice: Boolean,
     priceWatchBusy: Boolean,
@@ -1117,7 +1119,7 @@ private fun MarketplaceDetails(
             listing = l,
             onMessageSeller = onContact,
             onBuyNow = onBuyNow,
-            onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) },
+            onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title), onShareToStatus = onShareToStatus) },
             canPurchase = canPurchase
         )
         if (!canPurchase) {

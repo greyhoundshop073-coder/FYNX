@@ -77,7 +77,8 @@ fun FynxMatureStatusComposerPanel(
     initialMediaUri: Uri? = null,
     initialType: FynxStatusType? = null,
     initialMusic: FynxMusicCatalogueTrack? = null,
-    onClose: () -> Unit = {}
+    onClose: () -> Unit = {},
+    initialText: String? = null
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -132,7 +133,7 @@ fun FynxMatureStatusComposerPanel(
         }
     }
     var type by remember(initialType) { mutableStateOf(initialType ?: FynxStatusType.TEXT) }
-    var text by remember { mutableStateOf("") }
+    var text by remember(initialText) { mutableStateOf(initialText.orEmpty()) }
     var mediaUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri) }
     var selectedMusic by remember(initialMusic) { mutableStateOf(initialMusic) }
     var background by remember { mutableLongStateOf(MATURE_STATUS_BACKGROUNDS.first()) }

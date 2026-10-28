@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -348,6 +349,91 @@ private fun StatusHomeRow(
     }
 }
 
+@Composable
+private fun FynxMarketplaceStatusAttachmentCard(statusText: String) {
+    val listingId = remember(statusText) {
+        FynxDeepLinkParser.marketplaceListingIdFromStatusText(statusText)
+    } ?: return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var listing by remember(listingId) { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
+    var loaded by remember(listingId) { mutableStateOf(false) }
+
+    LaunchedEffect(listingId) {
+        FynxMarketplaceClient.listingById(context, listingId)
+            .onSuccess { listing = it }
+        loaded = true
+    }
+
+    Surface(
+        onClick = {
+            runCatching {
+                context.startActivity(
+                    android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(FynxDeepLinkParser.marketplaceAppLink(listingId))
+                    )
+                )
+            }
+        },
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White.copy(alpha = 0.12f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            val mediaId = listing?.mediaIds?.firstOrNull()
+            if (!mediaId.isNullOrBlank()) {
+                FynxRemoteMedia(
+                    "/api/media/$mediaId",
+                    "image",
+                    Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            } else {
+                Box(
+                    Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.ShoppingBag, contentDescription = "Product image unavailable", tint = Color.White)
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    listing?.title ?: if (loaded) "Marketplace product" else "Loading product…",
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2
+                )
+                listing?.let { product ->
+                    Text(
+                        "${product.currency.uppercase(java.util.Locale.US)} ${String.format(java.util.Locale.US, "%,.2f", product.price)}",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        when {
+                            !product.active -> "Listing is inactive"
+                            product.quantity <= 0 -> "Currently out of stock"
+                            else -> "Available on FYNX Marketplace"
+                        },
+                        color = Color.White.copy(alpha = 0.75f),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                } ?: Text(
+                    if (loaded) "Open Marketplace to check current details" else "Loading current product details",
+                    color = Color.White.copy(alpha = 0.75f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text("View product  →", color = Color(0xFF9CC5FF), fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
 private fun formatStatusTimestamp(timeMillis: Long): String {
     val now = java.util.Calendar.getInstance()
     val date = java.util.Calendar.getInstance().apply { timeInMillis = timeMillis }
@@ -648,14 +734,15 @@ private fun FynxStatusStoryViewer(
                             .imePadding(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (status.type != FynxStatusType.TEXT && !status.text.isNullOrBlank()) {
+                        FynxMarketplaceStatusAttachmentCard(status.text.orEmpty())
+                        if (status.type != FynxStatusType.TEXT && FynxDeepLinkParser.marketplaceStatusCaption(status.text).isNotBlank()) {
                             Surface(
                                 color = Color.White.copy(alpha = 0.10f),
                                 shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    status.text.orEmpty(),
+                                    FynxDeepLinkParser.marketplaceStatusCaption(status.text),
                                     color = Color.White,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
@@ -901,6 +988,9 @@ private fun StatusViewerText(status: FynxStatus) {
     }
     val weight = if (status.textStyle.font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
     val textAlign = when (status.textStyle.alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
+    val visibleText = FynxDeepLinkParser.marketplaceStatusCaption(status.text).ifBlank {
+        if (FynxDeepLinkParser.marketplaceListingIdFromStatusText(status.text) != null) "View product on FYNX Marketplace" else status.text.orEmpty()
+    }
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
@@ -910,12 +1000,12 @@ private fun StatusViewerText(status: FynxStatus) {
     ) {
         val baseSize = (maxWidth.value * 0.085f).coerceIn(24f, 42f)
         val scale = when {
-            status.text.orEmpty().length > 420 -> 0.72f
-            status.text.orEmpty().length > 240 -> 0.84f
+            visibleText.length > 420 -> 0.72f
+            visibleText.length > 240 -> 0.84f
             else -> 1f
         }
         Text(
-            status.text.orEmpty(),
+            visibleText,
             color = Color(status.textStyle.foregroundColor),
             fontFamily = family,
             fontWeight = weight,

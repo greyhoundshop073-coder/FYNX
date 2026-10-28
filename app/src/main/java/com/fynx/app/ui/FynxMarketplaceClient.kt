@@ -48,7 +48,7 @@ object FynxMarketplaceClient {
         val discovery = FynxDiscoveryClient.marketplaceDiscovery(context, query, category)
         if (discovery.isSuccess) return discovery
         return FynxBackendClient.get(context, "/api/marketplace/listings?q=${encode(query)}&category=${encode(category)}")
-            .mapCatching { raw -> parseListings(raw, preferAvailableStock = true) }
+            .mapCatching { raw -> parseListings(raw, preferAvailableStock = true, activeOmittedMeansActive = true) }
     }
 
     suspend fun listingById(context: Context, listingId: String): Result<Listing> {
@@ -210,26 +210,60 @@ object FynxMarketplaceClient {
         }
     }
 
-    private fun parseListings(raw: String, preferAvailableStock: Boolean): List<Listing> {
+    internal fun parseListings(raw: String, preferAvailableStock: Boolean, activeOmittedMeansActive: Boolean = false): List<Listing> {
         val array = JSONObject(raw).getJSONArray("listings")
         return buildList {
             for (i in 0 until array.length()) {
-                add(parseListingObject(array.getJSONObject(i), preferAvailableStock))
+                add(parseListingObject(array.getJSONObject(i), preferAvailableStock, activeOmittedMeansActive))
             }
         }
     }
 
-    private fun parseListingObject(o: JSONObject, preferAvailableStock: Boolean): Listing {
+    internal fun parseListingObject(o: JSONObject, preferAvailableStock: Boolean, activeOmittedMeansActive: Boolean = false): Listing {
         val media = o.optJSONArray("media_ids") ?: JSONArray()
-        val ids = buildList { for (j in 0 until media.length()) add(media.getString(j)) }
-        val mediaTypesJson = o.optJSONArray("media_types") ?: JSONArray()
-        val mediaTypes = buildList { for (j in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(j)) }
-        val quantity = if (preferAvailableStock) {
-            o.optInt("available_quantity", o.optInt("quantity", 0))
-        } else {
-            o.optInt("quantity", 0)
+        val ids = buildList {
+            for (j in 0 until media.length()) {
+                val mediaId = media.opt(j)
+                if (mediaId !is String || mediaId.isBlank()) throw IllegalStateException("Product media information is invalid.")
+                add(mediaId)
+            }
         }
-        return Listing(o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), quantity, o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true), mediaTypes)
+        val mediaTypesJson = o.optJSONArray("media_types") ?: JSONArray()
+        val mediaTypes = buildList {
+            for (j in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(j))
+        }
+        val stockValue = if (preferAvailableStock) {
+            if (o.has("available_quantity") && !o.isNull("available_quantity")) o.opt("available_quantity") else null
+        } else {
+            o.opt("quantity")
+        }
+        return Listing(
+            id = marketplaceRequiredListingId(o.opt("id")),
+            sellerUsername = o.optString("seller_username"),
+            sellerDisplayName = o.optString("seller_display_name"),
+            storeName = o.optString("store_name"),
+            title = marketplaceRequiredListingTitle(o.opt("title")),
+            description = o.optString("description"),
+            price = marketplaceRequiredListingPrice(o.opt("price")),
+            currency = marketplaceRequiredMarketplaceCurrency(o.opt("currency")),
+            category = o.optString("category"),
+            condition = o.optString("condition", "NEW"),
+            quantity = marketplaceRequiredInventoryQuantity(stockValue),
+            location = o.optString("location"),
+            deliveryAvailable = o.optBoolean("delivery_available", false),
+            pickupAvailable = o.optBoolean("pickup_available", true),
+            deliveryFee = marketplaceOptionalListingFee(o.opt("delivery_fee")),
+            mediaIds = ids,
+            active = if (o.has("active") && !o.isNull("active")) {
+                marketplaceRequiredListingActive(o.opt("active"))
+            } else if (activeOmittedMeansActive) {
+                // Discovery and the legacy public-list endpoint filter l.active=TRUE server-side.
+                true
+            } else {
+                marketplaceRequiredListingActive(null)
+            },
+            mediaTypes = mediaTypes
+        )
     }
 
     private fun encode(value: String): String = java.net.URLEncoder.encode(value.trim(), "UTF-8")

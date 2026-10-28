@@ -114,7 +114,7 @@ object FynxRemoteSocialClient {
         val text = "[FYNX_MARKETPLACE_AD]\n🛍️ ${title.trim().take(120)}\nPrice: $priceText\nStore: ${storeName.trim().take(120)}\n${description.trim().take(1000)}\nListing ID: $listingId"
         return FynxBackendClient.postJson(context, "/api/social/posts", JSONObject().apply { put("text", text.take(4000)); put("visibility", "PUBLIC"); put("mediaId", mediaId ?: JSONObject.NULL); put("mediaType", if (mediaId != null) "image" else JSONObject.NULL) }.toString()).map { Unit }
     }
-    suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching(::parseListings)
+    suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching { raw -> parseListings(raw, activeOmittedMeansActive = true) }
     data class MarketplaceListingPage(val listings: List<MarketplaceListing>, val hasMore: Boolean)
     suspend fun marketplaceDiscoveryPage(context: Context, query: String = "", category: String = "All", limit: Int = 24, offset: Int = 0, location: String = ""): Result<MarketplaceListingPage> {
         val safeLimit = limit.coerceIn(1, 60)
@@ -122,7 +122,7 @@ object FynxRemoteSocialClient {
         val path = "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=$safeLimit&offset=$safeOffset&location=${URLEncoder.encode(location.trim(), "UTF-8")}"
         return FynxBackendClient.get(context, path).mapCatching { raw ->
             val root = JSONObject(raw)
-            MarketplaceListingPage(parseListings(raw), root.optBoolean("hasMore", false))
+            MarketplaceListingPage(parseListings(raw, activeOmittedMeansActive = true), root.optBoolean("hasMore", false))
         }
     }
     suspend fun marketplacePriceWatchState(context: Context, listingId: String): Result<Boolean> {
@@ -298,5 +298,63 @@ object FynxRemoteSocialClient {
     data class PostAudience(val visibility: FynxPostVisibility, val userIds: List<String>)
     suspend fun postAudience(context: Context, id: String): Result<PostAudience> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.get(context, "/api/social/posts/$numericId/audience").mapCatching { raw -> val o = JSONObject(raw); val visibility = runCatching { FynxPostVisibility.valueOf(o.optString("visibility", "PUBLIC")) }.getOrDefault(FynxPostVisibility.PUBLIC); val users = o.optJSONArray("userIds") ?: JSONArray(); PostAudience(visibility, buildList { for (i in 0 until users.length()) add(users.optString(i)) }) } }
     suspend fun updatePostAudience(context: Context, id: String, visibility: FynxPostVisibility, userIds: List<String>): Result<Unit> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); val body = JSONObject().apply { put("visibility", visibility.name); put("audienceUserIds", JSONArray().apply { userIds.distinct().take(100).forEach { put(it) } }) }; return FynxBackendClient.patchJson(context, "/api/social/posts/$numericId", body.toString()).map { Unit } }
-    private fun parseListings(raw: String): List<MarketplaceListing> { val a = JSONObject(raw).optJSONArray("listings") ?: JSONArray(); return buildList { for (i in 0 until a.length()) { val o = a.getJSONObject(i); val ma = o.optJSONArray("media_ids") ?: JSONArray(); val ids = buildList { for (j in 0 until ma.length()) add(ma.get(j).toString()) }; val mt = o.optJSONArray("media_types") ?: JSONArray(); val types = buildList { for (j in 0 until mt.length()) add(mt.optString(j)) }; add(MarketplaceListing(o.optString("id"), o.optString("seller_id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price"), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), o.optInt("available_quantity", o.optInt("quantity")), o.optString("location"), o.optBoolean("delivery_available"), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true), types)) } } }
+    private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing> {
+        val array = JSONObject(raw).optJSONArray("listings")
+            ?: throw IllegalStateException("Marketplace listing response was incomplete.")
+        return buildList {
+            for (i in 0 until array.length()) {
+                val o = array.optJSONObject(i)
+                    ?: throw IllegalStateException("Marketplace listing response contains an invalid product.")
+                val mediaJson = o.optJSONArray("media_ids") ?: JSONArray()
+                val mediaIds = buildList {
+                    for (j in 0 until mediaJson.length()) {
+                        val mediaId = mediaJson.opt(j)
+                        if (mediaId !is String || mediaId.isBlank()) {
+                            throw IllegalStateException("Product media information is invalid.")
+                        }
+                        add(mediaId)
+                    }
+                }
+                val mediaTypesJson = o.optJSONArray("media_types") ?: JSONArray()
+                val mediaTypes = buildList {
+                    for (j in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(j))
+                }
+                val stockValue = if (o.has("available_quantity") && !o.isNull("available_quantity")) {
+                    o.opt("available_quantity")
+                } else {
+                    null
+                }
+                add(
+                    MarketplaceListing(
+                        id = marketplaceRequiredListingId(o.opt("id")),
+                        sellerId = o.optString("seller_id"),
+                        sellerUsername = o.optString("seller_username"),
+                        sellerDisplayName = o.optString("seller_display_name"),
+                        storeName = o.optString("store_name"),
+                        title = marketplaceRequiredListingTitle(o.opt("title")),
+                        description = o.optString("description"),
+                        price = marketplaceRequiredListingPrice(o.opt("price")),
+                        currency = marketplaceRequiredMarketplaceCurrency(o.opt("currency")),
+                        category = o.optString("category"),
+                        condition = o.optString("condition", "NEW"),
+                        quantity = marketplaceRequiredInventoryQuantity(stockValue),
+                        location = o.optString("location"),
+                        deliveryAvailable = o.optBoolean("delivery_available"),
+                        pickupAvailable = o.optBoolean("pickup_available", true),
+                        deliveryFee = marketplaceOptionalListingFee(o.opt("delivery_fee")),
+                        mediaIds = mediaIds,
+                        active = if (o.has("active") && !o.isNull("active")) {
+                            marketplaceRequiredListingActive(o.opt("active"))
+                        } else if (activeOmittedMeansActive) {
+                            // The legacy public-listings endpoint explicitly filters l.active=TRUE.
+                            true
+                        } else {
+                            marketplaceRequiredListingActive(null)
+                        },
+                        mediaTypes = mediaTypes
+                    )
+                )
+            }
+        }
+    }
 }

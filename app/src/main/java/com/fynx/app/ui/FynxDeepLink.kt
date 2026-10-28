@@ -46,6 +46,47 @@ object FynxDeepLinkParser {
     fun postAppLink(postId:String, commentId:String?=null):String = Uri.Builder().scheme("fynx").authority("post").appendPath(postId.trim()).apply { commentId?.trim()?.takeIf { it.isNotBlank() }?.let { appendQueryParameter("comment", it) } }.build().toString()
     fun statusAppLink(statusId:String):String = routeAppLink("status", statusId)
     fun marketplaceWebLink(listingId:String?=null):String=routeWebLink(MARKETPLACE_PATH,listingId)
+
+    /**
+     * Creates a Status caption with an ordinary Marketplace link as a backward-compatible
+     * attachment reference. The existing Status API already persists text; no new listing
+     * or Status record type is needed.
+     */
+    fun marketplaceStatusDraftText(listingId: String, title: String): String {
+        val normalizedId = listingId.trim().takeIf { value ->
+            value.toLongOrNull()?.let { it > 0L } == true
+        } ?: return ""
+        val cleanTitle = title.replace(Regex("\\s+"), " ").trim().take(120)
+        val caption = if (cleanTitle.isBlank()) {
+            "Check out this product on FYNX Marketplace"
+        } else {
+            "Check out \"$cleanTitle\" on FYNX Marketplace"
+        }
+        return "$caption\n${marketplaceWebLink(normalizedId)}"
+    }
+
+    /** Returns only a valid positive numeric Marketplace listing ID from a shared Status. */
+    fun marketplaceListingIdFromStatusText(text: String?): String? {
+        val match = Regex(
+            """https?://(?:www\.)?fynx\.app/marketplace/([0-9]+)(?:[/?#\s]|$)""",
+            RegexOption.IGNORE_CASE
+        ).find(text.orEmpty()) ?: return null
+        return match.groupValues.getOrNull(1)?.takeIf { value ->
+            value.toLongOrNull()?.let { it > 0L } == true
+        }
+    }
+
+    /** Keeps the product URL as metadata while displaying only the user's caption. */
+    fun marketplaceStatusCaption(text: String?): String =
+        text.orEmpty()
+            .replace(
+                Regex("""https?://(?:www\.)?fynx\.app/marketplace/[0-9]+(?:[?#][^\s]*)?""", RegexOption.IGNORE_CASE),
+                ""
+            )
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
     fun marketplaceAppLink(listingId:String?=null):String=routeAppLink("marketplace",listingId)
     fun storiesWebLink():String="https://$FYNX_HOST$STORIES_PATH"
     fun storiesAppLink():String="fynx://stories"

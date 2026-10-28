@@ -121,9 +121,9 @@ checks = [
     ("My Shop clears stale profile errors when any field changes and before retrying save", all(fragment in seller_center for fragment in ("shopName = it.take(120); shopMessage = null; shopError = null", "shopDescription = it.take(800); shopMessage = null; shopError = null", "shopLocation = it.take(160); shopMessage = null; shopError = null", "shopContactPhone = it.take(40); shopMessage = null; shopError = null", "shopSaving = true\n                            shopMessage = null\n                            shopError = null"))),
     ("My Shop preserves listing edit, delete, and per-listing delivery/pickup settings", 'Icon(Icons.Default.Edit, "Edit listing")' in seller_center and 'Icon(Icons.Default.Delete, "Remove listing")' in seller_center and "FynxMarketplaceShippingSettingsCard(" in seller_center),
     ("My Shop stock editor and inventory cards label total stock and backend rejects quantities below existing reservations", 'label = { Text("Total stock (0 = out of stock)") }' in seller_center and '${listing.quantity} total stock • ${listing.category} • ${listing.condition}' in seller_center and "Stock cannot be reduced below items already reserved by active orders." in seller_center and "if (quantity < reservedQuantity)" in social_routes and "reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE" in social_routes),
-    ("buyer-facing Marketplace uses available stock after reservations while My Shop retains total stock", social_routes.count("AS available_quantity") >= 3 and discovery_routes.count("AS available_quantity") >= 2 and 'o.optInt("available_quantity", o.optInt("quantity"))' in remote_client and 'label = { Text("Total stock (0 = out of stock)") }' in seller_center),
-    ("paginated Marketplace discovery parses available_quantity instead of total quantity", 'o.optInt("available_quantity", o.optInt("quantity", 0))' in discovery_client and "AS available_quantity" in discovery_routes),
-    ("public Marketplace detail and fallback parsers use available stock while My Shop explicitly keeps total stock", 'parseListings(raw, preferAvailableStock = true)' in marketplace_client and 'parseListingObject(JSONObject(raw).getJSONObject("listing"), preferAvailableStock = true)' in marketplace_client and 'parseListings(raw, preferAvailableStock = false)' in marketplace_client and 'if (preferAvailableStock)' in marketplace_client and 'o.optInt("available_quantity", o.optInt("quantity", 0))' in marketplace_client),
+    ("buyer-facing Marketplace uses available stock after reservations while My Shop retains total stock", social_routes.count("AS available_quantity") >= 3 and discovery_routes.count("AS available_quantity") >= 2 and 'val stockValue = if (o.has("available_quantity") && !o.isNull("available_quantity")) {' in remote_client and 'o.opt("available_quantity")' in remote_client and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client and 'label = { Text("Total stock (0 = out of stock)") }' in seller_center),
+    ("paginated Marketplace discovery parses available_quantity instead of total quantity", 'FynxMarketplaceClient.parseListings(raw, preferAvailableStock = true)' in discovery_client and 'if (preferAvailableStock)' in marketplace_client and 'else null' in marketplace_client[marketplace_client.index("val stockValue = if (preferAvailableStock)"):marketplace_client.index("return Listing(")] and 'o.opt("available_quantity")' in marketplace_client and "marketplaceRequiredInventoryQuantity(stockValue)" in marketplace_client and "AS available_quantity" in discovery_routes),
+    ("public Marketplace detail and fallback parsers use available stock while My Shop explicitly keeps total stock", 'parseListings(raw, preferAvailableStock = true, activeOmittedMeansActive = true)' in marketplace_client and 'parseListingObject(JSONObject(raw).getJSONObject("listing"), preferAvailableStock = true)' in marketplace_client and 'parseListings(raw, preferAvailableStock = false)' in marketplace_client and 'if (preferAvailableStock)' in marketplace_client and 'else null' in marketplace_client[marketplace_client.index("val stockValue = if (preferAvailableStock)"):marketplace_client.index("return Listing(")] and 'o.opt("available_quantity")' in marketplace_client and 'o.opt("quantity")' in marketplace_client and "marketplaceRequiredInventoryQuantity(stockValue)" in marketplace_client),
     ("My Shop edit form and authenticated backend update description, category, condition, and location while retaining seller ownership and price-watch notifications", all(fragment in seller_center for fragment in ('label = { Text("Product description") }', 'label = { Text("Category") }', 'Text("Condition", style = MaterialTheme.typography.labelLarge)', 'listOf("NEW", "USED", "REFURBISHED")', 'label = { Text("Product location") }', 'verticalScroll(rememberScrollState())')) and all(fragment in marketplace_client for fragment in ('"description", cleanDescription.take(4000)', '"category", cleanCategory.take(40)', '"condition", cleanCondition', '"location", cleanLocation.take(160)')) and all(fragment in social_routes for fragment in ('description = $4, category = $5, condition = $6, location = $7', 'WHERE id = $1 AND seller_id = $2 FOR UPDATE', 'if (priceChanged)'))),
     ("My Shop listing cards display the first uploaded product image and an explicit fallback when no media exists", 'FynxRemoteMedia(' in seller_center and 'FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())' in seller_center and 'Product image unavailable' in seller_center),
     ("My Shop keeps seller-order review in Orders and driver assignments in Delivery & drivers", 'if (activeSection == "Orders")' in seller_center and "FynxMarketplaceSellerOrders(context = context" in seller_center and 'if (activeSection == "Delivery & drivers")' in seller_center and "showDriverAssignments = true" in seller_center),
@@ -187,7 +187,7 @@ checks.extend([
     ("My Shop reads authoritative seller totals and warns when the backend only has a limited summary", "moneyTotalsFromBackend" in seller_center and "totalsArray" in seller_center and "This backend only provides the latest 100 settlements. Totals below may not include older orders." in seller_center and "Recent earnings history (latest 100; showing 20)" in seller_center),
     ("seller catalogue and saved-products APIs return ordered MIME types with indexable media-ID joins", "WITH ORDINALITY AS listing_media(media_id, ord)" in social_routes and "ORDER BY listing_media.ord" in social_routes and "AS media_types" in social_routes and "mm.id = CASE WHEN listing_media.media_id ~" in social_routes and social_routes.count("${marketplaceMediaTypesProjection}") == 3 and "media_types: Array.isArray(row.media_types)" in social_routes),
     ("Marketplace discovery and exact-listing APIs return ordered MIME types with indexable media-ID joins", "WITH ORDINALITY AS listing_media(media_id, ord)" in discovery_routes and "ORDER BY listing_media.ord" in discovery_routes and "AS media_types" in discovery_routes and "mm.id = CASE WHEN listing_media.media_id ~" in discovery_routes and discovery_routes.count("${marketplaceMediaTypesProjection}") == 2 and "media_types:Array.isArray(row.media_types)" in discovery_routes),
-    ("Marketplace parsers preserve media MIME types and render product cards, details, storefront and My Shop without guessing", all(fragment in marketplace_client for fragment in ('o.optJSONArray("media_types")', "mediaTypes: List<String>", "fun mediaDisplayType(")) and 'o.optJSONArray("media_types")' in discovery_client and 'o.optJSONArray("media_types")' in remote_client and all("mediaDisplayType" in source and "mediaTypes" in source for source in (product_card, marketplace, seller_center, storefront))),
+    ("Marketplace parsers preserve media MIME types and render product cards, details, storefront and My Shop without guessing", all(fragment in marketplace_client for fragment in ('o.optJSONArray("media_types")', "mediaTypes: List<String>", "fun mediaDisplayType(")) and 'FynxMarketplaceClient.parseListings(raw, preferAvailableStock = true)' in discovery_client and 'o.optJSONArray("media_types")' in remote_client and all("mediaDisplayType" in source and "mediaTypes" in source for source in (product_card, marketplace, seller_center, storefront))),
 ])
 
 checks.extend([
@@ -293,6 +293,52 @@ checks.extend([
      and 'FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())\n            .mapCatching { raw ->' in storefront
      and 'shopProfileError?.let { message ->' in storefront
      and 'TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }' in storefront),
+])
+checks.extend([
+    ("Marketplace product details receives the Status share callback", "onShareToStatus: (String, String) -> Unit" in marketplace and "onShareToStatus = onShareListingToStatus" in marketplace and "onShareToStatus = onShareToStatus" in marketplace[marketplace.index("private fun MarketplaceDetails("):]),
+    ("missing listing availability never defaults to active except for verified active-only public endpoints",
+     "marketplaceRequiredListingActive(o.opt(\"active\"))" in marketplace_client
+     and "internal fun marketplaceRequiredListingActive(value: Any?)" in support
+     and "activeOmittedMeansActive = true" in marketplace_client
+     and "activeOmittedMeansActive = true" in remote_client
+     and "active = o.optBoolean(\"active\", true)" not in marketplace_client
+     and "active = o.optBoolean(\"active\", true)" not in remote_client),
+    ("buyer-facing listing parsers never substitute total stock when available stock is missing",
+     "if (preferAvailableStock)" in marketplace_client
+     and "else null" in marketplace_client[marketplace_client.index("val stockValue = if (preferAvailableStock)"):marketplace_client.index("return Listing(")]
+     and "val stockValue = if (o.has(\"available_quantity\") && !o.isNull(\"available_quantity\"))" in remote_client
+     and "marketplaceRequiredInventoryQuantity(stockValue)" in marketplace_client
+     and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client),
+    ("Marketplace listing values fail closed instead of defaulting missing price/currency/quantity",
+     "marketplaceRequiredListingPrice(o.opt(\"price\"))" in marketplace_client
+     and "marketplaceRequiredMarketplaceCurrency(o.opt(\"currency\"))" in marketplace_client
+     and "marketplaceRequiredInventoryQuantity(stockValue)" in marketplace_client
+     and "o.optDouble(\"price\", 0.0)" not in marketplace_client
+     and "o.optString(\"currency\", \"NGN\")" not in marketplace_client),
+    ("discovery uses the canonical strict Marketplace listing parser",
+     "FynxMarketplaceClient.parseListings(raw, preferAvailableStock = true)" in discovery_client
+     and "private fun parseListings(raw: String): List<FynxMarketplaceClient.Listing>" not in discovery_client),
+    ("active Marketplace list/storefront parser rejects malformed listing prices and missing currencies",
+     "private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>" in remote_client
+     and "marketplaceRequiredListingPrice(o.opt(\"price\"))" in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]
+     and "marketplaceRequiredMarketplaceCurrency(o.opt(\"currency\"))" in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]
+     and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]
+     and "o.optDouble(\"price\")" not in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]
+     and "o.optString(\"currency\", \"NGN\")" not in remote_client[remote_client.index("private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing>"):]),
+    ("verified order receipts validate identity, signature, item money and reconciled totals before UI exposure",
+     "validateMarketplaceOrderReceipt(receipt)" in receipt
+     and "marketplaceReceiptAmountsMatch(lineSubtotal, expectedSubtotal)" in receipt
+     and "marketplaceReceiptAmountsMatch(marketplaceFee, buyerFee + sellerFee)" in receipt
+     and "marketplaceReceiptAmountsMatch(buyerTotal, subtotal + delivery + buyerFee - discount)" in receipt
+     and "marketplaceRequiredReceiptAmount(receipt.opt(\"buyerTotal\"))" in receipt
+     and "signatureAlgorithm" in receipt and "?signature=$signature" in receipt),
+    ("combined checkout receipts validate every item and reconcile all aggregate totals before UI exposure",
+     "validateMarketplaceCheckoutReceipt(receipt)" in receipt
+     and "items.length() !in 1..20" in receipt
+     and "marketplaceReceiptAmountsMatch(subtotal, sumSubtotal)" in receipt
+     and "marketplaceReceiptAmountsMatch(delivery, sumDelivery)" in receipt
+     and "marketplaceReceiptAmountsMatch(marketplaceFee, sumMarketplaceFee)" in receipt
+     and "marketplaceReceiptAmountsMatch(buyerTotal, sumBuyerTotal)" in receipt),
 ])
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
