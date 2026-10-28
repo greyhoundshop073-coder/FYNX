@@ -60,6 +60,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.5.3")
     implementation("androidx.camera:camera-view:1.5.3")
     implementation("androidx.camera:camera-video:1.5.3")
+    implementation("androidx.camera.media3:media3-effect:1.0.0-alpha04")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
 
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
