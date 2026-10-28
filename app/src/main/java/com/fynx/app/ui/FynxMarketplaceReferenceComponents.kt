@@ -60,7 +60,7 @@ internal object FynxMarketplaceReferenceStyle {
     val radius = RoundedCornerShape(18.dp)
 }
 
-/** Marketplace-local cobalt selection colors stay stable even when another app section uses a different accent. */
+/** Marketplace-local Azure selection colors stay consistent when another app section uses a different accent. */
 @Composable
 internal fun fynxMarketplaceSelectedChipColors(): androidx.compose.material3.SelectableChipColors {
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
