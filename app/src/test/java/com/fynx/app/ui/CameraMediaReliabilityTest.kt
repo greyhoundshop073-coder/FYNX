@@ -62,6 +62,9 @@ class CameraMediaReliabilityTest {
         assertTrue(filter.brightness.isFinite())
         assertTrue(filter.contrast.isFinite())
         assertTrue(filter.contrast > 0f)
+        assertEquals(1f, filter.saturation, 0f)
+        assertEquals(0.035f, filter.brightness, 0f)
+        assertEquals(0.92f, filter.contrast, 0f)
         assertFalse(filter.invert)
     }
 
@@ -77,6 +80,9 @@ class CameraMediaReliabilityTest {
         assertEquals("Low Light", filter.label)
         assertTrue(filter.brightness > 0f)
         assertTrue(filter.contrast > 0f)
+        assertEquals(1f, filter.saturation, 0f)
+        assertEquals(0.12f, filter.brightness, 0f)
+        assertEquals(1.04f, filter.contrast, 0f)
         assertFalse(filter.invert)
         assertEquals(Triple(1.04f, 1.035f, 1.02f), filter.rgbScales())
     }
