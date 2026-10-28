@@ -46,7 +46,7 @@ object FynxDiscoveryClient {
         val path = "/api/marketplace/discovery?q=${encode(query)}&category=${encode(category)}&limit=${limit.coerceIn(1, 60)}&offset=${offset.coerceAtLeast(0)}&location=${encode(location)}"
         return FynxBackendClient.get(context, path).mapCatching { raw ->
             val json = JSONObject(raw)
-            MarketplaceDiscoveryPage(parseListings(raw), json.optBoolean("hasMore", false))
+            MarketplaceDiscoveryPage(FynxMarketplaceClient.parseListings(raw, preferAvailableStock = true), json.optBoolean("hasMore", false))
         }
     }
 
@@ -54,20 +54,6 @@ object FynxDiscoveryClient {
         marketplaceDiscoveryPage(context, query, category, limit, 0, location).map { it.items }
 
     data class TrendingPost(val id: String, val authorUsername: String, val authorDisplayName: String, val text: String, val mediaId: String?, val mediaType: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val shareCount: Int, val saveCount: Int, val score: Double)
-
-    private fun parseListings(raw: String): List<FynxMarketplaceClient.Listing> {
-        val array = JSONObject(raw).optJSONArray("listings") ?: JSONArray()
-        return buildList {
-            for (i in 0 until array.length()) {
-                val o = array.getJSONObject(i)
-                val media = o.optJSONArray("media_ids") ?: JSONArray()
-                val ids = buildList { for (j in 0 until media.length()) add(media.get(j).toString()) }
-                val mediaTypesJson = o.optJSONArray("media_types") ?: JSONArray()
-                val mediaTypes = buildList { for (j in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(j)) }
-                add(FynxMarketplaceClient.Listing(o.optString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), o.optInt("available_quantity", o.optInt("quantity", 0)), o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true), mediaTypes))
-            }
-        }
-    }
 
     private fun encode(value: String): String = URLEncoder.encode(value.trim(), "UTF-8")
     private val EVENT_TYPES = setOf("VIEW", "LIKE", "COMMENT", "SHARE", "SAVE", "FOLLOW", "PROFILE_VIEW", "PRODUCT_CLICK", "MESSAGE", "PURCHASE", "INTERESTED", "NOT_INTERESTED", "REPORT")
