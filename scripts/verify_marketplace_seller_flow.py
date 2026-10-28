@@ -298,7 +298,9 @@ checks.extend([
     ("missing listing availability never defaults to active",
      "marketplaceRequiredListingActive(o.opt(\"active\"))" in marketplace_client
      and "internal fun marketplaceRequiredListingActive(value: Any?)" in support
-     and "active = o.optBoolean(\"active\", true)" not in marketplace_client),
+     and "active = o.optBoolean(\"active\", true)" not in marketplace_client
+     and "marketplaceRequiredListingActive(o.opt(\"active\"))" in remote_client
+     and "active = o.optBoolean(\"active\", true)" not in remote_client),
     ("Marketplace listing values fail closed instead of defaulting missing price/currency/quantity",
      "marketplaceRequiredListingPrice(o.opt(\"price\"))" in marketplace_client
      and "marketplaceRequiredMarketplaceCurrency(o.opt(\"currency\"))" in marketplace_client

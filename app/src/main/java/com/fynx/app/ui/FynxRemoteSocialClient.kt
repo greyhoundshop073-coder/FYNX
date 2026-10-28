@@ -343,7 +343,7 @@ object FynxRemoteSocialClient {
                         pickupAvailable = o.optBoolean("pickup_available", true),
                         deliveryFee = marketplaceOptionalListingFee(o.opt("delivery_fee")),
                         mediaIds = mediaIds,
-                        active = o.optBoolean("active", true),
+                        active = marketplaceRequiredListingActive(o.opt("active")),
                         mediaTypes = mediaTypes
                     )
                 )
