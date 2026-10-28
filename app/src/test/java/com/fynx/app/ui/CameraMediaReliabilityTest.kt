@@ -50,7 +50,7 @@ class CameraMediaReliabilityTest {
 
     @Test
     fun cameraFiltersHaveStableUserFacingOptions() {
-        assertEquals(listOf("Natural", "Portrait", "Bright", "Warm", "Cool", "Vintage", "Cinematic", "Neon", "Fade", "Dream", "Negative", "B&W", "Glow", "Sunset", "Rose", "Arctic", "Aurora", "Matte", "Noir", "Golden", "Flashback"), CameraFilter.values().map { it.label })
+        assertEquals(listOf("Natural", "Portrait", "Bright", "Warm", "Cool", "Vintage", "Cinematic", "Neon", "Fade", "Dream", "Negative", "B&W", "Glow", "Sunset", "Rose", "Arctic", "Aurora", "Matte", "Noir", "Golden", "Flashback", "Low Light"), CameraFilter.values().map { it.label })
     }
 
 
@@ -61,6 +61,16 @@ class CameraMediaReliabilityTest {
         assertTrue(filter.saturation.isFinite())
         assertTrue(filter.brightness.isFinite())
         assertTrue(filter.contrast.isFinite())
+        assertTrue(filter.contrast > 0f)
+        assertFalse(filter.invert)
+    }
+
+
+    @Test
+    fun lowLightFilterHasFiniteNonInvertingEnhancementParameters() {
+        val filter = CameraFilter.LOW_LIGHT
+        assertEquals("Low Light", filter.label)
+        assertTrue(filter.brightness > 0f)
         assertTrue(filter.contrast > 0f)
         assertFalse(filter.invert)
     }
