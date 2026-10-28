@@ -149,7 +149,7 @@ checks["Low Light uses live and saved photo filter parameters"] = (
     and 'CameraFilter.GOLDEN, CameraFilter.LOW_LIGHT -> "Color"' in camera
 )
 checks["Flashback live and saved tone parameters remain aligned"] = (
-    "CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb(), saturation()) in camera
+    "CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb(), saturation())" in camera
     and 'FLASHBACK("Flashback",1.0f,0.035f,0.92f)' in camera
     and "CameraFilter.VINTAGE, CameraFilter.FLASHBACK -> \"Retro\"" in camera
 )
