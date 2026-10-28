@@ -18,6 +18,14 @@ checks = [
         'if [ "$VISUAL_EXIT" -ne 0 ]; then' in runner and 'exit "$TEST_EXIT"' in runner,
     ),
     (
+        "green instrumentation selects authenticated navigation only when backend health is ready",
+        'if node --input-type=module -e' in runner
+        and 'body?.database !== "ready"' in runner
+        and 'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
+        and 'Live backend is unavailable; running read-only Marketplace/My Shop visual certification' in runner
+        and 'TEST_EXIT=$?' in runner,
+    ),
+    (
         "focused navigation mode is isolated from unrelated Home/Chat/Status journey loops",
         'if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":' in navigation
         and 'raise SystemExit(1 if FAILURES else 0)' in navigation,
