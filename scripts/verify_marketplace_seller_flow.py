@@ -296,12 +296,19 @@ checks.extend([
 ])
 checks.extend([
     ("Marketplace product details receives the Status share callback", "onShareToStatus: (String, String) -> Unit" in marketplace and "onShareToStatus = onShareListingToStatus" in marketplace),
-    ("missing listing availability never defaults to active",
+    ("missing listing availability never defaults to active except for the explicitly active-only legacy list endpoint",
      "marketplaceRequiredListingActive(o.opt(\"active\"))" in marketplace_client
      and "internal fun marketplaceRequiredListingActive(value: Any?)" in support
      and "active = o.optBoolean(\"active\", true)" not in marketplace_client
      and "marketplaceRequiredListingActive(o.opt(\"active\"))" in remote_client
+     and "activeOmittedMeansActive = true" in remote_client
      and "active = o.optBoolean(\"active\", true)" not in remote_client),
+    ("buyer-facing listing parsers never substitute total stock when available stock is missing",
+     "if (preferAvailableStock)" in marketplace_client
+     and "else null" in marketplace_client[marketplace_client.index("val stockValue = if (preferAvailableStock)"):marketplace_client.index("return Listing(")]
+     and "val stockValue = if (o.has(\"available_quantity\") && !o.isNull(\"available_quantity\"))" in remote_client
+     and "marketplaceRequiredInventoryQuantity(stockValue)" in marketplace_client
+     and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client),
     ("Marketplace listing values fail closed instead of defaulting missing price/currency/quantity",
      "marketplaceRequiredListingPrice(o.opt(\"price\"))" in marketplace_client
      and "marketplaceRequiredMarketplaceCurrency(o.opt(\"currency\"))" in marketplace_client

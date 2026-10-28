@@ -114,7 +114,7 @@ object FynxRemoteSocialClient {
         val text = "[FYNX_MARKETPLACE_AD]\n🛍️ ${title.trim().take(120)}\nPrice: $priceText\nStore: ${storeName.trim().take(120)}\n${description.trim().take(1000)}\nListing ID: $listingId"
         return FynxBackendClient.postJson(context, "/api/social/posts", JSONObject().apply { put("text", text.take(4000)); put("visibility", "PUBLIC"); put("mediaId", mediaId ?: JSONObject.NULL); put("mediaType", if (mediaId != null) "image" else JSONObject.NULL) }.toString()).map { Unit }
     }
-    suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching(::parseListings)
+    suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching { raw -> parseListings(raw, activeOmittedMeansActive = true) }
     data class MarketplaceListingPage(val listings: List<MarketplaceListing>, val hasMore: Boolean)
     suspend fun marketplaceDiscoveryPage(context: Context, query: String = "", category: String = "All", limit: Int = 24, offset: Int = 0, location: String = ""): Result<MarketplaceListingPage> {
         val safeLimit = limit.coerceIn(1, 60)
@@ -298,7 +298,7 @@ object FynxRemoteSocialClient {
     data class PostAudience(val visibility: FynxPostVisibility, val userIds: List<String>)
     suspend fun postAudience(context: Context, id: String): Result<PostAudience> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.get(context, "/api/social/posts/$numericId/audience").mapCatching { raw -> val o = JSONObject(raw); val visibility = runCatching { FynxPostVisibility.valueOf(o.optString("visibility", "PUBLIC")) }.getOrDefault(FynxPostVisibility.PUBLIC); val users = o.optJSONArray("userIds") ?: JSONArray(); PostAudience(visibility, buildList { for (i in 0 until users.length()) add(users.optString(i)) }) } }
     suspend fun updatePostAudience(context: Context, id: String, visibility: FynxPostVisibility, userIds: List<String>): Result<Unit> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); val body = JSONObject().apply { put("visibility", visibility.name); put("audienceUserIds", JSONArray().apply { userIds.distinct().take(100).forEach { put(it) } }) }; return FynxBackendClient.patchJson(context, "/api/social/posts/$numericId", body.toString()).map { Unit } }
-    private fun parseListings(raw: String): List<MarketplaceListing> {
+    private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing> {
         val array = JSONObject(raw).optJSONArray("listings")
             ?: throw IllegalStateException("Marketplace listing response was incomplete.")
         return buildList {
@@ -322,7 +322,7 @@ object FynxRemoteSocialClient {
                 val stockValue = if (o.has("available_quantity") && !o.isNull("available_quantity")) {
                     o.opt("available_quantity")
                 } else {
-                    o.opt("quantity")
+                    null
                 }
                 add(
                     MarketplaceListing(
@@ -343,7 +343,14 @@ object FynxRemoteSocialClient {
                         pickupAvailable = o.optBoolean("pickup_available", true),
                         deliveryFee = marketplaceOptionalListingFee(o.opt("delivery_fee")),
                         mediaIds = mediaIds,
-                        active = marketplaceRequiredListingActive(o.opt("active")),
+                        active = if (o.has("active") && !o.isNull("active")) {
+                            marketplaceRequiredListingActive(o.opt("active"))
+                        } else if (activeOmittedMeansActive) {
+                            // The legacy public-listings endpoint explicitly filters l.active=TRUE.
+                            true
+                        } else {
+                            marketplaceRequiredListingActive(null)
+                        },
                         mediaTypes = mediaTypes
                     )
                 )

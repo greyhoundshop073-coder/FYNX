@@ -232,8 +232,8 @@ object FynxMarketplaceClient {
         val mediaTypes = buildList {
             for (j in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(j))
         }
-        val stockValue = if (preferAvailableStock && o.has("available_quantity") && !o.isNull("available_quantity")) {
-            o.opt("available_quantity")
+        val stockValue = if (preferAvailableStock) {
+            if (o.has("available_quantity") && !o.isNull("available_quantity")) o.opt("available_quantity") else null
         } else {
             o.opt("quantity")
         }
