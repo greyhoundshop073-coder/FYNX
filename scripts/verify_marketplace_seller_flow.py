@@ -295,6 +295,7 @@ checks.extend([
      and 'TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }' in storefront),
 ])
 checks.extend([
+    ("Marketplace product details receives the Status share callback", "onShareToStatus: (String, String) -> Unit" in marketplace and "onShareToStatus = onShareListingToStatus" in marketplace),
     ("missing listing availability never defaults to active",
      "marketplaceRequiredListingActive(o.opt(\"active\"))" in marketplace_client
      and "internal fun marketplaceRequiredListingActive(value: Any?)" in support
