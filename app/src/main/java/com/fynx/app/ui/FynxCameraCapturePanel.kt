@@ -384,27 +384,39 @@ fun FynxCameraCapturePanel(
                 liveCameraEffect = null
                 if (generation != bindGeneration || pendingUri != null) return@runCatching
                 val targets = if (mode == CameraMode.PHOTO) CameraEffect.PREVIEW else (CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE)
-                val cameraEffect = Media3Effect(
-                    context, targets, ContextCompat.getMainExecutor(context)
-                ) { failure ->
-                    error = "Live effect stopped: " + (failure.message ?: "camera effect unavailable")
-                }
-                try {
+                var candidateEffect: Media3Effect? = null
+                var effectsBound = false
+                val camera = try {
+                    val effect = Media3Effect(
+                        context, targets, ContextCompat.getMainExecutor(context)
+                    ) { failure ->
+                        error = "Live effect stopped: " + (failure.message ?: "camera effect unavailable")
+                    }
+                    candidateEffect = effect
                     val groupBuilder = UseCaseGroup.Builder().addUseCase(preview)
                     if (mode == CameraMode.PHOTO) groupBuilder.addUseCase(capture) else groupBuilder.addUseCase(video)
-                    groupBuilder.addEffect(cameraEffect)
-                    val camera = provider.bindToLifecycle(lifecycleOwner, selector, groupBuilder.build())
-                    liveCameraEffect = cameraEffect
-                    cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
-                    cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f))
-                    val range = cameraInfo?.exposureState?.exposureCompensationRange
-                    exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2); cameraControl?.setExposureCompensationIndex(exposure)
-                    if (torchEnabled && cameraInfo?.hasFlashUnit() == true) cameraControl?.enableTorch(true) else if (torchEnabled) torchEnabled = false
-                    error = null
-                } catch (failure: Throwable) {
-                    cameraEffect.close()
-                    throw failure
+                    groupBuilder.addEffect(effect)
+                    provider.bindToLifecycle(lifecycleOwner, selector, groupBuilder.build()).also {
+                        liveCameraEffect = effect
+                        effectsBound = true
+                    }
+                } catch (_: Throwable) {
+                    candidateEffect?.close()
+                    liveCameraEffect = null
+                    provider.unbindAll()
+                    // A device/emulator that cannot run GPU effects must still capture normally.
+                    if (mode == CameraMode.PHOTO) {
+                        provider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
+                    } else {
+                        provider.bindToLifecycle(lifecycleOwner, selector, preview, video)
+                    }
                 }
+                cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
+                cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f))
+                val range = cameraInfo?.exposureState?.exposureCompensationRange
+                exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2); cameraControl?.setExposureCompensationIndex(exposure)
+                if (torchEnabled && cameraInfo?.hasFlashUnit() == true) cameraControl?.enableTorch(true) else if (torchEnabled) torchEnabled = false
+                error = if (effectsBound) null else "Live looks aren't supported on this camera; standard capture is ready."
             }.onFailure { if (generation == bindGeneration) error = it.message ?: "Camera could not start" }
         }, ContextCompat.getMainExecutor(context))
     }
@@ -696,7 +708,16 @@ fun FynxCameraCapturePanel(
                     var outputBitmap: android.graphics.Bitmap? = null
                     val temp = File(context.cacheDir, "fynx_photo_filter_${System.nanoTime()}.jpg")
                     try {
-                        val matrix = ColorMatrix().apply {
+                        val matrix = if (selected.invert) {
+                            val amount = strength.coerceIn(0f, 1f)
+                            val channelScale = 1f - 2f * amount
+                            ColorMatrix(floatArrayOf(
+                                channelScale, 0f, 0f, 0f, 255f * amount,
+                                0f, channelScale, 0f, 0f, 255f * amount,
+                                0f, 0f, channelScale, 0f, 255f * amount,
+                                0f, 0f, 0f, 1f, 0f
+                            ))
+                        } else ColorMatrix().apply {
                             setFynxFilter(
                                 1f + (selected.saturation - 1f) * strength,
                                 selected.brightness * strength,
@@ -1722,18 +1743,37 @@ private fun fynxCameraLiveEffects(filter: CameraFilter): List<Effect> = when (fi
         Brightness(0.025f), Contrast(-0.06f),
         RgbAdjustment.Builder().setRedScale(1.08f).setGreenScale(1.0f).setBlueScale(0.88f).build()
     )
-    CameraFilter.BW -> listOf(RgbFilter.createGrayscaleFilter(), Contrast(0.06f))
+    CameraFilter.CINEMATIC -> listOf(
+        Brightness(-0.025f), Contrast(0.24f),
+        RgbAdjustment.Builder().setRedScale(1.06f).setGreenScale(1.0f).setBlueScale(0.94f).build()
+    )
+    CameraFilter.NEON -> listOf(
+        Contrast(0.22f),
+        RgbAdjustment.Builder().setRedScale(0.92f).setGreenScale(1.14f).setBlueScale(1.32f).build()
+    )
+    CameraFilter.FADE -> listOf(Contrast(-0.22f), Brightness(0.10f))
+    CameraFilter.DREAM -> listOf(
+        Contrast(-0.08f), Brightness(0.055f),
+        RgbAdjustment.Builder().setRedScale(1.04f).setGreenScale(1.02f).setBlueScale(1.03f).build()
+    )
+    CameraFilter.NEGATIVE -> listOf(RgbFilter.createInvertedFilter())
+    CameraFilter.BW -> listOf(RgbFilter.createGrayscaleFilter(), Contrast(0.08f))
 }
 
 private fun formatCameraRecordingTime(milliseconds:Long):String{val totalSeconds=milliseconds/1000L;return "%02d:%02d".format(totalSeconds/60L,totalSeconds%60L)}
 enum class CameraMode{PHOTO,VIDEO}
-enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float){
+enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float,val invert:Boolean = false){
     NATURAL("Natural",1f,0f,1f),
     PORTRAIT("Portrait",0.96f,0.025f,1.01f),
     BRIGHT("Bright",1.03f,0.08f,1.02f),
     WARM("Warm",1.10f,0.04f,1.02f),
     COOL("Cool",0.92f,0.02f,1.02f),
     VINTAGE("Vintage",0.82f,0.015f,0.94f),
+    CINEMATIC("Cinematic",0.86f,-0.025f,1.18f),
+    NEON("Neon",1.32f,0.035f,1.12f),
+    FADE("Fade",0.86f,0.06f,0.88f),
+    DREAM("Dream",1.08f,0.065f,0.94f),
+    NEGATIVE("Negative",1f,0f,1f,true),
     BW("B&W",0f,0f,1.08f)
 }
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
