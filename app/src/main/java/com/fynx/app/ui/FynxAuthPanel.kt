@@ -183,26 +183,24 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
                                 val requestedUsername = username.trim().removePrefix("@")
-                                val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
                                 when {
                                     requestedUsername.isBlank() -> error = "Enter your username."
-                                    localDebugBuild && savedLocalUsername != null -> {
-                                        // For this debug review APK, the normal Sign In action is offline-first:
-                                        // never call the unavailable backend; enter the local app UI directly.
-                                        FynxAuthStore.save(context, savedLocalUsername)
+                                    localDebugBuild -> {
+                                        // Debug APK review must never be blocked by the unavailable backend.
+                                        // Accept the entered username for a local UI session only; no server token is fabricated.
+                                        FynxAuthStore.save(context, requestedUsername)
                                         error = null
                                         busy = false
-                                        onAuthenticated(savedLocalUsername)
+                                        onAuthenticated(requestedUsername)
                                     }
-                                    localDebugBuild -> error = "Use the username saved on this device for local testing."
                                     password.isBlank() -> error = "Enter your username and password."
                                     else -> {
                                         busy = true
                                         error = null
-                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }
+                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password)) }
                                     }
                                 }
-                            }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Continue locally" else "Sign In (offline in debug)") }
+                            }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Continue locally" else "Sign In") }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
                             if (localDebugBuild) {
                                 Spacer(Modifier.height(6.dp))
