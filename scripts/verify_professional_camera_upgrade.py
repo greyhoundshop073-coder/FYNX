@@ -114,6 +114,8 @@ checks["live effects are displayed in a horizontal swipe carousel, not a vertica
 checks["right-rail actions hide while the effect picker is open to prevent visual overlap"] = (
     "if (pendingUri == null && timerCountingDown == 0 && !showEffectCarousel)" in camera
 )
+checks["effects panel stays dismissible after the right rail hides"] = 'contentDescription = "Close effects"' in camera and "onClick = { showEffectCarousel = false }" in camera
+checks["effects panel leaves sufficient room for category and effect controls"] = ".width(176.dp).heightIn(max = 282.dp)" in camera and ".heightIn(max = 260.dp)" in camera and ".width(70.dp)" in camera and ".height(70.dp)" in camera
 
 checks["Status camera keeps Text as a separate action beside Photo and Video"] = 'if (statusCapture) {' in camera and 'Text("Text"' in camera and 'onClick = { if (recording == null) onDismiss() }' in camera
 checks["live effect carousel opens on demand and does not cover the shutter by default"] = 'var showEffectCarousel by remember { mutableStateOf(false) }' in camera and 'Modifier.align(Alignment.CenterEnd)' in camera and 'FynxCameraRailAction("Effects"' in camera
