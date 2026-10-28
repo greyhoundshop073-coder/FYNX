@@ -1119,7 +1119,7 @@ private fun MarketplaceDetails(
             listing = l,
             onMessageSeller = onContact,
             onBuyNow = onBuyNow,
-            onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title), onShareToStatus = onShareListingToStatus) },
+            onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title), onShareToStatus = onShareToStatus) },
             canPurchase = canPurchase
         )
         if (!canPurchase) {
