@@ -68,17 +68,22 @@ object FynxShareActions {
         link = FynxDeepLinkParser.groupWebLink(groupId)
     )
 
-    fun share(context: Context, payload: FynxSharePayload = defaultPayload()): Boolean {
+    fun share(context: Context, payload: FynxSharePayload = defaultPayload(), onShareToStatus: ((String, String) -> Unit)? = null): Boolean {
         val listingId = payload.marketplaceListingId?.trim().orEmpty()
         if (listingId.isNotBlank()) {
             AlertDialog.Builder(context)
                 .setTitle(payload.title)
-                .setItems(arrayOf("Post to FYNX Home", "Share to FYNX Group", "Share outside FYNX", "Copy link")) { _, which ->
+                .setItems(arrayOf("Post to FYNX Home", "Share to FYNX Group", "Share to Status", "Share outside FYNX", "Copy link")) { _, which ->
                     when (which) {
                         0 -> postMarketplaceToHome(context, listingId)
                         1 -> chooseGroupForMarketplaceShare(context, listingId, payload.title)
-                        2 -> shareExternally(context, payload)
-                        3 -> copy(context, payload)
+                        2 -> {
+                            val callback = onShareToStatus
+                            if (callback != null) callback(listingId, payload.title)
+                            else Toast.makeText(context, "Open Marketplace inside FYNX to share this product to Status.", Toast.LENGTH_LONG).show()
+                        }
+                        3 -> shareExternally(context, payload)
+                        4 -> copy(context, payload)
                     }
                 }
                 .setNegativeButton("Cancel", null)
