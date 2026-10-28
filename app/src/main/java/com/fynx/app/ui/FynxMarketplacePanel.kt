@@ -180,7 +180,7 @@ private fun MarketplaceSmartDealsHero(
                     }
                 }
             }
-            TextButton(onClick = onShopNow, modifier = Modifier.align(Alignment.End), colors = TextButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimary)) {
+            TextButton(onClick = onShopNow, modifier = Modifier.align(Alignment.End), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimary)) {
                 Text("Shop Now")
                 Spacer(Modifier.width(5.dp))
                 Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(18.dp))
