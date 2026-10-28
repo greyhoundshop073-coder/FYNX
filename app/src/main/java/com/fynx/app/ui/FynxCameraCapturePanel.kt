@@ -159,6 +159,7 @@ fun FynxCameraCapturePanel(
     var enhancing by remember { mutableStateOf(false) }
     var showCaptureControls by remember { mutableStateOf(true) }
     var showProControls by remember { mutableStateOf(false) }
+    var showTimerControls by remember { mutableStateOf(false) }
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
@@ -736,6 +737,39 @@ fun FynxCameraCapturePanel(
         }
     }
 
+    fun startVideoRecording() {
+        if (recording != null || timerCountingDown > 0 || galleryImporting || preparingPhoto) return
+        if (!hasAudio) {
+            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        val capture = videoCapture ?: run {
+            error = "Video camera is still starting"
+            return
+        }
+        val file = File(context.cacheDir, "fynx_video_" + System.currentTimeMillis() + ".mp4")
+        val pending = capture.output.prepareRecording(context, FileOutputOptions.Builder(file).build())
+        val withAudio = pending.withAudioEnabled()
+        recordingStartedAt = System.currentTimeMillis()
+        activeRecordingFile = file
+        recordingNotice = null
+        recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
+            if (event is VideoRecordEvent.Finalize) {
+                if (!event.hasError() && file.exists() && file.length() > 0L) {
+                    pendingUri = Uri.fromFile(file)
+                    pendingType = if (videoNoteMode) "video_note" else "video"
+                    error = null
+                } else {
+                    file.delete()
+                    recordingNotice = null
+                    error = "Video capture failed (" + event.error + ")"
+                }
+                recording = null
+                activeRecordingFile = null
+            }
+        }
+    }
+
     fun capturePhotoNow() {
         val capture = imageCapture ?: run { error = "Camera is still starting"; return }
         val stamp = System.currentTimeMillis()
@@ -1167,9 +1201,12 @@ fun FynxCameraCapturePanel(
                             }
                         },
                         enabled = recording == null && !preparingPhoto && !galleryImporting,
-                        modifier = Modifier.size(42.dp)
+                        modifier = Modifier.size(42.dp).semantics(mergeDescendants = true) {
+                            contentDescription = "Switch front/back camera"
+                            role = Role.Button
+                        }
                     ) {
-                        Icon(Icons.Default.Cameraswitch, "Flip camera", tint = Color.White)
+                        Icon(Icons.Default.Cameraswitch, null, tint = Color.White)
                     }
                 }
             }
@@ -1189,8 +1226,12 @@ fun FynxCameraCapturePanel(
                         showCaptureControls = true
                     }
                 }
-                FynxCameraRailAction("Timer", "◷", showProControls, recording == null) {
-                    if (recording == null) { showProControls = !showProControls; showCaptureControls = true }
+                FynxCameraRailAction("Timer", "◷", showTimerControls, recording == null) {
+                    if (recording == null) {
+                        showTimerControls = !showTimerControls
+                        if (showTimerControls) showProControls = false
+                        showCaptureControls = true
+                    }
                 }
                 FynxCameraRailAction("Grid", "▦", showGrid, recording == null) {
                     if (recording == null) { showGrid = !showGrid; showCaptureControls = true }
@@ -1201,7 +1242,11 @@ fun FynxCameraCapturePanel(
                     }
                 }
                 FynxCameraRailAction("Adjust", "☼", showProControls, recording == null) {
-                    if (recording == null) { showProControls = !showProControls; showCaptureControls = true }
+                    if (recording == null) {
+                        showProControls = !showProControls
+                        if (showProControls) showTimerControls = false
+                        showCaptureControls = true
+                    }
                 }
             }
         }
@@ -1233,7 +1278,10 @@ fun FynxCameraCapturePanel(
                             )
                         }
                         if (recording == null && !fastCapture && mode == CameraMode.PHOTO) {
-                            TextButton(onClick = { showProControls = !showProControls }) { Text(if (showProControls) "Less" else "Adjust") }
+                            TextButton(onClick = {
+                                showProControls = !showProControls
+                                if (showProControls) showTimerControls = false
+                            }) { Text(if (showProControls) "Less" else "Adjust") }
                         }
                     }
                     error?.let { Text(it, color = Color(0xFFFF8D8D), style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth()) }
@@ -1288,6 +1336,30 @@ fun FynxCameraCapturePanel(
                         }
                     }
 
+                    if (showTimerControls && recording == null) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            Text("TIMER", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall)
+                            listOf(0, 3, 10).forEach { seconds ->
+                                FilterChip(
+                                    selected = captureTimerSeconds == seconds,
+                                    onClick = { captureTimerSeconds = seconds },
+                                    label = { Text(if (seconds == 0) "Off" else "${seconds}s") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Color(0xFFD92D79),
+                                        selectedLabelColor = Color.White,
+                                        containerColor = Color.White.copy(alpha = 0.10f),
+                                        labelColor = Color.White
+                                    )
+                                )
+                            }
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+
                     if (showProControls && recording == null && !fastCapture) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Exposure", color = Color.White.copy(alpha = 0.86f), style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(66.dp))
@@ -1302,19 +1374,6 @@ fun FynxCameraCapturePanel(
                                 colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color(0xFF8C80FF), inactiveTrackColor = Color.White.copy(alpha = 0.22f))
                             )
                             Text(exposure.toString(), color = Color.White, style = MaterialTheme.typography.labelSmall)
-                        }
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                            Text("Timer", color = Color.White.copy(alpha = 0.86f), style = MaterialTheme.typography.labelMedium)
-                            listOf(0, 3, 10).forEach { seconds ->
-                                FilterChip(
-                                    selected = captureTimerSeconds == seconds, onClick = { captureTimerSeconds = seconds },
-                                    label = { Text(if (seconds == 0) "Off" else seconds.toString() + "s") },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Color(0xFF6B5CE7), selectedLabelColor = Color.White,
-                                        containerColor = Color.White.copy(alpha = 0.10f), labelColor = Color.White
-                                    )
-                                )
-                            }
                         }
                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                             listOf(1f, 2f, 3f, 4f).forEach { value ->
@@ -1344,7 +1403,7 @@ fun FynxCameraCapturePanel(
                             videoNoteMode -> "Record video note"
                             else -> "Record video"
                         }
-                        val shutterReady = !preparingPhoto && !galleryImporting && (
+                        val shutterReady = timerCountingDown == 0 && !preparingPhoto && !galleryImporting && (
                             if (recording != null) true else if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null
                         )
                         FilledIconButton(
@@ -1363,37 +1422,20 @@ fun FynxCameraCapturePanel(
                                     } else capturePhotoNow()
                                 } else {
                                     val active = recording
-                                    if (active != null) active.stop()
-                                    else {
-                                        if (!hasAudio) {
-                                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                            return@FilledIconButton
-                                        }
-                                        val capture = videoCapture ?: run {
-                                            error = "Video camera is still starting"
-                                            return@FilledIconButton
-                                        }
-                                        val file = File(context.cacheDir, "fynx_video_" + System.currentTimeMillis() + ".mp4")
-                                        val pending = capture.output.prepareRecording(context, FileOutputOptions.Builder(file).build())
-                                        val withAudio = if (hasAudio) pending.withAudioEnabled() else pending
-                                        recordingStartedAt = System.currentTimeMillis()
-                                        activeRecordingFile = file
-                                        recordingNotice = null
-                                        recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
-                                            if (event is VideoRecordEvent.Finalize) {
-                                                if (!event.hasError() && file.exists() && file.length() > 0L) {
-                                                    pendingUri = Uri.fromFile(file)
-                                                    pendingType = if (videoNoteMode) "video_note" else "video"
-                                                    error = null
-                                                } else {
-                                                    file.delete()
-                                                    recordingNotice = null
-                                                    error = "Video capture failed (" + event.error + ")"
-                                                }
-                                                recording = null
-                                                activeRecordingFile = null
+                                    if (active != null) {
+                                        active.stop()
+                                    } else if (captureTimerSeconds > 0) {
+                                        if (timerCountingDown == 0) {
+                                            timerCountingDown = captureTimerSeconds
+                                            showCaptureControls = false
+                                            scope.launch {
+                                                delay(captureTimerSeconds * 1000L)
+                                                timerCountingDown = 0
+                                                startVideoRecording()
                                             }
                                         }
+                                    } else {
+                                        startVideoRecording()
                                     }
                                 }
                             },
