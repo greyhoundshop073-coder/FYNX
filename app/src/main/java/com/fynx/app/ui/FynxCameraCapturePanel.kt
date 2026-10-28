@@ -837,6 +837,8 @@ fun FynxCameraCapturePanel(
             error = "Video camera is still starting"
             return
         }
+        // Close the picker at capture start so recording does not hide the only dismiss control.
+        showEffectCarousel = false
         val file = File(context.cacheDir, "fynx_video_" + System.currentTimeMillis() + ".mp4")
         val pending = capture.output.prepareRecording(context, FileOutputOptions.Builder(file).build())
         val withAudio = pending.withAudioEnabled()
@@ -872,6 +874,7 @@ fun FynxCameraCapturePanel(
         val file = File(context.cacheDir, "fynx_photo_"+stamp+".jpg")
         val original = File(context.cacheDir, "fynx_photo_original_"+stamp+".jpg")
         if (preparingPhoto) return
+        showEffectCarousel = false
         preparingPhoto = true
         capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(result: ImageCapture.OutputFileResults) {
