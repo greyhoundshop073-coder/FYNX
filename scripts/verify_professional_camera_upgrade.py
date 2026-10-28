@@ -123,7 +123,7 @@ checks["live effect thumbnails are custom-rendered visual cards with a selected-
 checks["effect category cards only select real CameraFilter presets wired to Media3"] = "captureStyleFilter = option" in camera and "liveEffectIntensity = 1f" in camera and "fynxCameraLiveEffects(captureStyleFilter, liveEffectIntensity)" in camera and "showEffectCarousel && recording == null" in camera
 
 checks["live effect intensity scales Media3 color/contrast effects and captured photos"] = 'Text("Strength"' in camera and "onValueChange = { liveEffectIntensity = it }" in camera and "setRedScale(1f + (red - 1f) * strength)" in camera and "applyFilterToPhoto(captureStyleFilter, if (captureStyleFilter.supportsLiveIntensity()) liveEffectIntensity else 1f)" in camera
-checks["expanded live effect library maps all new presets to real filter parameters and visual previews"] = all("CameraFilter." + name in camera for name in ["GLOW", "SUNSET", "ROSE", "ARCTIC", "AURORA", "MATTE", "NOIR", "GOLDEN"]) and all(name in camera for name in ['"Glow"', '"Sunset"', '"Rose"', '"Arctic"', '"Aurora"', '"Matte"', '"Noir"', '"Golden"'])
+checks["expanded live effect library maps all new presets to real filter parameters and visual previews"] = all("CameraFilter." + name in camera for name in ["GLOW", "SUNSET", "ROSE", "ARCTIC", "AURORA", "MATTE", "NOIR", "GOLDEN", "FLASHBACK"]) and all(name in camera for name in ['"Glow"', '"Sunset"', '"Rose"', '"Arctic"', '"Aurora"', '"Matte"', '"Noir"', '"Golden"', '"Flashback"'])
 
 failures = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
