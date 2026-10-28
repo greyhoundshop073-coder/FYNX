@@ -1611,13 +1611,13 @@ fun FynxCameraCapturePanel(
             Surface(
                 modifier = Modifier.align(Alignment.CenterEnd)
                     .padding(end = 8.dp, top = 108.dp, bottom = 218.dp)
-                    .width(168.dp).heightIn(max = 252.dp),
+                    .width(176.dp).heightIn(max = 282.dp),
                 shape = RoundedCornerShape(22.dp),
                 color = Color(0xD913151D),
                 tonalElevation = 8.dp
             ) {
                 Column(
-                    Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(horizontal = 7.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().heightIn(max = 260.dp).padding(horizontal = 7.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text("EFFECTS", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -1627,7 +1627,7 @@ fun FynxCameraCapturePanel(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        listOf("For You", "Beauty", "Color", "Creative", "Classic").forEach { category ->
+                        listOf("For You", "Beauty", "Retro", "Color", "Creative", "Classic").forEach { category ->
                             FilterChip(
                                 selected = selectedEffectCategory == category,
                                 onClick = { selectedEffectCategory = category },
@@ -1830,9 +1830,10 @@ private fun normalizeImportedPhotoToJpeg(file: File) {
 
 private fun CameraFilter.effectCategory(): String = when (this) {
     CameraFilter.NATURAL, CameraFilter.PORTRAIT, CameraFilter.BRIGHT, CameraFilter.GLOW -> "Beauty"
-    CameraFilter.WARM, CameraFilter.COOL, CameraFilter.FADE, CameraFilter.SUNSET, CameraFilter.ROSE, CameraFilter.ARCTIC, CameraFilter.GOLDEN -> "Color"
+    CameraFilter.WARM, CameraFilter.COOL, CameraFilter.FADE, CameraFilter.SUNSET, CameraFilter.ROSE, CameraFilter.ARCTIC, CameraFilter.GOLDEN, CameraFilter.LOW_LIGHT -> "Color"
     CameraFilter.NEON, CameraFilter.DREAM, CameraFilter.NEGATIVE, CameraFilter.AURORA -> "Creative"
-    CameraFilter.VINTAGE, CameraFilter.CINEMATIC, CameraFilter.BW, CameraFilter.MATTE, CameraFilter.NOIR, CameraFilter.FLASHBACK -> "Classic"
+    CameraFilter.VINTAGE, CameraFilter.FLASHBACK -> "Retro"
+    CameraFilter.CINEMATIC, CameraFilter.BW, CameraFilter.MATTE, CameraFilter.NOIR -> "Classic"
 }
 
 private fun CameraFilter.supportsLiveIntensity(): Boolean =
@@ -1860,6 +1861,7 @@ private fun CameraFilter.effectGlyph(): String = when (this) {
     CameraFilter.NOIR -> "◐"
     CameraFilter.GOLDEN -> "✦"
     CameraFilter.FLASHBACK -> "▧"
+    CameraFilter.LOW_LIGHT -> "☾"
 }
 
 private fun CameraFilter.effectPalette(): List<Color> = when (this) {
@@ -1884,6 +1886,7 @@ private fun CameraFilter.effectPalette(): List<Color> = when (this) {
     CameraFilter.NOIR -> listOf(Color(0xFF101010), Color(0xFF9A9A9A))
     CameraFilter.GOLDEN -> listOf(Color(0xFF9A6421), Color(0xFFFFD779))
     CameraFilter.FLASHBACK -> listOf(Color(0xFF5B392A), Color(0xFFE7B978))
+    CameraFilter.LOW_LIGHT -> listOf(Color(0xFF1D3150), Color(0xFFB6C8E3))
 }
 
 private fun CameraFilter.effectAccent(): Color = effectPalette().last()
@@ -1897,7 +1900,7 @@ private fun FynxCameraEffectTile(
     val tileShape = RoundedCornerShape(16.dp)
     Column(
         modifier = Modifier
-            .width(76.dp)
+            .width(70.dp)
             .clickable(onClick = onClick)
             .semantics {
                 contentDescription = "${filter.label} live camera effect" + if (selected) ", selected" else ""
@@ -1908,7 +1911,7 @@ private fun FynxCameraEffectTile(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(78.dp)
+                .height(70.dp)
                 .clip(tileShape)
                 .background(Brush.linearGradient(filter.effectPalette()))
                 .border(
@@ -2024,6 +2027,7 @@ private fun fynxCameraLiveEffects(filter: CameraFilter, intensity: Float): List<
         CameraFilter.NOIR -> listOf(RgbFilter.createGrayscaleFilter(), contrast(0.18f))
         CameraFilter.GOLDEN -> listOf(brightness(0.03f), contrast(0.08f), rgb(1.16f, 1.07f, 0.88f))
         CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb(1.10f, 1.02f, 0.86f))
+        CameraFilter.LOW_LIGHT -> listOf(brightness(0.12f), contrast(0.04f), rgb(1.04f, 1.035f, 1.02f))
     }
 }
 
@@ -2050,7 +2054,8 @@ enum class CameraFilter(val label:String,val saturation:Float,val brightness:Flo
     MATTE("Matte",0.90f,0.04f,0.90f),
     NOIR("Noir",0f,0f,1.18f),
     GOLDEN("Golden",1.13f,0.035f,1.08f),
-    FLASHBACK("Flashback",0.88f,0.035f,0.92f)
+    FLASHBACK("Flashback",0.88f,0.035f,0.92f),
+    LOW_LIGHT("Low Light",1.02f,0.12f,1.04f)
 }
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
 private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) {
