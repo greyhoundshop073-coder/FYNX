@@ -32,6 +32,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val localDebugLoginAvailable = localDebugAccountForLogin(context, username) != null
+    val localDebugBuild = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -203,6 +204,29 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
+                            if (localDebugBuild) {
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        val requestedUsername = username.trim().removePrefix("@")
+                                        val localUsername = localDebugAccountForLogin(context, requestedUsername)
+                                        if (localUsername == null) {
+                                            error = "Enter the username saved on this device for local testing."
+                                        } else {
+                                            // Debug-only local entry. No remote login request and no fabricated server token.
+                                            FynxAuthStore.save(context, localUsername)
+                                            error = null
+                                            busy = false
+                                            onAuthenticated(localUsername)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                                    shape = RoundedCornerShape(24.dp),
+                                    enabled = !busy,
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF9FCBFF)),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF397DBD))
+                                ) { Text("Continue locally (debug, no network)") }
+                            }
                         }
                     }
                 }
