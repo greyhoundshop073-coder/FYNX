@@ -96,6 +96,25 @@ for filename in caller_files:
     checks[f"{filename} remains wired to shared CameraX"] = path.exists() and "FynxCameraCapturePanel(" in path.read_text(encoding="utf-8")
 
 checks["capture controls use the compact floating dock and preserve gallery, shutter, and effects actions"] = all(item in camera for item in ['RoundedCornerShape(26.dp)', 'FynxCameraRailAction("Gallery"', 'FynxCameraRailAction("Effects"', 'contentDescription = shutterActionLabel'])
+
+checks["main capture dock is transparent rather than a full-width dark glass panel"] = re.search(
+    r"Surface\(\s*modifier = Modifier\\.fillMaxWidth\\(\\),\s*shape = RoundedCornerShape\\(26\\.dp\\),\s*color = Color\\.Transparent,\s*tonalElevation = 0\\.dp",
+    camera,
+) is not None
+
+_effects_start = camera.find("if (showEffectCarousel && recording == null)")
+_effects_end = camera.find("if (galleryImporting)", _effects_start)
+_effects_panel = camera[_effects_start:_effects_end] if _effects_start >= 0 and _effects_end > _effects_start else ""
+checks["live effects are displayed in a horizontal swipe carousel, not a vertical list"] = (
+    "Row(" in _effects_panel
+    and "horizontalScroll(rememberScrollState())" in _effects_panel
+    and "visibleCameraEffects.forEach" in _effects_panel
+    and "verticalScroll(rememberScrollState())" not in _effects_panel
+)
+checks["right-rail actions hide while the effect picker is open to prevent visual overlap"] = (
+    "if (pendingUri == null && timerCountingDown == 0 && !showEffectCarousel)" in camera
+)
+
 checks["Status camera keeps Text as a separate action beside Photo and Video"] = 'if (statusCapture) {' in camera and 'Text("Text"' in camera and 'onClick = { if (recording == null) onDismiss() }' in camera
 checks["live effect carousel opens on demand and does not cover the shutter by default"] = 'var showEffectCarousel by remember { mutableStateOf(false) }' in camera and 'Modifier.align(Alignment.CenterEnd)' in camera and 'FynxCameraRailAction("Effects"' in camera
 
