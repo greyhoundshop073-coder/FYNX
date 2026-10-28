@@ -62,13 +62,13 @@ object FynxDeepLinkParser {
         } else {
             "Check out \"$cleanTitle\" on FYNX Marketplace"
         }
-        return "$caption\\n${marketplaceWebLink(normalizedId)}"
+        return "$caption\n${marketplaceWebLink(normalizedId)}"
     }
 
     /** Returns only a valid positive numeric Marketplace listing ID from a shared Status. */
     fun marketplaceListingIdFromStatusText(text: String?): String? {
         val match = Regex(
-            """https?://(?:www\\.)?fynx\\.app/marketplace/([0-9]+)(?:[/?#\\s]|$)""",
+            """https?://(?:www\.)?fynx\.app/marketplace/([0-9]+)(?:[/?#\s]|$)""",
             RegexOption.IGNORE_CASE
         ).find(text.orEmpty()) ?: return null
         return match.groupValues.getOrNull(1)?.takeIf { value ->
@@ -80,13 +80,13 @@ object FynxDeepLinkParser {
     fun marketplaceStatusCaption(text: String?): String =
         text.orEmpty()
             .replace(
-                Regex("""https?://(?:www\\.)?fynx\\.app/marketplace/[0-9]+(?:[?#][^\\s]*)?""", RegexOption.IGNORE_CASE),
+                Regex("""https?://(?:www\.)?fynx\.app/marketplace/[0-9]+(?:[?#][^\s]*)?""", RegexOption.IGNORE_CASE),
                 ""
             )
             .lineSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
-            .joinToString("\\n")
+            .joinToString("\n")
     fun marketplaceAppLink(listingId:String?=null):String=routeAppLink("marketplace",listingId)
     fun storiesWebLink():String="https://$FYNX_HOST$STORIES_PATH"
     fun storiesAppLink():String="fynx://stories"
