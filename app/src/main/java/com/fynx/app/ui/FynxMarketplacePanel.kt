@@ -147,7 +147,7 @@ private fun MarketplaceSmartDealsHero(
             }
         }
     }
-    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.primaryContainer, modifier = modifier) {
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, modifier = modifier) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -155,12 +155,12 @@ private fun MarketplaceSmartDealsHero(
                     Text("Better Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("Real products from FYNX sellers", style = MaterialTheme.typography.bodySmall)
                 }
-                IconButton(onClick = onOrders) { Icon(Icons.Default.ReceiptLong, contentDescription = "Orders", tint = MaterialTheme.colorScheme.primary) }
-                IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = "Refresh listings", tint = MaterialTheme.colorScheme.primary) }
-                IconButton(onClick = onShopNow) { Icon(Icons.Default.Storefront, contentDescription = "Browse all products", tint = MaterialTheme.colorScheme.primary) }
+                IconButton(onClick = onOrders) { Icon(Icons.Default.ReceiptLong, contentDescription = "Orders", tint = MaterialTheme.colorScheme.onPrimary) }
+                IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = "Refresh listings", tint = MaterialTheme.colorScheme.onPrimary) }
+                IconButton(onClick = onShopNow) { Icon(Icons.Default.Storefront, contentDescription = "Browse all products", tint = MaterialTheme.colorScheme.onPrimary) }
             }
             if (deals.isEmpty()) {
-                Text("Products will appear here when live seller listings are available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Products will appear here when live seller listings are available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.88f))
             } else {
                 LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 4.dp)) {
                     items(deals, key = { "smart-deal-${it.id}" }) { listing ->
@@ -180,7 +180,7 @@ private fun MarketplaceSmartDealsHero(
                     }
                 }
             }
-            TextButton(onClick = onShopNow, modifier = Modifier.align(Alignment.End)) {
+            TextButton(onClick = onShopNow, modifier = Modifier.align(Alignment.End), colors = TextButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimary)) {
                 Text("Shop Now")
                 Spacer(Modifier.width(5.dp))
                 Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(18.dp))
