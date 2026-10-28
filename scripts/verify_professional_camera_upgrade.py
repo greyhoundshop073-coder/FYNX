@@ -144,12 +144,12 @@ checks["expanded live effect library maps all new presets to real filter paramet
 
 
 checks["Low Light uses live and saved photo filter parameters"] = (
-    "CameraFilter.LOW_LIGHT -> listOf(brightness(0.12f), contrast(0.04f), rgb())" in camera
+    "CameraFilter.LOW_LIGHT -> listOf(brightness(0.12f), contrast(0.04f), rgb(), saturation())" in camera
     and 'LOW_LIGHT("Low Light",1.0f,0.12f,1.04f)' in camera
     and 'CameraFilter.GOLDEN, CameraFilter.LOW_LIGHT -> "Color"' in camera
 )
 checks["Flashback live and saved tone parameters remain aligned"] = (
-    "CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb())" in camera
+    "CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb(), saturation()) in camera
     and 'FLASHBACK("Flashback",1.0f,0.035f,0.92f)' in camera
     and "CameraFilter.VINTAGE, CameraFilter.FLASHBACK -> \"Retro\"" in camera
 )
