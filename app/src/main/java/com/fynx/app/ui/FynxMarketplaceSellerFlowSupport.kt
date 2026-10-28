@@ -107,6 +107,10 @@ internal fun marketplaceRequiredListingPrice(value: Any?): Double {
     return price
 }
 
+/** A missing or malformed active flag must never make an unknown listing look purchasable. */
+internal fun marketplaceRequiredListingActive(value: Any?): Boolean =
+    value as? Boolean ?: throw IllegalStateException("Product availability information is missing or invalid.")
+
 /** Listing currencies are restricted to the two currencies the Marketplace currently supports. */
 internal fun marketplaceRequiredMarketplaceCurrency(value: Any?): String {
     val currency = (value as? String)?.trim()?.uppercase(Locale.US).orEmpty()

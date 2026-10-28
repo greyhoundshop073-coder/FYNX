@@ -46,6 +46,15 @@ class FynxMarketplaceListingReceiptValidationTest {
     }
 
     @Test
+    fun listingAvailabilityMustBeExplicitAndBoolean() {
+        assertEquals(true, marketplaceRequiredListingActive(true))
+        assertEquals(false, marketplaceRequiredListingActive(false))
+        expectInvalid { marketplaceRequiredListingActive(null) }
+        expectInvalid { marketplaceRequiredListingActive("true") }
+        expectInvalid { marketplaceRequiredListingActive(1) }
+    }
+
+    @Test
     fun inventoryMustBeAnIntegerWithinTheSupportedRange() {
         assertEquals(0, marketplaceRequiredInventoryQuantity(0))
         assertEquals(15, marketplaceRequiredInventoryQuantity(15.0))

@@ -295,6 +295,10 @@ checks.extend([
      and 'TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }' in storefront),
 ])
 checks.extend([
+    ("missing listing availability never defaults to active",
+     "marketplaceRequiredListingActive(o.opt(\"active\"))" in marketplace_client
+     and "internal fun marketplaceRequiredListingActive(value: Any?)" in support
+     and "active = o.optBoolean(\"active\", true)" not in marketplace_client),
     ("Marketplace listing values fail closed instead of defaulting missing price/currency/quantity",
      "marketplaceRequiredListingPrice(o.opt(\"price\"))" in marketplace_client
      and "marketplaceRequiredMarketplaceCurrency(o.opt(\"currency\"))" in marketplace_client
