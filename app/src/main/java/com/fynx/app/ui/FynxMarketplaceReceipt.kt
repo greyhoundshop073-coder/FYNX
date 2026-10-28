@@ -54,13 +54,184 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+private fun marketplaceReceiptText(receipt: JSONObject, key: String): String {
+    val value = receipt.opt(key) as? String
+    return value?.trim()?.takeIf { it.isNotEmpty() }
+        ?: throw IllegalStateException("Receipt details are incomplete and could not be verified.")
+}
+
+private fun marketplaceReceiptCents(amount: Double): Long {
+    if (!amount.isFinite() || amount > Long.MAX_VALUE.toDouble() / 400.0) {
+        throw IllegalStateException("Receipt totals are invalid and could not be verified.")
+    }
+    return kotlin.math.round(amount * 100.0).toLong()
+}
+
+private fun marketplaceReceiptAmountsMatch(actual: Double, expected: Double): Boolean =
+    kotlin.math.abs(marketplaceReceiptCents(actual) - marketplaceReceiptCents(expected)) <= 1L
+
+private fun marketplaceReceiptQuantity(value: Any?): Int =
+    marketplaceRequiredInventoryQuantity(value).takeIf { it > 0 }
+        ?: throw IllegalStateException("Receipt item quantity is invalid and could not be verified.")
+
+private fun validateMarketplaceReceiptIdentity(receipt: JSONObject, checkout: Boolean) {
+    val prefix = if (checkout) "FYNX-CHECKOUT-" else "FYNX-"
+    val receiptId = marketplaceReceiptText(receipt, "receiptId")
+    if (!receiptId.startsWith(prefix) ||
+        !receiptId.removePrefix(prefix).matches(Regex("[A-F0-9]{32}", RegexOption.IGNORE_CASE))) {
+        throw IllegalStateException("Receipt identity is invalid and could not be verified.")
+    }
+    val identityKey = if (checkout) "checkoutId" else "orderId"
+    val identity = marketplaceReceiptText(receipt, identityKey)
+    if (!identity.matches(Regex("[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}", RegexOption.IGNORE_CASE))) {
+        throw IllegalStateException("Receipt identity is invalid and could not be verified.")
+    }
+    marketplaceRequiredMarketplaceCurrency(receipt.opt("currency"))
+    marketplaceReceiptText(receipt, "paymentReference")
+    val paymentStatus = marketplaceReceiptText(receipt, "paymentStatus")
+    val allowedStatuses = if (checkout) setOf("PAID", "PARTIALLY_REFUNDED", "REFUNDED") else setOf("PAID", "REFUNDED")
+    if (paymentStatus !in allowedStatuses) {
+        throw IllegalStateException("Receipt payment status is invalid and could not be verified.")
+    }
+    try {
+        java.time.Instant.parse(marketplaceReceiptText(receipt, "issuedAt"))
+    } catch (_: Exception) {
+        throw IllegalStateException("Receipt issue time is invalid and could not be verified.")
+    }
+    if (marketplaceReceiptText(receipt, "signatureAlgorithm") != "HMAC-SHA256") {
+        throw IllegalStateException("Receipt signature is missing or unsupported.")
+    }
+    val signature = marketplaceReceiptText(receipt, "signature")
+    if (!signature.matches(Regex("[A-F0-9]{64}", RegexOption.IGNORE_CASE))) {
+        throw IllegalStateException("Receipt signature is missing or invalid.")
+    }
+    val verificationPath = marketplaceReceiptText(receipt, "verificationPath")
+    val expectedRoute = if (checkout) "/api/marketplace/checkout-receipts/" else "/api/marketplace/receipts/"
+    if (!verificationPath.startsWith(expectedRoute) || !verificationPath.contains("?signature=$signature")) {
+        throw IllegalStateException("Receipt verification link is invalid.")
+    }
+}
+
+internal fun validateMarketplaceOrderReceipt(receipt: JSONObject) {
+    validateMarketplaceReceiptIdentity(receipt, checkout = false)
+    val type = marketplaceReceiptText(receipt, "receiptType")
+    if (type !in setOf("SELLER_SALE", "BUYER_PURCHASE")) {
+        throw IllegalStateException("Receipt type is invalid and could not be verified.")
+    }
+    val buyer = receipt.optJSONObject("buyer")
+        ?: throw IllegalStateException("Receipt buyer details are incomplete.")
+    val seller = receipt.optJSONObject("seller")
+        ?: throw IllegalStateException("Receipt seller details are incomplete.")
+    marketplaceReceiptText(buyer, "username")
+    marketplaceReceiptText(seller, "username")
+    marketplaceReceiptText(receipt, "fulfillmentStatus")
+    marketplaceReceiptText(receipt, "payoutStatus")
+    val product = receipt.optJSONObject("product")
+        ?: throw IllegalStateException("Receipt product details are incomplete.")
+    marketplaceReceiptText(product, "title")
+    val quantity = marketplaceReceiptQuantity(product.opt("quantity"))
+    val unitPrice = marketplaceRequiredReceiptAmount(product.opt("unitPrice"))
+    if (unitPrice <= 0.0) throw IllegalStateException("Receipt product price is invalid and could not be verified.")
+    val lineSubtotal = marketplaceRequiredReceiptAmount(product.opt("lineSubtotal"))
+    val subtotal = marketplaceRequiredReceiptAmount(receipt.opt("subtotal"))
+    val delivery = marketplaceRequiredReceiptAmount(receipt.opt("deliveryFee"))
+    val marketplaceFee = marketplaceRequiredReceiptAmount(receipt.opt("marketplaceFee"))
+    val buyerFee = marketplaceRequiredReceiptAmount(receipt.opt("marketplaceFeeBuyer"))
+    val sellerFee = marketplaceRequiredReceiptAmount(receipt.opt("marketplaceFeeSeller"))
+    val buyerTotal = marketplaceRequiredReceiptAmount(receipt.opt("buyerTotal"))
+    val discount = marketplaceRequiredReceiptAmount(product.opt("discount"))
+    val expectedSubtotal = unitPrice * quantity
+    if (!expectedSubtotal.isFinite() ||
+        !marketplaceReceiptAmountsMatch(lineSubtotal, expectedSubtotal) ||
+        !marketplaceReceiptAmountsMatch(subtotal, lineSubtotal) ||
+        !marketplaceReceiptAmountsMatch(marketplaceFee, buyerFee + sellerFee) ||
+        !marketplaceReceiptAmountsMatch(buyerTotal, subtotal + delivery + buyerFee - discount) ||
+        subtotal + delivery + buyerFee < discount) {
+        throw IllegalStateException("Receipt totals do not reconcile and could not be verified.")
+    }
+    if (type == "SELLER_SALE") {
+        val sellerNet = marketplaceRequiredReceiptAmount(receipt.opt("sellerNet"))
+        if (!marketplaceReceiptAmountsMatch(sellerNet + marketplaceFee - discount, buyerTotal)) {
+            throw IllegalStateException("Seller receipt totals do not reconcile and could not be verified.")
+        }
+    }
+}
+
+internal fun validateMarketplaceCheckoutReceipt(receipt: JSONObject) {
+    validateMarketplaceReceiptIdentity(receipt, checkout = true)
+    if (marketplaceReceiptText(receipt, "receiptType") != "BUYER_CHECKOUT") {
+        throw IllegalStateException("Receipt type is invalid and could not be verified.")
+    }
+    val buyer = receipt.optJSONObject("buyer")
+        ?: throw IllegalStateException("Checkout receipt buyer details are incomplete.")
+    marketplaceReceiptText(buyer, "username")
+    val items = receipt.optJSONArray("items")
+        ?: throw IllegalStateException("Checkout receipt items are incomplete.")
+    if (items.length() !in 1..20) {
+        throw IllegalStateException("Checkout receipt item count is invalid.")
+    }
+    val declaredCount = marketplaceReceiptQuantity(receipt.opt("itemCount"))
+    if (declaredCount != items.length()) {
+        throw IllegalStateException("Checkout receipt item count does not reconcile.")
+    }
+    var sumSubtotal = 0.0
+    var sumDelivery = 0.0
+    var sumMarketplaceFee = 0.0
+    var sumBuyerTotal = 0.0
+    for (index in 0 until items.length()) {
+        val item = items.optJSONObject(index)
+            ?: throw IllegalStateException("Checkout receipt contains an invalid item.")
+        marketplaceReceiptText(item, "orderId")
+        marketplaceReceiptText(item, "seller")
+        marketplaceReceiptText(item, "title")
+        marketplaceReceiptText(item, "fulfillmentStatus")
+        marketplaceReceiptText(item, "payoutStatus")
+        val quantity = marketplaceReceiptQuantity(item.opt("quantity"))
+        val unitPrice = marketplaceRequiredReceiptAmount(item.opt("unitPrice"))
+        if (unitPrice <= 0.0) throw IllegalStateException("Checkout receipt product price is invalid.")
+        val subtotal = marketplaceRequiredReceiptAmount(item.opt("subtotal"))
+        val delivery = marketplaceRequiredReceiptAmount(item.opt("deliveryFee"))
+        val marketplaceFee = marketplaceRequiredReceiptAmount(item.opt("marketplaceFee"))
+        val total = marketplaceRequiredReceiptAmount(item.opt("total"))
+        val expectedSubtotal = unitPrice * quantity
+        if (!expectedSubtotal.isFinite() ||
+            !marketplaceReceiptAmountsMatch(subtotal, expectedSubtotal) ||
+            !marketplaceReceiptAmountsMatch(total, subtotal + delivery + marketplaceFee)) {
+            throw IllegalStateException("Checkout item totals do not reconcile and could not be verified.")
+        }
+        sumSubtotal += subtotal
+        sumDelivery += delivery
+        sumMarketplaceFee += marketplaceFee
+        sumBuyerTotal += total
+    }
+    val subtotal = marketplaceRequiredReceiptAmount(receipt.opt("subtotal"))
+    val delivery = marketplaceRequiredReceiptAmount(receipt.opt("deliveryFee"))
+    val marketplaceFee = marketplaceRequiredReceiptAmount(receipt.opt("marketplaceFee"))
+    val buyerTotal = marketplaceRequiredReceiptAmount(receipt.opt("buyerTotal"))
+    if (!marketplaceReceiptAmountsMatch(subtotal, sumSubtotal) ||
+        !marketplaceReceiptAmountsMatch(delivery, sumDelivery) ||
+        !marketplaceReceiptAmountsMatch(marketplaceFee, sumMarketplaceFee) ||
+        !marketplaceReceiptAmountsMatch(buyerTotal, sumBuyerTotal) ||
+        !marketplaceReceiptAmountsMatch(buyerTotal, subtotal + delivery + marketplaceFee)) {
+        throw IllegalStateException("Checkout receipt totals do not reconcile and could not be verified.")
+    }
+}
+
 private suspend fun fetchMarketplaceReceipt(context: Context, orderId: String): Result<JSONObject> =
     FynxBackendClient.get(context, "/api/marketplace/orders/${Uri.encode(orderId)}/receipt")
-        .mapCatching { JSONObject(it).getJSONObject("receipt") }
+        .mapCatching {
+            val receipt = JSONObject(it).getJSONObject("receipt")
+            validateMarketplaceOrderReceipt(receipt)
+            receipt
+        }
 
 private suspend fun fetchMarketplaceCheckoutReceipt(context: Context, checkoutId: String): Result<JSONObject> =
     FynxBackendClient.get(context, "/api/marketplace/checkout/${Uri.encode(checkoutId)}/receipt")
-        .mapCatching { JSONObject(it).getJSONObject("receipt") }
+        .mapCatching {
+            val receipt = JSONObject(it).getJSONObject("receipt")
+            validateMarketplaceCheckoutReceipt(receipt)
+            receipt
+        }
 
 private suspend fun receiptAvatar(context: Context, mediaId: String?): Bitmap? = withContext(Dispatchers.IO) {
     val id = mediaId?.toLongOrNull() ?: return@withContext null
