@@ -50,7 +50,7 @@ class CameraMediaReliabilityTest {
 
     @Test
     fun cameraFiltersHaveStableUserFacingOptions() {
-        assertEquals(listOf("Natural", "Portrait", "Bright", "Warm", "Cool", "Vintage", "B&W"), CameraFilter.values().map { it.label })
+        assertEquals(listOf("Natural", "Portrait", "Bright", "Warm", "Cool", "Vintage", "Cinematic", "Neon", "Fade", "Dream", "Negative", "B&W"), CameraFilter.values().map { it.label })
     }
 
     @Test
@@ -62,6 +62,12 @@ class CameraMediaReliabilityTest {
             assertTrue(filter.saturation >= 0f)
             assertTrue(filter.contrast > 0f)
         }
+    }
+
+    @Test
+    fun negativeFilterIsMarkedForChannelInversion() {
+        assertTrue(CameraFilter.NEGATIVE.invert)
+        assertFalse(CameraFilter.NATURAL.invert)
     }
 
     @Test
