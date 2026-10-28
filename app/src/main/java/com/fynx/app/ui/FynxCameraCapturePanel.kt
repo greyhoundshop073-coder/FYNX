@@ -33,6 +33,7 @@ import androidx.media3.common.Effect
 import androidx.media3.common.util.UnstableApi
 import androidx.annotation.OptIn
 import androidx.media3.effect.Brightness
+import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.RgbFilter
@@ -2070,30 +2071,33 @@ private fun fynxCameraLiveEffects(filter: CameraFilter, intensity: Float): List<
             .setBlueScale(1f + (blue - 1f) * strength)
             .build()
     }
+    fun saturation(): Effect = HslAdjustment.Builder()
+        .adjustSaturation(((filter.saturation - 1f) * 100f * strength).coerceIn(-100f, 100f))
+        .build()
 
     return when (filter) {
         CameraFilter.NATURAL -> emptyList()
-        CameraFilter.PORTRAIT -> listOf(contrast(0.04f), rgb())
-        CameraFilter.BRIGHT -> listOf(brightness(0.10f), contrast(0.04f))
-        CameraFilter.WARM -> listOf(brightness(0.025f), rgb())
-        CameraFilter.COOL -> listOf(rgb())
-        CameraFilter.VINTAGE -> listOf(brightness(0.025f), contrast(-0.06f), rgb())
-        CameraFilter.CINEMATIC -> listOf(brightness(-0.025f), contrast(0.24f), rgb())
-        CameraFilter.NEON -> listOf(contrast(0.22f), rgb())
-        CameraFilter.FADE -> listOf(contrast(-0.22f), brightness(0.10f))
-        CameraFilter.DREAM -> listOf(contrast(-0.08f), brightness(0.055f), rgb())
+        CameraFilter.PORTRAIT -> listOf(contrast(0.04f), rgb(), saturation())
+        CameraFilter.BRIGHT -> listOf(brightness(0.10f), contrast(0.04f), saturation())
+        CameraFilter.WARM -> listOf(brightness(0.025f), rgb(), saturation())
+        CameraFilter.COOL -> listOf(rgb(), saturation())
+        CameraFilter.VINTAGE -> listOf(brightness(0.025f), contrast(-0.06f), rgb(), saturation())
+        CameraFilter.CINEMATIC -> listOf(brightness(-0.025f), contrast(0.24f), rgb(), saturation())
+        CameraFilter.NEON -> listOf(contrast(0.22f), rgb(), saturation())
+        CameraFilter.FADE -> listOf(contrast(-0.22f), brightness(0.10f), saturation())
+        CameraFilter.DREAM -> listOf(contrast(-0.08f), brightness(0.055f), rgb(), saturation())
         CameraFilter.NEGATIVE -> listOf(RgbFilter.createInvertedFilter())
         CameraFilter.BW -> listOf(RgbFilter.createGrayscaleFilter(), contrast(0.08f))
-        CameraFilter.GLOW -> listOf(brightness(0.045f), contrast(0.035f), rgb())
-        CameraFilter.SUNSET -> listOf(brightness(0.04f), contrast(0.10f), rgb())
-        CameraFilter.ROSE -> listOf(brightness(0.025f), contrast(0.06f), rgb())
-        CameraFilter.ARCTIC -> listOf(contrast(0.06f), rgb())
-        CameraFilter.AURORA -> listOf(contrast(0.12f), rgb())
-        CameraFilter.MATTE -> listOf(brightness(0.045f), contrast(-0.16f), rgb())
+        CameraFilter.GLOW -> listOf(brightness(0.045f), contrast(0.035f), rgb(), saturation())
+        CameraFilter.SUNSET -> listOf(brightness(0.04f), contrast(0.10f), rgb(), saturation())
+        CameraFilter.ROSE -> listOf(brightness(0.025f), contrast(0.06f), rgb(), saturation())
+        CameraFilter.ARCTIC -> listOf(contrast(0.06f), rgb(), saturation())
+        CameraFilter.AURORA -> listOf(contrast(0.12f), rgb(), saturation())
+        CameraFilter.MATTE -> listOf(brightness(0.045f), contrast(-0.16f), rgb(), saturation())
         CameraFilter.NOIR -> listOf(RgbFilter.createGrayscaleFilter(), contrast(0.18f))
-        CameraFilter.GOLDEN -> listOf(brightness(0.03f), contrast(0.08f), rgb())
-        CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb())
-        CameraFilter.LOW_LIGHT -> listOf(brightness(0.12f), contrast(0.04f), rgb())
+        CameraFilter.GOLDEN -> listOf(brightness(0.03f), contrast(0.08f), rgb(), saturation())
+        CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb(), saturation())
+        CameraFilter.LOW_LIGHT -> listOf(brightness(0.12f), contrast(0.04f), rgb(), saturation())
     }
 }
 
