@@ -67,12 +67,18 @@ class CameraMediaReliabilityTest {
 
 
     @Test
+    fun liveAndSavedFlashbackShareTheSameWarmChannelTint() {
+        assertEquals(Triple(1.10f, 1.02f, 0.86f), CameraFilter.FLASHBACK.rgbScales())
+    }
+
+    @Test
     fun lowLightFilterHasFiniteNonInvertingEnhancementParameters() {
         val filter = CameraFilter.LOW_LIGHT
         assertEquals("Low Light", filter.label)
         assertTrue(filter.brightness > 0f)
         assertTrue(filter.contrast > 0f)
         assertFalse(filter.invert)
+        assertEquals(Triple(1.04f, 1.035f, 1.02f), filter.rgbScales())
     }
 
     @Test
@@ -83,6 +89,10 @@ class CameraMediaReliabilityTest {
             assertTrue(filter.contrast.isFinite())
             assertTrue(filter.saturation >= 0f)
             assertTrue(filter.contrast > 0f)
+            val (red, green, blue) = filter.rgbScales()
+            assertTrue(red.isFinite() && red > 0f)
+            assertTrue(green.isFinite() && green > 0f)
+            assertTrue(blue.isFinite() && blue > 0f)
         }
     }
 
