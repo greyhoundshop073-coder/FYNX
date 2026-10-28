@@ -84,6 +84,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
+@OptIn(UnstableApi::class)
 @Composable
 fun FynxCameraCapturePanel(
     onCaptured: (Uri, String) -> Unit,
