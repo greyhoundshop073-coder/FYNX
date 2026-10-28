@@ -1832,7 +1832,7 @@ private fun CameraFilter.effectCategory(): String = when (this) {
     CameraFilter.NATURAL, CameraFilter.PORTRAIT, CameraFilter.BRIGHT, CameraFilter.GLOW -> "Beauty"
     CameraFilter.WARM, CameraFilter.COOL, CameraFilter.FADE, CameraFilter.SUNSET, CameraFilter.ROSE, CameraFilter.ARCTIC, CameraFilter.GOLDEN -> "Color"
     CameraFilter.NEON, CameraFilter.DREAM, CameraFilter.NEGATIVE, CameraFilter.AURORA -> "Creative"
-    CameraFilter.VINTAGE, CameraFilter.CINEMATIC, CameraFilter.BW, CameraFilter.MATTE, CameraFilter.NOIR -> "Classic"
+    CameraFilter.VINTAGE, CameraFilter.CINEMATIC, CameraFilter.BW, CameraFilter.MATTE, CameraFilter.NOIR, CameraFilter.FLASHBACK -> "Classic"
 }
 
 private fun CameraFilter.supportsLiveIntensity(): Boolean =
@@ -1859,6 +1859,7 @@ private fun CameraFilter.effectGlyph(): String = when (this) {
     CameraFilter.MATTE -> "◍"
     CameraFilter.NOIR -> "◐"
     CameraFilter.GOLDEN -> "✦"
+    CameraFilter.FLASHBACK -> "▧"
 }
 
 private fun CameraFilter.effectPalette(): List<Color> = when (this) {
@@ -1882,6 +1883,7 @@ private fun CameraFilter.effectPalette(): List<Color> = when (this) {
     CameraFilter.MATTE -> listOf(Color(0xFF6F6C68), Color(0xFFD2C3AB))
     CameraFilter.NOIR -> listOf(Color(0xFF101010), Color(0xFF9A9A9A))
     CameraFilter.GOLDEN -> listOf(Color(0xFF9A6421), Color(0xFFFFD779))
+    CameraFilter.FLASHBACK -> listOf(Color(0xFF5B392A), Color(0xFFE7B978))
 }
 
 private fun CameraFilter.effectAccent(): Color = effectPalette().last()
@@ -2021,6 +2023,7 @@ private fun fynxCameraLiveEffects(filter: CameraFilter, intensity: Float): List<
         CameraFilter.MATTE -> listOf(brightness(0.045f), contrast(-0.16f), rgb(1.04f, 1.0f, 0.95f))
         CameraFilter.NOIR -> listOf(RgbFilter.createGrayscaleFilter(), contrast(0.18f))
         CameraFilter.GOLDEN -> listOf(brightness(0.03f), contrast(0.08f), rgb(1.16f, 1.07f, 0.88f))
+        CameraFilter.FLASHBACK -> listOf(brightness(0.035f), contrast(-0.08f), rgb(1.10f, 1.02f, 0.86f))
     }
 }
 
@@ -2046,7 +2049,8 @@ enum class CameraFilter(val label:String,val saturation:Float,val brightness:Flo
     AURORA("Aurora",1.16f,0.025f,1.12f),
     MATTE("Matte",0.90f,0.04f,0.90f),
     NOIR("Noir",0f,0f,1.18f),
-    GOLDEN("Golden",1.13f,0.035f,1.08f)
+    GOLDEN("Golden",1.13f,0.035f,1.08f),
+    FLASHBACK("Flashback",0.88f,0.035f,0.92f)
 }
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
 private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) {
