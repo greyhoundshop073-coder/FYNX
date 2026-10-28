@@ -60,13 +60,15 @@ internal object FynxMarketplaceReferenceStyle {
     val radius = RoundedCornerShape(18.dp)
 }
 
-/** Marketplace-local cobalt selection colors stay stable even when another app section uses a different accent. */
+/** Marketplace-local Azure selection colors stay consistent when another app section uses a different accent. */
 @Composable
 internal fun fynxMarketplaceSelectedChipColors(): androidx.compose.material3.SelectableChipColors {
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
     return FilterChipDefaults.filterChipColors(
-        selectedContainerColor = if (isLight) Color(0xFFE4ECF8) else Color(0xFF17365D),
-        selectedLabelColor = if (isLight) Color(0xFF0047AB) else Color(0xFFEAF1FF)
+        // Use the app's approved Azure Blue in light mode so selected Marketplace
+        // and My Shop controls are visibly selected; keep high-contrast ink text.
+        selectedContainerColor = if (isLight) FynxDesign.AzureBlue else Color(0xFF17365D),
+        selectedLabelColor = if (isLight) Color(0xFF000000) else Color(0xFFEAF1FF)
     )
 }
 
