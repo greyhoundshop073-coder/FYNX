@@ -50,7 +50,7 @@ class CameraMediaReliabilityTest {
 
     @Test
     fun cameraFiltersHaveStableUserFacingOptions() {
-        assertEquals(listOf("Natural", "Portrait", "Bright", "Warm", "Cool", "Vintage", "Cinematic", "Neon", "Fade", "Dream", "Negative", "B&W"), CameraFilter.values().map { it.label })
+        assertEquals(listOf("Natural", "Portrait", "Bright", "Warm", "Cool", "Vintage", "Cinematic", "Neon", "Fade", "Dream", "Negative", "B&W", "Glow", "Sunset", "Rose", "Arctic", "Aurora", "Matte", "Noir", "Golden"), CameraFilter.values().map { it.label })
     }
 
     @Test

@@ -188,6 +188,7 @@ fun FynxCameraCapturePanel(
     }
     var showEffectCarousel by remember { mutableStateOf(true) }
     var captureStyleFilter by remember { mutableStateOf(CameraFilter.NATURAL) }
+    var liveEffectIntensity by remember { mutableFloatStateOf(1f) }
     var selectedEffectCategory by remember { mutableStateOf("For You") }
     var galleryImporting by remember { mutableStateOf(false) }
     var showCameraMusicPicker by remember { mutableStateOf(false) }
@@ -332,9 +333,11 @@ fun FynxCameraCapturePanel(
             photoPixelHeight = dimensions.second.coerceAtLeast(0)
         }
     }
-    LaunchedEffect(captureStyleFilter, liveCameraEffect) {
+    LaunchedEffect(captureStyleFilter, liveCameraEffect, liveEffectIntensity) {
         val effect = liveCameraEffect ?: return@LaunchedEffect
-        runCatching { effect.setEffects(fynxCameraLiveEffects(captureStyleFilter)) }
+        // Debounce drag updates so the GPU pipeline is not reconfigured for every pointer sample.
+        delay(45L)
+        runCatching { effect.setEffects(fynxCameraLiveEffects(captureStyleFilter, liveEffectIntensity)) }
             .onFailure { error = "Camera effect could not be applied: " + (it.message ?: "unsupported effect") }
     }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
@@ -806,9 +809,9 @@ fun FynxCameraCapturePanel(
             enhancing = false
         }
     }
-    LaunchedEffect(pendingUri, pendingType, captureStyleFilter) {
+    LaunchedEffect(pendingUri, pendingType, captureStyleFilter, liveEffectIntensity) {
         if (pendingUri != null && pendingType == "image" && captureStyleFilter != CameraFilter.NATURAL && !enhancing) {
-            applyFilterToPhoto(captureStyleFilter, 1f)
+            applyFilterToPhoto(captureStyleFilter, if (captureStyleFilter.supportsLiveIntensity()) liveEffectIntensity else 1f)
         }
     }
 
@@ -1530,7 +1533,41 @@ fun FynxCameraCapturePanel(
                                     FynxCameraEffectTile(
                                         filter = option,
                                         selected = captureStyleFilter == option,
-                                        onClick = { captureStyleFilter = option }
+                                        onClick = {
+                                            captureStyleFilter = option
+                                            liveEffectIntensity = 1f
+                                        }
+                                    )
+                                }
+                            }
+                            if (captureStyleFilter.supportsLiveIntensity()) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        "Strength",
+                                        color = Color.White.copy(alpha = 0.82f),
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                    Slider(
+                                        value = liveEffectIntensity,
+                                        onValueChange = { liveEffectIntensity = it },
+                                        valueRange = 0f..1f,
+                                        modifier = Modifier.weight(1f),
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = Color.White,
+                                            activeTrackColor = Color(0xFFFF5BA8),
+                                            inactiveTrackColor = Color.White.copy(alpha = 0.24f)
+                                        )
+                                    )
+                                    Text(
+                                        (liveEffectIntensity * 100f).toInt().toString() + "%",
+                                        color = Color(0xFFFF78B7),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.width(34.dp),
+                                        textAlign = TextAlign.End
                                     )
                                 }
                             }
@@ -1766,11 +1803,14 @@ private fun normalizeImportedPhotoToJpeg(file: File) {
 
 
 private fun CameraFilter.effectCategory(): String = when (this) {
-    CameraFilter.NATURAL, CameraFilter.PORTRAIT, CameraFilter.BRIGHT -> "Beauty"
-    CameraFilter.WARM, CameraFilter.COOL, CameraFilter.FADE -> "Color"
-    CameraFilter.NEON, CameraFilter.DREAM, CameraFilter.NEGATIVE -> "Creative"
-    CameraFilter.VINTAGE, CameraFilter.CINEMATIC, CameraFilter.BW -> "Classic"
+    CameraFilter.NATURAL, CameraFilter.PORTRAIT, CameraFilter.BRIGHT, CameraFilter.GLOW -> "Beauty"
+    CameraFilter.WARM, CameraFilter.COOL, CameraFilter.FADE, CameraFilter.SUNSET, CameraFilter.ROSE, CameraFilter.ARCTIC, CameraFilter.GOLDEN -> "Color"
+    CameraFilter.NEON, CameraFilter.DREAM, CameraFilter.NEGATIVE, CameraFilter.AURORA -> "Creative"
+    CameraFilter.VINTAGE, CameraFilter.CINEMATIC, CameraFilter.BW, CameraFilter.MATTE, CameraFilter.NOIR -> "Classic"
 }
+
+private fun CameraFilter.supportsLiveIntensity(): Boolean =
+    this != CameraFilter.NATURAL && this != CameraFilter.NEGATIVE && this != CameraFilter.BW
 
 private fun CameraFilter.effectGlyph(): String = when (this) {
     CameraFilter.NATURAL -> "◉"
@@ -1785,6 +1825,14 @@ private fun CameraFilter.effectGlyph(): String = when (this) {
     CameraFilter.DREAM -> "✿"
     CameraFilter.NEGATIVE -> "◐"
     CameraFilter.BW -> "◑"
+    CameraFilter.GLOW -> "✧"
+    CameraFilter.SUNSET -> "☼"
+    CameraFilter.ROSE -> "♥"
+    CameraFilter.ARCTIC -> "❄"
+    CameraFilter.AURORA -> "✺"
+    CameraFilter.MATTE -> "◍"
+    CameraFilter.NOIR -> "◐"
+    CameraFilter.GOLDEN -> "✦"
 }
 
 private fun CameraFilter.effectPalette(): List<Color> = when (this) {
@@ -1800,6 +1848,14 @@ private fun CameraFilter.effectPalette(): List<Color> = when (this) {
     CameraFilter.DREAM -> listOf(Color(0xFF9171CC), Color(0xFFFFBBD7))
     CameraFilter.NEGATIVE -> listOf(Color(0xFF04B6AC), Color(0xFFFF4F86))
     CameraFilter.BW -> listOf(Color(0xFF181818), Color(0xFFB6B6B6))
+    CameraFilter.GLOW -> listOf(Color(0xFF9D65A8), Color(0xFFFFE0EC))
+    CameraFilter.SUNSET -> listOf(Color(0xFF9D3E47), Color(0xFFFFB85C))
+    CameraFilter.ROSE -> listOf(Color(0xFF8F416F), Color(0xFFFF9FCA))
+    CameraFilter.ARCTIC -> listOf(Color(0xFF1E4F8A), Color(0xFFB5F2FF))
+    CameraFilter.AURORA -> listOf(Color(0xFF1C426B), Color(0xFF69E3B0))
+    CameraFilter.MATTE -> listOf(Color(0xFF6F6C68), Color(0xFFD2C3AB))
+    CameraFilter.NOIR -> listOf(Color(0xFF101010), Color(0xFF9A9A9A))
+    CameraFilter.GOLDEN -> listOf(Color(0xFF9A6421), Color(0xFFFFD779))
 }
 
 private fun CameraFilter.effectAccent(): Color = effectPalette().last()
@@ -1908,39 +1964,38 @@ private fun FynxCameraEffectTile(
 }
 
 @OptIn(UnstableApi::class)
-private fun fynxCameraLiveEffects(filter: CameraFilter): List<Effect> = when (filter) {
-    CameraFilter.NATURAL -> emptyList()
-    CameraFilter.PORTRAIT -> listOf(
-        Contrast(0.04f),
-        RgbAdjustment.Builder().setRedScale(1.02f).setGreenScale(1.0f).setBlueScale(0.98f).build()
-    )
-    CameraFilter.BRIGHT -> listOf(Brightness(0.10f), Contrast(0.04f))
-    CameraFilter.WARM -> listOf(
-        Brightness(0.025f),
-        RgbAdjustment.Builder().setRedScale(1.12f).setGreenScale(1.02f).setBlueScale(0.90f).build()
-    )
-    CameraFilter.COOL -> listOf(
-        RgbAdjustment.Builder().setRedScale(0.90f).setGreenScale(1.02f).setBlueScale(1.12f).build()
-    )
-    CameraFilter.VINTAGE -> listOf(
-        Brightness(0.025f), Contrast(-0.06f),
-        RgbAdjustment.Builder().setRedScale(1.08f).setGreenScale(1.0f).setBlueScale(0.88f).build()
-    )
-    CameraFilter.CINEMATIC -> listOf(
-        Brightness(-0.025f), Contrast(0.24f),
-        RgbAdjustment.Builder().setRedScale(1.06f).setGreenScale(1.0f).setBlueScale(0.94f).build()
-    )
-    CameraFilter.NEON -> listOf(
-        Contrast(0.22f),
-        RgbAdjustment.Builder().setRedScale(0.92f).setGreenScale(1.14f).setBlueScale(1.32f).build()
-    )
-    CameraFilter.FADE -> listOf(Contrast(-0.22f), Brightness(0.10f))
-    CameraFilter.DREAM -> listOf(
-        Contrast(-0.08f), Brightness(0.055f),
-        RgbAdjustment.Builder().setRedScale(1.04f).setGreenScale(1.02f).setBlueScale(1.03f).build()
-    )
-    CameraFilter.NEGATIVE -> listOf(RgbFilter.createInvertedFilter())
-    CameraFilter.BW -> listOf(RgbFilter.createGrayscaleFilter(), Contrast(0.08f))
+private fun fynxCameraLiveEffects(filter: CameraFilter, intensity: Float): List<Effect> {
+    val strength = intensity.coerceIn(0f, 1f)
+    fun brightness(amount: Float) = Brightness(amount * strength)
+    fun contrast(amount: Float) = Contrast(amount * strength)
+    fun rgb(red: Float, green: Float, blue: Float) = RgbAdjustment.Builder()
+        .setRedScale(1f + (red - 1f) * strength)
+        .setGreenScale(1f + (green - 1f) * strength)
+        .setBlueScale(1f + (blue - 1f) * strength)
+        .build()
+
+    return when (filter) {
+        CameraFilter.NATURAL -> emptyList()
+        CameraFilter.PORTRAIT -> listOf(contrast(0.04f), rgb(1.02f, 1.0f, 0.98f))
+        CameraFilter.BRIGHT -> listOf(brightness(0.10f), contrast(0.04f))
+        CameraFilter.WARM -> listOf(brightness(0.025f), rgb(1.12f, 1.02f, 0.90f))
+        CameraFilter.COOL -> listOf(rgb(0.90f, 1.02f, 1.12f))
+        CameraFilter.VINTAGE -> listOf(brightness(0.025f), contrast(-0.06f), rgb(1.08f, 1.0f, 0.88f))
+        CameraFilter.CINEMATIC -> listOf(brightness(-0.025f), contrast(0.24f), rgb(1.06f, 1.0f, 0.94f))
+        CameraFilter.NEON -> listOf(contrast(0.22f), rgb(0.92f, 1.14f, 1.32f))
+        CameraFilter.FADE -> listOf(contrast(-0.22f), brightness(0.10f))
+        CameraFilter.DREAM -> listOf(contrast(-0.08f), brightness(0.055f), rgb(1.04f, 1.02f, 1.03f))
+        CameraFilter.NEGATIVE -> listOf(RgbFilter.createInvertedFilter())
+        CameraFilter.BW -> listOf(RgbFilter.createGrayscaleFilter(), contrast(0.08f))
+        CameraFilter.GLOW -> listOf(brightness(0.045f), contrast(0.035f), rgb(1.05f, 1.03f, 1.0f))
+        CameraFilter.SUNSET -> listOf(brightness(0.04f), contrast(0.10f), rgb(1.18f, 1.04f, 0.87f))
+        CameraFilter.ROSE -> listOf(brightness(0.025f), contrast(0.06f), rgb(1.10f, 0.99f, 1.05f))
+        CameraFilter.ARCTIC -> listOf(contrast(0.06f), rgb(0.88f, 1.03f, 1.16f))
+        CameraFilter.AURORA -> listOf(contrast(0.12f), rgb(0.96f, 1.13f, 1.19f))
+        CameraFilter.MATTE -> listOf(brightness(0.045f), contrast(-0.16f), rgb(1.04f, 1.0f, 0.95f))
+        CameraFilter.NOIR -> listOf(RgbFilter.createGrayscaleFilter(), contrast(0.18f))
+        CameraFilter.GOLDEN -> listOf(brightness(0.03f), contrast(0.08f), rgb(1.16f, 1.07f, 0.88f))
+    }
 }
 
 private fun formatCameraRecordingTime(milliseconds:Long):String{val totalSeconds=milliseconds/1000L;return "%02d:%02d".format(totalSeconds/60L,totalSeconds%60L)}
@@ -1957,7 +2012,15 @@ enum class CameraFilter(val label:String,val saturation:Float,val brightness:Flo
     FADE("Fade",0.86f,0.06f,0.88f),
     DREAM("Dream",1.08f,0.065f,0.94f),
     NEGATIVE("Negative",1f,0f,1f,true),
-    BW("B&W",0f,0f,1.08f)
+    BW("B&W",0f,0f,1.08f),
+    GLOW("Glow",1.12f,0.06f,1.03f),
+    SUNSET("Sunset",1.20f,0.045f,1.12f),
+    ROSE("Rose",1.08f,0.035f,1.06f),
+    ARCTIC("Arctic",0.98f,0.015f,1.08f),
+    AURORA("Aurora",1.16f,0.025f,1.12f),
+    MATTE("Matte",0.90f,0.04f,0.90f),
+    NOIR("Noir",0f,0f,1.18f),
+    GOLDEN("Golden",1.13f,0.035f,1.08f)
 }
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
 private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) {
