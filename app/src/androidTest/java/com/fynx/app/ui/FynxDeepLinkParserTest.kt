@@ -24,6 +24,23 @@ class FynxDeepLinkParserTest {
     }
 
     @Test
+    fun marketplaceStatusDraftPreservesListingReferenceAndCaption() {
+        val draft = FynxDeepLinkParser.marketplaceStatusDraftText("12345", "Blue Shoes")
+        assertTrue(draft.startsWith("Check out \"Blue Shoes\" on FYNX Marketplace"))
+        assertEquals("12345", FynxDeepLinkParser.marketplaceListingIdFromStatusText(draft))
+        assertEquals("Check out \"Blue Shoes\" on FYNX Marketplace", FynxDeepLinkParser.marketplaceStatusCaption(draft))
+        assertTrue(draft.contains(FynxDeepLinkParser.marketplaceWebLink("12345")))
+    }
+
+    @Test
+    fun marketplaceStatusAttachmentRejectsInvalidOrUnrelatedReferences() {
+        assertEquals("", FynxDeepLinkParser.marketplaceStatusDraftText("0", "Invalid product"))
+        assertEquals("", FynxDeepLinkParser.marketplaceStatusDraftText("not-an-id", "Invalid product"))
+        assertEquals(null, FynxDeepLinkParser.marketplaceListingIdFromStatusText("Visit https://fynx.app/profile/alice"))
+        assertEquals(null, FynxDeepLinkParser.marketplaceListingIdFromStatusText("https://fynx.app/marketplace/0"))
+    }
+
+    @Test
     fun marketplaceBaseLinkRemainsValid() {
         val destination = FynxDeepLinkParser.parse(Uri.parse(FynxDeepLinkParser.marketplaceAppLink()))
         assertTrue(destination is FynxDeepLinkDestination.Marketplace)
