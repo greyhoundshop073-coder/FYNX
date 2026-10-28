@@ -1078,7 +1078,7 @@ fun FynxCameraCapturePanel(
                     .background(Color(0xFF171820))
                     .imePadding()
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 34.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedButton(onClick = { if (!enhancing) retake() }, enabled = !enhancing, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Retake") }
@@ -1254,12 +1254,14 @@ fun FynxCameraCapturePanel(
         if (showCaptureControls || recording != null || statusCapture) {
             Surface(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .heightIn(max = 410.dp)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
                 shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
                 color = Color(0xE6111218), tonalElevation = 12.dp
             ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 8.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 410.dp)
+                        .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1286,6 +1288,11 @@ fun FynxCameraCapturePanel(
                     }
                     error?.let { Text(it, color = Color(0xFFFF8D8D), style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth()) }
                     recordingNotice?.let { Text(it, color = Color(0xFFFFD166), style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth()) }
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
                     if (liveProofMode && recording == null) {
                         Button(onClick = onLiveProofStart, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) {
                             Icon(Icons.Default.Videocam, null); Spacer(Modifier.width(8.dp)); Text("Start live proof")
@@ -1391,6 +1398,28 @@ fun FynxCameraCapturePanel(
                         }
                     }
 
+                    if (mode == CameraMode.PHOTO && showEffectCarousel && recording == null) {
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("PHOTO LOOKS", color = Color.White.copy(alpha = 0.76f), style = MaterialTheme.typography.labelSmall)
+                                Spacer(Modifier.weight(1f))
+                                Text("Applied after capture", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall)
+                            }
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                                CameraFilter.values().forEach { option ->
+                                    FilterChip(
+                                        selected = captureStyleFilter == option, onClick = { captureStyleFilter = option },
+                                        label = { Text(option.label) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color(0xFFD92D79), selectedLabelColor = Color.White,
+                                            containerColor = Color.White.copy(alpha = 0.10f), labelColor = Color.White
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                         FynxCameraRailAction("Gallery", "▧", enabled = recording == null && !galleryImporting && !preparingPhoto) {
                             galleryPicker.launch(arrayOf("image/*", "video/*"))
@@ -1466,27 +1495,7 @@ fun FynxCameraCapturePanel(
                         Spacer(Modifier.width(52.dp))
                     }
 
-                    if (mode == CameraMode.PHOTO && showEffectCarousel && recording == null) {
-                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text("PHOTO LOOKS", color = Color.White.copy(alpha = 0.76f), style = MaterialTheme.typography.labelSmall)
-                                Spacer(Modifier.weight(1f))
-                                Text("Applied after capture", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall)
-                            }
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                CameraFilter.values().forEach { option ->
-                                    FilterChip(
-                                        selected = captureStyleFilter == option, onClick = { captureStyleFilter = option },
-                                        label = { Text(option.label) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Color(0xFFD92D79), selectedLabelColor = Color.White,
-                                            containerColor = Color.White.copy(alpha = 0.10f), labelColor = Color.White
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
+
                 }
             }
         }
