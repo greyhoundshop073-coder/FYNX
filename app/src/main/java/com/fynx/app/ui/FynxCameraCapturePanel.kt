@@ -334,7 +334,16 @@ fun FynxCameraCapturePanel(
     }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
         val generation = bindGeneration + 1; bindGeneration = generation
-        if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
+        if (!hasCamera || pendingUri != null) {
+            cameraProvider?.unbindAll()
+            liveCameraEffect?.close()
+            liveCameraEffect = null
+            imageCapture = null
+            videoCapture = null
+            cameraControl = null
+            cameraInfo = null
+            return@LaunchedEffect
+        }
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             if (generation != bindGeneration || !hasCamera || pendingUri != null) return@addListener
@@ -1163,7 +1172,7 @@ fun FynxCameraCapturePanel(
             }
         };return
     }
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).clickable { if (recording == null) showCaptureControls = true }){
+    Box(Modifier.fillMaxSize().background(Color.Black).clickable { if (recording == null) showCaptureControls = true }){
         AndroidView(factory={previewView},modifier=Modifier.fillMaxSize())
         if (showGrid && pendingUri == null && recording == null) {
             Canvas(Modifier.fillMaxSize()) {
@@ -1298,8 +1307,8 @@ fun FynxCameraCapturePanel(
         if (showCaptureControls || recording != null || statusCapture) {
             Surface(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .heightIn(max = 410.dp)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .heightIn(max = 410.dp),
                 shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
                 color = Color(0xE6111218), tonalElevation = 12.dp
             ) {
