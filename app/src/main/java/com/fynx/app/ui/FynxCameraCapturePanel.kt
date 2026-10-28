@@ -755,14 +755,20 @@ fun FynxCameraCapturePanel(
         recordingNotice = null
         recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
             if (event is VideoRecordEvent.Finalize) {
-                if (!event.hasError() && file.exists() && file.length() > 0L) {
+                val finalizedBytes = if (file.exists()) file.length() else 0L
+                val exceedsStatusUploadLimit = statusCapture && finalizedBytes > FYNX_STATUS_MAX_VIDEO_BYTES
+                if (!event.hasError() && file.exists() && finalizedBytes > 0L && !exceedsStatusUploadLimit) {
                     pendingUri = Uri.fromFile(file)
                     pendingType = if (videoNoteMode) "video_note" else "video"
                     error = null
                 } else {
                     file.delete()
                     recordingNotice = null
-                    error = "Video capture failed (" + event.error + ")"
+                    error = when {
+                        exceedsStatusUploadLimit ->
+                            "Status video exceeded the 12 MiB upload-size limit. Record a shorter clip."
+                        else -> "Video capture failed (" + event.error + ")"
+                    }
                 }
                 recording = null
                 activeRecordingFile = null
