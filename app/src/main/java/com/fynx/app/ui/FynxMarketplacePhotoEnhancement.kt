@@ -12,6 +12,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.net.Uri
+import android.os.Build
 import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import com.google.android.gms.common.moduleinstall.InstallStatusListener
@@ -51,6 +52,14 @@ internal object FynxMarketplacePhotoEnhancement {
 
     suspend fun enhance(context: Context, source: Uri): Result<Uri> = withContext(Dispatchers.IO) {
         try {
+            // ML Kit subject-segmentation beta1 has an open native-crash report on Android 16/API 36.
+            // A SIGSEGV cannot be recovered by Kotlin; keep this optional path fail-closed until a safe SDK is verified.
+            if (Build.VERSION.SDK_INT >= 36) {
+                throw IllegalStateException(
+                    "Photo background cleanup is temporarily unavailable on Android 16 and newer. " +
+                        "Your original photo is unchanged; you can still publish it normally."
+                )
+            }
             val mime = context.contentResolver.getType(source).orEmpty().lowercase()
             require(mime.startsWith("image/") || mime.isBlank()) {
                 "Choose a still photo. Video enhancement is not supported."
