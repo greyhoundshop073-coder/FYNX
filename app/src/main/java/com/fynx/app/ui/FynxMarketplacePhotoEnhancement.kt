@@ -73,24 +73,32 @@ internal object FynxMarketplacePhotoEnhancement {
             } finally {
                 foreground.recycle()
             }
-            val directory = File(context.cacheDir, "marketplace-photo-enhancements")
-            if (!directory.exists() && !directory.mkdirs()) {
-                throw IllegalStateException("Temporary photo storage is unavailable.")
-            }
-            val destination = File(directory, "product_${UUID.randomUUID()}.jpg")
-            destination.outputStream().buffered().use { output ->
-                if (!finished.compress(Bitmap.CompressFormat.JPEG, 92, output)) {
-                    destination.delete()
-                    throw IllegalStateException("The enhanced photo could not be saved.")
+            try {
+                val directory = File(context.cacheDir, "marketplace-photo-enhancements")
+                if (!directory.exists() && !directory.mkdirs()) {
+                    throw IllegalStateException("Temporary photo storage is unavailable.")
                 }
+                val destination = File(directory, "product_${UUID.randomUUID()}.jpg")
+                try {
+                    destination.outputStream().buffered().use { output ->
+                        if (!finished.compress(Bitmap.CompressFormat.JPEG, 92, output)) {
+                            throw IllegalStateException("The enhanced photo could not be saved.")
+                        }
+                    }
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        destination
+                    )
+                    generatedFiles[uri.toString()] = destination
+                    Result.success(uri)
+                } catch (error: Throwable) {
+                    destination.delete()
+                    throw error
+                }
+            } finally {
+                finished.recycle()
             }
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                destination
-            )
-            generatedFiles[uri.toString()] = destination
-            Result.success(uri)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
