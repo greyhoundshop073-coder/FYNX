@@ -99,12 +99,29 @@ class FynxMarketplaceCarouselSupportTest {
         )
         val ranked = selectMarketplaceAdvertisingCandidates(
             products,
-            successfulSalesBySeller = mapOf("high-sales" to 25, "middle-shop" to 5)
+            successfulSalesBySeller = mapOf("high-sales" to 25, "middle-shop" to 5, "new-shop" to 0)
         )
         assertEquals(listOf("top-seller", "middle", "cheap"), ranked.map { it.id })
 
         val fallback = selectMarketplaceAdvertisingCandidates(products)
         assertEquals(listOf("cheap", "middle", "top-seller"), fallback.map { it.id })
+    }
+
+    @Test
+    fun incompleteSellerReputationCoverageFallsBackInsteadOfTreatingUnknownAsZeroSales() {
+        val products = listOf(
+            product("cheap", seller = "new-shop", price = 10.0),
+            product("known-top", seller = "known-top", price = 500.0),
+            product("known-middle", seller = "known-middle", price = 50.0)
+        )
+
+        val selected = selectMarketplaceAdvertisingCandidates(
+            products,
+            successfulSalesBySeller = mapOf("known-top" to 25, "known-middle" to 5)
+        )
+
+        // Unknown seller evidence must not be misrepresented as a verified zero-sales score.
+        assertEquals(listOf("cheap", "known-middle", "known-top"), selected.map { it.id })
     }
 
     @Test
