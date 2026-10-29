@@ -1940,16 +1940,24 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             }
         }
         if (media.any { !contextIsVideo(context, it) }) {
-            OutlinedButton(
-                onClick = { showEnhancementPicker = true; enhancementError = null },
-                enabled = !busy && !enhancementBusy,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Clean up photo background (optional)") }
-            Text(
-                "Preview before using it. The original stays available for Undo. First use may download a model through Google Play services and may use mobile data; photo pixels are processed on this device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (FynxMarketplacePhotoEnhancement.isSupportedOnCurrentAndroid()) {
+                OutlinedButton(
+                    onClick = { showEnhancementPicker = true; enhancementError = null },
+                    enabled = !busy && !enhancementBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Clean up photo background (optional)") }
+                Text(
+                    "Preview before using it. The original stays available for Undo. First use may download a model through Google Play services and may use mobile data; photo pixels are processed on this device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    "Photo background cleanup is temporarily unavailable on Android 16 and newer. Your original photos still work and can be published normally.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         enhancementError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         Text("1. Product basics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
