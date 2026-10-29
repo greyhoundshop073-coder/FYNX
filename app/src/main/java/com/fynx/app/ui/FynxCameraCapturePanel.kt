@@ -220,6 +220,8 @@ fun FynxCameraCapturePanel(
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
+    var selectedCameraTool by remember { mutableStateOf("Looks") }
+    var showAdjustments by remember { mutableStateOf(false) }
     val galleryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { selectedUri ->
@@ -657,14 +659,105 @@ fun FynxCameraCapturePanel(
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")};if(!fastCapture && !liveProofMode)TextButton(onClick={galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo));showCaptureControls=true},enabled=recording==null){Text("Gallery")}}
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
             Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.43f).verticalScroll(rememberScrollState())) {
-            if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
-            if (liveProofMode) {
-                Button(onClick = onLiveProofStart, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
-                    Icon(Icons.Default.Videocam, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Start live proof")
+            if (recording == null && !fastCapture) {
+                TextButton(
+                    onClick = { showAdjustments = !showAdjustments; showCaptureControls = true },
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text(if (showAdjustments) "Hide adjustments ▴" else "Adjustments ▾")
                 }
-                Spacer(Modifier.height(8.dp))
+                if (showAdjustments) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        color = Color.Black.copy(alpha = 0.70f)
+                    ) {
+                        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("Zoom", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(58.dp))
+                                Slider(value = zoomRatio.coerceIn(1f, 4f), onValueChange = { zoomRatio = it; cameraControl?.setZoomRatio(it) }, valueRange = 1f..4f, modifier = Modifier.weight(1f))
+                            }
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("Exposure", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(58.dp))
+                                val range = cameraInfo?.exposureState?.exposureCompensationRange
+                                val lower = (range?.lower ?: -2).toFloat()
+                                val upper = (range?.upper ?: 2).toFloat()
+                                Slider(value = exposure.toFloat().coerceIn(lower, upper), onValueChange = { exposure = it.toInt(); cameraControl?.setExposureCompensationIndex(exposure) }, valueRange = lower..upper, steps = ((upper - lower).toInt() - 1).coerceAtLeast(0), modifier = Modifier.weight(1f))
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Timer", style = MaterialTheme.typography.labelMedium)
+                                Spacer(Modifier.width(8.dp))
+                                FilterChip(selected = captureTimerSeconds == 0, onClick = { captureTimerSeconds = 0 }, label = { Text("Off") })
+                                Spacer(Modifier.width(6.dp))
+                                FilterChip(selected = captureTimerSeconds == 3, onClick = { captureTimerSeconds = 3 }, label = { Text("3 sec") })
+                                Spacer(Modifier.width(6.dp))
+                                FilterChip(selected = captureTimerSeconds == 10, onClick = { captureTimerSeconds = 10 }, label = { Text("10 sec") })
+                            }
+                        }
+                    }
+                }
+            }
+            if (recording == null && !fastCapture && mode == CameraMode.PHOTO) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Black.copy(alpha = 0.72f)
+                ) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            listOf("Looks", "Face FX", "Background", "AI Studio").forEach { category ->
+                                FilterChip(
+                                    selected = selectedCameraTool == category,
+                                    onClick = { selectedCameraTool = category; showCaptureControls = true },
+                                    label = { Text(category) }
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        when (selectedCameraTool) {
+                            "Face FX" -> {
+                                Text("Face FX", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                                Text("Face-tracked effects · applied to the saved photo", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.70f))
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    CameraFaceEffect.values().forEach { option ->
+                                        FilterChip(selected = faceEffect == option, enabled = !applyingFilter && !enhancing, onClick = { faceEffect = option; showCaptureControls = true }, label = { Text(option.label) })
+                                    }
+                                }
+                            }
+                            "Background" -> {
+                                Text("Background", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                                Text("Portrait blur and scene effects · after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.70f))
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    CameraBackgroundEffect.values().forEach { option ->
+                                        FilterChip(selected = backgroundEffect == option, enabled = !applyingFilter && !enhancing, onClick = { backgroundEffect = option; showCaptureControls = true }, label = { Text(option.label) })
+                                    }
+                                }
+                            }
+                            "AI Studio" -> {
+                                Text("AI Studio", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                                Text("Local photo styling · after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.70f))
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    CameraStudioEffect.values().forEach { option ->
+                                        FilterChip(selected = studioEffect == option, enabled = !applyingFilter && !enhancing, onClick = { studioEffect = option; showCaptureControls = true }, label = { Text(option.label) })
+                                    }
+                                }
+                            }
+                            else -> {
+                                Text("Looks", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                                Text("Colour looks are applied after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.70f))
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    CameraFilter.values().forEach { option ->
+                                        FilterChip(selected = filter == option, onClick = { if (recording == null) { filter = option; filterIntensity = 1f; showCaptureControls = true } }, label = { Text(option.label) })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             if (recording == null && !fastCapture && mode == CameraMode.PHOTO) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
