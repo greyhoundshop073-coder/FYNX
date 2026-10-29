@@ -22,7 +22,9 @@ checks = [
         'if node --input-type=module -e' in runner
         and 'body?.database !== "ready"' in runner
         and 'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
-        and 'Live backend is unavailable; running read-only Marketplace/My Shop visual certification' in runner
+        and 'if [ -z "${FYNX_E2E_USERNAME:-}" ] || [ -z "${FYNX_E2E_PASSWORD:-}" ]; then' in runner
+        and 'E2E credentials are not configured; running read-only camera/Marketplace UI certification' in runner
+        and 'Live backend is unavailable; running read-only camera/Marketplace visual certification' in runner
         and 'TEST_EXIT=$?' in runner,
     ),
     (
