@@ -869,7 +869,7 @@ fun FynxCameraCapturePanel(
                         // with a bounded inner scroll so the shutter stays visible.
                         Column(
                             Modifier.fillMaxWidth()
-                                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.22f)
+                                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.26f)
                                 .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
