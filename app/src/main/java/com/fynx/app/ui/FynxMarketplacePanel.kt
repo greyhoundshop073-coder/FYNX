@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -56,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -97,11 +99,11 @@ private fun MarketplaceExploreCategoryTiles(
                 "beauty", "health" -> Icons.Default.Face
                 "vehicles" -> Icons.Default.DirectionsCar
                 "services", "tools" -> Icons.Default.Build
-                "food" -> Icons.Default.Restaurant
-                "property" -> Icons.Default.HomeWork
-                "books" -> Icons.Default.MenuBook
-                "sports" -> Icons.Default.SportsSoccer
-                "baby & kids" -> Icons.Default.ChildCare
+                "food" -> Icons.Default.ShoppingBag
+                "property" -> Icons.Default.Home
+                "books" -> Icons.Default.Devices
+                "sports" -> Icons.Default.DirectionsCar
+                "baby & kids" -> Icons.Default.Face
                 else -> Icons.Default.Storefront
             }
             val selected = selectedCategory.equals(itemCategory, ignoreCase = true)
