@@ -393,7 +393,7 @@ fun FynxCameraCapturePanel(
                     Spacer(Modifier.width(8.dp))
                     Text("Tracked on-device · photo effects", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
                 }
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     CameraFaceEffect.values().forEach { option ->
                         FilterChip(
                             selected = faceEffect == option,
