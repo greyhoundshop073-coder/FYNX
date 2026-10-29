@@ -854,38 +854,7 @@ fun FynxCameraCapturePanel(
                                 }
                             }
                         }
-                        Spacer(Modifier.height(7.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    selectedCameraTool,
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    when (selectedCameraTool) {
-                                        "Face FX" -> "Live face tracking · saved with photo"
-                                        "Background" -> "Portrait and scene effects · after capture"
-                                        "AI Studio" -> "Creative photo treatments · after capture"
-                                        else -> "Choose a look for your photo"
-                                    },
-                                    color = Color.White.copy(alpha = 0.62f),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1
-                                )
-                            }
-                            Text(
-                                "ON DEVICE",
-                                color = Color(0xFFB8A7FF),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(8.dp))
                         // TikTok-inspired compact thumbnail grid: four options per row,
                         // with a bounded inner scroll so the shutter stays visible.
                         Column(
