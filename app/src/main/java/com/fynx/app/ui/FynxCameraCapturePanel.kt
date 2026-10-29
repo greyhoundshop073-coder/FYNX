@@ -42,6 +42,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.GridOff
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RotateRight
@@ -681,7 +683,7 @@ fun FynxCameraCapturePanel(
                 IconButton(
                     onClick = { if (recording == null) { showGrid = !showGrid; showCaptureControls = true } },
                     enabled = recording == null
-                ) { Text(if (showGrid) "▦" else "▤", color = Color.White, style = MaterialTheme.typography.titleMedium) }
+                ) { Icon(if (showGrid) Icons.Default.GridOff else Icons.Default.GridOn, if (showGrid) "Hide grid" else "Show grid") }
                 if (!fastCapture && !liveProofMode) {
                     IconButton(
                         onClick = { galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)); showCaptureControls = true },
