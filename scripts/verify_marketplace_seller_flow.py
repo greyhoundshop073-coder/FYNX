@@ -81,7 +81,12 @@ checks = [
      and "if (replacedOld != rootOriginal)" in marketplace
      and "FynxMarketplacePhotoEnhancement.discard(replacedOld)" in marketplace),
     ("seller photo cleanup uses app-private temporary files and a scoped FileProvider path", "FileProvider.getUriForFile" in photo_enhancement and 'name="marketplace_photo_enhancements"' in file_provider_paths and '"\u0024{context.packageName}.fileprovider"' in photo_enhancement),
-    ("seller photo cleanup registers the Play services subject model and its dependency", "play-services-mlkit-subject-segmentation:16.0.0-beta1" in app_gradle and 'android:name="com.google.mlkit.vision.DEPENDENCIES"' in app_manifest and 'android:value="subject_segment"' in app_manifest),
+    ("seller photo cleanup requests the Play services model only after the seller opts in, avoiding an install-time model download",
+     "play-services-mlkit-subject-segmentation:16.0.0-beta1" in app_gradle
+     and "installer.areModulesAvailable(segmenter)" in photo_enhancement
+     and "installer.installModules(request)" in photo_enhancement
+     and 'android:name="com.google.mlkit.vision.DEPENDENCIES"' not in app_manifest
+     and 'android:value="subject_segment"' not in app_manifest),
     ("seller photo cleanup refuses missing foreground results instead of silently publishing an unchanged image as enhanced", "No product foreground was found." in photo_enhancement and "The background could not be separated clearly." in photo_enhancement),
     ("seller photo cleanup keeps output proportions and uses a bounded working image", "MAX_WORKING_DIMENSION = 1600" in photo_enhancement and "SUBJECT_PADDING" in photo_enhancement and "canvas.drawBitmap(" in photo_enhancement),
     ("Marketplace discovery client sends category under the backend-supported query key", '&category=${URLEncoder.encode(category, "UTF-8")}' in remote_client and 'req.query?.category' in discovery_routes),
