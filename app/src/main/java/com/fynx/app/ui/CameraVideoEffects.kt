@@ -1,3 +1,4 @@
+@file:androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 @file:OptIn(androidx.media3.common.util.UnstableApi::class)
 package com.fynx.app.ui
 
