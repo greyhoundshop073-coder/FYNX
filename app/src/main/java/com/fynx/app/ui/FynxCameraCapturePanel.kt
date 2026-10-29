@@ -927,7 +927,9 @@ fun FynxCameraCapturePanel(
                     label = { Text("Video") },
                     leadingIcon = { Icon(Icons.Default.Videocam, null) }
                 )
-            }            Row(
+            }
+            // Main capture row: Gallery on the left, shutter centered, Effects on the right.
+            Row(
                 Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
