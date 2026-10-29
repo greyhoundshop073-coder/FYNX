@@ -83,38 +83,68 @@ private fun MarketplaceExploreCategoryTiles(
     selectedCategory: String,
     onSelect: (String) -> Unit
 ) {
+    // Category art is intentionally a safe, offline-ready fallback. Real listing photos
+    // belong to product cards; never show a category illustration as if it were a seller item.
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         categories.forEach { itemCategory ->
-            val icon = when (itemCategory.lowercase(Locale.US)) {
-                "electronics" -> Icons.Default.Devices
+            val icon = when (itemCategory.trim().lowercase(Locale.US)) {
+                "electronics", "phones & computers" -> Icons.Default.Devices
                 "fashion" -> Icons.Default.ShoppingBag
-                "home" -> Icons.Default.Home
-                "beauty" -> Icons.Default.Face
+                "home", "furniture" -> Icons.Default.Home
+                "beauty", "health" -> Icons.Default.Face
                 "vehicles" -> Icons.Default.DirectionsCar
-                "services" -> Icons.Default.Build
+                "services", "tools" -> Icons.Default.Build
+                "food" -> Icons.Default.Restaurant
+                "property" -> Icons.Default.HomeWork
+                "books" -> Icons.Default.MenuBook
+                "sports" -> Icons.Default.SportsSoccer
+                "baby & kids" -> Icons.Default.ChildCare
                 else -> Icons.Default.Storefront
             }
+            val selected = selectedCategory.equals(itemCategory, ignoreCase = true)
             Surface(
                 onClick = { onSelect(itemCategory) },
-                shape = RoundedCornerShape(16.dp),
-                color = if (selectedCategory == itemCategory) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.width(94.dp)
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                border = BorderStroke(
+                    width = if (selected) 1.5.dp else 1.dp,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                ),
+                modifier = Modifier.width(108.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 7.dp),
+                    modifier = Modifier.padding(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
-                        modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(66.dp)
+                            .clip(RoundedCornerShape(13.dp))
+                            .background(MaterialTheme.colorScheme.surface),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(23.dp))
+                        Icon(
+                            icon,
+                            contentDescription = "$itemCategory category",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(36.dp)
+                        )
                     }
-                    Text(itemCategory, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        itemCategory,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        maxLines = 2,
+                        minLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
