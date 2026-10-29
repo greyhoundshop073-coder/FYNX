@@ -125,7 +125,8 @@ private fun DrawScope.drawMarketplaceCategoryLine(
 
 internal fun marketplaceSubcategoriesFor(category: String): List<String> = when (category.trim().lowercase(Locale.US)) {
     "electronics" -> listOf("Phones & tablets", "Computers & laptops", "Audio & speakers", "TV & entertainment", "Cameras", "Other electronics")
-    "fashion" -> listOf("Clothing", "Shoes & footwear", "Bags", "Jewellery & watches", "Traditional wear", "Other fashion")
+    "fashion" -> listOf("Clothing", "Shoes & footwear", "Traditional wear", "Other fashion")
+    "personal accessories" -> listOf("Bags & purses", "Jewellery & watches", "Wallets", "Belts & hats", "Sunglasses", "Other accessories")
     "home" -> listOf("Kitchen & dining", "Home décor", "Lighting", "Bedding", "Cleaning & storage", "Other home goods")
     "beauty" -> listOf("Skincare", "Hair care", "Make-up", "Fragrance", "Grooming", "Personal care")
     "vehicles" -> listOf("Cars", "Motorcycles", "Commercial vehicles", "Bicycles", "Other vehicles")
@@ -216,6 +217,18 @@ private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Mo
                 drawMarketplaceCategoryCircle(74f, 38f, 7f, paleBlue, sx, sy)
                 drawMarketplaceCategoryCircle(74f, 38f, 4f, azure, sx, sy)
                 drawMarketplaceCategoryCircle(74f, 38f, 1.4f, white, sx, sy)
+            }
+            name.contains("personal accessories") -> {
+                // A bag and watch identify accessories separately from clothing.
+                drawMarketplaceCategoryRect(25f, 26f, 38f, 28f, azure, sx, sy, 5f)
+                drawMarketplaceCategoryRect(33f, 21f, 22f, 8f, slate, sx, sy, 3f)
+                drawMarketplaceCategoryLine(35f, 21f, 35f, 15f, slate, sx, sy, 2f)
+                drawMarketplaceCategoryLine(53f, 21f, 53f, 15f, slate, sx, sy, 2f)
+                drawMarketplaceCategoryCircle(75f, 28f, 13f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(75f, 28f, 8f, white, sx, sy)
+                drawMarketplaceCategoryLine(75f, 28f, 75f, 22f, slate, sx, sy, 1.5f)
+                drawMarketplaceCategoryLine(75f, 28f, 80f, 31f, slate, sx, sy, 1.5f)
+                drawMarketplaceCategoryLine(36f, 37f, 52f, 37f, paleGold, sx, sy, 1.7f)
             }
             name.contains("fashion") || name.contains("accessor") -> {
                 drawMarketplaceCategoryLine(52f, 11f, 56f, 15f, slate, sx, sy, 2.2f)
@@ -785,7 +798,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
-    val categories = listOf("All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other")
+    val categories = listOf("All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other")
     var sellerReputations by remember { mutableStateOf<Map<String, FynxMarketplaceClient.SellerReputation>>(emptyMap()) }
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
 
@@ -1763,6 +1776,21 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
     var enhancementError by remember { mutableStateOf<String?>(null) }
     var originalByEnhancedUri by remember { mutableStateOf<Map<String, Uri>>(emptyMap()) }
 
+    fun clearCategorySpecificFields() {
+        brand = ""
+        model = ""
+        size = ""
+        color = ""
+        material = ""
+        dimensions = ""
+        warranty = ""
+        vehicleYear = ""
+        mileage = ""
+        beautyDetails = ""
+        serviceDetails = ""
+        generalDetails = ""
+    }
+
     fun cleanupGeneratedPhotoFiles() {
         val generated = originalByEnhancedUri.keys.map { Uri.parse(it) } + listOfNotNull(enhancementPreviewUri)
         FynxMarketplacePhotoEnhancement.discardAll(generated)
@@ -1836,15 +1864,19 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             "Home", "Furniture" -> listOf("Material" to material, "Dimensions" to dimensions, "Colour / finish" to color)
             "Appliances" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty, "Dimensions" to dimensions)
             "Vehicles" -> listOf("Make / brand" to brand, "Model" to model, "Year" to vehicleYear, "Mileage" to mileage)
-            "Auto Parts" -> listOf("Part brand" to brand, "Part / model number" to model, "Compatibility / defects" to generalDetails)
+            "Auto Parts" -> listOf("Part manufacturer / brand" to brand, "Part number / compatible vehicle" to model, "Fitment, condition, and included parts" to generalDetails)
             "Beauty", "Health" -> listOf("Brand" to brand, "Size / volume" to size, "Product details" to beautyDetails)
-            "Food", "Agriculture" -> listOf("Brand / maker" to brand, "Expiry, storage, variety, or ingredient details" to generalDetails)
-            "Building Materials" -> listOf("Material" to material, "Dimensions / pack size" to dimensions, "Colour / finish" to color, "Additional details" to generalDetails)
-            "Garden & Outdoor" -> listOf("Brand / maker" to brand, "Material / variety" to material, "Additional details" to generalDetails)
+            "Food" -> listOf("Brand / producer" to brand, "Pack size / weight" to size, "Ingredients, allergens, expiry, or storage details" to generalDetails)
+            "Agriculture" -> listOf("Brand / maker" to brand, "Variety / material" to material, "Season, care, or farming-use details" to generalDetails)
+            "Garden & Outdoor" -> listOf("Brand / maker" to brand, "Material / variety" to material, "Season, care, variety, or intended use" to generalDetails)
+            "Building Materials" -> listOf("Material / grade" to material, "Dimensions / pack size" to dimensions, "Colour / finish" to color, "Additional details" to generalDetails)
             "Handmade & Local" -> listOf("Maker" to brand, "Material" to material, "Additional details" to generalDetails)
             "Office & Education", "Business & Workshop Supplies" -> listOf("Brand / maker" to brand, "Model / item type" to model, "Additional details" to generalDetails)
-            "Sports" -> listOf("Brand" to brand, "Model" to model, "Size / fit" to size, "Colour" to color)
-            "Tools" -> listOf("Brand / maker" to brand, "Model" to model, "Material" to material, "Dimensions" to dimensions)
+            "Sports" -> listOf("Brand" to brand, "Model" to model, "Size / fit" to size, "Colour" to color, "Material" to material, "Additional details" to generalDetails)
+            "Tools" -> listOf("Brand / maker" to brand, "Model" to model, "Material" to material, "Dimensions" to dimensions, "Additional details" to generalDetails)
+            "Baby & Kids" -> listOf("Brand / maker" to brand, "Age range / size" to size, "Colour" to color, "Safety and included accessories" to generalDetails)
+            "Books" -> listOf("Publisher / brand" to brand, "Edition / ISBN / level" to model, "Subject, contents, or condition" to generalDetails)
+            "Property" -> listOf("Property type / estate" to brand, "Dimensions / plot size" to dimensions, "Availability, utilities, or paperwork notes" to generalDetails)
             "Services" -> listOf("Service details" to serviceDetails)
             else -> listOf("Brand / maker" to brand, "Colour" to color, "Additional details" to generalDetails)
         }.filter { it.second.isNotBlank() }
@@ -1915,7 +1947,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("1. Product basics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(title, { title = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) }, label = { Text("Product name") }, supportingText = { Text("Use a clear name buyers can search for.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Category", style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item; subcategory = "" }, label = { Text(item) }, colors = selectedChipColors) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { if (category != item) clearCategorySpecificFields(); category = item; subcategory = "" }, label = { Text(item) }, colors = selectedChipColors) } }
         val categorySubcategories = marketplaceSubcategoriesFor(category)
         Text("Subcategory (optional)", style = MaterialTheme.typography.labelLarge)
         if (categorySubcategories.isNotEmpty()) {
@@ -1941,25 +1973,22 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("3. Details buyers care about", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("These optional fields are added to your product description so buyers can compare listings more confidently.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         when (category) {
-            "Electronics", "Appliances" -> {
+            "Electronics", "Phones & Computers", "Appliances" -> {
                 OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(model, { model = it.take(100) }, label = { Text("Model / model number") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(warranty, { warranty = it.take(160) }, label = { Text("Warranty or included accessories") }, modifier = Modifier.fillMaxWidth())
+                if (category == "Appliances") OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Dimensions") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
-            "Fashion" -> {
-                OutlinedTextField(size, { size = it.take(80) }, label = { Text("Size / fit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            "Fashion", "Personal Accessories" -> {
+                OutlinedTextField(size, { size = it.take(80) }, label = { Text(if (category == "Personal Accessories") "Item size" else "Size / fit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(color, { color = it.take(80) }, label = { Text("Colour") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material / fabric") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text(if (category == "Personal Accessories") "Material / finish" else "Material / fabric") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (category == "Personal Accessories") OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / maker") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
-            "Home" -> {
+            "Home", "Furniture" -> {
                 OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Dimensions (e.g. 120 × 60 × 75 cm)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(color, { color = it.take(80) }, label = { Text("Colour / finish") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            }
-            "Auto Parts" -> {
-                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Part manufacturer / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Part number / compatible vehicle") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Fitment, condition, and included parts") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             }
             "Vehicles" -> {
                 OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Make / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -1967,15 +1996,70 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                 OutlinedTextField(vehicleYear, { vehicleYear = it.filter(Char::isDigit).take(4) }, label = { Text("Year") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(mileage, { mileage = it.take(80) }, label = { Text("Mileage / usage") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
-            "Beauty" -> {
+            "Auto Parts" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Part manufacturer / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Part number / compatible vehicle") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Fitment, condition, and included parts") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Beauty", "Health" -> {
                 OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(size, { size = it.take(80) }, label = { Text("Size / volume") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(beautyDetails, { beautyDetails = it.take(500) }, label = { Text("Ingredients, skin/hair type, or expiry details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             }
+            "Food" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / producer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(size, { size = it.take(80) }, label = { Text("Pack size / weight") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Ingredients, allergens, expiry, or storage details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Agriculture", "Garden & Outdoor" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Producer / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Variety / material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Season, care, variety, or intended use") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Baby & Kids" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / maker") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(size, { size = it.take(80) }, label = { Text("Age range / size") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(color, { color = it.take(80) }, label = { Text("Colour") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Safety, included accessories, or toy details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Books" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Publisher / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Edition / ISBN / level") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Subject, contents, or condition") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Office & Education", "Business & Workshop Supplies" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / maker") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Model / item type") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Additional details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Sports" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / maker") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(size, { size = it.take(80) }, label = { Text("Size / fit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Sport, fit, or included gear") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Tools" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Manufacturer / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Model / part number") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material / grade") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Dimensions") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Size, use, or included parts") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
             "Building Materials" -> {
                 OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material / grade") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Size / dimensions") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(color, { color = it.take(80) }, label = { Text("Colour / finish") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Quantity, grade, and delivery notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Handmade & Local" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Maker / artisan") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Craft method, origin, or custom options") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Property" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Property type / estate") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Dimensions / plot size") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Availability, utilities, or paperwork notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             }
             "Services" -> OutlinedTextField(serviceDetails, { serviceDetails = it.take(500) }, label = { Text("What is included, duration, and service area") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             else -> {
