@@ -49,12 +49,11 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -270,6 +269,19 @@ fun FynxCameraCapturePanel(
             .also { it.setAnalyzer(faceAnalyzer.executor, faceAnalyzer) }
     }
     LaunchedEffect(faceEffect) { if (faceEffect == CameraFaceEffect.OFF) trackedFaceBounds = emptyList() }
+    // Apply live colour looks directly to PreviewView. A Compose graphicsLayer around the
+    // camera AndroidView can cover sibling controls after CameraX rebinds a lens on API 35.
+    LaunchedEffect(filter, filterIntensity, previewView) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            previewView.setRenderEffect(
+                android.graphics.RenderEffect.createColorFilterEffect(
+                    ColorMatrixColorFilter(cameraFilterMatrix(filter, filterIntensity))
+                )
+            )
+        } else {
+            previewView.setRenderEffect(null)
+        }
+    }
 
     LaunchedEffect(recording != null, recordingStartedAt) { while (recording != null) { recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L); delay(200L) } }
     LaunchedEffect(recording, recordingStartedAt, videoNoteMode) {
@@ -581,17 +593,21 @@ fun FynxCameraCapturePanel(
             }
         };return
     }
+    // Camera UI is deliberately dark so preview controls remain legible on bright or dark
+    // camera feeds, and so Material chips use high-contrast labels over the preview.
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            primary = Color(0xFFB8A7FF),
+            secondary = Color(0xFF72D8C9),
+            background = Color(0xFF080A10),
+            surface = Color(0xFF171A22),
+            surfaceVariant = Color(0xFF292D38)
+        )
+    ) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).clickable { if (recording == null) showCaptureControls = true }){
         AndroidView(
             factory = { previewView },
-            modifier = Modifier.fillMaxSize().graphicsLayer {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val matrix = cameraFilterMatrix(filter, filterIntensity)
-                    renderEffect = android.graphics.RenderEffect
-                        .createColorFilterEffect(ColorMatrixColorFilter(matrix))
-                        .asComposeRenderEffect()
-                }
-            }
+            modifier = Modifier.fillMaxSize()
         )
         if (faceAnalysisEnabled && faceEffect != CameraFaceEffect.OFF && trackedFaceBounds.isNotEmpty()) {
             Canvas(Modifier.fillMaxSize()) {
@@ -644,15 +660,6 @@ fun FynxCameraCapturePanel(
                     } ?: Surface(Modifier.size(34.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
                     Spacer(Modifier.width(8.dp))
                     Text(profileDisplayName.ifBlank { session.username?.removePrefix("@").orEmpty() }, maxLines = 1, style = MaterialTheme.typography.labelLarge)
-                }
-            }
-        }
-        if (showCaptureControls && recording == null && !fastCapture) {
-            Surface(modifier=Modifier.align(Alignment.Center),shape=MaterialTheme.shapes.extraLarge,color=MaterialTheme.colorScheme.surface.copy(alpha=0.88f),tonalElevation=3.dp) {
-                Row(modifier=Modifier.padding(horizontal=6.dp,vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
-                    listOf(1f,2f,3f,4f).forEach { value ->
-                        TextButton(onClick={zoomRatio=value;cameraControl?.setZoomRatio(value);showCaptureControls=true},modifier=Modifier.heightIn(min=44.dp),colors=ButtonDefaults.textButtonColors(contentColor=if(kotlin.math.abs(zoomRatio-value)<0.05f)MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)){Text(value.toInt().toString()+"x")}
-                    }
                 }
             }
         }
@@ -757,6 +764,7 @@ fun FynxCameraCapturePanel(
                                 }
                             };FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null){mode=CameraMode.VIDEO;filter=CameraFilter.NATURAL;filterIntensity=1f;showCaptureControls=true}},label={Text("Video")},leadingIcon={Icon(Icons.Default.Videocam,null)})}
         }
+    }
     }
 }
 private fun rotateCameraPhotoFile(file: File) {
