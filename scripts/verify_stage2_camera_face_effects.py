@@ -9,6 +9,7 @@ camera = read("app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt")
 video = read("app/src/main/java/com/fynx/app/ui/CameraVideoEffects.kt")
 effects = read("app/src/main/java/com/fynx/app/ui/CameraFaceEffects.kt")
 build = read("app/build.gradle.kts")
+enhancer = read("app/src/main/java/com/fynx/app/ui/FynxAiPhotoEnhancer.kt")
 test = read("app/src/test/java/com/fynx/app/ui/CameraMediaReliabilityTest.kt")
 
 checks = [
@@ -21,6 +22,9 @@ checks = [
     ("Front-camera overlay is mirrored", "isFrontCamera()" in effects and "viewWidth - right" in effects),
     ("Seven tracked face effects plus Off", all(label in effects for label in ["Cute Ears", "Smart Glasses", "Royal Crown", "Puppy / Animal", "Virtual Makeup", "Hair Colour", "Funny Face"])),
     ("Face effects give a clear error when no face is detected instead of silently doing nothing", "require(faces.isNotEmpty())" in effects and "No clear face was found. Try a front-facing photo in good light." in effects and "if (faces.isEmpty()) return" not in effects),
+    ("Large photo edits share a bounded bitmap decoder", "internal fun decodeCameraEditingBitmap(file: File, maxEdge: Int = 2400)" in effects and "decodeCameraEditingBitmap(source, maxEdge = 2400)" in camera and "decodeCameraEditingBitmap(file, maxEdge = 2400)" in effects),
+    ("AI enhancement decodes high-resolution photos before allocating output pixels", "decodeCameraEditingBitmap(inputFile, maxEdge = 2048)" in enhancer and "bitmap.recycle()" in enhancer),
+    ("Gallery photos are normalized to JPEG before source and working files diverge", 'val extension = if (type == "image")' in camera and "normalizeCapturedPhoto(working, mirrorFront = false, forceJpeg = true)" in camera and "working.copyTo(original, overwrite = true)" in camera),
     ("Same sticker drawing used for saved photos", "applyCameraFaceEffectToPhotoFile" in camera and "drawFynxCameraFaceEffect(canvas" in effects),
     ("Photo rotation updates both preview and source baseline with safe file replacement", "pendingOriginalUri?.path?.let(::File)" in camera and "distinctBy { it.absolutePath }" in camera and "forEach(::rotateCameraPhotoFile)" in camera and "temp.renameTo(file)" in camera),
     ("Photo rotation compresses a non-null bitmap to a temp file before replacing both image versions", "val rotatedBitmap = android.graphics.Bitmap.createBitmap" in camera and "rotatedBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)" in camera and "temp.renameTo(file)" in camera and "forEach(::rotateCameraPhotoFile)" in camera),

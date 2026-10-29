@@ -90,12 +90,18 @@ private fun copyCameraGalleryMediaToCache(context: Context, uri: Uri): Triple<Fi
         mime.startsWith("video/") -> "video"
         else -> error("Choose an image or video from Gallery.")
     }
-    val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
-        ?.filter { it.isLetterOrDigit() }
-        ?.take(10)
-        ?.takeIf { it.isNotBlank() }
-        ?: if (type == "image") "jpg" else "mp4"
+    val extension = if (type == "image") {
+        // Normalization writes JPEG pixels, so keep the cache extension and actual MIME aligned.
+        "jpg"
+    } else {
+        MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
+            ?.filter { it.isLetterOrDigit() }
+            ?.take(10)
+            ?.takeIf { it.isNotBlank() }
+            ?: "mp4"
+    }
     val original = File.createTempFile("fynx_gallery_source_", ".$extension", context.cacheDir)
+    var workingCopy: File? = null
     try {
         val input = resolver.openInputStream(uri)
             ?: error("The selected Gallery item could not be opened.")
@@ -129,8 +135,15 @@ private fun copyCameraGalleryMediaToCache(context: Context, uri: Uri): Triple<Fi
         } else {
             original
         }
+        workingCopy = working
+        if (type == "image") {
+            // Normalize EXIF orientation and cache both versions as correctly labelled JPEGs.
+            normalizeCapturedPhoto(working, mirrorFront = false, forceJpeg = true)
+            if (working != original) working.copyTo(original, overwrite = true)
+        }
         return Triple(working, original, type)
     } catch (failure: Exception) {
+        workingCopy?.takeIf { it != original }?.delete()
         original.delete()
         throw failure
     }
@@ -350,7 +363,7 @@ fun FynxCameraCapturePanel(
                     if (selected == CameraFilter.NATURAL) {
                         source.copyTo(target, overwrite = true)
                     } else {
-                        val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
+                        val bitmap = decodeCameraEditingBitmap(source, maxEdge = 2400)
                         try {
                             val matrix = cameraFilterMatrix(selected, strength)
                             val outputBitmap = android.graphics.Bitmap.createBitmap(bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888)
@@ -371,7 +384,7 @@ fun FynxCameraCapturePanel(
                         applyCameraStudioEffectToPhotoFile(target, selectedStudioEffect)
                     }
                     if (selectedFaceEffect != CameraFaceEffect.OFF) {
-                        applyCameraFaceEffectToPhotoFile(context, target, selectedFaceEffect)
+                        applyCameraFaceEffectToPhotoFile(target, selectedFaceEffect)
                     }
                 }
             }
@@ -749,7 +762,7 @@ fun FynxCameraCapturePanel(
     }
 }
 private fun rotateCameraPhotoFile(file: File) {
-    val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: error("Unable to decode photo")
+    val bitmap = decodeCameraEditingBitmap(file, maxEdge = 2400)
     var rotated: android.graphics.Bitmap? = null
     val temp = File(file.parentFile ?: error("Photo directory is unavailable"), file.name + ".rotating-" + System.currentTimeMillis())
     try {
@@ -808,7 +821,7 @@ private fun cameraFilterMatrix(filter: CameraFilter, intensity: Float): ColorMat
     }
 }
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
-private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) {
+private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean, forceJpeg: Boolean = false) {
     val exif = ExifInterface(file.absolutePath)
     val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
     val rotation = when (orientation) {
@@ -817,8 +830,8 @@ private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) {
         ExifInterface.ORIENTATION_ROTATE_270 -> 270f
         else -> 0f
     }
-    if (!mirrorFront && rotation == 0f) return
-    val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: error("Unable to decode captured photo")
+    if (!mirrorFront && rotation == 0f && !forceJpeg) return
+    val bitmap = decodeCameraEditingBitmap(file, maxEdge = 2400)
     val matrix = Matrix().apply {
         if (rotation != 0f) postRotate(rotation)
         if (mirrorFront) postScale(-1f, 1f)

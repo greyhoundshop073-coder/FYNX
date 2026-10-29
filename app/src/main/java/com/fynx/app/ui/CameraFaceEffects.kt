@@ -7,7 +7,6 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
-import android.net.Uri
 import android.os.SystemClock
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ExperimentalGetImage
@@ -50,6 +49,21 @@ data class CameraFaceBounds(
     val right: Float,
     val bottom: Float
 )
+
+internal fun decodeCameraEditingBitmap(file: File, maxEdge: Int = 2400): Bitmap {
+    require(maxEdge > 0) { "Maximum photo edge must be positive" }
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.absolutePath, bounds)
+    require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Unable to read the selected photo" }
+    var sampleSize = 1
+    while (max(bounds.outWidth, bounds.outHeight) / sampleSize > maxEdge) sampleSize *= 2
+    val options = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+    }
+    return BitmapFactory.decodeFile(file.absolutePath, options)
+        ?: error("Unable to decode the selected photo")
+}
 
 private fun newFynxFaceDetector(): FaceDetector {
     val options = FaceDetectorOptions.Builder()
@@ -275,29 +289,34 @@ internal fun drawFynxCameraFaceEffect(canvas: Canvas, bounds: RectF, effect: Cam
 }
 
 /** Bakes the selected sticker into the outgoing photo using the same drawing function as preview. */
-internal fun applyCameraFaceEffectToPhotoFile(context: Context, file: File, effect: CameraFaceEffect) {
+internal fun applyCameraFaceEffectToPhotoFile(file: File, effect: CameraFaceEffect) {
     if (effect == CameraFaceEffect.OFF) return
+    val source = decodeCameraEditingBitmap(file, maxEdge = 2400)
     val detector = newFynxFaceDetector()
+    var output: Bitmap? = null
+    val temp = File(file.parentFile ?: error("Photo directory is unavailable"), file.name + ".face-effect-" + System.currentTimeMillis())
     try {
-        val input = InputImage.fromFilePath(context, Uri.fromFile(file))
-        val faces = Tasks.await(detector.process(input))
+        // Detect and draw in the same bounded bitmap coordinate system to avoid high-resolution
+        // face boxes drifting after downsampling and to keep memory use safe on entry-level phones.
+        val faces = Tasks.await(detector.process(InputImage.fromBitmap(source, 0)))
         require(faces.isNotEmpty()) {
             "No clear face was found. Try a front-facing photo in good light."
         }
-        val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: error("Unable to decode captured photo for face effects")
-        val output = decoded.copy(Bitmap.Config.ARGB_8888, true)
-            ?: run { decoded.recycle(); error("Unable to prepare captured photo for face effects") }
-        try {
-            val canvas = Canvas(output)
-            faces.forEach { face -> drawFynxCameraFaceEffect(canvas, RectF(face.boundingBox), effect) }
-            FileOutputStream(file).use { stream ->
-                check(output.compress(Bitmap.CompressFormat.JPEG, 95, stream)) { "Unable to save face effect" }
-            }
-        } finally {
-            output.recycle()
-            decoded.recycle()
+        output = source.copy(Bitmap.Config.ARGB_8888, true)
+            ?: error("Unable to prepare captured photo for face effects")
+        val canvas = Canvas(output)
+        faces.forEach { face -> drawFynxCameraFaceEffect(canvas, RectF(face.boundingBox), effect) }
+        FileOutputStream(temp).use { stream ->
+            check(output.compress(Bitmap.CompressFormat.JPEG, 95, stream)) { "Unable to save face effect" }
+        }
+        if (!temp.renameTo(file)) {
+            temp.copyTo(file, overwrite = true)
+            check(file.length() > 0L) { "Unable to replace the photo with its face effect" }
         }
     } finally {
+        temp.delete()
+        output?.recycle()
+        source.recycle()
         detector.close()
     }
 }
