@@ -841,13 +841,25 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     screenshot(f"{prefix}-camera-live-preview.png")
     (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + chr(10), encoding="utf-8")
     missing_live = [
-        label for label in ["Switch front/back camera", "Face FX", "Cute Ears", "Gallery", "Take photo"]
+        label for label in ["Switch front/back camera", "Looks", "Face FX", "Gallery", "Take photo"]
         if not find_control(camera_xml, [label])
     ]
     if missing_live:
         FAILURES.append(prefix + ": live camera missing visible controls: " + ", ".join(missing_live))
     else:
-        report.append("- PASS live camera screenshot exposes camera switch, tracked Face FX, Gallery and capture")
+        report.append("- PASS live camera screenshot exposes the compact top toolbar, effect-category selector and capture control")
+
+    # Face FX is deliberately grouped behind its category selector to keep the preview clean.
+    # Open that category and prove the individual tracked effects are still reachable.
+    face_fx_xml = tap_control(
+        camera_xml, ["Face FX"], f"{prefix}-camera-face-fx-category", ["Cute Ears"]
+    )
+    if face_fx_xml and find_control(face_fx_xml, ["Cute Ears"]):
+        report.append("- PASS Face FX category exposes its tracked effects without stacking every tool row on the camera")
+        screenshot(f"{prefix}-camera-face-fx-category.png")
+        camera_xml = face_fx_xml
+    else:
+        FAILURES.append(prefix + ": opening the Face FX category did not expose the Cute Ears effect")
 
     # This screen starts on the front lens. Switch to the rear lens, test the torch there,
     # and return to the front lens before the photo flow; the test labels match the real lens.
