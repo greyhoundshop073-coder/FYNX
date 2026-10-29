@@ -1685,6 +1685,55 @@ private fun MarketplacePaymentDialog(context: android.content.Context, order: Fy
 @Composable
 private fun MarketplaceSellDialog(context: android.content.Context, onPublished: (String) -> Unit, onCancel: () -> Unit) {
     var title by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var condition by remember { mutableStateOf("NEW") }; var brand by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var size by remember { mutableStateOf("") }; var color by remember { mutableStateOf("") }; var material by remember { mutableStateOf("") }; var dimensions by remember { mutableStateOf("") }; var warranty by remember { mutableStateOf("") }; var vehicleYear by remember { mutableStateOf("") }; var mileage by remember { mutableStateOf("") }; var beautyDetails by remember { mutableStateOf("") }; var serviceDetails by remember { mutableStateOf("") }; var generalDetails by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
+    var showEnhancementPicker by remember { mutableStateOf(false) }
+    var showEnhancementPreview by remember { mutableStateOf(false) }
+    var enhancementBusy by remember { mutableStateOf(false) }
+    var enhancementIndex by remember { mutableIntStateOf(-1) }
+    var enhancementSource by remember { mutableStateOf<Uri?>(null) }
+    var enhancementPreviewUri by remember { mutableStateOf<Uri?>(null) }
+    var enhancementError by remember { mutableStateOf<String?>(null) }
+    var originalByEnhancedUri by remember { mutableStateOf<Map<String, Uri>>(emptyMap()) }
+
+    fun cleanupGeneratedPhotoFiles() {
+        val generated = originalByEnhancedUri.keys.map { Uri.parse(it) } + listOfNotNull(enhancementPreviewUri)
+        FynxMarketplacePhotoEnhancement.discardAll(context, generated)
+        originalByEnhancedUri = emptyMap()
+        enhancementPreviewUri = null
+        enhancementSource = null
+        enhancementIndex = -1
+        showEnhancementPreview = false
+        showEnhancementPicker = false
+    }
+
+    fun keepOriginalPhotoPreview() {
+        FynxMarketplacePhotoEnhancement.discard(context, enhancementPreviewUri)
+        enhancementPreviewUri = null
+        enhancementSource = null
+        enhancementIndex = -1
+        showEnhancementPreview = false
+    }
+
+    fun startPhotoEnhancement(index: Int, uri: Uri) {
+        if (enhancementBusy || contextIsVideo(context, uri)) return
+        enhancementIndex = index
+        enhancementSource = uri
+        enhancementPreviewUri = null
+        enhancementError = null
+        showEnhancementPicker = false
+        enhancementBusy = true
+        scope.launch {
+            val result = FynxMarketplacePhotoEnhancement.enhance(context, uri)
+            result.onSuccess { output ->
+                enhancementPreviewUri = output
+                showEnhancementPreview = true
+            }.onFailure {
+                enhancementError = "FYNX could not separate this photo's background on this device. Your original is unchanged; try another photo or keep it as-is."
+                showEnhancementPicker = true
+            }
+            enhancementBusy = false
+        }
+    }
+
     val sellerLocationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         if (permissions.values.any { it }) {
             scope.launch {
@@ -1729,10 +1778,60 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         }.trim().take(FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA)) { uris -> if (uris.isNotEmpty()) media = FynxMarketplaceSellerFlowSupport.normalizedMedia(context, media + uris) }
-    AlertDialog(onDismissRequest = { if (!busy) onCancel() }, title = { Text("Sell on FYNX") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    AlertDialog(onDismissRequest = { if (!busy && !enhancementBusy) { cleanupGeneratedPhotoFiles(); onCancel() } }, title = { Text("Sell on FYNX") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Add product media, then enter the key details.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text("Product media (${media.size}/${FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA})", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Collections, null); Spacer(Modifier.width(5.dp)); Text("Choose media") }; OutlinedButton(onClick = { showCamera = true }, enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera") } }
-        if (media.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) { items(media, key = { it.toString() }) { uri -> Box(Modifier.width(78.dp).height(78.dp)) { val isVideo = contextIsVideo(LocalContext.current, uri); if (isVideo) Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.Videocam, "Video") } else AndroidView(factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { imageView -> imageView.setImageURI(uri) }, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))); IconButton(onClick = { media = media.filterNot { it == uri } }, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) { Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error) } } } }
+        if (media.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
+            items(media, key = { it.toString() }) { uri ->
+                Column(Modifier.width(78.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.width(78.dp).height(78.dp)) {
+                        val isVideo = contextIsVideo(LocalContext.current, uri)
+                        if (isVideo) {
+                            Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.Videocam, "Video") }
+                        } else {
+                            AndroidView(factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { imageView -> imageView.setImageURI(uri) }, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
+                        }
+                        IconButton(
+                            onClick = {
+                                media = media.filterNot { it == uri }
+                                if (originalByEnhancedUri.containsKey(uri.toString())) {
+                                    originalByEnhancedUri = originalByEnhancedUri - uri.toString()
+                                    FynxMarketplacePhotoEnhancement.discard(context, uri)
+                                }
+                            },
+                            modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
+                        ) { Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error) }
+                    }
+                    val original = originalByEnhancedUri[uri.toString()]
+                    if (original != null) {
+                        TextButton(
+                            onClick = {
+                                media = FynxMarketplaceSellerFlowSupport.normalizedMedia(
+                                    context,
+                                    media.map { if (it == uri) original else it }
+                                )
+                                originalByEnhancedUri = originalByEnhancedUri - uri.toString()
+                                FynxMarketplacePhotoEnhancement.discard(context, uri)
+                            },
+                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                        ) { Text("Undo", style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+            }
+        }
+        if (media.any { !contextIsVideo(context, it) }) {
+            OutlinedButton(
+                onClick = { showEnhancementPicker = true; enhancementError = null },
+                enabled = !busy && !enhancementBusy,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Clean up photo background (optional)") }
+            Text(
+                "Preview the result before using it. The original stays available for Undo. First use may need a one-time model download.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        enhancementError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         Text("1. Product basics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(title, { title = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) }, label = { Text("Product name") }, supportingText = { Text("Use a clear name buyers can search for.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Category", style = MaterialTheme.typography.labelLarge)
@@ -1786,7 +1885,121 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         OutlinedButton(onClick = { useCurrentListingLocation() }, enabled = !busy && !locationLoading, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (locationLoading) "Finding your area..." else "Use my current area") }
         Text("FYNX uses a human-readable area for discovery; your exact GPS coordinates are not published with the listing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delivery, { delivery = it }); Text("Delivery") }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(pickup, { pickup = it }); Text("Pickup") }; error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { listingId -> onPublished(listingId) }.onFailure { error = marketplaceSafeError(it, "Listing could not be published."); busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") } })
+    } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { listingId -> cleanupGeneratedPhotoFiles(); onPublished(listingId) }.onFailure { error = marketplaceSafeError(it, "Listing could not be published."); busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = { cleanupGeneratedPhotoFiles(); onCancel() }, enabled = !busy && !enhancementBusy) { Text("Cancel") } })
+    if (showEnhancementPicker) {
+        AlertDialog(
+            onDismissRequest = { if (!enhancementBusy) showEnhancementPicker = false },
+            title = { Text("Choose a product photo") },
+            text = {
+                Column(
+                    Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Only still photos can be cleaned up. Processing runs on your device; the original image is not overwritten.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    media.forEachIndexed { index, uri ->
+                        if (!contextIsVideo(context, uri)) {
+                            Card(Modifier.fillMaxWidth()) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    AndroidView(
+                                        factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
+                                        update = { it.setImageURI(uri) },
+                                        modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp))
+                                    )
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Photo ${index + 1}", style = MaterialTheme.typography.titleSmall)
+                                        if (originalByEnhancedUri.containsKey(uri.toString())) {
+                                            Text("Already enhanced; use Undo in the photo strip to restore it.", style = MaterialTheme.typography.bodySmall)
+                                        } else {
+                                            Text("Original retained", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    Button(
+                                        onClick = { if (!originalByEnhancedUri.containsKey(uri.toString())) startPhotoEnhancement(index, uri) },
+                                        enabled = !enhancementBusy && !originalByEnhancedUri.containsKey(uri.toString())
+                                    ) { Text("Enhance") }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showEnhancementPicker = false }, enabled = !enhancementBusy) { Text("Close") }
+            }
+        )
+    }
+    if (enhancementBusy) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Enhancing photo on this device") },
+            text = {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(Modifier.size(24.dp))
+                    Text("The first run may need to download the segmentation model. Your selected original remains unchanged.")
+                }
+            },
+            confirmButton = {}
+        )
+    }
+    if (showEnhancementPreview && enhancementSource != null && enhancementPreviewUri != null) {
+        AlertDialog(
+            onDismissRequest = { keepOriginalPhotoPreview() },
+            title = { Text("Review enhanced photo") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Compare the original with the cleaned background. Use Enhanced replaces only this item; Undo restores the original.", style = MaterialTheme.typography.bodySmall)
+                    Text("Original", style = MaterialTheme.typography.labelLarge)
+                    AndroidView(
+                        factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
+                        update = { it.setImageURI(enhancementSource) },
+                        modifier = Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+                    Text("Enhanced preview", style = MaterialTheme.typography.labelLarge)
+                    AndroidView(
+                        factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
+                        update = { it.setImageURI(enhancementPreviewUri) },
+                        modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val original = enhancementSource
+                    val enhanced = enhancementPreviewUri
+                    val index = enhancementIndex
+                    if (original != null && enhanced != null && index in media.indices && media[index] == original) {
+                        val replacedOld = media[index]
+                        media = media.toMutableList().also { it[index] = enhanced }
+                        originalByEnhancedUri = originalByEnhancedUri + (enhanced.toString() to original)
+                        if (originalByEnhancedUri.containsKey(replacedOld.toString()) && replacedOld != original) {
+                            FynxMarketplacePhotoEnhancement.discard(context, replacedOld)
+                            originalByEnhancedUri = originalByEnhancedUri - replacedOld.toString()
+                        }
+                        enhancementPreviewUri = null
+                        enhancementSource = null
+                        enhancementIndex = -1
+                        showEnhancementPreview = false
+                        enhancementError = null
+                    } else {
+                        enhancementError = "This photo changed while it was being enhanced. The original selection was kept."
+                        keepOriginalPhotoPreview()
+                    }
+                }) { Text("Use Enhanced") }
+            },
+            dismissButton = { TextButton(onClick = { keepOriginalPhotoPreview() }) { Text("Keep Original") } }
+        )
+    }
     if (showCamera) Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, _ -> media = FynxMarketplaceSellerFlowSupport.addMedia(context, media, uri); showCamera = false }, onDismiss = { showCamera = false }) } } }
 }
 
