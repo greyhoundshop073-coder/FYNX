@@ -2172,11 +2172,12 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                     val index = enhancementIndex
                     if (original != null && enhanced != null && index in media.indices && media[index] == original) {
                         val replacedOld = media[index]
+                        // Re-enhancement must keep Undo pointed at the first, untouched source photo.
+                        val rootOriginal = originalByEnhancedUri[original.toString()] ?: original
                         media = media.toMutableList().also { it[index] = enhanced }
-                        originalByEnhancedUri = originalByEnhancedUri + (enhanced.toString() to original)
-                        if (originalByEnhancedUri.containsKey(replacedOld.toString()) && replacedOld != original) {
+                        originalByEnhancedUri = (originalByEnhancedUri - replacedOld.toString()) + (enhanced.toString() to rootOriginal)
+                        if (replacedOld != rootOriginal) {
                             FynxMarketplacePhotoEnhancement.discard(replacedOld)
-                            originalByEnhancedUri = originalByEnhancedUri - replacedOld.toString()
                         }
                         enhancementPreviewUri = null
                         enhancementSource = null
