@@ -269,23 +269,10 @@ fun FynxCameraCapturePanel(
             .also { it.setAnalyzer(faceAnalyzer.executor, faceAnalyzer) }
     }
     LaunchedEffect(faceEffect) { if (faceEffect == CameraFaceEffect.OFF) trackedFaceBounds = emptyList() }
-    // Apply live colour looks directly to PreviewView. A Compose graphicsLayer around the
-    // camera AndroidView can cover sibling controls after CameraX rebinds a lens on API 35.
-    // Keep colour processing on the internal preview texture rather than the outer
-    // PreviewView. A RenderEffect on the parent can promote the whole camera surface above
-    // Compose siblings after CameraX rebinds a lens, hiding flash/Gallery/capture controls.
-    LaunchedEffect(filter, filterIntensity, lens, previewView) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val effect = android.graphics.RenderEffect.createColorFilterEffect(
-                ColorMatrixColorFilter(cameraFilterMatrix(filter, filterIntensity))
-            )
-            previewView.post {
-                // COMPATIBLE mode uses TextureView, keeping its filtered pixels in the View
-                // hierarchy while Compose draws camera controls over it.
-                previewView.getChildAt(0)?.setRenderEffect(effect)
-            }
-        }
-    }
+    // Do not apply Android RenderEffect to PreviewView's internal TextureView. On Android 15
+    // emulator/device camera rebinding can leave the TextureView above Compose, corrupt the
+    // preview and swallow Gallery/flash/capture controls. Looks are applied to the captured
+    // image in the editor, so keep the live preview clean and the controls reliably interactive.
 
     LaunchedEffect(recording != null, recordingStartedAt) { while (recording != null) { recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L); delay(200L) } }
     LaunchedEffect(recording, recordingStartedAt, videoNoteMode) {
@@ -667,10 +654,10 @@ fun FynxCameraCapturePanel(
                 }
             }
         }
-        if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp),horizontalAlignment=Alignment.CenterHorizontally){
+        if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp),horizontalAlignment=Alignment.CenterHorizontally){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")};if(!fastCapture && !liveProofMode)TextButton(onClick={galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo));showCaptureControls=true},enabled=recording==null){Text("Gallery")}}
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
-            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.54f).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.43f).verticalScroll(rememberScrollState())) {
             if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
             if (liveProofMode) {
                 Button(onClick = onLiveProofStart, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
@@ -682,7 +669,7 @@ fun FynxCameraCapturePanel(
             }
             if (recording == null && !fastCapture && mode == CameraMode.PHOTO) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Face FX", style = MaterialTheme.typography.labelMedium)
+                    Text("Face FX", style = MaterialTheme.typography.labelMedium, color = Color.White)
                     Spacer(Modifier.width(8.dp))
                     Text("Tracked on-device · photo effects", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
                 }
@@ -700,7 +687,7 @@ fun FynxCameraCapturePanel(
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Background", style = MaterialTheme.typography.labelMedium)
+                    Text("Background", style = MaterialTheme.typography.labelMedium, color = Color.White)
                     Spacer(Modifier.width(8.dp))
                     Text("On-device photo effect · applied after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
                 }
@@ -715,7 +702,7 @@ fun FynxCameraCapturePanel(
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("AI Studio", style = MaterialTheme.typography.labelMedium)
+                    Text("AI Studio", style = MaterialTheme.typography.labelMedium, color = Color.White)
                     Spacer(Modifier.width(8.dp))
                     Text("Local photo styling · applied after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
                 }
@@ -730,9 +717,9 @@ fun FynxCameraCapturePanel(
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Looks", style = MaterialTheme.typography.labelMedium)
+                    Text("Looks", style = MaterialTheme.typography.labelMedium, color = Color.White)
                     Spacer(Modifier.width(8.dp))
-                    Text(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) "Live preview" else "Photo preview", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
+                    Text("Applied after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.82f))
                 }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     CameraFilter.values().forEach { option ->
