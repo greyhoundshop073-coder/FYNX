@@ -97,6 +97,12 @@ checks = [
     ("seller form shows category-specific product specifications", all(term in marketplace for term in ('"Brand"', '"Model / model number"', '"Size / fit"', '"Dimensions (e.g. 120 × 60 × 75 cm)"', '"Year"', '"Ingredients, skin/hair type, or expiry details"', '"What is included, duration, and service area"'))),
     ("switching seller category clears prior category-specific values to prevent incorrect details being published", "fun clearCategorySpecificFields()" in marketplace and "if (category != item) clearCategorySpecificFields()" in marketplace),
     ("category specifications are included in the saved product description with bounded length", 'append("\\n\\nProduct specifications\\n")' in marketplace and "MAX_DESCRIPTION_LENGTH" in marketplace and "listingDescription" in marketplace),
+    ("Marketplace descriptions reserve space for category specifications within the backend 4,000-character limit",
+     "val maximumSavedDescriptionLength = minOf(4_000, FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)" in marketplace
+     and "val descriptionBodyLimit = (maximumSavedDescriptionLength - specificationSection.length).coerceAtLeast(0)" in marketplace
+     and "append(desc.trim().take(descriptionBodyLimit))" in marketplace
+     and "append(specificationSection)" in marketplace
+     and "Up to $descriptionBodyLimit characters are available for this category." in marketplace),
     ("seller publishes selected condition and composed specifications through the existing listing path", 'title, listingDescription, "", price.toDouble(), currency, category, condition' in marketplace and 'validListing(title, listingDescription' in marketplace),
     ("active marketplace remains backend listing driven", "FynxRemoteSocialClient.listings" in marketplace),
     ("Marketplace discovery includes the signed-in seller own active products while the detail UI disables self-purchase and backend checkout rejects it", 'const params = [req.user.sub]' in discovery_routes and 'l.seller_id<>$1' not in discovery_routes and 'canPurchase = !isOwnListing' in marketplace and 'Buyers can see it in Marketplace, but you cannot buy your own product.' in marketplace and 'enabled = canPurchase && l.quantity > 0' in marketplace and "you cannot purchase your own listing" in marketplace_checkout_route),
