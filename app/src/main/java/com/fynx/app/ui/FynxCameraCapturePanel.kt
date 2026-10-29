@@ -827,7 +827,7 @@ fun FynxCameraCapturePanel(
                                 )
                                 Text(
                                     when (selectedCameraTool) {
-                                        "Face FX" -> "Face-tracked stickers · after capture"
+                                        "Face FX" -> "Live face tracking · saved with photo"
                                         "Background" -> "Portrait and scene effects · after capture"
                                         "AI Studio" -> "Creative photo treatments · after capture"
                                         else -> "Choose a look for your photo"
@@ -910,7 +910,7 @@ fun FynxCameraCapturePanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
+                if (!fastCapture) Surface(
                     onClick = { showEffectTray = !showEffectTray; showCaptureControls = true },
                     modifier = Modifier.size(width = 76.dp, height = 76.dp),
                     shape = RoundedCornerShape(18.dp),
@@ -927,12 +927,12 @@ fun FynxCameraCapturePanel(
                     ) {
                         Text("✧", style = MaterialTheme.typography.titleLarge, color = Color.White)
                         Text(
-                            if (showEffectTray) "Effects on" else "Effects",
+                            "Effects",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White
                         )
                     }
-                }
+                } else Spacer(Modifier.size(width = 76.dp, height = 76.dp))
                 FilledIconButton(onClick = {
                     if (mode == CameraMode.PHOTO) {
                         if (captureTimerSeconds > 0) {
@@ -996,12 +996,11 @@ fun FynxCameraCapturePanel(
                         )
                     }
                 }
-                Surface(
+                if (!fastCapture && !liveProofMode) Surface(
                     onClick = {
                         galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
                         showCaptureControls = true
                     },
-                    enabled = recording == null && !fastCapture && !liveProofMode,
                     modifier = Modifier.size(width = 76.dp, height = 76.dp),
                     shape = RoundedCornerShape(18.dp),
                     color = Color(0xFF22252E),
@@ -1012,10 +1011,10 @@ fun FynxCameraCapturePanel(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text("▧", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
                         Text("Gallery", style = MaterialTheme.typography.labelSmall, color = Color.White)
                     }
-                }
+                } else Spacer(Modifier.size(width = 76.dp, height = 76.dp))
             }
             Row(
                 Modifier.fillMaxWidth().padding(top = 6.dp),
