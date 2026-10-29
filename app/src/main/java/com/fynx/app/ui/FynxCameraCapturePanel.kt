@@ -238,6 +238,7 @@ fun FynxCameraCapturePanel(
                     pendingUri = Uri.fromFile(working)
                     pendingOriginalUri = Uri.fromFile(original)
                     pendingType = if (selectedType == "video" && videoNoteMode) "video_note" else selectedType
+                    selectedCameraTool = "Looks"
                     filter = CameraFilter.NATURAL
                     faceEffect = CameraFaceEffect.OFF
                     backgroundEffect = CameraBackgroundEffect.OFF
@@ -328,7 +329,7 @@ fun FynxCameraCapturePanel(
     }
     DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
-    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; videoStyle = CameraVideoStyle.NATURAL; videoCaptionText = ""; applyingVideoEffects = false; generatingCaptions = false; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
+    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; videoStyle = CameraVideoStyle.NATURAL; videoCaptionText = ""; selectedCameraTool = "Looks"; applyingVideoEffects = false; generatingCaptions = false; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
     fun rotatePhoto() {
         val currentUri = pendingUri ?: return
         if (pendingType != "image") return
@@ -474,6 +475,7 @@ fun FynxCameraCapturePanel(
                     pendingUri = Uri.fromFile(file)
                     pendingOriginalUri = Uri.fromFile(original)
                     pendingType = "image"
+                    selectedCameraTool = "Looks"
                     error = null
                     showCaptureControls = true
                     if (filter != CameraFilter.NATURAL || faceEffect != CameraFaceEffect.OFF || backgroundEffect != CameraBackgroundEffect.OFF || studioEffect != CameraStudioEffect.OFF) applyFilterToPhoto(filter, filterIntensity)
@@ -492,73 +494,114 @@ fun FynxCameraCapturePanel(
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp)){
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}
                 Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.30f else 0.55f).verticalScroll(rememberScrollState())) {
-                if(previewType=="image"){Text("Edit photo",style=MaterialTheme.typography.labelLarge)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                        CameraFilter.values().forEach{option->
+                if (previewType == "image") {
+                    Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        listOf("Looks", "Face FX", "Background", "AI Studio").forEach { category ->
                             FilterChip(
-                                selected=filter==option,
-                                enabled=!enhancing && !applyingFilter,
-                                onClick={applyFilterToPhoto(option, filterIntensity)},
-                                label={Text(option.label)}
+                                selected = selectedCameraTool == category,
+                                onClick = { selectedCameraTool = category },
+                                label = { Text(category) }
                             )
                         }
                     }
-                    Text("Face FX", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CameraFaceEffect.values().forEach { option ->
-                            FilterChip(
-                                selected = faceEffect == option,
-                                enabled = !enhancing && !applyingFilter,
-                                onClick = {
-                                    faceEffect = option
-                                    applyFilterToPhoto(filter, filterIntensity, faceEffectOverride = option)
-                                },
-                                label = { Text(option.label) }
-                            )
+                    when (selectedCameraTool) {
+                        "Face FX" -> {
+                            Text("Face FX", style = MaterialTheme.typography.labelLarge)
+                            Text("Face-tracked photo effects", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CameraFaceEffect.values().forEach { option ->
+                                    FilterChip(
+                                        selected = faceEffect == option,
+                                        enabled = !enhancing && !applyingFilter,
+                                        onClick = {
+                                            faceEffect = option
+                                            applyFilterToPhoto(filter, filterIntensity, faceEffectOverride = option)
+                                        },
+                                        label = { Text(option.label) }
+                                    )
+                                }
+                            }
                         }
-                    }
-                    Text("AI Studio", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CameraStudioEffect.values().forEach { option ->
-                            FilterChip(
-                                selected = studioEffect == option,
-                                enabled = !enhancing && !applyingFilter,
-                                onClick = {
-                                    studioEffect = option
-                                    applyFilterToPhoto(filter, filterIntensity, studioEffectOverride = option)
-                                },
-                                label = { Text(option.label) }
-                            )
+                        "Background" -> {
+                            Text("Background", style = MaterialTheme.typography.labelLarge)
+                            Text("Portrait blur and scene replacements · applied after capture", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CameraBackgroundEffect.values().forEach { option ->
+                                    FilterChip(
+                                        selected = backgroundEffect == option,
+                                        enabled = !enhancing && !applyingFilter,
+                                        onClick = {
+                                            backgroundEffect = option
+                                            applyFilterToPhoto(filter, filterIntensity, backgroundEffectOverride = option)
+                                        },
+                                        label = { Text(option.label) }
+                                    )
+                                }
+                            }
+                            if (backgroundEffect != CameraBackgroundEffect.OFF) {
+                                Text("Subject separation runs on-device; no camera image is uploaded for this effect.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
-                    }
-                    Text("Mature Look is a stylized edit; these effects run locally on the photo.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Background replacement", style = MaterialTheme.typography.labelLarge)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CameraBackgroundEffect.values().forEach { option ->
-                            FilterChip(
-                                selected = backgroundEffect == option,
-                                enabled = !enhancing && !applyingFilter,
-                                onClick = {
-                                    backgroundEffect = option
-                                    applyFilterToPhoto(filter, filterIntensity, backgroundEffectOverride = option)
-                                },
-                                label = { Text(option.label) }
-                            )
+                        "AI Studio" -> {
+                            Text("AI Studio", style = MaterialTheme.typography.labelLarge)
+                            Text("Local photo styling · applied after capture", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CameraStudioEffect.values().forEach { option ->
+                                    FilterChip(
+                                        selected = studioEffect == option,
+                                        enabled = !enhancing && !applyingFilter,
+                                        onClick = {
+                                            studioEffect = option
+                                            applyFilterToPhoto(filter, filterIntensity, studioEffectOverride = option)
+                                        },
+                                        label = { Text(option.label) }
+                                    )
+                                }
+                            }
+                            Text("Mature Look is a stylized edit, not a genuine age-prediction model.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        else -> {
+                            Text("Looks", style = MaterialTheme.typography.labelLarge)
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CameraFilter.values().forEach { option ->
+                                    FilterChip(
+                                        selected = filter == option,
+                                        enabled = !enhancing && !applyingFilter,
+                                        onClick = { applyFilterToPhoto(option, filterIntensity) },
+                                        label = { Text(option.label) }
+                                    )
+                                }
+                            }
+                            if (filter != CameraFilter.NATURAL) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Intensity", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(64.dp))
+                                    Slider(
+                                        value = filterIntensity,
+                                        onValueChange = { filterIntensity = it },
+                                        onValueChangeFinished = { applyFilterToPhoto(filter, filterIntensity) },
+                                        valueRange = 0f..1f,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
                         }
                     }
                     if (applyingFilter) {
-                        Text("Applying selected effects on this device…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text("Applying selected effect on this device…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
-                    if (backgroundEffect != CameraBackgroundEffect.OFF) {
-                        Text("Subject separation runs on-device; no camera image is uploaded for this effect.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(
+                        onClick = ::enhancePhoto,
+                        enabled = !enhancing && !applyingFilter,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Text(if (enhancing) "Enhancing…" else "✨ Auto Enhance")
                     }
-                    if(filter != CameraFilter.NATURAL){
-                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                            Text("Intensity",style=MaterialTheme.typography.labelMedium,modifier=Modifier.width(56.dp))
-                            Slider(value=filterIntensity,onValueChange={filterIntensity=it},onValueChangeFinished={applyFilterToPhoto(filter, filterIntensity)},valueRange=0f..1f,modifier=Modifier.weight(1f))
-                        }
-                    }
-                    OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing && !applyingFilter,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}}
+                }
                 else {
                     Text("Video styles", style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
