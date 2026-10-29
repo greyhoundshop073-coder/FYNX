@@ -154,7 +154,8 @@ object FynxMarketplaceClient {
         condition: String,
         location: String,
         price: Double,
-        quantity: Int
+        quantity: Int,
+        mediaIds: List<String>? = null
     ): Result<Unit> {
         val id = listingId.trim().toLongOrNull()?.takeIf { it > 0 }
             ?: return Result.failure(IllegalArgumentException("Invalid listing id."))
@@ -178,6 +179,14 @@ object FynxMarketplaceClient {
             .put("location", cleanLocation.take(160))
             .put("price", price)
             .put("quantity", quantity)
+        if (mediaIds != null) {
+            val cleanMediaIds = mediaIds.map { it.trim() }
+            if (cleanMediaIds.isEmpty() || cleanMediaIds.size > FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA ||
+                cleanMediaIds.any { it.toLongOrNull()?.let { value -> value > 0L } != true } ||
+                cleanMediaIds.distinct().size != cleanMediaIds.size
+            ) return Result.failure(IllegalArgumentException("Choose between 1 and 12 valid product photos or videos."))
+            payload.put("mediaIds", JSONArray().apply { cleanMediaIds.forEach { put(it) } })
+        }
         return FynxBackendClient.postJson(context, "/api/marketplace/listings/$id/update", payload.toString()).map { }
     }
 

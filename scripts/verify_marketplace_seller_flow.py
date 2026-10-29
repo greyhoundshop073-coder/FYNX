@@ -208,7 +208,7 @@ checks = [
      and "internal fun marketplaceSubcategoriesFor(category: String)" in marketplace),
     ("My Shop edit persists the selected subcategory through its existing authenticated listing update",
      "marketplaceDescriptionWithSubcategory(editDescription, editSubcategory)" in seller_center
-     and "updateListing(context, selectedListing.id, editTitle, savedDescription, editCategory" in seller_center
+     and "FynxMarketplaceClient.updateListing(" in seller_center and "savedDescription," in seller_center and "mediaIds = uploadedMedia?.map { it.id }" in seller_center
      and seller_center.count("description = savedDescription,") == 2
      and "private fun marketplaceDescriptionSubcategory(description: String)" in seller_center
      and "private fun marketplaceDescriptionWithSubcategory(description: String, subcategory: String)" in seller_center
@@ -494,6 +494,25 @@ checks.extend([
      and '"Products will appear here when live seller listings are available."' in hero
      and 'contentDescription = "Refresh advertised products"' in hero),
 
+])
+checks.extend([
+    ("My Shop listing editor offers real replacement photo/video selection and uploads selected media before saving",
+     "PickMultipleVisualMedia(FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA)" in seller_center
+     and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in seller_center
+     and "FynxProductionMessaging.uploadMedia(context, uri, mimeType).getOrThrow()" in seller_center
+     and "mediaIds = uploadedMedia?.map { it.id }" in seller_center
+     and "mediaIds = replacementIds ?: current.mediaIds" in seller_center),
+    ("Marketplace update client sends replacement media only when explicitly selected and enforces the media limit",
+     "mediaIds: List<String>? = null" in marketplace_client
+     and "cleanMediaIds.size > FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA" in marketplace_client
+     and 'payload.put("mediaIds", JSONArray().apply { cleanMediaIds.forEach { put(it) } })' in marketplace_client),
+    ("Marketplace update backend enforces media count, unique identifiers, owner-only access and safe image/video types",
+     'Object.prototype.hasOwnProperty.call(req.body || {}, "mediaIds")' in social_routes
+     and "rawMediaIds.length < 1 || rawMediaIds.length > 12" in social_routes
+     and "new Set(replacementMediaIds).size !== replacementMediaIds.length" in social_routes
+     and "SELECT id, mime_type FROM message_media WHERE id = ANY($1::bigint[]) AND owner_id = $2" in social_routes
+     and "media_ids = COALESCE($8::jsonb, media_ids)" in social_routes
+     and "Marketplace listing media must be images or videos" in social_routes),
 ])
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
