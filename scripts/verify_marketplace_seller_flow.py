@@ -180,6 +180,8 @@ checks = [
      and seller_center.count("description = savedDescription,") == 2
      and "private fun marketplaceDescriptionSubcategory(description: String)" in seller_center
      and "private fun marketplaceDescriptionWithSubcategory(description: String, subcategory: String)" in seller_center
+     and 'val cleaned = Regex("' in seller_center
+     and 'val cleaned = Regex("(?m)' not in seller_center
      and 'val subcategoryLine = "Subcategory: ${subcategory.trim()}' in seller_center),
     ("My Shop stock editor and inventory cards label total stock and backend rejects quantities below existing reservations", 'label = { Text("Total stock (0 = out of stock)") }' in seller_center and '${listing.quantity} total stock • ${listing.category} • ${listing.condition}' in seller_center and "Stock cannot be reduced below items already reserved by active orders." in seller_center and "if (quantity < reservedQuantity)" in social_routes and "reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE" in social_routes),
     ("buyer-facing Marketplace uses available stock after reservations while My Shop retains total stock", social_routes.count("AS available_quantity") >= 3 and discovery_routes.count("AS available_quantity") >= 2 and 'val stockValue = if (o.has("available_quantity") && !o.isNull("available_quantity")) {' in remote_client and 'o.opt("available_quantity")' in remote_client and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client and 'label = { Text("Total stock (0 = out of stock)") }' in seller_center),
