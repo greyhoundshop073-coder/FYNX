@@ -600,11 +600,12 @@ fun AppearanceDialog(current: String, onSelected: (String) -> Unit, onDismiss: (
 fun AccentDialog(current: FynxAccent, onSelected: (FynxAccent) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Colors & accent") }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            FynxAccent.entries.forEach { option ->
+            listOf(FynxAccent.Blue, FynxAccent.Purple, FynxAccent.Green).forEach { option ->
                 val label = when (option) {
-                    FynxAccent.Charcoal -> "Charcoal Black"
+                    FynxAccent.Charcoal -> "Charcoal Black" // Legacy enum value; not shown in this picker.
                     FynxAccent.Blue -> "Azure Blue"
                     FynxAccent.Purple -> "FYNX Purple"
+                    FynxAccent.Green -> "Green"
                 }
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 4.dp),
