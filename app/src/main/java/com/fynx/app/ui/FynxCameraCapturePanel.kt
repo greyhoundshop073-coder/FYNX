@@ -212,8 +212,8 @@ fun FynxCameraCapturePanel(
                         CameraFilter.values().forEach{option->
                             FilterChip(
                                 selected=filter==option,
-                                enabled=!enhancing,
-                                onClick={applyFilterToPhoto(option, if(option==CameraFilter.NATURAL) 0f else filterIntensity)},
+                                enabled=!enhancing && !applyingFilter,
+                                onClick={applyFilterToPhoto(option, filterIntensity)},
                                 label={Text(option.label)}
                             )
                         }
@@ -224,7 +224,7 @@ fun FynxCameraCapturePanel(
                             Slider(value=filterIntensity,onValueChange={filterIntensity=it},onValueChangeFinished={applyFilterToPhoto(filter, filterIntensity)},valueRange=0f..1f,modifier=Modifier.weight(1f))
                         }
                     }
-                    OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}}
+                    OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing && !applyingFilter,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}}
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing)retake()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing)rotatePhoto()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing)onCaptured(previewUri,previewType)},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
             }
         };return
