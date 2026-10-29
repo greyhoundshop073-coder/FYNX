@@ -77,7 +77,7 @@ private fun marketplaceDescriptionWithSubcategory(description: String, subcatego
     val existing = withoutOldSubcategory.trimEnd()
     val header = "Product specifications\n"
     val headerIndex = existing.indexOf(header)
-    val subcategoryLine = "Subcategory: \${subcategory.trim()}\n"
+    val subcategoryLine = "Subcategory: ${subcategory.trim()}\n"
     return if (headerIndex >= 0) {
         val insertIndex = headerIndex + header.length
         (
@@ -86,9 +86,9 @@ private fun marketplaceDescriptionWithSubcategory(description: String, subcatego
                 existing.substring(insertIndex).trimStart('\n')
         ).trim()
     } else if (cleaned.isBlank()) {
-        "Product specifications\nSubcategory: \${subcategory.trim()}"
+        "Product specifications\nSubcategory: ${subcategory.trim()}"
     } else {
-        "$cleaned\n\nProduct specifications\nSubcategory: \${subcategory.trim()}"
+        "$cleaned\n\nProduct specifications\nSubcategory: ${subcategory.trim()}"
     }
 }
 
