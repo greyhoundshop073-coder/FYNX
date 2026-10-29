@@ -310,7 +310,19 @@ fun FynxCameraCapturePanel(
     DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
     fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; videoStyle = CameraVideoStyle.NATURAL; videoCaptionText = ""; applyingVideoEffects = false; generatingCaptions = false; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
-    fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
+    fun rotatePhoto() {
+        val currentUri = pendingUri ?: return
+        if (pendingType != "image") return
+        val currentFile = currentUri.path?.let(::File) ?: return
+        val originalFile = pendingOriginalUri?.path?.let(::File)
+        runCatching {
+            // Rotate the editing baseline too, so changing an effect after Rotate cannot restore
+            // the old orientation. Write via a same-directory temporary file before replacement.
+            listOfNotNull(originalFile, currentFile)
+                .distinctBy { it.absolutePath }
+                .forEach(::rotateCameraPhotoFile)
+        }.onFailure { error = it.message ?: "Photo rotation failed" }
+    }
     fun applyFilterToPhoto(
         selected: CameraFilter,
         intensity: Float = filterIntensity,
@@ -367,7 +379,34 @@ fun FynxCameraCapturePanel(
             applyingFilter = false
         }
     }
-    fun enhancePhoto() { val source=pendingUri ?: return; if(pendingType!="image" || enhancing)return; enhancing=true; error=null; scope.launch { val result=withContext(Dispatchers.IO){FynxAiPhotoEnhancer.enhance(context,source)}; result.onSuccess { enhancedUri -> deleteUri(source); pendingUri=enhancedUri; filter=CameraFilter.NATURAL; filterIntensity=1f; error=null }.onFailure { error=it.message ?: "AI photo enhancement failed" }; enhancing=false } }
+    fun enhancePhoto() {
+        val source = pendingUri ?: return
+        if (pendingType != "image" || enhancing) return
+        enhancing = true
+        error = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { FynxAiPhotoEnhancer.enhance(context, source) }
+            result.onSuccess { enhancedUri ->
+                val previousOriginal = pendingOriginalUri
+                if (enhancedUri != source) deleteUri(source)
+                if (previousOriginal != null && previousOriginal != source && previousOriginal != enhancedUri) {
+                    deleteUri(previousOriginal)
+                }
+                // The enhancement already includes the active image edits. Make it the new
+                // baseline and clear baked effect selections so the next edit is not applied twice.
+                pendingUri = enhancedUri
+                pendingOriginalUri = enhancedUri
+                filter = CameraFilter.NATURAL
+                faceEffect = CameraFaceEffect.OFF
+                backgroundEffect = CameraBackgroundEffect.OFF
+                studioEffect = CameraStudioEffect.OFF
+                filterIntensity = 1f
+                trackedFaceBounds = emptyList()
+                error = null
+            }.onFailure { error = it.message ?: "AI photo enhancement failed" }
+            enhancing = false
+        }
+    }
     fun generateCaptionsForVideo() {
         val current = pendingUri ?: return
         if (pendingType != "video" && pendingType != "video_note") return
@@ -709,6 +748,29 @@ fun FynxCameraCapturePanel(
         }
     }
 }
+private fun rotateCameraPhotoFile(file: File) {
+    val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: error("Unable to decode photo")
+    var rotated: android.graphics.Bitmap? = null
+    val temp = File(file.parentFile ?: error("Photo directory is unavailable"), file.name + ".rotating-" + System.currentTimeMillis())
+    try {
+        val matrix = Matrix().apply { postRotate(90f) }
+        rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        FileOutputStream(temp).use {
+            check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) {
+                "Unable to save rotated photo"
+            }
+        }
+        if (!temp.renameTo(file)) {
+            temp.copyTo(file, overwrite = true)
+            check(file.length() > 0L) { "Unable to replace rotated photo" }
+        }
+    } finally {
+        temp.delete()
+        rotated?.takeIf { it !== bitmap }?.recycle()
+        bitmap.recycle()
+    }
+}
+
 private fun formatCameraRecordingTime(milliseconds:Long):String{val totalSeconds=milliseconds/1000L;return "%02d:%02d".format(totalSeconds/60L,totalSeconds%60L)}
 enum class CameraMode{PHOTO,VIDEO}
 enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float,val warmth:Float = 0f){
