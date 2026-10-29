@@ -695,24 +695,13 @@ fun FynxCameraCapturePanel(
                     Icon(Icons.Default.Close, "Close camera")
                 }
                 if (!liveProofMode) {
-                    Surface(
-                        modifier = Modifier.widthIn(max = 96.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color.Black.copy(alpha = 0.68f)
-                    ) {
-                        Row(Modifier.padding(horizontal = 7.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            profilePhotoId?.takeIf { it.isNotBlank() }?.let { photoId ->
-                                FynxRemoteMedia("/api/media/$photoId", "image", Modifier.size(26.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop, rounded = true)
-                            } ?: Surface(Modifier.size(26.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
-                            Spacer(Modifier.width(5.dp))
-                            Text(
-                                profileDisplayName.ifBlank { session.username?.removePrefix("@").orEmpty() },
-                                maxLines = 1,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.widthIn(max = 52.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        "FYNX CAMERA",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
                 }
                 Spacer(Modifier.weight(1f))
                 IconButton(
