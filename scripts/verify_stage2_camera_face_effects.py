@@ -18,6 +18,9 @@ checks = [
     ("Seven tracked face effects plus Off", all(label in effects for label in ["Cute Ears", "Smart Glasses", "Royal Crown", "Puppy / Animal", "Virtual Makeup", "Hair Colour", "Funny Face"])),
     ("Same sticker drawing used for saved photos", "applyCameraFaceEffectToPhotoFile" in camera and "drawFynxCameraFaceEffect(canvas" in effects),
     ("Face-effect choices covered by unit test", "stageTwoFaceEffectsHaveStableUserFacingOptions" in test),
+    ("Gallery can select both photos and videos through the system photo picker", "ActivityResultContracts.PickVisualMedia()" in camera and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in camera),
+    ("Gallery media is copied locally into bounded app-cache files before editing", "copyCameraGalleryMediaToCache(context, selectedUri)" in camera and "resolver.openInputStream(uri)" in camera and "MAX_CAMERA_GALLERY_IMAGE_BYTES" in camera and "MAX_CAMERA_GALLERY_VIDEO_BYTES" in camera),
+    ("Gallery selections preserve the original image and route video notes correctly", "pendingOriginalUri = Uri.fromFile(original)" in camera and "if (selectedType == \"video\" && videoNoteMode) \"video_note\" else selectedType" in camera),
     ("Existing capture-to-post callback preserved", "onCaptured(previewUri,previewType)" in camera),
 ]
 for name, ok in checks:

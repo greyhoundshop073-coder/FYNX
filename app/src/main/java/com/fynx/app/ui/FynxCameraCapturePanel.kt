@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -10,8 +11,10 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
+import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -66,6 +69,69 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+
+private const val MAX_CAMERA_GALLERY_IMAGE_BYTES = 96L * 1024 * 1024
+private const val MAX_CAMERA_GALLERY_VIDEO_BYTES = 512L * 1024 * 1024
+
+/**
+ * Copies selected media into app-owned cache before preview/editing. The picker URI is never
+ * uploaded automatically; the existing composer callback runs only after the user taps Send.
+ * Returns (working file, untouched original, semantic media type).
+ */
+private fun copyCameraGalleryMediaToCache(context: Context, uri: Uri): Triple<File, File, String> {
+    val resolver = context.contentResolver
+    val mime = resolver.getType(uri)?.substringBefore(';')?.trim()?.lowercase()
+        ?: error("The selected media type could not be determined.")
+    val type = when {
+        mime.startsWith("image/") -> "image"
+        mime.startsWith("video/") -> "video"
+        else -> error("Choose an image or video from Gallery.")
+    }
+    val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
+        ?.filter { it.isLetterOrDigit() }
+        ?.take(10)
+        ?.takeIf { it.isNotBlank() }
+        ?: if (type == "image") "jpg" else "mp4"
+    val original = File.createTempFile("fynx_gallery_source_", ".$extension", context.cacheDir)
+    try {
+        val input = resolver.openInputStream(uri)
+            ?: error("The selected Gallery item could not be opened.")
+        val maxBytes = if (type == "image") MAX_CAMERA_GALLERY_IMAGE_BYTES else MAX_CAMERA_GALLERY_VIDEO_BYTES
+        input.use { source ->
+            FileOutputStream(original).use { output ->
+                val buffer = ByteArray(64 * 1024)
+                var totalBytes = 0L
+                while (true) {
+                    val count = source.read(buffer)
+                    if (count < 0) break
+                    totalBytes += count.toLong()
+                    require(totalBytes <= maxBytes) {
+                        if (type == "image") "The selected photo is too large (maximum 96 MB)."
+                        else "The selected video is too large (maximum 512 MB)."
+                    }
+                    output.write(buffer, 0, count)
+                }
+            }
+        }
+        require(original.length() > 0L) { "The selected Gallery item is empty." }
+        val working = if (type == "image") {
+            val copy = File.createTempFile("fynx_gallery_work_", ".$extension", context.cacheDir)
+            try {
+                original.copyTo(copy, overwrite = true)
+            } catch (failure: Exception) {
+                copy.delete()
+                throw failure
+            }
+            copy
+        } else {
+            original
+        }
+        return Triple(working, original, type)
+    } catch (failure: Exception) {
+        original.delete()
+        throw failure
+    }
+}
 
 @Composable
 fun FynxCameraCapturePanel(
@@ -141,6 +207,35 @@ fun FynxCameraCapturePanel(
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
+    val galleryPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { selectedUri ->
+        if (selectedUri != null) {
+            error = null
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { copyCameraGalleryMediaToCache(context, selectedUri) }
+                }
+                result.onSuccess { (working, original, selectedType) ->
+                    pendingUri = Uri.fromFile(working)
+                    pendingOriginalUri = Uri.fromFile(original)
+                    pendingType = if (selectedType == "video" && videoNoteMode) "video_note" else selectedType
+                    filter = CameraFilter.NATURAL
+                    faceEffect = CameraFaceEffect.OFF
+                    backgroundEffect = CameraBackgroundEffect.OFF
+                    studioEffect = CameraStudioEffect.OFF
+                    videoStyle = CameraVideoStyle.NATURAL
+                    videoCaptionText = ""
+                    filterIntensity = 1f
+                    trackedFaceBounds = emptyList()
+                    showCaptureControls = true
+                }.onFailure {
+                    error = it.message ?: "The selected media could not be opened."
+                }
+            }
+        }
+    }
+
     val faceAnalysisEnabled = faceEffect != CameraFaceEffect.OFF && mode == CameraMode.PHOTO && pendingUri == null
     val faceAnalyzer = remember(context, previewView) {
         FynxCameraFaceAnalyzer(
@@ -486,7 +581,7 @@ fun FynxCameraCapturePanel(
             }
         }
         if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp),horizontalAlignment=Alignment.CenterHorizontally){
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")}}
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")};if(!fastCapture && !liveProofMode)TextButton(onClick={galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo));showCaptureControls=true},enabled=recording==null){Text("Gallery")}}
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
             if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
             if (liveProofMode) {
