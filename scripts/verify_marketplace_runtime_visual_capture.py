@@ -95,6 +95,35 @@ checks = [
     ),
 ]
 
+marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
+app_source = Path("app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+hero_source = marketplace_source.split("private fun MarketplaceSmartDealsHero", 1)[1].split("@Composable\nfun FynxMarketplacePanel", 1)[0]
+checks.extend([
+    (
+        "Marketplace secondary controls fold away on real user scroll while search/cart stay available",
+        "NestedScrollSource.UserInput" in marketplace_source
+        and ".nestedScroll(marketplaceScrollConnection)" in marketplace_source
+        and "marketplaceChromeHidden" in marketplace_source
+        and "visible = !marketplaceChromeHidden" in marketplace_source
+        and "MarketplaceReferenceSearchBar(" in marketplace_source,
+    ),
+    (
+        "Marketplace app title and floating navigation share scroll-away behavior",
+        'selected != "Home" && selected != "Marketplace"' in app_source
+        and 'selected == "Marketplace") Modifier.height(52.dp * (1f - homeChromeProgress))' in app_source
+        and 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' in app_source,
+    ),
+    (
+        "Great Deals uses the Home silver smoky mirror-glass palette with transparent card surface",
+        "dealsGlassBrush" in hero_source
+        and "dealsGlassBorder" in hero_source
+        and "luminance() < 0.5f" in hero_source
+        and "Color(0xFFE0E6ED).copy(alpha = 0.68f)" in hero_source
+        and "containerColor = Color.Transparent" in hero_source
+        and "BorderStroke(1.dp, dealsGlassBorder)" in hero_source,
+    ),
+])
+
 failed = 0
 for name, passed in checks:
     print(f"{'PASS' if passed else 'FAIL'}: {name}")
