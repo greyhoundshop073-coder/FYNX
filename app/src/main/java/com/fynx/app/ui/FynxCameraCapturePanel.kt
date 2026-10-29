@@ -343,7 +343,7 @@ fun FynxCameraCapturePanel(
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            if (recording == null && !fastCapture) {
+            if (recording == null && !fastCapture && mode == CameraMode.PHOTO) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Looks", style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.width(8.dp))
@@ -368,7 +368,7 @@ fun FynxCameraCapturePanel(
                                     }
                                     Icon(if(mode==CameraMode.PHOTO)Icons.Default.PhotoCamera else if(recording!=null)Icons.Default.Stop else Icons.Default.Videocam,if(recording!=null)"Stop video note" else if(mode==CameraMode.PHOTO)"Take photo" else "Record video note")
                                 }
-                            };FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null){mode=CameraMode.VIDEO;showCaptureControls=true}},label={Text("Video")},leadingIcon={Icon(Icons.Default.Videocam,null)})}
+                            };FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null){mode=CameraMode.VIDEO;filter=CameraFilter.NATURAL;filterIntensity=1f;showCaptureControls=true}},label={Text("Video")},leadingIcon={Icon(Icons.Default.Videocam,null)})}
         }
     }
 }
