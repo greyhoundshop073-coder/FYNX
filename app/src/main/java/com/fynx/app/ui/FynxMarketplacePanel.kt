@@ -1856,38 +1856,44 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         } else sellerLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
     val selectedChipColors = fynxMarketplaceSelectedChipColors()
-    val listingDescription = remember(desc, category, subcategory, brand, model, size, color, material, dimensions, warranty, vehicleYear, mileage, beautyDetails, serviceDetails, generalDetails) {
-        val specifications = when (category) {
-            "Electronics", "Phones & Computers" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty)
-            "Fashion" -> listOf("Size" to size, "Colour" to color, "Material" to material)
-            "Personal Accessories" -> listOf("Brand / maker" to brand, "Size" to size, "Colour" to color, "Material" to material)
-            "Home", "Furniture" -> listOf("Material" to material, "Dimensions" to dimensions, "Colour / finish" to color)
-            "Appliances" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty, "Dimensions" to dimensions)
-            "Vehicles" -> listOf("Make / brand" to brand, "Model" to model, "Year" to vehicleYear, "Mileage" to mileage)
-            "Auto Parts" -> listOf("Part manufacturer / brand" to brand, "Part number / compatible vehicle" to model, "Fitment, condition, and included parts" to generalDetails)
-            "Beauty", "Health" -> listOf("Brand" to brand, "Size / volume" to size, "Product details" to beautyDetails)
-            "Food" -> listOf("Brand / producer" to brand, "Pack size / weight" to size, "Ingredients, allergens, expiry, or storage details" to generalDetails)
-            "Agriculture" -> listOf("Brand / maker" to brand, "Variety / material" to material, "Season, care, or farming-use details" to generalDetails)
-            "Garden & Outdoor" -> listOf("Brand / maker" to brand, "Material / variety" to material, "Season, care, variety, or intended use" to generalDetails)
-            "Building Materials" -> listOf("Material / grade" to material, "Dimensions / pack size" to dimensions, "Colour / finish" to color, "Additional details" to generalDetails)
-            "Handmade & Local" -> listOf("Maker" to brand, "Material" to material, "Additional details" to generalDetails)
-            "Office & Education", "Business & Workshop Supplies" -> listOf("Brand / maker" to brand, "Model / item type" to model, "Additional details" to generalDetails)
-            "Sports" -> listOf("Brand" to brand, "Model" to model, "Size / fit" to size, "Colour" to color, "Material" to material, "Additional details" to generalDetails)
-            "Tools" -> listOf("Brand / maker" to brand, "Model" to model, "Material" to material, "Dimensions" to dimensions, "Additional details" to generalDetails)
-            "Baby & Kids" -> listOf("Brand / maker" to brand, "Age range / size" to size, "Colour" to color, "Safety and included accessories" to generalDetails)
-            "Books" -> listOf("Publisher / brand" to brand, "Edition / ISBN / level" to model, "Subject, contents, or condition" to generalDetails)
-            "Property" -> listOf("Property type / estate" to brand, "Dimensions / plot size" to dimensions, "Availability, utilities, or paperwork notes" to generalDetails)
-            "Services" -> listOf("Service details" to serviceDetails)
-            else -> listOf("Brand / maker" to brand, "Colour" to color, "Additional details" to generalDetails)
-        }.filter { it.second.isNotBlank() }
-        val allSpecifications = if (subcategory.isBlank()) specifications else listOf("Subcategory" to subcategory) + specifications
+    val specifications = when (category) {
+        "Electronics", "Phones & Computers" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty)
+        "Fashion" -> listOf("Size" to size, "Colour" to color, "Material" to material)
+        "Personal Accessories" -> listOf("Brand / maker" to brand, "Size" to size, "Colour" to color, "Material" to material)
+        "Home", "Furniture" -> listOf("Material" to material, "Dimensions" to dimensions, "Colour / finish" to color)
+        "Appliances" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty, "Dimensions" to dimensions)
+        "Vehicles" -> listOf("Make / brand" to brand, "Model" to model, "Year" to vehicleYear, "Mileage" to mileage)
+        "Auto Parts" -> listOf("Part manufacturer / brand" to brand, "Part number / compatible vehicle" to model, "Fitment, condition, and included parts" to generalDetails)
+        "Beauty", "Health" -> listOf("Brand" to brand, "Size / volume" to size, "Product details" to beautyDetails)
+        "Food" -> listOf("Brand / producer" to brand, "Pack size / weight" to size, "Ingredients, allergens, expiry, or storage details" to generalDetails)
+        "Agriculture" -> listOf("Brand / maker" to brand, "Variety / material" to material, "Season, care, or farming-use details" to generalDetails)
+        "Garden & Outdoor" -> listOf("Brand / maker" to brand, "Material / variety" to material, "Season, care, variety, or intended use" to generalDetails)
+        "Building Materials" -> listOf("Material / grade" to material, "Dimensions / pack size" to dimensions, "Colour / finish" to color, "Additional details" to generalDetails)
+        "Handmade & Local" -> listOf("Maker" to brand, "Material" to material, "Additional details" to generalDetails)
+        "Office & Education", "Business & Workshop Supplies" -> listOf("Brand / maker" to brand, "Model / item type" to model, "Additional details" to generalDetails)
+        "Sports" -> listOf("Brand" to brand, "Model" to model, "Size / fit" to size, "Colour" to color, "Material" to material, "Additional details" to generalDetails)
+        "Tools" -> listOf("Brand / maker" to brand, "Model" to model, "Material" to material, "Dimensions" to dimensions, "Additional details" to generalDetails)
+        "Baby & Kids" -> listOf("Brand / maker" to brand, "Age range / size" to size, "Colour" to color, "Safety and included accessories" to generalDetails)
+        "Books" -> listOf("Publisher / brand" to brand, "Edition / ISBN / level" to model, "Subject, contents, or condition" to generalDetails)
+        "Property" -> listOf("Property type / estate" to brand, "Dimensions / plot size" to dimensions, "Availability, utilities, or paperwork notes" to generalDetails)
+        "Services" -> listOf("Service details" to serviceDetails)
+        else -> listOf("Brand / maker" to brand, "Colour" to color, "Additional details" to generalDetails)
+    }.filter { it.second.isNotBlank() }
+    val allSpecifications = if (subcategory.isBlank()) specifications else listOf("Subcategory" to subcategory) + specifications
+    val maximumSavedDescriptionLength = minOf(4_000, FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)
+    val specificationSection = if (allSpecifications.isEmpty()) "" else buildString {
+        append("\n\nProduct specifications\n")
+        allSpecifications.forEachIndexed { index, (label, value) ->
+            if (index > 0) append('\n')
+            append(label).append(": ").append(value.trim())
+        }
+    }
+    val descriptionBodyLimit = (maximumSavedDescriptionLength - specificationSection.length).coerceAtLeast(0)
+    val listingDescription = remember(desc, specificationSection, descriptionBodyLimit, maximumSavedDescriptionLength) {
         buildString {
-            append(desc.trim())
-            if (allSpecifications.isNotEmpty()) {
-                append("\n\nProduct specifications\n")
-                allSpecifications.forEach { (label, value) -> append(label).append(": ").append(value.trim()).append('\n') }
-            }
-        }.trim().take(FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)
+            append(desc.trim().take(descriptionBodyLimit))
+            append(specificationSection)
+        }.trim().take(maximumSavedDescriptionLength)
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA)) { uris -> if (uris.isNotEmpty()) media = FynxMarketplaceSellerFlowSupport.normalizedMedia(context, media + uris) }
     AlertDialog(onDismissRequest = { if (!busy && !enhancementBusy) { cleanupGeneratedPhotoFiles(); onCancel() } }, title = { Text("Sell on FYNX") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2068,7 +2074,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                 OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Other useful product details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             }
         }
-        OutlinedTextField(desc, { desc = it.take(4000) }, label = { Text("Product description") }, supportingText = { Text("Describe condition, included items, defects, and anything buyers should know.") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(desc.take(descriptionBodyLimit), { desc = it.take(descriptionBodyLimit) }, label = { Text("Product description") }, supportingText = { Text("Description and saved specifications share a 4,000-character limit. Up to $descriptionBodyLimit characters are available for this category.") }, minLines = 3, modifier = Modifier.fillMaxWidth())
         Text("4. Location and delivery", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(location, { location = it.take(160) }, label = { Text("Listing area") }, supportingText = { Text("Use a town, city, or state buyers recognise.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedButton(onClick = { useCurrentListingLocation() }, enabled = !busy && !locationLoading, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (locationLoading) "Finding your area..." else "Use my current area") }
