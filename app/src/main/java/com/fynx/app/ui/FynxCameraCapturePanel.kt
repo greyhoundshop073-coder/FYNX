@@ -8,6 +8,7 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,6 +46,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -121,6 +124,7 @@ fun FynxCameraCapturePanel(
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
     var filterIntensity by remember { mutableFloatStateOf(1f) }
     var enhancing by remember { mutableStateOf(false) }
+    var applyingFilter by remember { mutableStateOf(false) }
     var showCaptureControls by remember { mutableStateOf(true) }
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
@@ -175,15 +179,45 @@ fun FynxCameraCapturePanel(
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
     fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; filterIntensity = 1f; enhancing = false; error = null }
     fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
-    fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) { val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val strength = intensity.coerceIn(0f, 1f)
-            val matrix = ColorMatrix().apply {
-                setFynxFilter(
-                    1f + (selected.saturation - 1f) * strength,
-                    selected.brightness * strength,
-                    1f + (selected.contrast - 1f) * strength,
-                    1f
-                )
-            }; val outputBitmap=android.graphics.Bitmap.createBitmap(bitmap.width,bitmap.height,android.graphics.Bitmap.Config.ARGB_8888); android.graphics.Canvas(outputBitmap).drawBitmap(bitmap,0f,0f,android.graphics.Paint().apply { colorFilter=ColorMatrixColorFilter(matrix) }); FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); outputBitmap.recycle(); filter=selected; filterIntensity=intensity; error=null }.onFailure { error=it.message ?: "Filter could not be applied" } }
+    fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) {
+        val current = pendingUri ?: return
+        val original = pendingOriginalUri ?: current
+        if (pendingType != "image" || applyingFilter) return
+        if (selected == CameraFilter.NATURAL) {
+            filter = selected
+            filterIntensity = intensity.coerceIn(0f, 1f)
+            error = null
+            return
+        }
+        val source = original.path?.let { File(it) } ?: return
+        val target = current.path?.let { File(it) } ?: return
+        val strength = intensity.coerceIn(0f, 1f)
+        filter = selected
+        filterIntensity = strength
+        applyingFilter = true
+        error = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
+                    try {
+                        val matrix = cameraFilterMatrix(selected, strength)
+                        val outputBitmap = android.graphics.Bitmap.createBitmap(bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888)
+                        try {
+                            android.graphics.Canvas(outputBitmap).drawBitmap(bitmap, 0f, 0f, android.graphics.Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) })
+                            FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) { "Unable to save filtered photo" } }
+                        } finally {
+                            outputBitmap.recycle()
+                        }
+                    } finally {
+                        bitmap.recycle()
+                    }
+                }
+            }
+            result.onFailure { error = it.message ?: "Filter could not be applied" }
+            applyingFilter = false
+        }
+    }
     fun enhancePhoto() { val source=pendingUri ?: return; if(pendingType!="image" || enhancing)return; enhancing=true; error=null; scope.launch { val result=withContext(Dispatchers.IO){FynxAiPhotoEnhancer.enhance(context,source)}; result.onSuccess { enhancedUri -> deleteUri(source); pendingUri=enhancedUri; filter=CameraFilter.NATURAL; filterIntensity=1f; error=null }.onFailure { error=it.message ?: "AI photo enhancement failed" }; enhancing=false } }
     fun capturePhotoNow() {
         val capture = imageCapture ?: run { error = "Camera is still starting"; return }
@@ -193,7 +227,14 @@ fun FynxCameraCapturePanel(
         capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(result: ImageCapture.OutputFileResults) {
                 runCatching { normalizeCapturedPhoto(file, lens == CameraSelector.LENS_FACING_FRONT); file.copyTo(original, overwrite = true) }
-                    .onSuccess { pendingUri = Uri.fromFile(file); pendingOriginalUri = Uri.fromFile(original); pendingType = "image"; filter = CameraFilter.NATURAL; error = null; showCaptureControls = true }
+                    .onSuccess {
+                    pendingUri = Uri.fromFile(file)
+                    pendingOriginalUri = Uri.fromFile(original)
+                    pendingType = "image"
+                    error = null
+                    showCaptureControls = true
+                    if (filter != CameraFilter.NATURAL) applyFilterToPhoto(filter, filterIntensity)
+                }
                     .onFailure { file.delete(); original.delete(); error = it.message ?: "Photo could not be prepared"; showCaptureControls = true }
             }
             override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed"; showCaptureControls = true }
@@ -230,7 +271,17 @@ fun FynxCameraCapturePanel(
         };return
     }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).clickable { if (recording == null) showCaptureControls = true }){
-        AndroidView(factory={previewView},modifier=Modifier.fillMaxSize())
+        AndroidView(
+            factory = { previewView },
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val matrix = cameraFilterMatrix(filter, filterIntensity)
+                    renderEffect = android.graphics.RenderEffect
+                        .createColorFilterEffect(ColorMatrixColorFilter(matrix))
+                        .asComposeRenderEffect()
+                }
+            }
+        )
         if (showGrid && pendingUri == null && recording == null) {
             Canvas(Modifier.fillMaxSize()) {
                 val stroke = androidx.compose.ui.unit.Dp.Hairline
@@ -294,6 +345,22 @@ fun FynxCameraCapturePanel(
                 }
                 Spacer(Modifier.height(8.dp))
             }
+            if (recording == null && !fastCapture) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Looks", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) "Live preview" else "Photo preview", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CameraFilter.values().forEach { option ->
+                        FilterChip(
+                            selected = filter == option,
+                            onClick = { if (recording == null) { filter = option; filterIntensity = 1f; showCaptureControls = true } },
+                            label = { Text(option.label) }
+                        )
+                    }
+                }
+            }
             Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null){mode=CameraMode.PHOTO;showCaptureControls=true}},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(onClick={
                 if(mode==CameraMode.PHOTO){if(captureTimerSeconds>0){if(timerCountingDown==0){timerCountingDown=captureTimerSeconds;showCaptureControls=false;scope.launch{delay(captureTimerSeconds*1000L);timerCountingDown=0;capturePhotoNow()}}}else capturePhotoNow()}else{val active=recording;if(active!=null)active.stop()else{if(!hasAudio){audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);return@FilledIconButton};val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingType=if(videoNoteMode)"video_note" else "video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},modifier=Modifier.size(80.dp),shape=androidx.compose.foundation.shape.CircleShape,colors=IconButtonDefaults.filledIconButtonColors(containerColor=Color.White,contentColor=Color.Black)){
                                 Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) {
@@ -321,6 +388,17 @@ enum class CameraFilter(val label:String,val saturation:Float,val brightness:Flo
     COOL("Cool",0.92f,0.02f,1.02f),
     VINTAGE("Vintage",0.82f,0.015f,0.94f),
     BW("B&W",0f,0f,1.08f)
+}
+private fun cameraFilterMatrix(filter: CameraFilter, intensity: Float): ColorMatrix {
+    val strength = intensity.coerceIn(0f, 1f)
+    return ColorMatrix().apply {
+        setFynxFilter(
+            1f + (filter.saturation - 1f) * strength,
+            filter.brightness * strength,
+            1f + (filter.contrast - 1f) * strength,
+            1f
+        )
+    }
 }
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
 private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) {
