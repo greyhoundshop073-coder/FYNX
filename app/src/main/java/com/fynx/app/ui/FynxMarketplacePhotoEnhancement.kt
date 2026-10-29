@@ -44,6 +44,9 @@ import kotlin.coroutines.resumeWithException
  * locally and are not sent to a background-removal service.
  */
 internal object FynxMarketplacePhotoEnhancement {
+    /** The beta segmentation SDK can crash in native code on Android 16/API 36. */
+    fun isSupportedOnCurrentAndroid(): Boolean = Build.VERSION.SDK_INT < 36
+
     private const val MAX_WORKING_DIMENSION = 1600
     private const val OUTPUT_SIZE = 1080
     private const val SUBJECT_PADDING = 840
