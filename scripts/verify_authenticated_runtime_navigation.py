@@ -742,7 +742,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         time.sleep(0.8)
         return dump_ui(f"{prefix}-camera-return-home.xml") or composer_xml
 
-    (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + "\\n", encoding="utf-8")
+    (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + chr(10), encoding="utf-8")
     missing_live = [label for label in ["Switch front/back camera", "Face FX", "Cute Ears"] if not find_control(camera_xml, [label])]
     if missing_live:
         FAILURES.append(prefix + ": live camera missing visible controls: " + ", ".join(missing_live))
@@ -754,7 +754,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     )
     if editor_xml:
         screenshot(f"{prefix}-camera-photo-editor-effects.png")
-        (ROOT / f"{prefix}-camera-photo-editor-effects.xml").write_text(editor_xml + "\\n", encoding="utf-8")
+        (ROOT / f"{prefix}-camera-photo-editor-effects.xml").write_text(editor_xml + chr(10), encoding="utf-8")
         missing_editor = [label for label in ["Face FX", "Cute Ears", "Retake", "Send"] if not find_control(editor_xml, [label])]
         if missing_editor:
             FAILURES.append(prefix + ": captured-photo editor missing expected effect or action controls: " + ", ".join(missing_editor))

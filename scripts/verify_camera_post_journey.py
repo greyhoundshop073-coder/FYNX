@@ -10,6 +10,7 @@ runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_tex
 
 checks = [
     ("Home camera opens the real camera panel", "showCamera = true" in home and "FynxCameraCapturePanel(" in home),
+    ("Runtime UI hierarchies end in valid XML whitespace", runtime.count("write_text(camera_xml + chr(10)") == 1 and runtime.count("write_text(editor_xml + chr(10)") == 1),
     ("Runtime captures camera preview and photo editor effects controls without publishing", "def capture_camera_post_journey(" in runtime and '["Take photo"]' in runtime and '["Face FX", "Cute Ears", "Retake", "Send"]' in runtime and "camera-photo-editor-effects.png" in runtime),
     ("Home camera starts a fresh session", "capturedUris = emptyList()" in home and "cameraOpenedFromComposer = false" in home),
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
