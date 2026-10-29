@@ -39,6 +39,19 @@ checks = [
         and "it is not server authentication." in navigation,
     ),
     (
+        "debug-only visual capture prevents Android notification prompts from intercepting real UI navigation",
+        'def prepare_debug_visual_capture_permissions()' in navigation
+        and 'if not VISUALS_ONLY:' in navigation
+        and 'run("adb", "shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")' in navigation
+        and 'prepare_debug_visual_capture_permissions()' in navigation
+        and 'and "com.google.android.permissioncontroller" in xml' in navigation
+        and 'find_control(xml, ["Allow FYNX to send you notifications?"])' in navigation
+        and 'find_control(xml, ["Allow"])' in navigation
+        and 'if VISUALS_ONLY and "com.google.android.permissioncontroller" in xml:' in navigation
+        and 'authenticated-before-login-after-permission.png' in navigation
+        and 'find_control(xml, ["Open FYNX camera"])' in navigation,
+    ),
+    (
         "real Marketplace screenshot and UI hierarchy are captured after destination marker verification",
         'tap_control(\n        xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]' in navigation
         and 'screenshot("authenticated-marketplace-product-detail.png")' in navigation
