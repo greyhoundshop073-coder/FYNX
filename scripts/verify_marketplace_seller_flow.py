@@ -208,7 +208,7 @@ checks = [
      and "internal fun marketplaceSubcategoriesFor(category: String)" in marketplace),
     ("My Shop edit persists the selected subcategory through its existing authenticated listing update",
      "marketplaceDescriptionWithSubcategory(editDescription, editSubcategory)" in seller_center
-     and "updateListing(context, selectedListing.id, editTitle, savedDescription, editCategory" in seller_center
+     and "FynxMarketplaceClient.updateListing(" in seller_center and "savedDescription," in seller_center and "mediaIds = uploadedMedia?.map { it.id }" in seller_center
      and seller_center.count("description = savedDescription,") == 2
      and "private fun marketplaceDescriptionSubcategory(description: String)" in seller_center
      and "private fun marketplaceDescriptionWithSubcategory(description: String, subcategory: String)" in seller_center
