@@ -176,10 +176,36 @@ fun FynxVisibleUpdatesPanel(
         }
 
         Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            modifier = Modifier.fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .clip(FynxDesign.LargeCardShape)
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.84f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.11f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f)
+                        )
+                    ),
+                    FynxDesign.LargeCardShape
+                ),
             shape = FynxDesign.LargeCardShape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            border = BorderStroke(
+                1.dp,
+                Brush.linearGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f),
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.18f),
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
+                    )
+                )
+            )
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -197,7 +223,12 @@ fun FynxVisibleUpdatesPanel(
                 }
                 Row(
                     Modifier.fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f), FynxDesign.CardShape)
+                        .clip(FynxDesign.CardShape)
+                        .background(Color.Black.copy(alpha = 0.82f), FynxDesign.CardShape)
+                        .border(
+                            BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                            FynxDesign.CardShape
+                        )
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
