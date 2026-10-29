@@ -27,7 +27,7 @@ checks = [
      and "Gallery opened Android's real photo-picker UI" in runtime
      and "camera torch toggled on and back off" in runtime
      and "Send must become enabled" in runtime
-     and "never publishing a post" in runtime),
+     and "without publishing a post" in runtime),
     ("Runtime video journey records a real clip, applies Cinematic, preserves audio where inspectable, and never publishes",
      "def capture_camera_video_journey(" in runtime
      and '["Video"]' in runtime
