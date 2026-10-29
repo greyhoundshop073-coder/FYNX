@@ -742,20 +742,19 @@ fun FynxCameraCapturePanel(
             }
         }
 
-        if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.Black.copy(alpha = 0.84f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=10.dp,bottom=12.dp),horizontalAlignment=Alignment.CenterHorizontally){
-            Box(Modifier.padding(bottom = 8.dp).size(width = 38.dp, height = 4.dp).background(Color.White.copy(alpha = 0.42f), androidx.compose.foundation.shape.CircleShape))
-            error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
+        if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(top=8.dp,bottom=12.dp),horizontalAlignment=Alignment.CenterHorizontally){
+            error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))
             Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.34f).verticalScroll(rememberScrollState())) {
             if (recording == null && !fastCapture) {
                 TextButton(
                     onClick = { showAdjustments = !showAdjustments; showCaptureControls = true },
-                    modifier = Modifier.align(Alignment.End)
+                    modifier = Modifier.align(Alignment.End).padding(horizontal = 18.dp)
                 ) {
                     Text(if (showAdjustments) "Hide adjustments ▴" else "Adjustments ▾")
                 }
                 if (showAdjustments) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp),
                         shape = RoundedCornerShape(18.dp),
                         color = Color.Black.copy(alpha = 0.70f)
                     ) {
@@ -792,6 +791,7 @@ fun FynxCameraCapturePanel(
                     shadowElevation = 8.dp
                 ) {
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        Box(Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp).size(width = 38.dp, height = 4.dp).background(Color.White.copy(alpha = 0.42f), androidx.compose.foundation.shape.CircleShape))
                         // A proper category tab strip keeps browsing separate from the shutter.
                         Row(
                             Modifier.fillMaxWidth(),
@@ -905,19 +905,19 @@ fun FynxCameraCapturePanel(
                 }
             }
             if (recording == null && !fastCapture && mode == CameraMode.VIDEO) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Video styles", style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.width(8.dp))
                     Text("Applied after recording", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
                 }
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp).horizontalScroll(rememberScrollState()).padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     CameraVideoStyle.values().forEach { option ->
                         FilterChip(selected = videoStyle == option, onClick = { videoStyle = option; showCaptureControls = true }, label = { Text(option.label) })
                     }
                 }
             }
             }
-            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null){mode=CameraMode.PHOTO;showCaptureControls=true}},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(onClick={
+            Row(Modifier.fillMaxWidth().padding(horizontal=18.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null){mode=CameraMode.PHOTO;showCaptureControls=true}},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(onClick={
                 if(mode==CameraMode.PHOTO){if(captureTimerSeconds>0){if(timerCountingDown==0){timerCountingDown=captureTimerSeconds;showCaptureControls=false;scope.launch{delay(captureTimerSeconds*1000L);timerCountingDown=0;capturePhotoNow()}}}else capturePhotoNow()}else{val active=recording;if(active!=null)active.stop()else{if(!hasAudio){audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);return@FilledIconButton};val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingOriginalUri=Uri.fromFile(file);pendingType=if(videoNoteMode)"video_note" else "video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},modifier=Modifier.size(80.dp),shape=androidx.compose.foundation.shape.CircleShape,colors=IconButtonDefaults.filledIconButtonColors(containerColor=Color.White,contentColor=Color.Black)){
                                 Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) {
                                     if (videoNoteMode && recording != null) {
