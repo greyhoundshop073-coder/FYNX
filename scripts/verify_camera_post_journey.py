@@ -10,8 +10,33 @@ runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_tex
 
 checks = [
     ("Home camera opens the real camera panel", "showCamera = true" in home and "FynxCameraCapturePanel(" in home),
-    ("Runtime UI hierarchies end in valid XML whitespace", runtime.count("write_text(camera_xml + chr(10)") == 1 and runtime.count("write_text(editor_xml + chr(10)") == 1),
-    ("Runtime captures camera preview and photo editor effects controls without publishing", "def capture_camera_post_journey(" in runtime and '["Take photo"]' in runtime and '["Face FX", "Cute Ears", "Retake", "Send"]' in runtime and "camera-photo-editor-effects.png" in runtime),
+    ("Runtime UI hierarchies preserve XML terminators for live/photo/video editor captures",
+     runtime.count("write_text(camera_xml + chr(10)") >= 1
+     and runtime.count("write_text(editor_xml + chr(10)") >= 1
+     and "camera-live-preview.xml" in runtime
+     and "camera-photo-editor-initial.xml" in runtime
+     and "camera-video-editor-before-effects.xml" in runtime),
+    ("Runtime camera journey verifies switch, flash capability, Gallery, capture, effects and Retake without publishing",
+     "def capture_camera_post_journey(" in runtime
+     and '["Take photo"]' in runtime
+     and '["Face FX", "Cute Ears", "AI Studio", "Portrait Blur", "Retake", "Send"]' in runtime
+     and "camera-photo-editor-initial.png" in runtime
+     and "camera-photo-editor-portrait-ready.png" in runtime
+     and "camera-photo-retake" in runtime
+     and "front/back camera switching returned to a usable camera preview" in runtime
+     and "Gallery opened Android's real photo-picker UI" in runtime
+     and "camera torch toggled on and back off" in runtime
+     and "Send must become enabled" in runtime
+     and "never publishing a post" in runtime),
+    ("Runtime video journey records a real clip, applies Cinematic, preserves audio where inspectable, and never publishes",
+     "def capture_camera_video_journey(" in runtime
+     and "video mode" in runtime.lower()
+     and "Cinematic" in runtime
+     and "list_app_cache_videos" in runtime
+     and "processed video dropped the source audio stream" in runtime
+     and "Generate on-device captions" in runtime
+     and "camera-video-effect-output.png" in runtime
+     and "never tap Send" in runtime),
     ("Home camera starts a fresh session", "capturedUris = emptyList()" in home and "cameraOpenedFromComposer = false" in home),
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
     ("Camera dismiss returns to an existing composer draft", "cameraOpenedFromComposer && !posting" in home),
