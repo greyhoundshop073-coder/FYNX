@@ -794,7 +794,7 @@ def tap_control_permission_aware(
         latest = dump_ui(name + "-wait.xml") or latest
         camera_permission = find_control(latest, ["Allow camera"]) if "camera" in name.lower() else None
         permission = camera_permission or find_control(
-            latest, ["While using the app", "While using app", "Only this time", "Allow"]
+            latest, ["While using the app", "While using app", "Only this time"]
         )
         if permission:
             _, px, py = permission
