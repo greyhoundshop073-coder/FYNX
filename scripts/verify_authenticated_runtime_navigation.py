@@ -849,9 +849,9 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     else:
         report.append("- PASS live camera screenshot exposes camera switch, tracked Face FX, Gallery and capture")
 
-    # A virtual Pixel should provide both camera lenses. Switch away and back, asserting that
-    # CameraX rebinds to a usable preview rather than merely changing the button state.
-    for lens_step in ("front", "back"):
+    # This screen starts on the front lens. Switch to the rear lens, test the torch there,
+    # and return to the front lens before the photo flow; the test labels match the real lens.
+    for lens_step in ("back", "front"):
         switch = find_control(camera_xml, ["Switch front/back camera"])
         if not switch:
             FAILURES.append(prefix + f": camera switch disappeared while testing the {lens_step} lens")
@@ -867,37 +867,40 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         if not find_control(camera_xml, ["Switch front/back camera"]):
             FAILURES.append(prefix + f": camera preview controls did not return after switching to {lens_step} lens")
             break
-    else:
-        report.append("- PASS front/back camera switching returned to a usable camera preview")
 
-    # Toggle torch on and back off when this emulator reports a flash unit; absence of hardware
-    # flash is an expected capability limitation, not a broken camera test.
-    camera_xml = dump_ui(f"{prefix}-camera-before-flash.xml") or camera_xml
-    flash = find_control(camera_xml, ["Turn flash on"])
-    if flash:
-        _, fx, fy = flash
-        run("adb", "shell", "input", "tap", str(fx), str(fy))
-        time.sleep(0.5)
-        flash_xml = dump_ui(f"{prefix}-camera-flash-on.xml") or camera_xml
-        if find_control(flash_xml, ["Turn flash off"]):
-            off = find_control(flash_xml, ["Turn flash off"])
-            if off:
-                _, ox, oy = off
-                run("adb", "shell", "input", "tap", str(ox), str(oy))
-                time.sleep(0.4)
-                camera_xml = dump_ui(f"{prefix}-camera-flash-off.xml") or flash_xml
-                if find_control(camera_xml, ["Turn flash on"]):
-                    report.append("- PASS camera torch toggled on and back off")
+        if lens_step == "back":
+            # A front-facing virtual camera commonly lacks a torch. Exercise flash on the rear
+            # lens, and report the hardware capability explicitly if this emulator has no flash.
+            flash = find_control(camera_xml, ["Turn flash on"])
+            if flash:
+                _, fx, fy = flash
+                run("adb", "shell", "input", "tap", str(fx), str(fy))
+                time.sleep(0.5)
+                flash_xml = dump_ui(f"{prefix}-camera-flash-on.xml") or camera_xml
+                if find_control(flash_xml, ["Turn flash off"]):
+                    off = find_control(flash_xml, ["Turn flash off"])
+                    if off:
+                        _, ox, oy = off
+                        run("adb", "shell", "input", "tap", str(ox), str(oy))
+                        time.sleep(0.4)
+                        camera_xml = dump_ui(f"{prefix}-camera-flash-off.xml") or flash_xml
+                        if find_control(camera_xml, ["Turn flash on"]):
+                            report.append("- PASS rear-camera torch toggled on and back off")
+                        else:
+                            FAILURES.append(prefix + ": rear-camera torch did not return to the off control state")
+                    else:
+                        camera_xml = flash_xml
+                elif find_control(flash_xml, ["Flash is not available on this camera"]):
+                    report.append("- NOTE rear-camera flash test skipped because the emulator reports no flash unit")
+                    camera_xml = flash_xml
                 else:
-                    FAILURES.append(prefix + ": torch did not return to the off control state")
-        elif find_control(flash_xml, ["Flash is not available on this camera"]):
-            report.append("- NOTE camera flash test skipped because the active emulator camera reports no flash unit")
-            camera_xml = flash_xml
-        else:
-            FAILURES.append(prefix + ": flash control neither enabled torch nor reported the no-flash capability")
-            camera_xml = flash_xml
+                    FAILURES.append(prefix + ": rear-camera flash control neither enabled torch nor reported no-flash capability")
+                    camera_xml = flash_xml
+            else:
+                report.append("- NOTE rear camera exposes no flash-on control on this emulator")
+
     else:
-        report.append("- NOTE camera exposes no flash-on control on this active lens")
+        report.append("- PASS front/back camera switching returned to a usable preview; flash was checked on the rear lens")
 
     # Open the Android system photo picker, verify that picker UI actually appeared, then back out.
     gallery_xml = tap_control(camera_xml, ["Gallery"], f"{prefix}-camera-gallery", None)
