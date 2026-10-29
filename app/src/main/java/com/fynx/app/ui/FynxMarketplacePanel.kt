@@ -1826,7 +1826,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Clean up photo background (optional)") }
             Text(
-                "Preview the result before using it. The original stays available for Undo. First use may need a one-time model download.",
+                "Preview before using it. The original stays available for Undo. First use may download a model through Google Play services and may use mobile data; photo pixels are processed on this device.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
