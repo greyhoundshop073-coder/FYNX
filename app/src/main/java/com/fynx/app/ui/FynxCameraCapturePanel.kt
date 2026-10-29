@@ -900,32 +900,55 @@ fun FynxCameraCapturePanel(
             }
 
             }
+            // Capture mode sits above the shutter, keeping the main action row uncluttered.
             Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = mode == CameraMode.PHOTO,
+                    onClick = { if (recording == null) { mode = CameraMode.PHOTO; showEffectTray = false; showCaptureControls = true } },
+                    label = { Text("Photo") },
+                    leadingIcon = { Icon(Icons.Default.PhotoCamera, null) }
+                )
+                Spacer(Modifier.width(10.dp))
+                FilterChip(
+                    selected = mode == CameraMode.VIDEO,
+                    onClick = {
+                        if (recording == null) {
+                            mode = CameraMode.VIDEO
+                            showEffectTray = false
+                            filter = CameraFilter.NATURAL
+                            filterIntensity = 1f
+                            showCaptureControls = true
+                        }
+                    },
+                    label = { Text("Video") },
+                    leadingIcon = { Icon(Icons.Default.Videocam, null) }
+                )
+            }            Row(
                 Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!fastCapture) Surface(
-                    onClick = { showEffectTray = !showEffectTray; showCaptureControls = true },
+                if (!fastCapture && !liveProofMode) Surface(
+                    onClick = {
+                        galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        showCaptureControls = true
+                    },
                     modifier = Modifier.size(width = 64.dp, height = 64.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = if (showEffectTray) Color(0xFF3A315A) else Color(0xFF22252E),
-                    border = androidx.compose.foundation.BorderStroke(
-                        if (showEffectTray) 1.5.dp else 1.dp,
-                        if (showEffectTray) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.12f)
-                    )
+                    color = Color(0xFF22252E),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
                 ) {
                     Column(
                         Modifier.fillMaxSize().padding(4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-                        Text(
-                            if (mode == CameraMode.VIDEO) "Video FX" else "Effects",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White
-                        )
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                        Text("Gallery", style = MaterialTheme.typography.labelSmall, color = Color.White)
                     }
                 } else Spacer(Modifier.size(width = 64.dp, height = 64.dp))
                 FilledIconButton(onClick = {
@@ -993,53 +1016,31 @@ fun FynxCameraCapturePanel(
                         )
                     }
                 }
-                if (!fastCapture && !liveProofMode) Surface(
-                    onClick = {
-                        galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                        showCaptureControls = true
-                    },
+                if (!fastCapture) Surface(
+                    onClick = { showEffectTray = !showEffectTray; showCaptureControls = true },
                     modifier = Modifier.size(width = 64.dp, height = 64.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFF22252E),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+                    color = if (showEffectTray) Color(0xFF3A315A) else Color(0xFF22252E),
+                    border = androidx.compose.foundation.BorderStroke(
+                        if (showEffectTray) 1.5.dp else 1.dp,
+                        if (showEffectTray) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.12f)
+                    )
                 ) {
                     Column(
                         Modifier.fillMaxSize().padding(4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
-                        Text("Gallery", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                        Text(
+                            if (mode == CameraMode.VIDEO) "Video FX" else "Effects",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White
+                        )
                     }
                 } else Spacer(Modifier.size(width = 64.dp, height = 64.dp))
             }
-            Row(
-                Modifier.fillMaxWidth().padding(top = 6.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FilterChip(
-                    selected = mode == CameraMode.PHOTO,
-                    onClick = { if (recording == null) { mode = CameraMode.PHOTO; showEffectTray = false; showCaptureControls = true } },
-                    label = { Text("Photo") },
-                    leadingIcon = { Icon(Icons.Default.PhotoCamera, null) }
-                )
-                Spacer(Modifier.width(10.dp))
-                FilterChip(
-                    selected = mode == CameraMode.VIDEO,
-                    onClick = {
-                        if (recording == null) {
-                            mode = CameraMode.VIDEO
-                            showEffectTray = false
-                            filter = CameraFilter.NATURAL
-                            filterIntensity = 1f
-                            showCaptureControls = true
-                        }
-                    },
-                    label = { Text("Video") },
-                    leadingIcon = { Icon(Icons.Default.Videocam, null) }
-                )
-            }
+
         }
     }
     }
