@@ -380,7 +380,7 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
             run("adb","shell","input","tap",str(px),str(py))
             time.sleep(1)
             continue
-        if expected_labels and any(find_control(next_xml,[wanted]) for wanted in expected_labels):
+        if not expected_labels or any(find_control(next_xml,[wanted]) for wanted in expected_labels):
             break
     screenshot(f"authenticated-{name}.png")
     if expected_labels and not any(find_control(next_xml,[wanted]) for wanted in expected_labels):
@@ -978,18 +978,17 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         home_xml, ["Open FYNX camera"], f"{prefix}-video-home-camera", ["What's on your mind?"]
     )
     if not composer:
-        return home_xml
+        return camera_return_to_home(home_xml, prefix + "-video-composer-missing")
     camera = tap_control(
         composer, ["Video/Camera"], f"{prefix}-video-composer-camera", ["Switch front/back camera"]
     )
     if not camera:
-        run("adb", "shell", "input", "keyevent", "4")
-        return dump_ui(f"{prefix}-video-camera-return-home.xml") or composer
+        return camera_return_to_home(composer, prefix + "-video-camera-missing")
 
     video_mode = tap_control(camera, ["Video"], f"{prefix}-camera-video-mode", ["Record video note"])
     if not video_mode:
         FAILURES.append(prefix + ": could not enter video capture mode")
-        return camera
+        return camera_return_to_home(camera, prefix + "-video-mode-failed")
 
     # Select a real processing style before recording; then apply it to the captured clip.
     video_mode = tap_control(
@@ -1000,7 +999,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     )
     if not recording:
         FAILURES.append(prefix + ": video recording did not start or expose the stop action")
-        return video_mode
+        return camera_return_to_home(video_mode, prefix + "-video-recording-failed")
 
     screenshot(f"{prefix}-camera-video-recording.png")
     time.sleep(2.5)
@@ -1010,7 +1009,19 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     )
     if not editor:
         FAILURES.append(prefix + ": recorded video did not reach its preview/editor")
-        return recording
+        current_recording = dump_ui(f"{prefix}-video-recording-stop-retry.xml") or recording
+        stop_retry = find_control(current_recording, ["Stop video note"])
+        if stop_retry:
+            _, stop_x, stop_y = stop_retry
+            run("adb", "shell", "input", "tap", str(stop_x), str(stop_y))
+            time.sleep(1.0)
+            retried_editor = dump_ui(f"{prefix}-video-editor-stop-retry.xml") or current_recording
+            if find_control(retried_editor, ["Retake"]) and find_control(retried_editor, ["Send"]):
+                editor = retried_editor
+            else:
+                return camera_return_to_home(retried_editor, prefix + "-video-editor-retry-failed")
+        else:
+            return camera_return_to_home(current_recording, prefix + "-video-editor-missing")
 
     (ROOT / f"{prefix}-camera-video-editor-before-effects.xml").write_text(
         editor + chr(10), encoding="utf-8"
@@ -1051,6 +1062,15 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # Exercise the actual on-device speech-caption request. An unsupported emulator model is
     # an explicitly reported capability limitation, not a successful transcript claim.
     captions = find_control(editor, ["Generate on-device captions"])
+    if not captions:
+        # The video editor's inner content is scrollable; expose the caption action before
+        # declaring the option missing from the runtime UI.
+        run("adb", "shell", "input", "swipe", "540", "1800", "540", "1250", "450")
+        time.sleep(0.5)
+        editor = dump_ui(f"{prefix}-camera-video-caption-control-scroll.xml") or editor
+        captions = find_control(editor, ["Generate on-device captions"])
+    if not captions:
+        FAILURES.append(prefix + ": recorded-video editor did not expose Generate on-device captions")
     if captions:
         _, cx, cy = captions
         run("adb", "logcat", "-c")
@@ -1072,7 +1092,14 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         else:
             FAILURES.append(prefix + ": caption generation remained stuck in progress for 40 seconds")
         if caption_error and not find_control(caption_xml, ["Review/edit transcript"]):
-            report.append("- NOTE on-device captions returned without a transcript on this emulator; visible UI: " + caption_error)
+            visible_text = " ".join(
+                (node.attrib.get("text") or "").strip()
+                for node in nodes(caption_xml)
+                if node.attrib.get("visible-to-user", "true").lower() != "false"
+                and (node.attrib.get("text") or "").strip()
+            )
+            visible_text = " ".join(visible_text.split())[:350] or caption_error
+            report.append("- NOTE on-device captions returned without an editable transcript on this emulator; visible UI: " + visible_text)
         screenshot(f"{prefix}-camera-video-captions.png")
         editor = caption_xml
 
