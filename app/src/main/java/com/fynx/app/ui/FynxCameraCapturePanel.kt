@@ -527,14 +527,17 @@ fun FynxCameraCapturePanel(
                             Text("Face-tracked photo effects", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 CameraFaceEffect.values().forEach { option ->
-                                    FilterChip(
+                                    CameraEffectTile(
+                                        category = "Face FX",
+                                        label = option.label,
+                                        previewStyle = cameraEffectPreviewStyle("Face FX", option.label),
                                         selected = faceEffect == option,
                                         enabled = !enhancing && !applyingFilter,
                                         onClick = {
                                             faceEffect = option
                                             applyFilterToPhoto(filter, filterIntensity, faceEffectOverride = option)
                                         },
-                                        label = { Text(option.label) }
+                                        modifier = Modifier.width(78.dp)
                                     )
                                 }
                             }
@@ -544,14 +547,17 @@ fun FynxCameraCapturePanel(
                             Text("Portrait blur and scene replacements · applied after capture", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 CameraBackgroundEffect.values().forEach { option ->
-                                    FilterChip(
+                                    CameraEffectTile(
+                                        category = "Background",
+                                        label = option.label,
+                                        previewStyle = cameraEffectPreviewStyle("Background", option.label),
                                         selected = backgroundEffect == option,
                                         enabled = !enhancing && !applyingFilter,
                                         onClick = {
                                             backgroundEffect = option
                                             applyFilterToPhoto(filter, filterIntensity, backgroundEffectOverride = option)
                                         },
-                                        label = { Text(option.label) }
+                                        modifier = Modifier.width(78.dp)
                                     )
                                 }
                             }
@@ -564,14 +570,17 @@ fun FynxCameraCapturePanel(
                             Text("Local photo styling · applied after capture", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 CameraStudioEffect.values().forEach { option ->
-                                    FilterChip(
+                                    CameraEffectTile(
+                                        category = "AI Studio",
+                                        label = option.label,
+                                        previewStyle = cameraEffectPreviewStyle("AI Studio", option.label),
                                         selected = studioEffect == option,
                                         enabled = !enhancing && !applyingFilter,
                                         onClick = {
                                             studioEffect = option
                                             applyFilterToPhoto(filter, filterIntensity, studioEffectOverride = option)
                                         },
-                                        label = { Text(option.label) }
+                                        modifier = Modifier.width(78.dp)
                                     )
                                 }
                             }
@@ -581,11 +590,14 @@ fun FynxCameraCapturePanel(
                             Text("Looks", style = MaterialTheme.typography.labelLarge)
                             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 CameraFilter.values().forEach { option ->
-                                    FilterChip(
+                                    CameraEffectTile(
+                                        category = "Looks",
+                                        label = option.label,
+                                        previewStyle = cameraEffectPreviewStyle("Looks", option.label),
                                         selected = filter == option,
                                         enabled = !enhancing && !applyingFilter,
                                         onClick = { applyFilterToPhoto(option, filterIntensity) },
-                                        label = { Text(option.label) }
+                                        modifier = Modifier.width(78.dp)
                                     )
                                 }
                             }
@@ -618,7 +630,15 @@ fun FynxCameraCapturePanel(
                     Text("Video styles", style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         CameraVideoStyle.values().forEach { option ->
-                            FilterChip(selected = videoStyle == option, enabled = !applyingVideoEffects && !generatingCaptions, onClick = { videoStyle = option }, label = { Text(option.label) })
+                            CameraEffectTile(
+                                category = "Video FX",
+                                label = option.label,
+                                previewStyle = cameraEffectPreviewStyle("Video FX", option.label),
+                                selected = videoStyle == option,
+                                enabled = !applyingVideoEffects && !generatingCaptions,
+                                onClick = { videoStyle = option },
+                                modifier = Modifier.width(78.dp)
+                            )
                         }
                     }
                     OutlinedButton(onClick = ::generateCaptionsForVideo, enabled = !generatingCaptions && !applyingVideoEffects, modifier = Modifier.fillMaxWidth()) {
