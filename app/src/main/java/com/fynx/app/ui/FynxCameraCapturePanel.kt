@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.ColorMatrix as ComposeColorMatrix
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
-import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.graphics.Matrix
 import android.media.ExifInterface
