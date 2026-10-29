@@ -566,7 +566,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 FynxRemoteMedia(
                                     mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
                                     type = FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
-                                    modifier = Modifier.size(88.dp)
+                                    modifier = Modifier.size(88.dp),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                 )
                             } else {
                                 Surface(
@@ -637,7 +638,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 FynxRemoteMedia(
                                     mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
                                     type = FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
-                                    modifier = Modifier.size(72.dp)
+                                    modifier = Modifier.size(72.dp),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                 )
                             } else {
                                 Surface(
