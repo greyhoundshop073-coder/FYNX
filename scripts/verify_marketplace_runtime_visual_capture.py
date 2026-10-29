@@ -54,10 +54,11 @@ checks = [
     ),
     (
         "dark Home mirror-glass capture keeps the active session and recovers through the real debug UI entry",
-        'dark_home_xml = dump_ui("home-mirror-glass-dark-probe.xml")' in navigation
+        'dark_home_xml = dismiss_runtime_permission_prompt() or dump_ui("home-mirror-glass-dark-probe.xml")' in navigation
         and 'dark_home_xml, dark_login_error = login()' in navigation
         and 'screenshot("home-mirror-glass-dark.png")' in navigation
         and "Home mirror-glass dark-mode capture could not recover the real Home surface" in navigation
+        and 'xml = dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-marketplace-light-probe.xml")' in navigation
         and 'restore_home_after_restart("home-mirror-glass-dark-mode")' not in navigation,
     ),
     (
