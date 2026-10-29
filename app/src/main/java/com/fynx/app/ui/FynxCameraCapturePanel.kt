@@ -445,6 +445,20 @@ fun FynxCameraCapturePanel(
                             )
                         }
                     }
+                    Text("Face FX", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CameraFaceEffect.values().forEach { option ->
+                            FilterChip(
+                                selected = faceEffect == option,
+                                enabled = !enhancing && !applyingFilter,
+                                onClick = {
+                                    faceEffect = option
+                                    applyFilterToPhoto(filter, filterIntensity, faceEffectOverride = option)
+                                },
+                                label = { Text(option.label) }
+                            )
+                        }
+                    }
                     Text("AI Studio", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         CameraStudioEffect.values().forEach { option ->
