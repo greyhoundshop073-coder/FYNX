@@ -123,11 +123,6 @@ private fun DrawScope.drawMarketplaceCategoryLine(
     )
 }
 
-/**
- * Offline category artwork only. These illustrations help buyers recognize a category;
- * they are never used as seller listing media or as Great Deals product photos.
- */
-@Composable
 internal fun marketplaceSubcategoriesFor(category: String): List<String> = when (category.trim().lowercase(Locale.US)) {
     "electronics" -> listOf("Phones & tablets", "Computers & laptops", "Audio & speakers", "TV & entertainment", "Cameras", "Other electronics")
     "fashion" -> listOf("Clothing", "Shoes & footwear", "Bags", "Jewellery & watches", "Traditional wear", "Other fashion")
@@ -156,6 +151,11 @@ internal fun marketplaceSubcategoriesFor(category: String): List<String> = when 
     else -> emptyList()
 }
 
+/**
+ * Offline category artwork only. These illustrations help buyers recognize a category;
+ * they are never used as seller listing media or as Great Deals product photos.
+ */
+@Composable
 private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         val sx = size.width / 108f
