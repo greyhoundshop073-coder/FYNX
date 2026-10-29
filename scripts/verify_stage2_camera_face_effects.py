@@ -29,7 +29,7 @@ checks = [
     ("Newly tapped Studio effect is passed directly into photo processing", "studioEffectOverride: CameraStudioEffect? = null" in camera and "studioEffectOverride = option" in camera),
     ("Newly tapped background effect is passed directly into photo processing", "backgroundEffectOverride: CameraBackgroundEffect? = null" in camera and "backgroundEffectOverride = option" in camera),
     ("Live camera settings scroll within the screen while capture controls stay outside the scroll region", "heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.54f).verticalScroll(rememberScrollState())" in camera and "FilledIconButton(onClick={" in camera and camera.index("heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.54f)") < camera.index("FilledIconButton(onClick={")),
-    ("Photo and video editing controls scroll above the persistent Retake/Send footer", "heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f).verticalScroll(rememberScrollState())" in camera and "onCaptured(previewUri,previewType)" in camera and camera.index("heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f)") < camera.index("onCaptured(previewUri,previewType)")),
+    ("Photo/video editor shrinks while keyboard is open so Retake/Send remain reachable", "WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.30f else 0.55f" in camera and "onCaptured(previewUri,previewType)" in camera and camera.index("heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime") < camera.index("onCaptured(previewUri,previewType)")),
     ("Existing capture-to-post callback preserved", "onCaptured(previewUri,previewType)" in camera),
 ]
 for name, ok in checks:
