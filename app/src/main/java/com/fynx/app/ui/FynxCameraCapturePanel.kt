@@ -359,23 +359,7 @@ fun FynxCameraCapturePanel(
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    if (selected == CameraFilter.NATURAL) {
-                        source.copyTo(target, overwrite = true)
-                    } else {
-                        val bitmap = decodeCameraEditingBitmap(source, maxEdge = 2400)
-                        try {
-                            val matrix = cameraFilterMatrix(selected, strength)
-                            val outputBitmap = android.graphics.Bitmap.createBitmap(bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888)
-                            try {
-                                android.graphics.Canvas(outputBitmap).drawBitmap(bitmap, 0f, 0f, android.graphics.Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) })
-                                FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) { "Unable to save filtered photo" } }
-                            } finally {
-                                outputBitmap.recycle()
-                            }
-                        } finally {
-                            bitmap.recycle()
-                        }
-                    }
+                    applyCameraColorFilterToPhotoFile(source, target, selected, strength)
                     if (selectedBackgroundEffect != CameraBackgroundEffect.OFF) {
                         applyCameraBackgroundEffectToPhotoFile(target, selectedBackgroundEffect)
                     }
@@ -814,6 +798,54 @@ enum class CameraFilter(val label:String,val saturation:Float,val brightness:Flo
     VINTAGE("Vintage",0.82f,0.015f,0.94f,0.035f),
     BW("B&W",0f,0f,1.08f)
 }
+/**
+ * Apply the exact colour-look pipeline used by the camera editor.
+ * The temporary output protects the source image if compression or replacement fails.
+ */
+internal fun applyCameraColorFilterToPhotoFile(
+    source: File,
+    target: File,
+    filter: CameraFilter,
+    intensity: Float
+) {
+    if (filter == CameraFilter.NATURAL) {
+        if (source.absolutePath != target.absolutePath) source.copyTo(target, overwrite = true)
+        return
+    }
+
+    val bitmap = decodeCameraEditingBitmap(source, maxEdge = 2400)
+    val temporary = File(
+        target.parentFile ?: error("Photo output directory is unavailable"),
+        target.name + ".color-filter-" + System.currentTimeMillis()
+    )
+    try {
+        val matrix = cameraFilterMatrix(filter, intensity)
+        val output = android.graphics.Bitmap.createBitmap(
+            bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888
+        )
+        try {
+            android.graphics.Canvas(output).drawBitmap(
+                bitmap, 0f, 0f,
+                android.graphics.Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) }
+            )
+            FileOutputStream(temporary).use {
+                check(output.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) {
+                    "Unable to save filtered photo"
+                }
+            }
+        } finally {
+            output.recycle()
+        }
+        if (!temporary.renameTo(target)) {
+            temporary.copyTo(target, overwrite = true)
+            check(target.length() > 1024L) { "Unable to replace filtered photo" }
+        }
+    } finally {
+        temporary.delete()
+        bitmap.recycle()
+    }
+}
+
 private fun cameraFilterMatrix(filter: CameraFilter, intensity: Float): ColorMatrix {
     val strength = intensity.coerceIn(0f, 1f)
     return ColorMatrix().apply {

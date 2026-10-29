@@ -24,6 +24,45 @@ class CameraPhotoEffectsInstrumentationTest {
     private val testContext get() = InstrumentationRegistry.getInstrumentation().context
 
     @Test
+    fun everyPhotoLookWritesVisibleColourChangesAndNaturalRestoresTheBaseline() {
+        withPortrait { pristine, original ->
+            CameraFilter.values().filter { it != CameraFilter.NATURAL }.forEach { look ->
+                val outputFile = File.createTempFile("fynx-camera-look-", ".jpg", targetContext.cacheDir)
+                try {
+                    applyCameraColorFilterToPhotoFile(pristine, outputFile, look, 1f)
+                    assertTrue("Photo look ${look.label} did not save an image", outputFile.length() > 1024L)
+                    val edited = BitmapFactory.decodeFile(outputFile.absolutePath)
+                    assertNotNull("Photo look ${look.label} output is not decodable", edited)
+                    try {
+                        assertEquals("Photo look ${look.label} changed width", original.width, edited.width)
+                        assertEquals("Photo look ${look.label} changed height", original.height, edited.height)
+                        val averageDifference = averageSampledRgbDifference(original, edited)
+                        assertTrue(
+                            "Photo look ${look.label} was not visible in the saved pixels (mean RGB delta=$averageDifference)",
+                            averageDifference > 6.0
+                        )
+                    } finally {
+                        edited.recycle()
+                    }
+                } finally {
+                    outputFile.delete()
+                }
+            }
+
+            val naturalOutput = File.createTempFile("fynx-camera-natural-", ".jpg", targetContext.cacheDir)
+            try {
+                applyCameraColorFilterToPhotoFile(pristine, naturalOutput, CameraFilter.NATURAL, 1f)
+                assertTrue(
+                    "Natural did not restore the exact unedited baseline",
+                    pristine.readBytes().contentEquals(naturalOutput.readBytes())
+                )
+            } finally {
+                naturalOutput.delete()
+            }
+        }
+    }
+
+    @Test
     fun eachTrackedFaceEffectWritesAVisibleEdit() {
         withPortrait { pristine, original ->
             CameraFaceEffect.values().filter { it != CameraFaceEffect.OFF }.forEach { effect ->
@@ -120,6 +159,30 @@ class CameraPhotoEffectsInstrumentationTest {
         } finally {
             editedFile.delete()
         }
+    }
+
+    private fun averageSampledRgbDifference(before: Bitmap, after: Bitmap): Double {
+        val width = minOf(before.width, after.width)
+        val height = minOf(before.height, after.height)
+        val stepX = max(1, width / 100)
+        val stepY = max(1, height / 100)
+        var total = 0L
+        var count = 0
+        var y = 0
+        while (y < height) {
+            var x = 0
+            while (x < width) {
+                val a = before.getPixel(x, y)
+                val b = after.getPixel(x, y)
+                total += abs(Color.red(a) - Color.red(b))
+                total += abs(Color.green(a) - Color.green(b))
+                total += abs(Color.blue(a) - Color.blue(b))
+                count++
+                x += stepX
+            }
+            y += stepY
+        }
+        return if (count == 0) 0.0 else total.toDouble() / count
     }
 
     private fun countStronglyChangedSamples(before: Bitmap, after: Bitmap): Int {
