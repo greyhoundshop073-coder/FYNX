@@ -50,6 +50,8 @@ dependencies {
     implementation("androidx.camera:camera-view:1.5.3")
     implementation("androidx.camera:camera-video:1.5.3")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
+    // Optional, on-device subject cutout for Marketplace product photos; model is delivered by Play services.
+    implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
 
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-messaging")
