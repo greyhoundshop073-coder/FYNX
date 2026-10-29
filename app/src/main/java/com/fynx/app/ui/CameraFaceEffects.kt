@@ -75,7 +75,7 @@ internal class FynxCameraFaceAnalyzer(
     private val lastFrameAt = AtomicLong(0L)
     private val closed = AtomicLong(0L)
 
-    @OptIn(ExperimentalGetImage::class)
+    @ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
         if (closed.get() != 0L || !isActive()) {
             imageProxy.close()
