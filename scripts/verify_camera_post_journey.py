@@ -30,7 +30,7 @@ checks = [
      and "never publishing a post" in runtime),
     ("Runtime video journey records a real clip, applies Cinematic, preserves audio where inspectable, and never publishes",
      "def capture_camera_video_journey(" in runtime
-     and "video mode" in runtime.lower()
+     and '["Video"]' in runtime
      and "Cinematic" in runtime
      and "list_app_cache_videos" in runtime
      and "processed video dropped the source audio stream" in runtime
