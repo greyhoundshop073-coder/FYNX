@@ -10,6 +10,10 @@ checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt
 detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt").read_text()
 product_card = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceProductComponents.kt").read_text()
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
+photo_enhancement = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePhotoEnhancement.kt").read_text()
+app_gradle = (ROOT / "app/build.gradle.kts").read_text()
+app_manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text()
+file_provider_paths = (ROOT / "app/src/main/res/xml/fynx_file_paths.xml").read_text()
 seller_orders = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt").read_text()
 app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 saved_products_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSavedMarketplaceProductsPanel.kt").read_text()
@@ -63,6 +67,12 @@ checks = [
     ("Marketplace category artwork remains separate from real seller inventory photos", "never used as seller listing media" in marketplace and "MarketplaceCategoryArtwork" not in hero and "RemoteMarketMedia(" in hero),
     ("My Shop active listing thumbnails use the real seller media and a consistent crop", "mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())" in seller_center and "modifier = Modifier.size(88.dp),\n                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop" in seller_center),
     ("My Shop archived listing thumbnails use the real seller media and a consistent crop", "mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())" in seller_center and "modifier = Modifier.size(72.dp),\n                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop" in seller_center),
+    ("seller photo cleanup uses on-device ML Kit subject segmentation instead of a remote processing API", "SubjectSegmentation.getClient" in photo_enhancement and "segmenter.process(input)" in photo_enhancement and "FynxProductionMessaging.uploadMedia" not in photo_enhancement),
+    ("seller photo cleanup preserves the original and offers preview, Keep Original, Use Enhanced and Undo", all(token in marketplace for token in ("Review enhanced photo", "Keep Original", "Use Enhanced", "Text(\"Undo\"")) and "originalByEnhancedUri" in marketplace),
+    ("seller photo cleanup uses app-private temporary files and a scoped FileProvider path", "FileProvider.getUriForFile" in photo_enhancement and 'name="marketplace_photo_enhancements"' in file_provider_paths and '"\u0024{context.packageName}.fileprovider"' in photo_enhancement),
+    ("seller photo cleanup registers the Play services subject model and its dependency", "play-services-mlkit-subject-segmentation:16.0.0-beta1" in app_gradle and 'android:name="com.google.mlkit.vision.DEPENDENCIES"' in app_manifest and 'android:value="subject_segment"' in app_manifest),
+    ("seller photo cleanup refuses missing foreground results instead of silently publishing an unchanged image as enhanced", "No product foreground was found." in photo_enhancement and "The background could not be separated clearly." in photo_enhancement),
+    ("seller photo cleanup keeps output proportions and uses a bounded working image", "MAX_WORKING_DIMENSION = 1600" in photo_enhancement and "SUBJECT_PADDING" in photo_enhancement and "canvas.drawBitmap(" in photo_enhancement),
     ("Marketplace discovery client sends category under the backend-supported query key", '&category=${URLEncoder.encode(category, "UTF-8")}' in remote_client and 'req.query?.category' in discovery_routes),
     ("Marketplace backend filters selected categories exactly and leaves All unfiltered", 'category.toLowerCase() !== "all"' in discovery_routes and 'where.push("l.category=$" + params.length)' in discovery_routes),
     ("seller form and discovery expose the same expanded category set",
