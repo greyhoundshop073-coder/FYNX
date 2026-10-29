@@ -1900,6 +1900,9 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    enhancementError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
                     media.forEachIndexed { index, uri ->
                         if (!contextIsVideo(context, uri)) {
                             Card(Modifier.fillMaxWidth()) {
