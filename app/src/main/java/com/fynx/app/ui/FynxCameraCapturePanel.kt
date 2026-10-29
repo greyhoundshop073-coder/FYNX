@@ -773,60 +773,118 @@ fun FynxCameraCapturePanel(
             }
             if (recording == null && !fastCapture && mode == CameraMode.PHOTO) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.Black.copy(alpha = 0.72f)
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 20.dp, bottomEnd = 20.dp),
+                    color = Color(0xF012141C),
+                    shadowElevation = 8.dp
                 ) {
-                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        // A proper category tab strip keeps browsing separate from the shutter.
                         Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             listOf("Looks", "Face FX", "Background", "AI Studio").forEach { category ->
-                                FilterChip(
-                                    selected = selectedCameraTool == category,
-                                    onClick = { selectedCameraTool = category; showCaptureControls = true },
-                                    label = { Text(category) }
-                                )
+                                val selected = selectedCameraTool == category
+                                Column(
+                                    modifier = Modifier.weight(1f).clickable {
+                                        selectedCameraTool = category
+                                        showCaptureControls = true
+                                    }.padding(horizontal = 2.dp, vertical = 3.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        category,
+                                        color = if (selected) Color.White else Color.White.copy(alpha = 0.62f),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                        maxLines = 1
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Box(
+                                        Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(3.dp)
+                                            .background(
+                                                if (selected) Color(0xFFB8A7FF) else Color.Transparent,
+                                                androidx.compose.foundation.shape.CircleShape
+                                            )
+                                    )
+                                }
                             }
                         }
-                        Spacer(Modifier.height(2.dp))
-                        when (selectedCameraTool) {
-                            "Face FX" -> {
-                                Text("Face FX", style = MaterialTheme.typography.labelMedium, color = Color.White)
-                                Text("Face-tracked effects · applied to the saved photo", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.70f))
-                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    CameraFaceEffect.values().forEach { option ->
-                                        FilterChip(selected = faceEffect == option, enabled = !applyingFilter && !enhancing, onClick = { faceEffect = option; showCaptureControls = true }, label = { Text(option.label) })
-                                    }
-                                }
+                        Spacer(Modifier.height(7.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    selectedCameraTool,
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    when (selectedCameraTool) {
+                                        "Face FX" -> "Face-tracked stickers · after capture"
+                                        "Background" -> "Portrait and scene effects · after capture"
+                                        "AI Studio" -> "Creative photo treatments · after capture"
+                                        else -> "Choose a look for your photo"
+                                    },
+                                    color = Color.White.copy(alpha = 0.62f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1
+                                )
                             }
-                            "Background" -> {
-                                Text("Background", style = MaterialTheme.typography.labelMedium, color = Color.White)
-                                Text("Portrait blur and scene effects · after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.70f))
-                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    CameraBackgroundEffect.values().forEach { option ->
-                                        FilterChip(selected = backgroundEffect == option, enabled = !applyingFilter && !enhancing, onClick = { backgroundEffect = option; showCaptureControls = true }, label = { Text(option.label) })
-                                    }
+                            Text(
+                                "ON DEVICE",
+                                color = Color(0xFFB8A7FF),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            when (selectedCameraTool) {
+                                "Face FX" -> CameraFaceEffect.values().forEach { option ->
+                                    CameraEffectTile(
+                                        label = option.label,
+                                        glyph = cameraEffectGlyph("Face FX", option.label),
+                                        selected = faceEffect == option,
+                                        enabled = !applyingFilter && !enhancing,
+                                        onClick = { faceEffect = option; showCaptureControls = true }
+                                    )
                                 }
-                            }
-                            "AI Studio" -> {
-                                Text("AI Studio", style = MaterialTheme.typography.labelMedium, color = Color.White)
-                                Text("Local photo styling · after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.70f))
-                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    CameraStudioEffect.values().forEach { option ->
-                                        FilterChip(selected = studioEffect == option, enabled = !applyingFilter && !enhancing, onClick = { studioEffect = option; showCaptureControls = true }, label = { Text(option.label) })
-                                    }
+                                "Background" -> CameraBackgroundEffect.values().forEach { option ->
+                                    CameraEffectTile(
+                                        label = option.label,
+                                        glyph = cameraEffectGlyph("Background", option.label),
+                                        selected = backgroundEffect == option,
+                                        enabled = !applyingFilter && !enhancing,
+                                        onClick = { backgroundEffect = option; showCaptureControls = true }
+                                    )
                                 }
-                            }
-                            else -> {
-                                Text("Looks", style = MaterialTheme.typography.labelMedium, color = Color.White)
-                                Text("Colour looks are applied after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.70f))
-                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    CameraFilter.values().forEach { option ->
-                                        FilterChip(selected = filter == option, onClick = { if (recording == null) { filter = option; filterIntensity = 1f; showCaptureControls = true } }, label = { Text(option.label) })
-                                    }
+                                "AI Studio" -> CameraStudioEffect.values().forEach { option ->
+                                    CameraEffectTile(
+                                        label = option.label,
+                                        glyph = cameraEffectGlyph("AI Studio", option.label),
+                                        selected = studioEffect == option,
+                                        enabled = !applyingFilter && !enhancing,
+                                        onClick = { studioEffect = option; showCaptureControls = true }
+                                    )
+                                }
+                                else -> CameraFilter.values().forEach { option ->
+                                    CameraEffectTile(
+                                        label = option.label,
+                                        glyph = cameraEffectGlyph("Looks", option.label),
+                                        selected = filter == option,
+                                        enabled = recording == null && !applyingFilter && !enhancing,
+                                        onClick = { filter = option; filterIntensity = 1f; showCaptureControls = true }
+                                    )
                                 }
                             }
                         }
@@ -860,6 +918,91 @@ fun FynxCameraCapturePanel(
     }
     }
 }
+
+/** Compact, consistent effect tiles inspired by familiar short-video camera trays. */
+@Composable
+private fun CameraEffectTile(
+    label: String,
+    glyph: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.width(76.dp).height(78.dp),
+        shape = RoundedCornerShape(15.dp),
+        color = if (selected) Color(0xFF3A315A) else Color(0xFF22252E),
+        border = androidx.compose.foundation.BorderStroke(
+            if (selected) 1.5.dp else 1.dp,
+            if (selected) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.10f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 7.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(glyph, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                label,
+                color = if (selected) Color.White else Color.White.copy(alpha = 0.84f),
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 2,
+                minLines = 2
+            )
+        }
+    }
+}
+
+private fun cameraEffectGlyph(category: String, label: String): String = when (category) {
+    "Face FX" -> when (label) {
+        "Off" -> "○"
+        "Cute Ears" -> "🐱"
+        "Smart Glasses" -> "🤓"
+        "Royal Crown" -> "👑"
+        "Puppy / Animal" -> "🐶"
+        "Virtual Makeup" -> "💄"
+        "Hair Colour" -> "🎨"
+        "Funny Face" -> "😜"
+        else -> "✨"
+    }
+    "Background" -> when (label) {
+        "Off" -> "○"
+        "Portrait Blur" -> "◉"
+        "Blue" -> "🔵"
+        "Sunset" -> "🌅"
+        "Mint" -> "🟢"
+        "Studio Scene" -> "🎬"
+        "Beach Scene" -> "🏖️"
+        else -> "🌄"
+    }
+    "AI Studio" -> when (label) {
+        "Off" -> "○"
+        "Mature Look" -> "🎭"
+        "Face Symmetry" -> "◐"
+        "Anime / Cartoon" -> "🎨"
+        else -> "✨"
+    }
+    else -> when (label) {
+        "Natural" -> "◉"
+        "Portrait" -> "◌"
+        "Beauty Glow" -> "✨"
+        "Bright" -> "☀️"
+        "Warm Glow" -> "🌅"
+        "Cinematic" -> "🎬"
+        "Low-Light Rescue" -> "🌙"
+        "2000s Flash" -> "⚡"
+        "Cool" -> "❄️"
+        "Vintage" -> "◷"
+        "B&W" -> "◐"
+        else -> "✦"
+    }
+}
+
 private fun rotateCameraPhotoFile(file: File) {
     val bitmap = decodeCameraEditingBitmap(file, maxEdge = 2400)
     var rotated: android.graphics.Bitmap? = null
