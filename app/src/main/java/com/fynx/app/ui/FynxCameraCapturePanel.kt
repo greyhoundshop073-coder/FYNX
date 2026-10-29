@@ -271,13 +271,19 @@ fun FynxCameraCapturePanel(
     LaunchedEffect(faceEffect) { if (faceEffect == CameraFaceEffect.OFF) trackedFaceBounds = emptyList() }
     // Apply live colour looks directly to PreviewView. A Compose graphicsLayer around the
     // camera AndroidView can cover sibling controls after CameraX rebinds a lens on API 35.
-    LaunchedEffect(filter, filterIntensity, previewView) {
+    // Keep colour processing on the internal preview texture rather than the outer
+    // PreviewView. A RenderEffect on the parent can promote the whole camera surface above
+    // Compose siblings after CameraX rebinds a lens, hiding flash/Gallery/capture controls.
+    LaunchedEffect(filter, filterIntensity, lens, previewView) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            previewView.setRenderEffect(
-                android.graphics.RenderEffect.createColorFilterEffect(
-                    ColorMatrixColorFilter(cameraFilterMatrix(filter, filterIntensity))
-                )
+            val effect = android.graphics.RenderEffect.createColorFilterEffect(
+                ColorMatrixColorFilter(cameraFilterMatrix(filter, filterIntensity))
             )
+            previewView.post {
+                // COMPATIBLE mode uses TextureView, keeping its filtered pixels in the View
+                // hierarchy while Compose draws camera controls over it.
+                previewView.getChildAt(0)?.setRenderEffect(effect)
+            }
         }
     }
 
