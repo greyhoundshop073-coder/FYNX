@@ -302,12 +302,13 @@ internal fun applyCameraFaceEffectToPhotoFile(file: File, effect: CameraFaceEffe
         require(faces.isNotEmpty()) {
             "No clear face was found. Try a front-facing photo in good light."
         }
-        output = source.copy(Bitmap.Config.ARGB_8888, true)
+        val outputBitmap = source.copy(Bitmap.Config.ARGB_8888, true)
             ?: error("Unable to prepare captured photo for face effects")
-        val canvas = Canvas(output)
+        output = outputBitmap
+        val canvas = Canvas(outputBitmap)
         faces.forEach { face -> drawFynxCameraFaceEffect(canvas, RectF(face.boundingBox), effect) }
         FileOutputStream(temp).use { stream ->
-            check(output.compress(Bitmap.CompressFormat.JPEG, 95, stream)) { "Unable to save face effect" }
+            check(outputBitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)) { "Unable to save face effect" }
         }
         if (!temp.renameTo(file)) {
             temp.copyTo(file, overwrite = true)
