@@ -23,6 +23,14 @@ class CameraMediaReliabilityTest {
     }
 
     @Test
+    fun stageTwoFaceEffectsHaveStableUserFacingOptions() {
+        assertEquals(
+            listOf("Off", "Cute Ears", "Smart Glasses", "Royal Crown", "Puppy / Animal", "Virtual Makeup", "Hair Colour", "Funny Face"),
+            CameraFaceEffect.values().map { it.label }
+        )
+    }
+
+    @Test
     fun cameraFilterParametersAreFinite() {
         CameraFilter.values().forEach { filter ->
             assertTrue(filter.saturation.isFinite())

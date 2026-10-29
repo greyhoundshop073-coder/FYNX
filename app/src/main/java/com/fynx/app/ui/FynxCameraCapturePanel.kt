@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
+import android.graphics.RectF
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
@@ -13,6 +14,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.UseCase
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
@@ -47,6 +50,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -122,6 +126,8 @@ fun FynxCameraCapturePanel(
     var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
     var pendingType by remember { mutableStateOf<String?>(null) }
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
+    var faceEffect by remember { mutableStateOf(CameraFaceEffect.OFF) }
+    var trackedFaceBounds by remember { mutableStateOf<List<CameraFaceBounds>>(emptyList()) }
     var filterIntensity by remember { mutableFloatStateOf(1f) }
     var enhancing by remember { mutableStateOf(false) }
     var applyingFilter by remember { mutableStateOf(false) }
@@ -129,6 +135,25 @@ fun FynxCameraCapturePanel(
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
+    val faceAnalysisEnabled = faceEffect != CameraFaceEffect.OFF && mode == CameraMode.PHOTO && pendingUri == null
+    val faceAnalyzer = remember(context, previewView) {
+        FynxCameraFaceAnalyzer(
+            context = context,
+            previewView = previewView,
+            mainExecutor = ContextCompat.getMainExecutor(context),
+            isActive = { faceEffect != CameraFaceEffect.OFF && mode == CameraMode.PHOTO && pendingUri == null },
+            isFrontCamera = { lens == CameraSelector.LENS_FACING_FRONT },
+            onFaces = { trackedFaceBounds = it }
+        )
+    }
+    val faceImageAnalysis = remember(faceAnalyzer) {
+        ImageAnalysis.Builder()
+            .setTargetResolution(android.util.Size(640, 480))
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+            .also { it.setAnalyzer(faceAnalyzer.executor, faceAnalyzer) }
+    }
+    LaunchedEffect(faceEffect) { if (faceEffect == CameraFaceEffect.OFF) trackedFaceBounds = emptyList() }
 
     LaunchedEffect(recording != null, recordingStartedAt) { while (recording != null) { recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L); delay(200L) } }
     LaunchedEffect(recording, recordingStartedAt, videoNoteMode) {
@@ -139,7 +164,7 @@ fun FynxCameraCapturePanel(
     }
     LaunchedEffect(showCaptureControls, pendingUri, recording, cameraControl, hasCamera) { if (showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0 && cameraControl != null && hasCamera) { delay(5000L); showCaptureControls = false } }
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
-    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
+    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled) {
         val generation = bindGeneration + 1; bindGeneration = generation
         if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
         val future = ProcessCameraProvider.getInstance(context)
@@ -166,7 +191,10 @@ fun FynxCameraCapturePanel(
                     .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
                     .build()
                 provider.unbindAll(); if (generation != bindGeneration || pendingUri != null) return@runCatching
-                val camera = if (mode == CameraMode.PHOTO) provider.bindToLifecycle(lifecycleOwner, selector, preview, capture) else provider.bindToLifecycle(lifecycleOwner, selector, preview, video)
+                val useCases = mutableListOf<UseCase>(preview)
+                if (mode == CameraMode.PHOTO) useCases += capture else useCases += video
+                if (faceAnalysisEnabled && mode == CameraMode.PHOTO) useCases += faceImageAnalysis
+                val camera = provider.bindToLifecycle(lifecycleOwner, selector, *useCases.toTypedArray())
                 cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
                 cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 4f)); val range = cameraInfo?.exposureState?.exposureCompensationRange
                 exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2); cameraControl?.setExposureCompensationIndex(exposure)
@@ -175,7 +203,7 @@ fun FynxCameraCapturePanel(
             }.onFailure { if (generation == bindGeneration) error = it.message ?: "Camera could not start" }
         }, ContextCompat.getMainExecutor(context))
     }
-    DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll() } }
+    DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
     fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; filterIntensity = 1f; enhancing = false; error = null }
     fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
@@ -186,6 +214,7 @@ fun FynxCameraCapturePanel(
         val source = original.path?.let { File(it) } ?: return
         val target = current.path?.let { File(it) } ?: return
         val strength = intensity.coerceIn(0f, 1f)
+        val selectedFaceEffect = faceEffect
         filter = selected
         filterIntensity = strength
         applyingFilter = true
@@ -210,6 +239,9 @@ fun FynxCameraCapturePanel(
                             bitmap.recycle()
                         }
                     }
+                    if (selectedFaceEffect != CameraFaceEffect.OFF) {
+                        applyCameraFaceEffectToPhotoFile(context, target, selectedFaceEffect)
+                    }
                 }
             }
             result.onFailure { error = it.message ?: "Filter could not be applied" }
@@ -231,7 +263,7 @@ fun FynxCameraCapturePanel(
                     pendingType = "image"
                     error = null
                     showCaptureControls = true
-                    if (filter != CameraFilter.NATURAL) applyFilterToPhoto(filter, filterIntensity)
+                    if (filter != CameraFilter.NATURAL || faceEffect != CameraFaceEffect.OFF) applyFilterToPhoto(filter, filterIntensity)
                 }
                     .onFailure { file.delete(); original.delete(); error = it.message ?: "Photo could not be prepared"; showCaptureControls = true }
             }
@@ -280,6 +312,18 @@ fun FynxCameraCapturePanel(
                 }
             }
         )
+        if (faceAnalysisEnabled && faceEffect != CameraFaceEffect.OFF && trackedFaceBounds.isNotEmpty()) {
+            Canvas(Modifier.fillMaxSize()) {
+                val nativeCanvas = drawContext.canvas.nativeCanvas
+                trackedFaceBounds.forEach { face ->
+                    drawFynxCameraFaceEffect(
+                        nativeCanvas,
+                        RectF(face.left, face.top, face.right, face.bottom),
+                        faceEffect
+                    )
+                }
+            }
+        }
         if (showGrid && pendingUri == null && recording == null) {
             Canvas(Modifier.fillMaxSize()) {
                 val stroke = androidx.compose.ui.unit.Dp.Hairline
@@ -344,6 +388,24 @@ fun FynxCameraCapturePanel(
                 Spacer(Modifier.height(8.dp))
             }
             if (recording == null && !fastCapture && mode == CameraMode.PHOTO) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Face FX", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Tracked on-device · photo effects", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+                    CameraFaceEffect.values().forEach { option ->
+                        FilterChip(
+                            selected = faceEffect == option,
+                            enabled = !applyingFilter && !enhancing,
+                            onClick = {
+                                faceEffect = option
+                                showCaptureControls = true
+                            },
+                            label = { Text(option.label) }
+                        )
+                    }
+                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Looks", style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.width(8.dp))
