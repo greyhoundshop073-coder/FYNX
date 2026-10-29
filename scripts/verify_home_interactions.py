@@ -52,7 +52,7 @@ for needle in ('post.mediaUrl?.let','RemoteSocialMedia','VideoView','rememberLaz
     require(home, needle, f"post media behavior {needle}")
 if 'MediaController' in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy Android MediaController must not compete with FYNX feed controls")
-require(home, 'LazyColumn(state = feedListState', "single feed state owns vertical scrolling")
+require_normalized(home, 'LazyColumn( state = feedListState, modifier = modifier.fillMaxSize().background(Brush.verticalGradient(', "single feed state owns vertical scrolling with the reflective viewport background")
 require(home, 'snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }', "automatic near-bottom feed pagination")
 for needle in ('onOpenAuthorProfile','FynxRemoteSocialClient.follow','FynxDiscoveryClient.recordEngagement','Intent.ACTION_SEND'):
     require(home, needle, f"identity/share behavior {needle}")
