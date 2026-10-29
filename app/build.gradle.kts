@@ -23,10 +23,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi"
+    buildFeatures { compose = true }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget("17")
+        optIn.add("androidx.compose.foundation.ExperimentalFoundationApi")
     }
+}
     buildFeatures { compose = true }
 }
 
