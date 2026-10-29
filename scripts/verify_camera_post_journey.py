@@ -19,13 +19,13 @@ checks = [
     ("Runtime camera journey verifies switch, flash capability, Gallery, capture, effects and Retake without publishing",
      "def capture_camera_post_journey(" in runtime
      and '["Take photo"]' in runtime
-     and '["Face FX", "Cute Ears", "AI Studio", "Portrait Blur", "Retake", "Send"]' in runtime
+     and all(f'"{label}"' in runtime for label in ["Face FX", "Cute Ears", "AI Studio", "Portrait Blur", "Retake", "Send"])
      and "camera-photo-editor-initial.png" in runtime
      and "camera-photo-editor-portrait-ready.png" in runtime
      and "camera-photo-retake" in runtime
-     and "front/back camera switching returned to a usable camera preview" in runtime
+     and "front/back camera switching returned to a usable preview" in runtime
      and "Gallery opened Android's real photo-picker UI" in runtime
-     and "camera torch toggled on and back off" in runtime
+     and "rear-camera torch toggled on and back off" in runtime
      and "Send must become enabled" in runtime
      and "without publishing a post" in runtime),
     ("Runtime video journey records a real clip, applies Cinematic, preserves audio where inspectable, and never publishes",
