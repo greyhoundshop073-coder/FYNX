@@ -76,6 +76,11 @@ checks = [
      and photo_enhancement.index("if (Build.VERSION.SDK_INT >= 36)") < photo_enhancement.index("SubjectSegmentation.getClient")
      and "failure.message" in marketplace
      and 'it.contains("temporarily unavailable on Android 16 and newer")' in marketplace),
+    ("Marketplace hides the unsupported photo cleanup action on Android 16 and explains originals remain publishable",
+     "fun isSupportedOnCurrentAndroid(): Boolean = Build.VERSION.SDK_INT < 36" in photo_enhancement
+     and "if (FynxMarketplacePhotoEnhancement.isSupportedOnCurrentAndroid())" in marketplace
+     and "Photo background cleanup is temporarily unavailable on Android 16 and newer." in marketplace
+     and "Your original photos still work and can be published normally." in marketplace),
     ("seller photo cleanup preserves the original and offers preview, Keep Original, Use Enhanced and Undo", all(token in marketplace for token in ("Review enhanced photo", "Keep Original", "Use Enhanced", "Text(\"Undo\"")) and "originalByEnhancedUri" in marketplace),
     ("re-enhancing a seller photo preserves the first original for Undo and deletes only the superseded generated image",
      "val rootOriginal = originalByEnhancedUri[original.toString()] ?: original" in marketplace
