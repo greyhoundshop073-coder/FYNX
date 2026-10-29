@@ -1136,6 +1136,20 @@ private fun CameraEffectTile(
                     colorFilter = ColorFilter.colorMatrix(cameraEffectPreviewMatrix(previewStyle)),
                     modifier = Modifier.fillMaxSize()
                 )
+                // Reuse the actual sticker renderer so Face FX thumbnails preview the same artwork
+                // as the live camera and saved-photo processor instead of displaying a generic icon.
+                val facePreviewEffect = if (category == "Face FX") {
+                    CameraFaceEffect.values().firstOrNull { it.label == label }
+                } else null
+                if (facePreviewEffect != null && facePreviewEffect != CameraFaceEffect.OFF) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        val previewFace = RectF(
+                            size.width * 0.12f, size.height * 0.18f,
+                            size.width * 0.88f, size.height * 0.94f
+                        )
+                        drawFynxCameraFaceEffect(drawContext.canvas.nativeCanvas, previewFace, facePreviewEffect)
+                    }
+                }
                 Box(
                     Modifier.align(Alignment.TopEnd).padding(4.dp).size(5.dp)
                         .background(Color.White.copy(alpha = 0.78f), androidx.compose.foundation.shape.CircleShape)
