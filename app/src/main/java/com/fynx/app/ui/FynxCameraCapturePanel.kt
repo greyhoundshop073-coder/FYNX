@@ -127,6 +127,7 @@ fun FynxCameraCapturePanel(
     var pendingType by remember { mutableStateOf<String?>(null) }
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
     var faceEffect by remember { mutableStateOf(CameraFaceEffect.OFF) }
+    var backgroundEffect by remember { mutableStateOf(CameraBackgroundEffect.OFF) }
     var trackedFaceBounds by remember { mutableStateOf<List<CameraFaceBounds>>(emptyList()) }
     var filterIntensity by remember { mutableFloatStateOf(1f) }
     var enhancing by remember { mutableStateOf(false) }
@@ -205,7 +206,7 @@ fun FynxCameraCapturePanel(
     }
     DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
-    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; filterIntensity = 1f; enhancing = false; error = null }
+    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
     fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
     fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) {
         val current = pendingUri ?: return
@@ -215,6 +216,7 @@ fun FynxCameraCapturePanel(
         val target = current.path?.let { File(it) } ?: return
         val strength = intensity.coerceIn(0f, 1f)
         val selectedFaceEffect = faceEffect
+        val selectedBackgroundEffect = backgroundEffect
         filter = selected
         filterIntensity = strength
         applyingFilter = true
@@ -238,6 +240,9 @@ fun FynxCameraCapturePanel(
                         } finally {
                             bitmap.recycle()
                         }
+                    }
+                    if (selectedBackgroundEffect != CameraBackgroundEffect.OFF) {
+                        applyCameraBackgroundEffectToPhotoFile(target, selectedBackgroundEffect)
                     }
                     if (selectedFaceEffect != CameraFaceEffect.OFF) {
                         applyCameraFaceEffectToPhotoFile(context, target, selectedFaceEffect)
@@ -263,7 +268,7 @@ fun FynxCameraCapturePanel(
                     pendingType = "image"
                     error = null
                     showCaptureControls = true
-                    if (filter != CameraFilter.NATURAL || faceEffect != CameraFaceEffect.OFF) applyFilterToPhoto(filter, filterIntensity)
+                    if (filter != CameraFilter.NATURAL || faceEffect != CameraFaceEffect.OFF || backgroundEffect != CameraBackgroundEffect.OFF) applyFilterToPhoto(filter, filterIntensity)
                 }
                     .onFailure { file.delete(); original.delete(); error = it.message ?: "Photo could not be prepared"; showCaptureControls = true }
             }
@@ -289,6 +294,26 @@ fun FynxCameraCapturePanel(
                             )
                         }
                     }
+                    Text("Background replacement", style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CameraBackgroundEffect.values().forEach { option ->
+                            FilterChip(
+                                selected = backgroundEffect == option,
+                                enabled = !enhancing && !applyingFilter,
+                                onClick = {
+                                    backgroundEffect = option
+                                    applyFilterToPhoto(filter, filterIntensity)
+                                },
+                                label = { Text(option.label) }
+                            )
+                        }
+                    }
+                    if (applyingFilter) {
+                        Text("Applying selected effects on this device…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                    if (backgroundEffect != CameraBackgroundEffect.OFF) {
+                        Text("Subject separation runs on-device; no camera image is uploaded for this effect.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     if(filter != CameraFilter.NATURAL){
                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
                             Text("Intensity",style=MaterialTheme.typography.labelMedium,modifier=Modifier.width(56.dp))
@@ -296,7 +321,7 @@ fun FynxCameraCapturePanel(
                         }
                     }
                     OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing && !applyingFilter,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}}
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing)retake()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing)rotatePhoto()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing)onCaptured(previewUri,previewType)},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing && !applyingFilter)retake()},enabled=!enhancing && !applyingFilter,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing && !applyingFilter)rotatePhoto()},enabled=!enhancing && !applyingFilter,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing && !applyingFilter)onCaptured(previewUri,previewType)},enabled=!enhancing && !applyingFilter,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
             }
         };return
     }
@@ -402,6 +427,21 @@ fun FynxCameraCapturePanel(
                                 faceEffect = option
                                 showCaptureControls = true
                             },
+                            label = { Text(option.label) }
+                        )
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Background", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Text("On-device photo effect · applied after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CameraBackgroundEffect.values().forEach { option ->
+                        FilterChip(
+                            selected = backgroundEffect == option,
+                            enabled = !applyingFilter && !enhancing,
+                            onClick = { backgroundEffect = option; showCaptureControls = true },
                             label = { Text(option.label) }
                         )
                     }

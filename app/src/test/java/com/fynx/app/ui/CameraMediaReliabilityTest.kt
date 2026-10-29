@@ -31,6 +31,17 @@ class CameraMediaReliabilityTest {
     }
 
     @Test
+    fun stageThreeBackgroundEffectsIncludeBlurColourReplacementAndScenes() {
+        assertEquals(
+            listOf("Off", "Portrait Blur", "Blue", "Sunset", "Mint", "Studio Scene", "Beach Scene"),
+            CameraBackgroundEffect.values().map { it.label }
+        )
+        assertTrue(CameraBackgroundEffect.PORTRAIT_BLUR != CameraBackgroundEffect.OFF)
+        assertTrue(CameraBackgroundEffect.BLUE_STUDIO != CameraBackgroundEffect.PORTRAIT_BLUR)
+        assertTrue(CameraBackgroundEffect.STUDIO_SCENE != CameraBackgroundEffect.BEACH_SCENE)
+    }
+
+    @Test
     fun cameraFilterParametersAreFinite() {
         CameraFilter.values().forEach { filter ->
             assertTrue(filter.saturation.isFinite())
