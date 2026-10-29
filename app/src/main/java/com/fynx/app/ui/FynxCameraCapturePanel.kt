@@ -696,13 +696,7 @@ fun FynxCameraCapturePanel(
                 }
                 if (!liveProofMode) {
                     profilePhotoId?.takeIf { it.isNotBlank() }?.let { photoId ->
-                        FynxRemoteMedia(
-                            "/api/media/$photoId",
-                            "image",
-                            Modifier.padding(start = 7.dp).size(28.dp),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                            rounded = true
-                        )
+                        FynxRemoteMedia("/api/media/$photoId", "image", Modifier.padding(start = 7.dp).size(28.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop, rounded = true)
                     } ?: Surface(
                         modifier = Modifier.padding(start = 7.dp).size(28.dp),
                         shape = androidx.compose.foundation.shape.CircleShape,
