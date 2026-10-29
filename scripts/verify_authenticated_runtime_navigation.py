@@ -602,6 +602,17 @@ def login():
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
     xml=dump_ui("authenticated-before-login.xml"); screenshot("authenticated-before-login.png")
+    # A first-run notification modal can own the accessibility hierarchy even
+    # though the actual Home screen is already rendered behind it. In the
+    # read-only visual-only flow, clear that exact system overlay before treating
+    # the missing Sign In control as an authentication failure.
+    if VISUALS_ONLY and "com.google.android.permissioncontroller" in xml:
+        xml = dismiss_runtime_permission_prompt() or dump_ui("authenticated-before-login-after-permission.xml")
+        screenshot("authenticated-before-login-after-permission.png")
+        if (xml and find_control(xml, ["Open FYNX camera"])
+                and find_control(xml, ["Chat"]) and find_control(xml, ["Friends"])):
+            LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
+            return xml, ""
     sign_in_gate=find_control(xml,["Sign In"])
     if not sign_in_gate: return xml,"authentication gate was not visible"
     _,x,y=sign_in_gate; run("adb","shell","input","tap",str(x),str(y))

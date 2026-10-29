@@ -46,7 +46,10 @@ checks = [
         and 'prepare_debug_visual_capture_permissions()' in navigation
         and 'and "com.google.android.permissioncontroller" in xml' in navigation
         and 'find_control(xml, ["Allow FYNX to send you notifications?"])' in navigation
-        and 'find_control(xml, ["Allow"])' in navigation,
+        and 'find_control(xml, ["Allow"])' in navigation
+        and 'if VISUALS_ONLY and "com.google.android.permissioncontroller" in xml:' in navigation
+        and 'authenticated-before-login-after-permission.png' in navigation
+        and 'find_control(xml, ["Open FYNX camera"])' in navigation,
     ),
     (
         "real Marketplace screenshot and UI hierarchy are captured after destination marker verification",
