@@ -947,13 +947,39 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     screenshot(f"{prefix}-camera-photo-editor-initial.png")
     (ROOT / f"{prefix}-camera-photo-editor-initial.xml").write_text(editor_xml + chr(10), encoding="utf-8")
     missing_editor = [
-        label for label in ["Face FX", "Cute Ears", "AI Studio", "Portrait Blur", "Retake", "Send"]
+        label for label in ["Looks", "Face FX", "Background", "AI Studio", "Retake", "Send"]
         if not find_control(editor_xml, [label])
     ]
     if missing_editor:
-        FAILURES.append(prefix + ": captured-photo editor missing expected effect/action controls: " + ", ".join(missing_editor))
+        FAILURES.append(prefix + ": captured-photo editor missing expected category/action controls: " + ", ".join(missing_editor))
     else:
-        report.append("- PASS photo editor exposes face, background, Studio and Retake/Send controls")
+        report.append("- PASS photo editor exposes the grouped effect categories and Retake/Send actions")
+
+    # Verify each category exposes its actual controls without flooding one screen with every effect row.
+    for category, expected_effect, slug in [
+        ("Face FX", "Cute Ears", "face-fx"),
+        ("Background", "Portrait Blur", "background"),
+        ("AI Studio", "Mature Look", "studio"),
+    ]:
+        category_xml = tap_control(
+            editor_xml, [category], f"{prefix}-camera-photo-editor-{slug}-category",
+            [expected_effect]
+        )
+        if category_xml and find_control(category_xml, [expected_effect]):
+            report.append(f"- PASS photo editor {category} category exposes {expected_effect}")
+            screenshot(f"{prefix}-camera-photo-editor-{slug}-category.png")
+            editor_xml = category_xml
+        else:
+            FAILURES.append(prefix + f": photo editor {category} category did not expose {expected_effect}")
+
+    # Return to the default Looks category before testing actual photo processing.
+    looks_xml = tap_control(
+        editor_xml, ["Looks"], f"{prefix}-camera-photo-editor-looks-category", ["Portrait"]
+    )
+    if looks_xml and find_control(looks_xml, ["Portrait"]):
+        editor_xml = looks_xml
+    else:
+        FAILURES.append(prefix + ": photo editor could not return to Looks for the Portrait-processing test")
 
     # Exercise a filter through the actual editor UI. Portrait must process onto the saved file;
     # Send must become enabled only after processing is complete. Never publish the image.
