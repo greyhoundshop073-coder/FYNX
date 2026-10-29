@@ -1986,7 +1986,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                         media = media.toMutableList().also { it[index] = enhanced }
                         originalByEnhancedUri = originalByEnhancedUri + (enhanced.toString() to original)
                         if (originalByEnhancedUri.containsKey(replacedOld.toString()) && replacedOld != original) {
-                            FynxMarketplacePhotoEnhancement.discard(context, replacedOld)
+                            FynxMarketplacePhotoEnhancement.discard(replacedOld)
                             originalByEnhancedUri = originalByEnhancedUri - replacedOld.toString()
                         }
                         enhancementPreviewUri = null
