@@ -308,10 +308,30 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const categoryInput = typeof req.body?.category === "string" ? req.body.category.trim().slice(0, 40) : null;
       const conditionInput = typeof req.body?.condition === "string" ? req.body.condition.trim().toUpperCase() : null;
       const locationInput = typeof req.body?.location === "string" ? req.body.location.trim().slice(0, 160) : null;
+      const mediaIdsProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "mediaIds");
+      let replacementMediaIds = null;
+      if (mediaIdsProvided) {
+        const rawMediaIds = req.body.mediaIds;
+        if (!Array.isArray(rawMediaIds) || rawMediaIds.length < 1 || rawMediaIds.length > 12) {
+          return res.status(400).json({ error: "choose between 1 and 12 replacement product photos or videos" });
+        }
+        replacementMediaIds = rawMediaIds.map((value) => {
+          if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return value;
+          if (typeof value === "string" && /^[0-9]{1,18}$/.test(value.trim())) {
+            const parsed = Number(value.trim());
+            return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+          }
+          return null;
+        });
+        if (replacementMediaIds.some((value) => value == null) ||
+            new Set(replacementMediaIds).size !== replacementMediaIds.length) {
+          return res.status(400).json({ error: "replacement media identifiers are invalid or duplicated" });
+        }
+      }
       if (title.length < 2 || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0) return res.status(400).json({ error: "valid product name, price and quantity are required" });
 
       await client.query("BEGIN");
-      const existing = (await client.query("SELECT id, seller_id, price, description, category, condition, location, reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
+      const existing = (await client.query("SELECT id, seller_id, price, description, category, condition, location, reserved_quantity, media_ids FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
       if (!existing) { await client.query("ROLLBACK"); return res.status(404).json({ error: "listing not found" }); }
       const description = descriptionInput ?? String(existing.description || "");
       const category = categoryInput ?? String(existing.category || "");
@@ -326,8 +346,25 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "valid product description, category, condition and location are required" });
       }
+      if (replacementMediaIds != null) {
+        const ownedMedia = await client.query(
+          "SELECT id, mime_type FROM message_media WHERE id = ANY($1::bigint[]) AND owner_id = $2",
+          [replacementMediaIds, req.user.sub]
+        );
+        if (ownedMedia.rowCount !== replacementMediaIds.length) {
+          await client.query("ROLLBACK");
+          return res.status(403).json({ error: "one or more replacement media files are not owned by this account" });
+        }
+        if (ownedMedia.rows.some((media) => !/^(image|video)\//i.test(String(media.mime_type || "")))) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: "Marketplace listing media must be images or videos" });
+        }
+      }
       const oldPrice = Number(existing.price);
-      const updated = (await client.query("UPDATE marketplace_listings SET title = $1, price = $2, quantity = $3, description = $4, category = $5, condition = $6, location = $7, updated_at = NOW() WHERE id = $8 AND seller_id = $9 RETURNING id, title, price, quantity, description, category, condition, location", [title, price, quantity, description, category, condition, location, id, req.user.sub])).rows[0];
+      const updated = (await client.query(
+        "UPDATE marketplace_listings SET title = $1, price = $2, quantity = $3, description = $4, category = $5, condition = $6, location = $7, media_ids = COALESCE($8::jsonb, media_ids), updated_at = NOW() WHERE id = $9 AND seller_id = $10 RETURNING id, title, price, quantity, description, category, condition, location, media_ids",
+        [title, price, quantity, description, category, condition, location, replacementMediaIds == null ? null : JSON.stringify(replacementMediaIds), id, req.user.sub]
+      )).rows[0];
       const priceChanged = oldPrice !== Number(updated.price);
       const watchers = priceChanged ? (await client.query("SELECT w.user_id FROM marketplace_price_watches w WHERE w.listing_id = $1 AND w.user_id <> $2", [id, req.user.sub])).rows : [];
       await client.query("COMMIT");
@@ -346,7 +383,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           });
         }
       }
-      return res.json({ listing: { id: String(updated.id), title: updated.title, price: Number(updated.price), quantity: Number(updated.quantity), description: updated.description, category: updated.category, condition: updated.condition, location: updated.location }, priceChanged, notifiedWatchers: watchers.length });
+      return res.json({ listing: { id: String(updated.id), title: updated.title, price: Number(updated.price), quantity: Number(updated.quantity), description: updated.description, category: updated.category, condition: updated.condition, location: updated.location, mediaIds: Array.isArray(updated.media_ids) ? updated.media_ids.map(String) : [] }, priceChanged, notifiedWatchers: watchers.length });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       console.error("marketplace listing update", error);
