@@ -1637,15 +1637,15 @@ fun FynxCameraCapturePanel(
 
         if (showEffectCarousel && recording == null) {
             Surface(
-                modifier = Modifier.align(Alignment.CenterEnd)
-                    .padding(end = 8.dp, top = 108.dp, bottom = 218.dp)
-                    .width(176.dp).heightIn(max = 282.dp),
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .padding(horizontal = 12.dp, bottom = 210.dp)
+                    .fillMaxWidth().widthIn(max = 520.dp).heightIn(max = 282.dp),
                 shape = RoundedCornerShape(22.dp),
                 color = Color(0xD913151D),
                 tonalElevation = 8.dp
             ) {
                 Column(
-                    Modifier.fillMaxWidth().heightIn(max = 260.dp).padding(horizontal = 7.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().heightIn(max = 260.dp).padding(horizontal = 10.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(
