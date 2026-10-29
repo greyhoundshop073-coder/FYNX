@@ -50,6 +50,19 @@ class CameraMediaReliabilityTest {
     }
 
     @Test
+    fun stageFiveVideoStylesAndCaptionTimelineAreStable() {
+        assertEquals(
+            listOf("Natural", "Cinematic", "Warm Film", "Vintage", "B&W", "Vivid"),
+            CameraVideoStyle.values().map { it.label }
+        )
+        val cues = buildCameraCaptionCues("Hello there. This is FYNX camera captions.", 8_000L)
+        assertTrue(cues.isNotEmpty())
+        assertEquals(0L, cues.first().startMs)
+        assertEquals(8_000L, cues.last().endMs)
+        assertTrue(cues.zipWithNext().all { (left, right) -> left.endMs == right.startMs })
+    }
+
+    @Test
     fun cameraFilterParametersAreFinite() {
         CameraFilter.values().forEach { filter ->
             assertTrue(filter.saturation.isFinite())
