@@ -724,6 +724,56 @@ def restore_home_after_restart(name:str)->str:
         return current
     return current
 
+def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
+    """Capture the actual camera preview and photo editor from the running APK, without publishing."""
+    composer_xml = tap_control(
+        home_xml, ["Open FYNX camera"], f"{prefix}-home-camera-composer",
+        ["What's on your mind?"]
+    )
+    if not composer_xml:
+        return home_xml
+
+    camera_xml = tap_control(
+        composer_xml, ["Video/Camera"], f"{prefix}-composer-camera",
+        ["Switch front/back camera"]
+    )
+    if not camera_xml:
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.8)
+        return dump_ui(f"{prefix}-camera-return-home.xml") or composer_xml
+
+    (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + "\\n", encoding="utf-8")
+    missing_live = [label for label in ["Switch front/back camera", "Face FX", "Cute Ears"] if not find_control(camera_xml, [label])]
+    if missing_live:
+        FAILURES.append(prefix + ": live camera missing visible controls: " + ", ".join(missing_live))
+    else:
+        report.append("- PASS live camera screenshot exposes the camera switch and tracked Face FX choices")
+
+    editor_xml = tap_control(
+        camera_xml, ["Take photo"], f"{prefix}-camera-photo-capture", ["Send"]
+    )
+    if editor_xml:
+        screenshot(f"{prefix}-camera-photo-editor-effects.png")
+        (ROOT / f"{prefix}-camera-photo-editor-effects.xml").write_text(editor_xml + "\\n", encoding="utf-8")
+        missing_editor = [label for label in ["Face FX", "Cute Ears", "Retake", "Send"] if not find_control(editor_xml, [label])]
+        if missing_editor:
+            FAILURES.append(prefix + ": captured-photo editor missing expected effect or action controls: " + ", ".join(missing_editor))
+        else:
+            report.append("- PASS captured-photo editor screenshot exposes Face FX and persistent Retake/Send controls")
+
+    # Dismiss only; do not tap Send or create a post. Return to Home through the in-app back stack.
+    current_xml = editor_xml or camera_xml
+    for attempt in range(4):
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.8)
+        current_xml = dump_ui(f"{prefix}-camera-return-home-{attempt}.xml") or current_xml
+        if (find_control(current_xml, ["Open FYNX camera"])
+                and find_control(current_xml, ["Chat"])
+                and find_control(current_xml, ["Friends"])):
+            return current_xml
+    FAILURES.append(prefix + ": camera was dismissed but Home markers did not return without publishing")
+    return current_xml
+
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
     # A failed tap must remain failed; returning the previous screen caused false GREEN results.
     return tap_control(xml,labels,name,expected_labels)
@@ -771,6 +821,9 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         report.append("- Session: debug-only local UI entry; screenshots certify rendered UI/navigation only, not live account data.")
     else:
         report.append("- Session: the existing login flow reached Home; live Marketplace data remains unverified unless its API loads successfully.")
+
+    # Camera/photo-editor screenshots are read-only local captures and need no live backend.
+    xml = capture_camera_post_journey(xml, "debug-camera")
 
     marketplace_xml = tap_control(
         xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
@@ -948,13 +1001,7 @@ if not FAILURES:
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
     if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
-    composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
-    if composer_xml:
-        report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
-        camera_xml=tap_control(composer_xml,["Video/Camera"],"composer-camera",["Switch front/back camera"])
-        if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
-        else: FAILURES.append("post composer -> real camera")
-    else: FAILURES.append("Home header camera -> real post composer")
+    xml = capture_camera_post_journey(xml, "authenticated-camera")
     # The debug saved-device entry is intentionally a local UI-only route, not
     # server authentication. Do not cold-start it: that returns to Sign In and
     # makes unrelated navigation checks fail for the wrong reason. Certify the

@@ -9,6 +9,7 @@ backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="ut
 
 checks = [
     ("Home camera opens the real camera panel", "showCamera = true" in home and "FynxCameraCapturePanel(" in home),
+    ("Runtime captures camera preview and photo editor effects controls without publishing", "def capture_camera_post_journey(" in runtime and '["Take photo"]' in runtime and '["Face FX", "Cute Ears", "Retake", "Send"]' in runtime and "camera-photo-editor-effects.png" in runtime),
     ("Home camera starts a fresh session", "capturedUris = emptyList()" in home and "cameraOpenedFromComposer = false" in home),
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
     ("Camera dismiss returns to an existing composer draft", "cameraOpenedFromComposer && !posting" in home),
