@@ -128,6 +128,34 @@ private fun DrawScope.drawMarketplaceCategoryLine(
  * they are never used as seller listing media or as Great Deals product photos.
  */
 @Composable
+internal fun marketplaceSubcategoriesFor(category: String): List<String> = when (category.trim().lowercase(Locale.US)) {
+    "electronics" -> listOf("Phones & tablets", "Computers & laptops", "Audio & speakers", "TV & entertainment", "Cameras", "Other electronics")
+    "fashion" -> listOf("Clothing", "Shoes & footwear", "Bags", "Jewellery & watches", "Traditional wear", "Other fashion")
+    "home" -> listOf("Kitchen & dining", "Home décor", "Lighting", "Bedding", "Cleaning & storage", "Other home goods")
+    "beauty" -> listOf("Skincare", "Hair care", "Make-up", "Fragrance", "Grooming", "Personal care")
+    "vehicles" -> listOf("Cars", "Motorcycles", "Commercial vehicles", "Bicycles", "Other vehicles")
+    "services" -> listOf("Repairs", "Cleaning", "Professional services", "Transport", "Tutoring", "Other services")
+    "food" -> listOf("Fresh produce", "Packaged food", "Bakery", "Meat & seafood", "Beverages", "Other food")
+    "property" -> listOf("Land", "Residential rentals", "Property for sale", "Commercial spaces", "Short stays")
+    "agriculture" -> listOf("Farm produce", "Seeds & seedlings", "Livestock", "Farming equipment", "Fertilizers", "Other agriculture")
+    "phones & computers" -> listOf("Mobile phones", "Tablets", "Laptops", "Desktop computers", "Computer accessories", "Repairs")
+    "furniture" -> listOf("Living room", "Bedroom", "Office furniture", "Tables & chairs", "Mattresses", "Other furniture")
+    "baby & kids" -> listOf("Baby essentials", "Children's clothing", "Toys & games", "School items", "Prams & carriers")
+    "books" -> listOf("School textbooks", "Higher education", "Fiction & non-fiction", "Reference books", "Stationery")
+    "sports" -> listOf("Fitness equipment", "Team sports", "Sportswear", "Outdoor & camping", "Cycling")
+    "tools" -> listOf("Hand tools", "Power tools", "Plumbing", "Electrical supplies", "Paints & finishes", "Building tools")
+    "health" -> listOf("First aid", "Wellness", "Medical equipment", "Mobility aids", "Hygiene")
+    "appliances" -> listOf("Kitchen appliances", "Refrigeration", "Laundry", "Fans & cooling", "Small appliances", "Other appliances")
+    "auto parts" -> listOf("Engine parts", "Tyres & wheels", "Batteries", "Body & lighting", "Motorcycle parts", "Other parts")
+    "building materials" -> listOf("Cement & blocks", "Roofing", "Doors & windows", "Plumbing", "Electrical supplies", "Paints & finishes")
+    "office & education" -> listOf("Textbooks", "Stationery", "Office supplies", "Printing supplies", "Office furniture", "Computer accessories")
+    "garden & outdoor" -> listOf("Seeds & seedlings", "Plants", "Garden tools", "Irrigation", "Pots & planters", "Outdoor equipment")
+    "handmade & local" -> listOf("Handmade crafts", "Local foods", "Traditional textiles", "Art & décor", "Handmade accessories")
+    "business & workshop supplies" -> listOf("Retail & packaging", "Food service supplies", "Commercial equipment", "Cleaning supplies", "Workshop tools", "Office supplies")
+    "other" -> listOf("Handmade & local goods", "Collectibles", "Other items")
+    else -> emptyList()
+}
+
 private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         val sx = size.width / 108f
@@ -1725,7 +1753,7 @@ private fun MarketplacePaymentDialog(context: android.content.Context, order: Fy
 
 @Composable
 private fun MarketplaceSellDialog(context: android.content.Context, onPublished: (String) -> Unit, onCancel: () -> Unit) {
-    var title by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var condition by remember { mutableStateOf("NEW") }; var brand by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var size by remember { mutableStateOf("") }; var color by remember { mutableStateOf("") }; var material by remember { mutableStateOf("") }; var dimensions by remember { mutableStateOf("") }; var warranty by remember { mutableStateOf("") }; var vehicleYear by remember { mutableStateOf("") }; var mileage by remember { mutableStateOf("") }; var beautyDetails by remember { mutableStateOf("") }; var serviceDetails by remember { mutableStateOf("") }; var generalDetails by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
+    var title by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var subcategory by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("NEW") }; var brand by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var size by remember { mutableStateOf("") }; var color by remember { mutableStateOf("") }; var material by remember { mutableStateOf("") }; var dimensions by remember { mutableStateOf("") }; var warranty by remember { mutableStateOf("") }; var vehicleYear by remember { mutableStateOf("") }; var mileage by remember { mutableStateOf("") }; var beautyDetails by remember { mutableStateOf("") }; var serviceDetails by remember { mutableStateOf("") }; var generalDetails by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
     var showEnhancementPicker by remember { mutableStateOf(false) }
     var showEnhancementPreview by remember { mutableStateOf(false) }
     var enhancementBusy by remember { mutableStateOf(false) }
@@ -1800,21 +1828,32 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         } else sellerLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
     val selectedChipColors = fynxMarketplaceSelectedChipColors()
-    val listingDescription = remember(desc, category, brand, model, size, color, material, dimensions, warranty, vehicleYear, mileage, beautyDetails, serviceDetails, generalDetails) {
+    val listingDescription = remember(desc, category, subcategory, brand, model, size, color, material, dimensions, warranty, vehicleYear, mileage, beautyDetails, serviceDetails, generalDetails) {
         val specifications = when (category) {
-            "Electronics" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty)
+            "Electronics", "Phones & Computers" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty)
             "Fashion" -> listOf("Size" to size, "Colour" to color, "Material" to material)
-            "Home" -> listOf("Material" to material, "Dimensions" to dimensions, "Colour" to color)
+            "Personal Accessories" -> listOf("Brand / maker" to brand, "Size" to size, "Colour" to color, "Material" to material)
+            "Home", "Furniture" -> listOf("Material" to material, "Dimensions" to dimensions, "Colour / finish" to color)
+            "Appliances" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty, "Dimensions" to dimensions)
             "Vehicles" -> listOf("Make / brand" to brand, "Model" to model, "Year" to vehicleYear, "Mileage" to mileage)
-            "Beauty" -> listOf("Brand" to brand, "Size / volume" to size, "Product details" to beautyDetails)
+            "Auto Parts" -> listOf("Part brand" to brand, "Part / model number" to model, "Compatibility / defects" to generalDetails)
+            "Beauty", "Health" -> listOf("Brand" to brand, "Size / volume" to size, "Product details" to beautyDetails)
+            "Food", "Agriculture" -> listOf("Brand / maker" to brand, "Expiry, storage, variety, or ingredient details" to generalDetails)
+            "Building Materials" -> listOf("Material" to material, "Dimensions / pack size" to dimensions, "Colour / finish" to color, "Additional details" to generalDetails)
+            "Garden & Outdoor" -> listOf("Brand / maker" to brand, "Material / variety" to material, "Additional details" to generalDetails)
+            "Handmade & Local" -> listOf("Maker" to brand, "Material" to material, "Additional details" to generalDetails)
+            "Office & Education", "Business & Workshop Supplies" -> listOf("Brand / maker" to brand, "Model / item type" to model, "Additional details" to generalDetails)
+            "Sports" -> listOf("Brand" to brand, "Model" to model, "Size / fit" to size, "Colour" to color)
+            "Tools" -> listOf("Brand / maker" to brand, "Model" to model, "Material" to material, "Dimensions" to dimensions)
             "Services" -> listOf("Service details" to serviceDetails)
             else -> listOf("Brand / maker" to brand, "Colour" to color, "Additional details" to generalDetails)
         }.filter { it.second.isNotBlank() }
+        val allSpecifications = if (subcategory.isBlank()) specifications else listOf("Subcategory" to subcategory) + specifications
         buildString {
             append(desc.trim())
-            if (specifications.isNotEmpty()) {
+            if (allSpecifications.isNotEmpty()) {
                 append("\n\nProduct specifications\n")
-                specifications.forEach { (label, value) -> append(label).append(": ").append(value.trim()).append('\n') }
+                allSpecifications.forEach { (label, value) -> append(label).append(": ").append(value.trim()).append('\n') }
             }
         }.trim().take(FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)
     }
@@ -1876,7 +1915,22 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("1. Product basics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(title, { title = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) }, label = { Text("Product name") }, supportingText = { Text("Use a clear name buyers can search for.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Category", style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }, colors = selectedChipColors) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item; subcategory = "" }, label = { Text(item) }, colors = selectedChipColors) } }
+        val categorySubcategories = marketplaceSubcategoriesFor(category)
+        Text("Subcategory (optional)", style = MaterialTheme.typography.labelLarge)
+        if (categorySubcategories.isNotEmpty()) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                categorySubcategories.forEach { item ->
+                    FilterChip(
+                        selected = subcategory == item,
+                        onClick = { subcategory = if (subcategory == item) "" else item },
+                        label = { Text(item) },
+                        colors = selectedChipColors
+                    )
+                }
+            }
+            Text("Choose a closer match. FYNX keeps the main category unchanged for existing search and filter compatibility.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Text("Condition", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }, colors = selectedChipColors) } }
         Text("2. Price and stock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
