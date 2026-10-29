@@ -81,7 +81,7 @@ checks = [
      and '"REFURBISHED" to "Refurbished"' in marketplace),
     ("Marketplace seller flow exposes optional category-specific subcategories and resets stale selections when the main category changes",
      "internal fun marketplaceSubcategoriesFor(category: String)" in marketplace
-     and 'Text("Subcategory (optional)")' in marketplace
+     and 'Text("Subcategory (optional)"' in marketplace
      and "val categorySubcategories = marketplaceSubcategoriesFor(category)" in marketplace
      and 'onClick = { category = item; subcategory = "" }' in marketplace
      and all(token in marketplace for token in ('"auto parts" ->', '"appliances" ->', '"building materials" ->', '"office & education" ->', '"garden & outdoor" ->', '"handmade & local" ->', '"business & workshop supplies" ->'))),
