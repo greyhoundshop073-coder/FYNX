@@ -58,16 +58,30 @@ internal fun selectMarketplaceAdvertisingCandidates(
         normalizedSeller(it.key) to it.value.coerceAtLeast(0)
     }
 
-    return eligible
+    val sameCurrency = eligible
         .filter { it.currency.trim().uppercase(Locale.US) == currency }
-        .sortedWith(
+
+    // A seller absent from the reputation map is unknown, not a confirmed zero-sales seller.
+    // Only use best-seller ranking when every advertised seller has actual reputation evidence.
+    val hasCompleteSalesEvidence = sameCurrency.all {
+        normalizedSeller(it.sellerUsername) in sales
+    }
+
+    val stableTieBreakers =
+        compareBy<MarketplaceAdvertisingCandidate> { it.price }
+            .thenBy { it.title.trim().lowercase(Locale.US) }
+            .thenBy { it.id.trim() }
+
+    return if (hasCompleteSalesEvidence) {
+        sameCurrency.sortedWith(
             compareByDescending<MarketplaceAdvertisingCandidate> {
                 sales[normalizedSeller(it.sellerUsername)] ?: 0
-            }
-                .thenBy { it.price }
-                .thenBy { it.title.trim().lowercase(Locale.US) }
-                .thenBy { it.id.trim() }
+            }.then(stableTieBreakers)
         )
+    } else {
+        // Do not label or implicitly rank a partially observed seller set as best sellers.
+        sameCurrency.sortedWith(stableTieBreakers)
+    }
 }
 
 /**

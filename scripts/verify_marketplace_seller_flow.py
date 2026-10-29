@@ -351,10 +351,12 @@ checks.extend([
      and "it.price.isFinite()" in ad_support
      and ".distinctBy { it.id.trim() }" in ad_support
      and 'groupingBy { it.currency.trim().uppercase(Locale.US) }' in ad_support),
-    ("Great Deals carousel uses real successful-sales evidence with a safe price-order fallback",
+    ("Great Deals carousel uses complete real successful-sales evidence with a safe price-order fallback",
      "successfulSalesBySeller" in ad_support
      and "reputation.successfulSales" in marketplace
-     and "thenBy { it.price }" in ad_support),
+     and ("thenBy { it.price }" in ad_support or "compareBy<MarketplaceAdvertisingCandidate> { it.price }" in ad_support)
+     and "hasCompleteSalesEvidence" in ad_support
+     and "sameCurrency.sortedWith(stableTieBreakers)" in ad_support),
     ("Great Deals advert slides show real listing media, seller identity, price and exact-listing navigation",
      "RemoteMarketMedia(" in hero
      and '"Sold by $sellerName"' in hero
