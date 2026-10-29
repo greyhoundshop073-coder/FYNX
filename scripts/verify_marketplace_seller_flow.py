@@ -83,7 +83,7 @@ checks = [
      "internal fun marketplaceSubcategoriesFor(category: String)" in marketplace
      and 'Text("Subcategory (optional)"' in marketplace
      and "val categorySubcategories = marketplaceSubcategoriesFor(category)" in marketplace
-     and 'onClick = { category = item; subcategory = "" }' in marketplace
+     and 'onClick = { if (category != item) clearCategorySpecificFields(); category = item; subcategory = "" }' in marketplace
      and all(token in marketplace for token in ('"auto parts" ->', '"appliances" ->', '"building materials" ->', '"office & education" ->', '"garden & outdoor" ->', '"handmade & local" ->', '"personal accessories" ->', '"business & workshop supplies" ->'))),
     ("selected Marketplace subcategory is saved in the listing description while the existing main-category value remains the backend category",
      'listOf("Subcategory" to subcategory) + specifications' in marketplace
