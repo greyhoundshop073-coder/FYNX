@@ -75,6 +75,7 @@ require(assistant_card_header, "Brush.linearGradient(", "FYNX Assistance reflect
 require(assistant_card_header, "containerColor = Color.Transparent", "FYNX Assistance lets the glass gradient show through")
 require(visible_updates, "Color.Black.copy(alpha = 0.82f)", "FYNX AI prompt remains a high-contrast dark inset")
 require(home, "Brush.verticalGradient(", "Home feed uses a restrained reflective background behind real posts")
+require_normalized(home, "modifier = modifier.fillMaxSize().background(Brush.verticalGradient(", "Home feed viewport has a reflective backdrop for the marked black area")
 if 'feed_load_more' in home or 'Load more posts' in home:
     raise SystemExit("HOME INTERACTIONS RED: Home feed must load the next page automatically; manual Load more control remains")
 if '"Refresh feed"' in home:
