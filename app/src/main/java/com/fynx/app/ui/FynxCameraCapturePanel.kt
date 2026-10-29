@@ -285,7 +285,7 @@ fun FynxCameraCapturePanel(
             recording?.stop()
         }
     }
-    LaunchedEffect(showCaptureControls, pendingUri, recording, cameraControl, hasCamera) { if (showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0 && cameraControl != null && hasCamera) { delay(5000L); showCaptureControls = false } }
+    // Keep the shutter and capture tools visible; only the self-timer deliberately hides them during countdown.
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled) {
         val generation = bindGeneration + 1; bindGeneration = generation
