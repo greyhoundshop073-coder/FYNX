@@ -5,6 +5,13 @@ import android.content.pm.PackageManager
 import android.content.Context
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.ColorMatrix as ComposeColorMatrix
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Image
+import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.graphics.Matrix
 import android.media.ExifInterface
@@ -788,7 +795,8 @@ fun FynxCameraCapturePanel(
                             CameraVideoStyle.values().map { option ->
                                 CameraEffectOption(
                                     label = option.label,
-                                    glyph = cameraEffectGlyph("Video FX", option.label),
+                                    category = "Video FX",
+                                    previewStyle = cameraEffectPreviewStyle("Video FX", option.label),
                                     selected = videoStyle == option,
                                     enabled = !applyingVideoEffects && !applyingFilter && !enhancing,
                                     onClick = { videoStyle = option; showCaptureControls = true }
@@ -798,7 +806,8 @@ fun FynxCameraCapturePanel(
                             "Face FX" -> CameraFaceEffect.values().map { option ->
                                 CameraEffectOption(
                                     label = option.label,
-                                    glyph = cameraEffectGlyph("Face FX", option.label),
+                                    category = "Face FX",
+                                    previewStyle = cameraEffectPreviewStyle("Face FX", option.label),
                                     selected = faceEffect == option,
                                     enabled = !applyingFilter && !enhancing,
                                     onClick = { faceEffect = option; showCaptureControls = true }
@@ -807,7 +816,8 @@ fun FynxCameraCapturePanel(
                             "Background" -> CameraBackgroundEffect.values().map { option ->
                                 CameraEffectOption(
                                     label = option.label,
-                                    glyph = cameraEffectGlyph("Background", option.label),
+                                    category = "Background",
+                                    previewStyle = cameraEffectPreviewStyle("Background", option.label),
                                     selected = backgroundEffect == option,
                                     enabled = !applyingFilter && !enhancing,
                                     onClick = { backgroundEffect = option; showCaptureControls = true }
@@ -816,7 +826,8 @@ fun FynxCameraCapturePanel(
                             "AI Studio" -> CameraStudioEffect.values().map { option ->
                                 CameraEffectOption(
                                     label = option.label,
-                                    glyph = cameraEffectGlyph("AI Studio", option.label),
+                                    category = "AI Studio",
+                                    previewStyle = cameraEffectPreviewStyle("AI Studio", option.label),
                                     selected = studioEffect == option,
                                     enabled = !applyingFilter && !enhancing,
                                     onClick = { studioEffect = option; showCaptureControls = true }
@@ -825,7 +836,8 @@ fun FynxCameraCapturePanel(
                             else -> CameraFilter.values().map { option ->
                                 CameraEffectOption(
                                     label = option.label,
-                                    glyph = cameraEffectGlyph("Looks", option.label),
+                                    category = "Looks",
+                                    previewStyle = cameraEffectPreviewStyle("Looks", option.label),
                                     selected = filter == option,
                                     enabled = recording == null && !applyingFilter && !enhancing,
                                     onClick = { filter = option; filterIntensity = 1f; showCaptureControls = true }
@@ -881,8 +893,9 @@ fun FynxCameraCapturePanel(
                                 ) {
                                     optionsRow.forEach { option ->
                                         CameraEffectTile(
+                                            category = option.category,
                                             label = option.label,
-                                            glyph = option.glyph,
+                                            previewStyle = option.previewStyle,
                                             selected = option.selected,
                                             enabled = option.enabled,
                                             onClick = option.onClick,
@@ -1052,27 +1065,33 @@ fun FynxCameraCapturePanel(
 /** Compact effect previews: circular visual first, two-line label below. */
 private data class CameraEffectOption(
     val label: String,
-    val glyph: String,
+    val category: String,
+    val previewStyle: Int,
     val selected: Boolean,
     val enabled: Boolean,
     val onClick: () -> Unit
 )
 
-/** Compact rounded-square effect preview with the label underneath. */
+/**
+ * Each effect tile uses a bundled photographic portrait preview, graded locally to illustrate
+ * the selected look. The preview is offline-safe and never uploads a camera image.
+ */
 @Composable
 private fun CameraEffectTile(
+    category: String,
     label: String,
-    glyph: String,
+    previewStyle: Int,
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val shape = RoundedCornerShape(13.dp)
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 82.dp),
-        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.heightIn(min = 94.dp),
+        shape = RoundedCornerShape(14.dp),
         color = Color.Transparent
     ) {
         Column(
@@ -1082,33 +1101,41 @@ private fun CameraEffectTile(
         ) {
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .background(
-                        if (selected) Color(0xFF3A315A) else Color(0xFF22252E),
-                        RoundedCornerShape(12.dp)
-                    )
+                    .size(60.dp)
+                    .clip(shape)
                     .border(
                         if (selected) 2.dp else 1.dp,
                         if (selected) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.18f),
-                        RoundedCornerShape(12.dp)
+                        shape
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(glyph, style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Image(
+                    painter = painterResource(id = R.drawable.camera_effect_preview),
+                    contentDescription = "$category $label photo preview",
+                    contentScale = ContentScale.Crop,
+                    colorFilter = ColorFilter.colorMatrix(cameraEffectPreviewMatrix(previewStyle)),
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(4.dp).size(5.dp)
+                        .background(Color.White.copy(alpha = 0.78f), androidx.compose.foundation.shape.CircleShape)
+                )
                 if (selected) {
                     Box(
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(1.dp)
-                            .size(15.dp).background(Color(0xFFB8A7FF), androidx.compose.foundation.shape.CircleShape),
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(3.dp)
+                            .size(17.dp)
+                            .background(Color(0xFFB8A7FF), androidx.compose.foundation.shape.CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("✓", color = Color(0xFF17131F), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(5.dp))
             Text(
                 label,
-                color = if (selected) Color.White else Color.White.copy(alpha = 0.82f),
+                color = if (selected) Color.White else Color.White.copy(alpha = 0.84f),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -1120,58 +1147,98 @@ private fun CameraEffectTile(
     }
 }
 
-private fun cameraEffectGlyph(category: String, label: String): String = when (category) {
+private fun cameraEffectPreviewStyle(category: String, label: String): Int = when (category) {
+    "Looks" -> when (label) {
+        "Natural" -> 0
+        "Portrait" -> 1
+        "Beauty Glow" -> 2
+        "Bright" -> 3
+        "Warm Glow" -> 4
+        "Cinematic" -> 5
+        "Low-Light Rescue" -> 6
+        "2000s Flash" -> 7
+        "Cool" -> 8
+        "Vintage" -> 9
+        "B&W" -> 10
+        else -> 0
+    }
     "Face FX" -> when (label) {
-        "Off" -> "○"
-        "Cute Ears" -> "🐱"
-        "Smart Glasses" -> "🤓"
-        "Royal Crown" -> "👑"
-        "Puppy / Animal" -> "🐶"
-        "Virtual Makeup" -> "💄"
-        "Hair Colour" -> "🎨"
-        "Funny Face" -> "😜"
-        else -> "✨"
+        "Off" -> 0
+        "Cute Ears" -> 11
+        "Smart Glasses" -> 12
+        "Royal Crown" -> 13
+        "Puppy / Animal" -> 14
+        "Virtual Makeup" -> 15
+        "Hair Colour" -> 16
+        "Funny Face" -> 17
+        else -> 0
     }
     "Background" -> when (label) {
-        "Off" -> "○"
-        "Portrait Blur" -> "◉"
-        "Blue" -> "🔵"
-        "Sunset" -> "🌅"
-        "Mint" -> "🟢"
-        "Studio Scene" -> "🎬"
-        "Beach Scene" -> "🏖️"
-        else -> "🌄"
+        "Off" -> 0
+        "Portrait Blur" -> 18
+        "Blue" -> 19
+        "Sunset" -> 20
+        "Mint" -> 21
+        "Studio Scene" -> 22
+        "Beach Scene" -> 23
+        else -> 0
     }
     "AI Studio" -> when (label) {
-        "Off" -> "○"
-        "Mature Look" -> "🎭"
-        "Face Symmetry" -> "◐"
-        "Anime / Cartoon" -> "🎨"
-        else -> "✨"
+        "Off" -> 0
+        "Mature Look" -> 24
+        "Face Symmetry" -> 25
+        "Anime / Cartoon" -> 26
+        else -> 0
     }
     "Video FX" -> when (label) {
-        "Natural" -> "◉"
-        "Cinematic" -> "🎬"
-        "Warm Film" -> "🌅"
-        "Vintage" -> "◷"
-        "B&W" -> "◐"
-        "Vivid" -> "🌈"
-        else -> "✦"
+        "Natural" -> 0
+        "Cinematic" -> 5
+        "Warm Film" -> 4
+        "Vintage" -> 9
+        "B&W" -> 10
+        "Vivid" -> 3
+        else -> 0
     }
-    else -> when (label) {
-        "Natural" -> "◉"
-        "Portrait" -> "◌"
-        "Beauty Glow" -> "✨"
-        "Bright" -> "☀️"
-        "Warm Glow" -> "🌅"
-        "Cinematic" -> "🎬"
-        "Low-Light Rescue" -> "🌙"
-        "2000s Flash" -> "⚡"
-        "Cool" -> "❄️"
-        "Vintage" -> "◷"
-        "B&W" -> "◐"
-        else -> "✦"
+    else -> 0
+}
+
+private fun cameraEffectPreviewMatrix(style: Int): ComposeColorMatrix {
+    val (red, green, blue, saturation, brightness) = when (style) {
+        1 -> listOf(1.05f, 1.02f, 0.98f, 1.05f, 0.025f)
+        2, 15 -> listOf(1.10f, 0.98f, 1.02f, 1.08f, 0.045f)
+        3 -> listOf(1.06f, 1.05f, 1.04f, 1.06f, 0.09f)
+        4, 20 -> listOf(1.12f, 1.01f, 0.87f, 1.08f, 0.035f)
+        5 -> listOf(1.08f, 0.97f, 0.90f, 0.92f, 0.015f)
+        6 -> listOf(1.08f, 1.07f, 1.04f, 1.03f, 0.12f)
+        7 -> listOf(1.14f, 1.10f, 1.05f, 1.18f, 0.13f)
+        8, 19 -> listOf(0.88f, 0.98f, 1.14f, 0.96f, 0.015f)
+        9, 24 -> listOf(1.10f, 0.98f, 0.82f, 0.74f, 0.025f)
+        10 -> listOf(1f, 1f, 1f, 0f, 0.015f)
+        11 -> listOf(1.12f, 0.94f, 1.01f, 1.04f, 0.02f)
+        12 -> listOf(0.91f, 1.00f, 1.12f, 0.94f, 0.02f)
+        13, 25 -> listOf(1.13f, 1.03f, 0.92f, 1.06f, 0.035f)
+        14 -> listOf(1.09f, 0.99f, 0.87f, 1.02f, 0.02f)
+        16 -> listOf(0.92f, 1.07f, 1.14f, 1.12f, 0.025f)
+        17, 26 -> listOf(1.12f, 0.94f, 1.10f, 1.28f, 0.035f)
+        18 -> listOf(0.92f, 0.96f, 1.07f, 0.86f, 0.025f)
+        21 -> listOf(0.89f, 1.12f, 1.02f, 0.98f, 0.025f)
+        22 -> listOf(0.98f, 1.00f, 1.04f, 0.88f, 0.035f)
+        23 -> listOf(1.08f, 1.09f, 0.91f, 1.08f, 0.04f)
+        else -> listOf(1f, 1f, 1f, 1f, 0f)
     }
+    val desaturation = 1f - saturation
+    val redLuma = 0.213f * desaturation
+    val greenLuma = 0.715f * desaturation
+    val blueLuma = 0.072f * desaturation
+    val lift = brightness * 255f
+    return ComposeColorMatrix(
+        floatArrayOf(
+            (redLuma + saturation) * red, greenLuma * red, blueLuma * red, 0f, lift,
+            redLuma * green, (greenLuma + saturation) * green, blueLuma * green, 0f, lift,
+            redLuma * blue, greenLuma * blue, (blueLuma + saturation) * blue, 0f, lift,
+            0f, 0f, 0f, 1f, 0f
+        )
+    )
 }
 
 private fun rotateCameraPhotoFile(file: File) {
