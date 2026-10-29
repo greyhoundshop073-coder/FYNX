@@ -281,7 +281,9 @@ internal fun applyCameraFaceEffectToPhotoFile(context: Context, file: File, effe
     try {
         val input = InputImage.fromFilePath(context, Uri.fromFile(file))
         val faces = Tasks.await(detector.process(input))
-        if (faces.isEmpty()) return
+        require(faces.isNotEmpty()) {
+            "No clear face was found. Try a front-facing photo in good light."
+        }
         val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: error("Unable to decode captured photo for face effects")
         val output = decoded.copy(Bitmap.Config.ARGB_8888, true)
             ?: run { decoded.recycle(); error("Unable to prepare captured photo for face effects") }

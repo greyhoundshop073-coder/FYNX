@@ -16,6 +16,7 @@ checks = [
     ("Face detector tracks landmarks on device", "setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)" in effects and "enableTracking()" in effects),
     ("Front-camera overlay is mirrored", "isFrontCamera()" in effects and "viewWidth - right" in effects),
     ("Seven tracked face effects plus Off", all(label in effects for label in ["Cute Ears", "Smart Glasses", "Royal Crown", "Puppy / Animal", "Virtual Makeup", "Hair Colour", "Funny Face"])),
+    ("Face effects give a clear error when no face is detected instead of silently doing nothing", "require(faces.isNotEmpty())" in effects and "No clear face was found. Try a front-facing photo in good light." in effects and "if (faces.isEmpty()) return" not in effects),
     ("Same sticker drawing used for saved photos", "applyCameraFaceEffectToPhotoFile" in camera and "drawFynxCameraFaceEffect(canvas" in effects),
     ("Face-effect choices covered by unit test", "stageTwoFaceEffectsHaveStableUserFacingOptions" in test),
     ("Gallery can select both photos and videos through the system photo picker", "ActivityResultContracts.PickVisualMedia()" in camera and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in camera),
