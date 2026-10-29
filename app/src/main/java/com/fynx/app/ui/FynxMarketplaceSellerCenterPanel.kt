@@ -65,30 +65,45 @@ private fun marketplaceDescriptionSubcategory(description: String): String =
  * all other product specifications are retained; the backend main category is not changed here.
  */
 private fun marketplaceDescriptionWithSubcategory(description: String, subcategory: String): String {
+    val maximumDescriptionLength = minOf(
+        4_000,
+        FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH
+    ).coerceAtLeast(1)
     val normalized = description.replace("\r\n", "\n").trim()
     val withoutOldSubcategory = Regex("(?m)^[ \t]*Subcategory:[ \t]*[^\r\n]*(?:\n|$)")
         .replace(normalized, "")
     val cleaned = Regex("(?:\n[ \t]*)?Product specifications[ \t]*\n?[ \t]*$")
         .replace(withoutOldSubcategory, "")
         .trim()
-    if (subcategory.isBlank()) return cleaned
+    if (subcategory.isBlank()) return cleaned.take(maximumDescriptionLength).trimEnd()
 
     val existing = withoutOldSubcategory.trimEnd()
     val header = "Product specifications\n"
     val headerIndex = existing.indexOf(header)
-    val subcategoryLine = "Subcategory: ${subcategory.trim()}\n"
-    return if (headerIndex >= 0) {
-        val insertIndex = headerIndex + header.length
-        (
-            existing.substring(0, insertIndex) +
-                subcategoryLine +
-                existing.substring(insertIndex).trimStart('\n')
-        ).trim()
-    } else if (cleaned.isBlank()) {
-        "Product specifications\nSubcategory: ${subcategory.trim()}"
+    val remainingSpecifications = if (headerIndex >= 0) {
+        existing.substring(headerIndex + header.length).trimStart('\n')
     } else {
-        "$cleaned\n\nProduct specifications\nSubcategory: ${subcategory.trim()}"
+        ""
     }
+    val specificationSection = buildString {
+        append(header)
+        append("Subcategory: ").append(subcategory.trim()).append('\n')
+        if (remainingSpecifications.isNotBlank()) append(remainingSpecifications)
+    }.take(maximumDescriptionLength)
+    val descriptionBody = if (headerIndex >= 0) {
+        existing.substring(0, headerIndex).trimEnd()
+    } else {
+        cleaned
+    }
+    val separator = if (descriptionBody.isBlank()) "" else "\n\n"
+    val descriptionBodyLimit = (
+        maximumDescriptionLength - specificationSection.length - separator.length
+    ).coerceAtLeast(0)
+    val limitedBody = descriptionBody.take(descriptionBodyLimit).trimEnd()
+    return (
+        if (limitedBody.isBlank()) specificationSection
+        else "$limitedBody\n\n$specificationSection"
+    ).take(maximumDescriptionLength)
 }
 
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
