@@ -351,7 +351,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         val homeScrollConnection = remember {
             object : NestedScrollConnection {
                 override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                    if (selected != "Home" || source != NestedScrollSource.UserInput) return Offset.Zero
+                    if ((selected != "Home" && selected != "Marketplace") || source != NestedScrollSource.UserInput) return Offset.Zero
                     // Observe the feed after it has handled the gesture. Never participate
                     // in pre-scroll so the feed keeps first ownership of vertical movement.
                     val delta = -(consumed.y + available.y)
@@ -367,10 +367,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             }
         }
         LaunchedEffect(selected) {
-            if (selected != "Home") {
-                homeChromeProgress = 0f
-                homeChromeHidden = false
-            }
+            homeChromeProgress = 0f
+            homeChromeHidden = false
         }
         // When the IME is open, hide the floating navigation instead of moving it
         // over the Home feed. It returns automatically when the keyboard closes.
@@ -507,7 +505,16 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 Row(
                     Modifier.fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .then(
+                            if (selected == "Marketplace") {
+                                Modifier
+                                    .height(52.dp * (1f - homeChromeProgress))
+                                    .graphicsLayer { alpha = 1f - homeChromeProgress }
+                            } else {
+                                Modifier
+                            }
+                        ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Spacer(Modifier.size(48.dp))
@@ -582,7 +589,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             // post/content is covered. It reappears when the keyboard closes.
             if (!isKeyboardVisible && selected in mainNav.map { it.key }) {
                 AnimatedVisibility(
-                    visible = selected != "Home" || !homeChromeHidden,
+                    visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden,
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {

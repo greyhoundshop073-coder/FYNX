@@ -6,6 +6,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.ImageView
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.CornerRadius
@@ -62,7 +68,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
@@ -528,11 +538,55 @@ private fun MarketplaceSmartDealsHero(
         }
     }
 
-    Surface(
+    val isDarkGlassTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val dealsGlassBrush = if (isDarkGlassTheme) {
+        Brush.linearGradient(
+            listOf(
+                Color(0xFFE0E6ED).copy(alpha = 0.68f),
+                Color(0xFFAEB9C7).copy(alpha = 0.82f),
+                Color(0xFF384453).copy(alpha = 0.96f),
+                Color(0xFFD2D9E2).copy(alpha = 0.50f),
+                Color(0xFF687585).copy(alpha = 0.82f)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f),
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f),
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f)
+            )
+        )
+    }
+    val dealsGlassBorder = if (isDarkGlassTheme) {
+        Brush.linearGradient(
+            listOf(
+                Color.White.copy(alpha = 0.66f),
+                Color(0xFF9CAAB9).copy(alpha = 0.28f),
+                Color.White.copy(alpha = 0.46f)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.42f),
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
+            )
+        )
+    }
+
+    Card(
         shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
         modifier = modifier
+            .clip(RoundedCornerShape(22.dp))
+            .background(dealsGlassBrush, RoundedCornerShape(22.dp)),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        border = BorderStroke(1.dp, dealsGlassBorder)
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -542,13 +596,13 @@ private fun MarketplaceSmartDealsHero(
                     Text("Real products from FYNX sellers", style = MaterialTheme.typography.bodySmall)
                 }
                 IconButton(onClick = onOrders) {
-                    Icon(Icons.Default.ReceiptLong, contentDescription = "Orders", tint = MaterialTheme.colorScheme.onPrimary)
+                    Icon(Icons.Default.ReceiptLong, contentDescription = "Orders", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 IconButton(onClick = onRefresh) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh advertised products", tint = MaterialTheme.colorScheme.onPrimary)
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh advertised products", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 IconButton(onClick = onShopNow) {
-                    Icon(Icons.Default.Storefront, contentDescription = "Browse all products", tint = MaterialTheme.colorScheme.onPrimary)
+                    Icon(Icons.Default.Storefront, contentDescription = "Browse all products", tint = MaterialTheme.colorScheme.onSurface)
                 }
             }
 
@@ -556,7 +610,7 @@ private fun MarketplaceSmartDealsHero(
                 Text(
                     "Products will appear here when live seller listings are available.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.88f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
                 )
             } else {
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -652,13 +706,13 @@ private fun MarketplaceSmartDealsHero(
                     Text(
                         "Product ${currentAdIndex + 1} of ${deals.size}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
                     )
                     IconButton(onClick = { advanceAdvertisement() }, modifier = Modifier.size(40.dp)) {
                         Icon(
                             Icons.Default.ChevronRight,
                             contentDescription = "Next advertised product",
-                            tint = MaterialTheme.colorScheme.onPrimary
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -666,7 +720,7 @@ private fun MarketplaceSmartDealsHero(
                 TextButton(
                     onClick = onShopNow,
                     modifier = Modifier.align(Alignment.CenterVertically),
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimary)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
                 ) {
                     Text("Shop Now")
                     Spacer(Modifier.width(5.dp))
@@ -683,6 +737,25 @@ private fun MarketplaceSmartDealsHero(
 fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
+    var marketplaceChromeHidden by remember { mutableStateOf(false) }
+    val marketplaceChromeMaxPx = with(LocalDensity.current) { 52.dp.toPx() }
+    val marketplaceScrollConnection = remember(marketplaceChromeMaxPx) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput) return Offset.Zero
+                val delta = -(consumed.y + available.y)
+                if (kotlin.math.abs(delta) > 0.5f) {
+                    marketplaceChromeProgress = (marketplaceChromeProgress + delta / marketplaceChromeMaxPx).coerceIn(0f, 1f)
+                    when {
+                        !marketplaceChromeHidden && marketplaceChromeProgress >= 0.55f -> marketplaceChromeHidden = true
+                        marketplaceChromeHidden && marketplaceChromeProgress <= 0.35f -> marketplaceChromeHidden = false
+                    }
+                }
+                return Offset.Zero
+            }
+        }
+    }
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
     var hasMoreListings by remember { mutableStateOf(false) }
     var loadingMoreListings by remember { mutableStateOf(false) }
@@ -975,7 +1048,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         }
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).nestedScroll(marketplaceScrollConnection)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             MarketplaceReferenceSearchBar(
                 value = query,
@@ -984,25 +1057,31 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 cartCount = cartQuantities.values.sum().coerceAtLeast(0),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 1.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            AnimatedVisibility(
+                visible = !marketplaceChromeHidden,
+                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
             ) {
-                OutlinedButton(onClick = onOpenMyShop, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
-                    Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("My Shop", maxLines = 1)
-                }
-                OutlinedButton(onClick = { showOrders = true; reloadOrders() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
-                    Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(17.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("Orders", maxLines = 1)
-                }
-                OutlinedButton(onClick = onOpenSavedProducts, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
-                    Icon(Icons.Default.BookmarkBorder, contentDescription = null, modifier = Modifier.size(17.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("Saved products", maxLines = 1)
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 1.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(onClick = onOpenMyShop, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                        Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("My Shop", maxLines = 1)
+                    }
+                    OutlinedButton(onClick = { showOrders = true; reloadOrders() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Orders", maxLines = 1)
+                    }
+                    OutlinedButton(onClick = onOpenSavedProducts, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                        Icon(Icons.Default.BookmarkBorder, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Saved products", maxLines = 1)
+                    }
                 }
             }
             completedCheckoutId?.let { checkoutId ->
@@ -1011,50 +1090,62 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     checkoutId = checkoutId
                 )
             }
-            MarketplaceReferenceCategoryRow(
-                categories = categories,
-                selected = category,
-                onSelect = { category = it },
-                onNearby = { toggleNearby() },
-                nearbySelected = nearbyMode,
-                nearbyLabel = if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me",
-                nearbyLoading = nearbyLoading,
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 6.dp)
-            )
-            if (query.isBlank() && recentSearches.isNotEmpty()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Recent searches", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    TextButton(onClick = {
-                        recentSearches = emptyList()
-                        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
-                            .edit().remove(recentSearchesKey).apply()
-                    }) { Text("Clear") }
-                }
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(end = 16.dp)
-                ) {
-                    items(recentSearches, key = { "recent-search-$it" }) { term ->
-                        InputChip(
-                            selected = false,
-                            onClick = { query = term },
-                            label = { Text(term, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = {
-                                        recentSearches = recentSearches.filterNot { it.equals(term, ignoreCase = true) }
-                                        val saved = JSONArray().apply { recentSearches.forEach(::put) }
-                                        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
-                                            .edit().putString(recentSearchesKey, saved.toString()).apply()
-                                    },
-                                    modifier = Modifier.size(24.dp)
-                                ) { Icon(Icons.Default.Close, contentDescription = "Remove $term", modifier = Modifier.size(14.dp)) }
-                            }
-                        )
+            AnimatedVisibility(
+                visible = !marketplaceChromeHidden,
+                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+            ) {
+                MarketplaceReferenceCategoryRow(
+                    categories = categories,
+                    selected = category,
+                    onSelect = { category = it },
+                    onNearby = { toggleNearby() },
+                    nearbySelected = nearbyMode,
+                    nearbyLabel = if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me",
+                    nearbyLoading = nearbyLoading,
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 6.dp)
+                )
+            }
+            AnimatedVisibility(
+                visible = !marketplaceChromeHidden,
+                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+            ) {
+                if (query.isBlank() && recentSearches.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Recent searches", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        TextButton(onClick = {
+                            recentSearches = emptyList()
+                            context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                .edit().remove(recentSearchesKey).apply()
+                        }) { Text("Clear") }
+                    }
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(end = 16.dp)
+                    ) {
+                        items(recentSearches, key = { "recent-search-$it" }) { term ->
+                            InputChip(
+                                selected = false,
+                                onClick = { query = term },
+                                label = { Text(term, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = {
+                                            recentSearches = recentSearches.filterNot { it.equals(term, ignoreCase = true) }
+                                            val saved = JSONArray().apply { recentSearches.forEach(::put) }
+                                            context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                                .edit().putString(recentSearchesKey, saved.toString()).apply()
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) { Icon(Icons.Default.Close, contentDescription = "Remove $term", modifier = Modifier.size(14.dp)) }
+                                }
+                            )
+                        }
                     }
                 }
             }
