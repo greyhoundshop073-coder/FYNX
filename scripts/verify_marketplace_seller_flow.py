@@ -4,6 +4,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerFlowSupport.kt").read_text()
 marketplace = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
+ad_support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCarouselSupport.kt").read_text()
+hero = marketplace[marketplace.index("private fun MarketplaceSmartDealsHero"):marketplace.index("@Composable\nfun FynxMarketplacePanel")]
 checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text()
 detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt").read_text()
 product_card = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceProductComponents.kt").read_text()
@@ -341,6 +343,34 @@ checks.extend([
      and "marketplaceReceiptAmountsMatch(delivery, sumDelivery)" in receipt
      and "marketplaceReceiptAmountsMatch(marketplaceFee, sumMarketplaceFee)" in receipt
      and "marketplaceReceiptAmountsMatch(buyerTotal, sumBuyerTotal)" in receipt),
+
+    ("Great Deals carousel selects only valid, active, in-stock unique listings and keeps one deterministic currency",
+     "selectMarketplaceAdvertisingCandidates" in ad_support
+     and "it.active" in ad_support
+     and "it.quantity > 0" in ad_support
+     and "it.price.isFinite()" in ad_support
+     and ".distinctBy { it.id.trim() }" in ad_support
+     and 'groupingBy { it.currency.trim().uppercase(Locale.US) }' in ad_support),
+    ("Great Deals carousel uses real successful-sales evidence with a safe price-order fallback",
+     "successfulSalesBySeller" in ad_support
+     and "reputation.successfulSales" in marketplace
+     and "thenBy { it.price }" in ad_support),
+    ("Great Deals advert slides show real listing media, seller identity, price and exact-listing navigation",
+     "RemoteMarketMedia(" in hero
+     and '"Sold by $sellerName"' in hero
+     and 'String.format(Locale.US, "%,.2f", listing.price)' in hero
+     and "onClick = { onOpenListing(listing) }" in hero
+     and "sellerReputations = sellerReputations" in marketplace),
+    ("Great Deals advert rotation supports small lists, loops through a duplicate-first slide and runs in a cancellable composition effect",
+     "MARKETPLACE_AD_ROTATION_INTERVAL_MS" in hero
+     and "nextMarketplaceAdvertisingDisplayIndex" in hero
+     and "if (deals.size > 1) deals + deals.first() else deals" in hero
+     and "rowState.animateScrollToItem(target)" in hero),
+    ("Great Deals advert has accessible manual next navigation and a truthful empty state",
+     'contentDescription = "Next advertised product"' in hero
+     and '"Products will appear here when live seller listings are available."' in hero
+     and 'contentDescription = "Refresh advertised products"' in hero),
+
 ])
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
