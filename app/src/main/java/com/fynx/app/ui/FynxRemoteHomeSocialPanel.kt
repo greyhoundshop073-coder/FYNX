@@ -39,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -476,7 +478,32 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
-    LazyColumn(state = feedListState, modifier = modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)) {
+    LazyColumn(
+        state = feedListState,
+        modifier = modifier.fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+                        listOf(
+                            Color(0xFFC9D2DE).copy(alpha = 0.16f),
+                            Color.Black.copy(alpha = 0.96f),
+                            Color(0xFF8797A9).copy(alpha = 0.14f),
+                            Color.Black.copy(alpha = 0.93f)
+                        )
+                    } else {
+                        listOf(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.10f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.14f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)
+                        )
+                    }
+                )
+            )
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)
+    ) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -738,7 +765,18 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
     val marketplaceListingId = Regex("""(?m)^Listing ID:\s*(\d+)\s*$""").find(post.text)?.groupValues?.getOrNull(1)
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true); val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER); val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
     val openMarketplaceTarget: (() -> Unit)? = if (marketplaceAd) { { if (marketplaceListingId.isNullOrBlank()) onOpenMarketplace() else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(marketplaceListingId)))) } } else null
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
+    Column(
+        Modifier.fillMaxWidth().background(
+            Brush.verticalGradient(
+                listOf(
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.075f),
+                    MaterialTheme.colorScheme.background.copy(alpha = 0.97f),
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.14f),
+                    MaterialTheme.colorScheme.background.copy(alpha = 0.96f)
+                )
+            )
+        )
+    ) {
         if (post.isDiscovery) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Explore, "Suggested for you", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(6.dp)); Text("Suggested for you", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = if (hasActiveStatus) onOpenStatus else onOpenProfile, modifier = Modifier.size(50.dp).semantics { contentDescription = if (hasActiveStatus) "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} status" else "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} profile" }) { Box(Modifier.size(50.dp).border(if (hasActiveStatus) 2.dp else 0.dp, if (hasActiveStatus) Color(0xFF22C55E) else Color.Transparent, CircleShape).padding(if (hasActiveStatus) 2.dp else 0.dp)) { FynxRemoteProfileAvatar(profilePhotoMediaId, post.authorDisplayName.ifBlank { post.authorUsername }, Modifier.size(46.dp).clip(CircleShape), ownerUsername = post.authorUsername) } }

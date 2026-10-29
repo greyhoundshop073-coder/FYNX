@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -125,6 +126,44 @@ fun FynxVisibleUpdatesPanel(
     val own = grouped.firstOrNull {
         it.first.ownerUsername.removePrefix("@").trim().equals(current, ignoreCase = true)
     }
+    val isDarkGlassTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val assistanceGlassBrush = if (isDarkGlassTheme) {
+        Brush.linearGradient(
+            listOf(
+                Color(0xFFE0E6ED).copy(alpha = 0.68f),
+                Color(0xFFAEB9C7).copy(alpha = 0.82f),
+                Color(0xFF384453).copy(alpha = 0.96f),
+                Color(0xFFD2D9E2).copy(alpha = 0.50f),
+                Color(0xFF687585).copy(alpha = 0.82f)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f),
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f),
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f)
+            )
+        )
+    }
+    val assistanceGlassBorder = if (isDarkGlassTheme) {
+        Brush.linearGradient(
+            listOf(
+                Color.White.copy(alpha = 0.66f),
+                Color(0xFF9CAAB9).copy(alpha = 0.28f),
+                Color.White.copy(alpha = 0.46f)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.42f),
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
+            )
+        )
+    }
 
     Column(
         Modifier.fillMaxWidth(),
@@ -176,10 +215,22 @@ fun FynxVisibleUpdatesPanel(
         }
 
         Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            modifier = Modifier.fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .clip(FynxDesign.LargeCardShape)
+                .background(
+                    assistanceGlassBrush,
+                    FynxDesign.LargeCardShape
+                ),
             shape = FynxDesign.LargeCardShape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            border = BorderStroke(
+                1.dp,
+                assistanceGlassBorder
+            )
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -197,7 +248,12 @@ fun FynxVisibleUpdatesPanel(
                 }
                 Row(
                     Modifier.fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f), FynxDesign.CardShape)
+                        .clip(FynxDesign.CardShape)
+                        .background(Color.Black.copy(alpha = 0.82f), FynxDesign.CardShape)
+                        .border(
+                            BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                            FynxDesign.CardShape
+                        )
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

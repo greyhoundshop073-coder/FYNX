@@ -52,7 +52,7 @@ for needle in ('post.mediaUrl?.let','RemoteSocialMedia','VideoView','rememberLaz
     require(home, needle, f"post media behavior {needle}")
 if 'MediaController' in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy Android MediaController must not compete with FYNX feed controls")
-require(home, 'LazyColumn(state = feedListState', "single feed state owns vertical scrolling")
+require_normalized(home, 'LazyColumn( state = feedListState, modifier = modifier.fillMaxSize().background(Brush.verticalGradient(', "single feed state owns vertical scrolling with the reflective viewport background")
 require(home, 'snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }', "automatic near-bottom feed pagination")
 for needle in ('onOpenAuthorProfile','FynxRemoteSocialClient.follow','FynxDiscoveryClient.recordEngagement','Intent.ACTION_SEND'):
     require(home, needle, f"identity/share behavior {needle}")
@@ -64,6 +64,20 @@ if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 for needle in ('MaterialTheme.colorScheme','FynxDesign.LargeCardShape','key = "feed_header"','key = "feed_loading"','key = "feed_loading_more"','key = "feed_error"','key = "feed_empty"','"Create Post"','"Like"','"Comment"','"Post options"','onDismissRequest =','enabled = !feedRequestInFlight'):
     require(home, needle, f"Home 4F polish/integration surface {needle}")
+
+# Reference-driven Home mirror-glass surfaces: the real card and feed remain functional.
+assistant_card_start = visible_updates.find('modifier = Modifier.fillMaxWidth()\n                .padding(horizontal = 4.dp)')
+assistant_card_end = visible_updates.find('Text("FYNX Assistance"', assistant_card_start)
+if assistant_card_start < 0 or assistant_card_end < 0:
+    raise SystemExit("HOME INTERACTIONS RED: FYNX Assistance card structure is missing")
+assistant_card_header = visible_updates[assistant_card_start:assistant_card_end]
+require(visible_updates, "val assistanceGlassBrush = if (isDarkGlassTheme)", "FYNX Assistance uses a theme-aware silver mirror-glass gradient")
+require(visible_updates, "Color(0xFFE0E6ED).copy(alpha = 0.68f)", "FYNX Assistance uses a visible silver reflection in dark mode")
+require(assistant_card_header, "assistanceGlassBrush", "FYNX Assistance card renders its glass gradient")
+require(assistant_card_header, "containerColor = Color.Transparent", "FYNX Assistance lets the glass gradient show through")
+require(visible_updates, "Color.Black.copy(alpha = 0.82f)", "FYNX AI prompt remains a high-contrast dark inset")
+require(home, "Brush.verticalGradient(", "Home feed uses a restrained reflective background behind real posts")
+require_normalized(home, "modifier = modifier.fillMaxSize().background(Brush.verticalGradient(", "Home feed viewport has a reflective backdrop for the marked black area")
 if 'feed_load_more' in home or 'Load more posts' in home:
     raise SystemExit("HOME INTERACTIONS RED: Home feed must load the next page automatically; manual Load more control remains")
 if '"Refresh feed"' in home:
