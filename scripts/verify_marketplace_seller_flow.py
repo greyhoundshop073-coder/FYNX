@@ -8,6 +8,8 @@ ad_support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCarouselS
 hero = marketplace[marketplace.index("private fun MarketplaceSmartDealsHero"):marketplace.index("@Composable\nfun FynxMarketplacePanel")]
 checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text()
 detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt").read_text()
+marketplace_reference_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text()
+design_system = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt").read_text()
 product_card = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceProductComponents.kt").read_text()
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
 photo_enhancement = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePhotoEnhancement.kt").read_text()
@@ -352,11 +354,15 @@ checks.extend([
 ])
 
 checks.extend([
-    ("Marketplace sell-form category, condition and currency chips use the local cobalt palette",
+    ("Marketplace sell-form category, condition and currency chips use the approved Azure Blue palette",
      "val selectedChipColors = fynxMarketplaceSelectedChipColors()" in marketplace
      and marketplace.count("colors = selectedChipColors") >= 3
+     and "selectedContainerColor = if (isLight) FynxDesign.AzureBlue" in marketplace_reference_components
+     and "val AzureBlue = Color(0xFF007FFF)" in design_system
+     and "val ClassicGreen = Color(0xFF008000)" in design_system
+     and "val CrimsonRed = Color(0xFFDC143C)" in design_system
      and "private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 15_000L" in marketplace),
-    ("multi-product checkout Delivery and Pickup selections keep Marketplace cobalt colors",
+    ("multi-product checkout Delivery and Pickup selections keep Marketplace Azure Blue colors",
      'label={Text("Delivery")},enabled=!busy,colors=fynxMarketplaceSelectedChipColors()' in marketplace
      and 'label={Text("Pickup")},enabled=!busy,colors=fynxMarketplaceSelectedChipColors()' in marketplace),
     ("My Shop selected section tab scrolls fully into view on narrow screens",
