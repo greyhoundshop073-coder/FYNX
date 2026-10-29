@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Refresh
@@ -51,6 +52,60 @@ private data class SellerMoneySnapshot(
     val totals: Map<String, SellerMoneyTotals>?
 )
 
+private fun marketplaceDescriptionSubcategory(description: String): String =
+    Regex("(?m)^[ \t]*Subcategory:[ \t]*([^\r\n]+)[ \t]*$")
+        .find(description)
+        ?.groupValues
+        ?.get(1)
+        ?.trim()
+        .orEmpty()
+
+/**
+ * Replace only the reserved Subcategory specification line. Seller-written description and
+ * all other product specifications are retained; the backend main category is not changed here.
+ */
+private fun marketplaceDescriptionWithSubcategory(description: String, subcategory: String): String {
+    val maximumDescriptionLength = minOf(
+        4_000,
+        FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH
+    ).coerceAtLeast(1)
+    val normalized = description.replace("\r\n", "\n").trim()
+    val withoutOldSubcategory = Regex("(?m)^[ \t]*Subcategory:[ \t]*[^\r\n]*(?:\n|$)")
+        .replace(normalized, "")
+    val cleaned = Regex("(?:\n[ \t]*)?Product specifications[ \t]*\n?[ \t]*$")
+        .replace(withoutOldSubcategory, "")
+        .trim()
+    if (subcategory.isBlank()) return cleaned.take(maximumDescriptionLength).trimEnd()
+
+    val existing = withoutOldSubcategory.trimEnd()
+    val header = "Product specifications\n"
+    val headerIndex = existing.indexOf(header)
+    val remainingSpecifications = if (headerIndex >= 0) {
+        existing.substring(headerIndex + header.length).trimStart('\n')
+    } else {
+        ""
+    }
+    val specificationSection = buildString {
+        append(header)
+        append("Subcategory: ").append(subcategory.trim()).append('\n')
+        if (remainingSpecifications.isNotBlank()) append(remainingSpecifications)
+    }.take(maximumDescriptionLength)
+    val descriptionBody = if (headerIndex >= 0) {
+        existing.substring(0, headerIndex).trimEnd()
+    } else {
+        cleaned
+    }
+    val separator = if (descriptionBody.isBlank()) "" else "\n\n"
+    val descriptionBodyLimit = (
+        maximumDescriptionLength - specificationSection.length - separator.length
+    ).coerceAtLeast(0)
+    val limitedBody = descriptionBody.take(descriptionBodyLimit).trimEnd()
+    return (
+        if (limitedBody.isBlank()) specificationSection
+        else "$limitedBody\n\n$specificationSection"
+    ).take(maximumDescriptionLength)
+}
+
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
 fun FynxMarketplaceSellerCenterPanel() {
@@ -69,6 +124,8 @@ fun FynxMarketplaceSellerCenterPanel() {
     var editTitle by rememberSaveable { mutableStateOf("") }
     var editDescription by rememberSaveable { mutableStateOf("") }
     var editCategory by rememberSaveable { mutableStateOf("") }
+    var editSubcategory by rememberSaveable { mutableStateOf("") }
+    var editCategoryExpanded by remember { mutableStateOf(false) }
     var editCondition by rememberSaveable { mutableStateOf("NEW") }
     var editLocation by rememberSaveable { mutableStateOf("") }
     var editPrice by rememberSaveable { mutableStateOf("") }
@@ -94,6 +151,17 @@ fun FynxMarketplaceSellerCenterPanel() {
     var showDriverAssignments by remember { mutableStateOf(false) }
     var activeSection by rememberSaveable { mutableStateOf("Overview") }
     val selectedChipColors = fynxMarketplaceSelectedChipColors()
+    val standardMarketplaceCategories = listOf(
+        "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property",
+        "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools",
+        "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education",
+        "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other"
+    )
+    // Existing legacy categories remain selectable until the seller intentionally picks a supported value.
+    val editCategoryOptions = if (
+        editCategory.isNotBlank() &&
+        standardMarketplaceCategories.none { it.equals(editCategory.trim(), ignoreCase = true) }
+    ) standardMarketplaceCategories + editCategory else standardMarketplaceCategories
     var shopName by rememberSaveable { mutableStateOf("") }
     var shopDescription by rememberSaveable { mutableStateOf("") }
     var shopLocation by rememberSaveable { mutableStateOf("") }
@@ -566,7 +634,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 FynxRemoteMedia(
                                     mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
                                     type = FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
-                                    modifier = Modifier.size(88.dp)
+                                    modifier = Modifier.size(88.dp),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                 )
                             } else {
                                 Surface(
@@ -591,6 +660,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     editTitle = listing.title
                                     editDescription = listing.description
                                     editCategory = listing.category
+                                    editSubcategory = marketplaceDescriptionSubcategory(listing.description)
                                     editCondition = listing.condition.uppercase(Locale.US)
                                     editLocation = listing.location
                                     editPrice = listing.price.toString()
@@ -637,7 +707,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 FynxRemoteMedia(
                                     mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
                                     type = FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
-                                    modifier = Modifier.size(72.dp)
+                                    modifier = Modifier.size(72.dp),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                 )
                             } else {
                                 Surface(
@@ -661,6 +732,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 editTitle = listing.title
                                 editDescription = listing.description
                                 editCategory = listing.category
+                                    editSubcategory = marketplaceDescriptionSubcategory(listing.description)
                                 editCondition = listing.condition.uppercase(Locale.US)
                                 editLocation = listing.location
                                 editPrice = listing.price.toString()
@@ -709,6 +781,7 @@ fun FynxMarketplaceSellerCenterPanel() {
 
     if (editingListing != null) {
         val selectedListing = editingListing!!
+        val editSubcategoryOptions = marketplaceSubcategoriesFor(editCategory)
         AlertDialog(
             onDismissRequest = { if (!editSaving) editingListing = null },
             title = { Text("Edit listing") },
@@ -735,14 +808,50 @@ fun FynxMarketplaceSellerCenterPanel() {
                         maxLines = 5,
                         enabled = !editSaving
                     )
-                    OutlinedTextField(
-                        value = editCategory,
-                        onValueChange = { editCategory = it.take(40) },
-                        label = { Text("Category") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        enabled = !editSaving
-                    )
+                    Box(Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { editCategoryExpanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !editSaving
+                        ) {
+                            Text(editCategory.ifBlank { "Choose category" }, modifier = Modifier.weight(1f))
+                            Icon(Icons.Default.ExpandMore, contentDescription = "Choose listing category")
+                        }
+                        DropdownMenu(
+                            expanded = editCategoryExpanded,
+                            onDismissRequest = { editCategoryExpanded = false },
+                            modifier = Modifier.heightIn(max = 300.dp)
+                        ) {
+                            editCategoryOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        if (!editCategory.equals(option, ignoreCase = true)) editSubcategory = ""
+                                        editCategory = option
+                                        editCategoryExpanded = false
+                                    },
+                                    enabled = !editSaving
+                                )
+                            }
+                        }
+                    }
+                    if (editSubcategoryOptions.isNotEmpty()) {
+                        Text("Subcategory (optional)", style = MaterialTheme.typography.labelLarge)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            editSubcategoryOptions.forEach { option ->
+                                FilterChip(
+                                    selected = editSubcategory == option,
+                                    onClick = { editSubcategory = if (editSubcategory == option) "" else option },
+                                    enabled = !editSaving,
+                                    label = { Text(option, maxLines = 1) },
+                                    colors = selectedChipColors
+                                )
+                            }
+                        }
+                    }
                     Text("Condition", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                         listOf("NEW", "USED", "REFURBISHED").forEach { condition ->
@@ -796,15 +905,16 @@ fun FynxMarketplaceSellerCenterPanel() {
                     onClick = {
                         val price = editPrice.toDoubleOrNull() ?: return@Button
                         val quantity = editQuantity.toIntOrNull() ?: return@Button
+                        val savedDescription = marketplaceDescriptionWithSubcategory(editDescription, editSubcategory)
                         editSaving = true
                         editError = null
                         scope.launch {
-                            FynxMarketplaceClient.updateListing(context, selectedListing.id, editTitle, editDescription, editCategory, editCondition, editLocation, price, quantity)
+                            FynxMarketplaceClient.updateListing(context, selectedListing.id, editTitle, savedDescription, editCategory, editCondition, editLocation, price, quantity)
                                 .onSuccess {
                                     listings = listings.map { current ->
                                         if (current.id == selectedListing.id) current.copy(
                                             title = editTitle.trim(),
-                                            description = editDescription.trim(),
+                                            description = savedDescription,
                                             category = editCategory.trim(),
                                             condition = editCondition.trim().uppercase(Locale.US),
                                             location = editLocation.trim(),
@@ -815,7 +925,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     archivedListings = archivedListings.map { current ->
                                         if (current.id == selectedListing.id) current.copy(
                                             title = editTitle.trim(),
-                                            description = editDescription.trim(),
+                                            description = savedDescription,
                                             category = editCategory.trim(),
                                             condition = editCondition.trim().uppercase(Locale.US),
                                             location = editLocation.trim(),

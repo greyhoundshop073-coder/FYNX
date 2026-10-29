@@ -10,6 +10,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -56,6 +65,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -77,44 +87,358 @@ internal fun advanceMarketplaceListingsOffset(currentOffset: Int, requestedLimit
 
 
 
+private fun DrawScope.drawMarketplaceCategoryRect(
+    x: Float, y: Float, width: Float, height: Float, color: Color,
+    scaleX: Float, scaleY: Float, radius: Float = 4f
+) {
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(x * scaleX, y * scaleY),
+        size = Size(width * scaleX, height * scaleY),
+        cornerRadius = CornerRadius(radius * scaleX, radius * scaleY)
+    )
+}
+
+private fun DrawScope.drawMarketplaceCategoryCircle(
+    x: Float, y: Float, radius: Float, color: Color,
+    scaleX: Float, scaleY: Float
+) {
+    drawCircle(
+        color = color,
+        radius = radius * minOf(scaleX, scaleY),
+        center = Offset(x * scaleX, y * scaleY)
+    )
+}
+
+private fun DrawScope.drawMarketplaceCategoryLine(
+    x1: Float, y1: Float, x2: Float, y2: Float, color: Color,
+    scaleX: Float, scaleY: Float, stroke: Float = 2f
+) {
+    drawLine(
+        color = color,
+        start = Offset(x1 * scaleX, y1 * scaleY),
+        end = Offset(x2 * scaleX, y2 * scaleY),
+        strokeWidth = stroke * minOf(scaleX, scaleY),
+        cap = StrokeCap.Round
+    )
+}
+
+internal fun marketplaceSubcategoriesFor(category: String): List<String> = when (category.trim().lowercase(Locale.US)) {
+    "electronics" -> listOf("Phones & tablets", "Computers & laptops", "Audio & speakers", "TV & entertainment", "Cameras", "Other electronics")
+    "fashion" -> listOf("Clothing", "Shoes & footwear", "Traditional wear", "Other fashion")
+    "personal accessories" -> listOf("Bags & purses", "Jewellery & watches", "Wallets", "Belts & hats", "Sunglasses", "Other accessories")
+    "home" -> listOf("Kitchen & dining", "Home décor", "Lighting", "Bedding", "Cleaning & storage", "Other home goods")
+    "beauty" -> listOf("Skincare", "Hair care", "Make-up", "Fragrance", "Grooming", "Personal care")
+    "vehicles" -> listOf("Cars", "Motorcycles", "Commercial vehicles", "Bicycles", "Other vehicles")
+    "services" -> listOf("Repairs", "Cleaning", "Professional services", "Transport", "Tutoring", "Other services")
+    "food" -> listOf("Fresh produce", "Packaged food", "Bakery", "Meat & seafood", "Beverages", "Other food")
+    "property" -> listOf("Land", "Residential rentals", "Property for sale", "Commercial spaces", "Short stays")
+    "agriculture" -> listOf("Farm produce", "Seeds & seedlings", "Livestock", "Farming equipment", "Fertilizers", "Other agriculture")
+    "phones & computers" -> listOf("Mobile phones", "Tablets", "Laptops", "Desktop computers", "Computer accessories", "Repairs")
+    "furniture" -> listOf("Living room", "Bedroom", "Office furniture", "Tables & chairs", "Mattresses", "Other furniture")
+    "baby & kids" -> listOf("Baby essentials", "Children's clothing", "Toys & games", "School items", "Prams & carriers")
+    "books" -> listOf("School textbooks", "Higher education", "Fiction & non-fiction", "Reference books", "Stationery")
+    "sports" -> listOf("Fitness equipment", "Team sports", "Sportswear", "Outdoor & camping", "Cycling")
+    "tools" -> listOf("Hand tools", "Power tools", "Plumbing", "Electrical supplies", "Paints & finishes", "Building tools")
+    "health" -> listOf("First aid", "Wellness", "Medical equipment", "Mobility aids", "Hygiene")
+    "appliances" -> listOf("Kitchen appliances", "Refrigeration", "Laundry", "Fans & cooling", "Small appliances", "Other appliances")
+    "auto parts" -> listOf("Engine parts", "Tyres & wheels", "Batteries", "Body & lighting", "Motorcycle parts", "Other parts")
+    "building materials" -> listOf("Cement & blocks", "Roofing", "Doors & windows", "Plumbing", "Electrical supplies", "Paints & finishes")
+    "office & education" -> listOf("Textbooks", "Stationery", "Office supplies", "Printing supplies", "Office furniture", "Computer accessories")
+    "garden & outdoor" -> listOf("Seeds & seedlings", "Plants", "Garden tools", "Irrigation", "Pots & planters", "Outdoor equipment")
+    "handmade & local" -> listOf("Handmade crafts", "Local foods", "Traditional textiles", "Art & décor", "Handmade accessories")
+    "business & workshop supplies" -> listOf("Retail & packaging", "Food service supplies", "Commercial equipment", "Cleaning supplies", "Workshop tools", "Office supplies")
+    "other" -> listOf("Handmade & local goods", "Collectibles", "Other items")
+    else -> emptyList()
+}
+
+/**
+ * Offline category artwork only. These illustrations help buyers recognize a category;
+ * they are never used as seller listing media or as Great Deals product photos.
+ */
+@Composable
+private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val sx = size.width / 108f
+        val sy = size.height / 66f
+        val name = category.trim().lowercase(Locale.US)
+        val azure = Color(0xFF007FFF)
+        val green = Color(0xFF008000)
+        val red = Color(0xFFDC143C)
+        val gold = Color(0xFFD4AF37)
+        val slate = Color(0xFF1C2434)
+        val cloud = Color(0xFFF5F7FA)
+        val white = Color.White
+        val paleBlue = Color(0xFFE5F1FF)
+        val paleGreen = Color(0xFFE4F3E8)
+        val paleGold = Color(0xFFFFF4D7)
+        val accent = when {
+            name.contains("electronic") || name.contains("phone") || name.contains("computer") || name.contains("appliance") -> azure
+            name.contains("fashion") || name.contains("accessor") || name.contains("handmade") || name.contains("local") -> gold
+            name.contains("home") || name.contains("furniture") || name.contains("property") || name.contains("building") -> green
+            name.contains("beauty") || name.contains("health") -> red
+            name.contains("food") || name.contains("grocery") || name.contains("agriculture") || name.contains("garden") -> green
+            name.contains("vehicle") || name.contains("automotive") || name.contains("auto parts") -> azure
+            else -> gold
+        }
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                colors = listOf(cloud, accent.copy(alpha = 0.17f)),
+                start = Offset.Zero,
+                end = Offset(size.width, size.height)
+            ),
+            size = size,
+            cornerRadius = CornerRadius(13.dp.toPx())
+        )
+        drawMarketplaceCategoryCircle(18f, 15f, 12f, white.copy(alpha = 0.72f), sx, sy)
+        drawMarketplaceCategoryCircle(90f, 53f, 17f, accent.copy(alpha = 0.10f), sx, sy)
+
+        when {
+            name.contains("electronics") || name.contains("phones") || name.contains("computer") -> {
+                // Smartphone and laptop, with screens that read clearly at compact sizes.
+                drawMarketplaceCategoryRect(25f, 10f, 20f, 41f, slate, sx, sy, 4f)
+                drawMarketplaceCategoryRect(27.5f, 14f, 15f, 31f, paleBlue, sx, sy, 2f)
+                drawMarketplaceCategoryRect(30f, 18f, 10f, 21f, azure, sx, sy, 1.5f)
+                drawMarketplaceCategoryCircle(35f, 48f, 1.2f, white, sx, sy)
+                drawMarketplaceCategoryRect(51f, 25f, 34f, 23f, slate, sx, sy, 3f)
+                drawMarketplaceCategoryRect(54f, 28f, 28f, 16f, paleBlue, sx, sy, 1f)
+                drawMarketplaceCategoryRect(57f, 30f, 22f, 11f, azure, sx, sy, 1f)
+                drawMarketplaceCategoryRect(47f, 48f, 43f, 3.5f, slate, sx, sy, 1.8f)
+                drawMarketplaceCategoryLine(58f, 49f, 79f, 49f, gold, sx, sy, 1.2f)
+            }
+            name.contains("appliance") -> {
+                // Fridge and washer/dryer shapes make household appliances distinct from phones.
+                drawMarketplaceCategoryRect(27f, 12f, 31f, 43f, white, sx, sy, 4f)
+                drawMarketplaceCategoryRect(31f, 16f, 23f, 17f, paleBlue, sx, sy, 2f)
+                drawMarketplaceCategoryRect(31f, 36f, 23f, 15f, paleBlue, sx, sy, 2f)
+                drawMarketplaceCategoryLine(49f, 23f, 49f, 28f, azure, sx, sy, 1.5f)
+                drawMarketplaceCategoryLine(49f, 39f, 49f, 45f, azure, sx, sy, 1.5f)
+                drawMarketplaceCategoryRect(64f, 22f, 21f, 31f, slate, sx, sy, 4f)
+                drawMarketplaceCategoryCircle(74f, 38f, 7f, paleBlue, sx, sy)
+                drawMarketplaceCategoryCircle(74f, 38f, 4f, azure, sx, sy)
+                drawMarketplaceCategoryCircle(74f, 38f, 1.4f, white, sx, sy)
+            }
+            name.contains("personal accessories") -> {
+                // A bag and watch identify accessories separately from clothing.
+                drawMarketplaceCategoryRect(25f, 26f, 38f, 28f, azure, sx, sy, 5f)
+                drawMarketplaceCategoryRect(33f, 21f, 22f, 8f, slate, sx, sy, 3f)
+                drawMarketplaceCategoryLine(35f, 21f, 35f, 15f, slate, sx, sy, 2f)
+                drawMarketplaceCategoryLine(53f, 21f, 53f, 15f, slate, sx, sy, 2f)
+                drawMarketplaceCategoryCircle(75f, 28f, 13f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(75f, 28f, 8f, white, sx, sy)
+                drawMarketplaceCategoryLine(75f, 28f, 75f, 22f, slate, sx, sy, 1.5f)
+                drawMarketplaceCategoryLine(75f, 28f, 80f, 31f, slate, sx, sy, 1.5f)
+                drawMarketplaceCategoryLine(36f, 37f, 52f, 37f, paleGold, sx, sy, 1.7f)
+            }
+            name.contains("fashion") || name.contains("accessor") -> {
+                drawMarketplaceCategoryLine(52f, 11f, 56f, 15f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryLine(56f, 15f, 52f, 19f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryLine(52f, 19f, 30f, 19f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryLine(30f, 19f, 30f, 24f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryLine(30f, 24f, 78f, 24f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryRect(35f, 26f, 38f, 28f, azure, sx, sy, 5f)
+                drawMarketplaceCategoryRect(41f, 29f, 26f, 21f, white.copy(alpha = 0.95f), sx, sy, 4f)
+                drawMarketplaceCategoryLine(46f, 28f, 54f, 35f, gold, sx, sy, 2f)
+                drawMarketplaceCategoryLine(62f, 28f, 54f, 35f, gold, sx, sy, 2f)
+                drawMarketplaceCategoryRect(39f, 47f, 30f, 3f, gold, sx, sy, 1f)
+            }
+            name.contains("home") || name.contains("property") || name.contains("furniture") -> {
+                if (name.contains("furniture")) {
+                    drawMarketplaceCategoryRect(26f, 32f, 55f, 17f, azure, sx, sy, 5f)
+                    drawMarketplaceCategoryRect(30f, 26f, 47f, 15f, white, sx, sy, 5f)
+                    drawMarketplaceCategoryRect(33f, 29f, 19f, 10f, paleBlue, sx, sy, 3f)
+                    drawMarketplaceCategoryRect(55f, 29f, 18f, 10f, paleBlue, sx, sy, 3f)
+                    drawMarketplaceCategoryRect(31f, 47f, 4f, 8f, slate, sx, sy, 1.5f)
+                    drawMarketplaceCategoryRect(73f, 47f, 4f, 8f, slate, sx, sy, 1.5f)
+                    drawMarketplaceCategoryCircle(80f, 18f, 8f, paleGreen, sx, sy)
+                    drawMarketplaceCategoryLine(80f, 28f, 80f, 40f, green, sx, sy, 2f)
+                    drawMarketplaceCategoryCircle(75f, 26f, 4.5f, green, sx, sy)
+                    drawMarketplaceCategoryCircle(85f, 23f, 4.5f, green, sx, sy)
+                } else {
+                    drawMarketplaceCategoryLine(24f, 29f, 54f, 8f, slate, sx, sy, 3f)
+                    drawMarketplaceCategoryLine(54f, 8f, 84f, 29f, slate, sx, sy, 3f)
+                    drawMarketplaceCategoryRect(31f, 28f, 46f, 26f, white, sx, sy, 2f)
+                    drawMarketplaceCategoryRect(37f, 34f, 11f, 10f, paleBlue, sx, sy, 1.5f)
+                    drawMarketplaceCategoryRect(59f, 34f, 11f, 10f, paleBlue, sx, sy, 1.5f)
+                    drawMarketplaceCategoryRect(50f, 39f, 9f, 15f, gold, sx, sy, 1.5f)
+                    drawMarketplaceCategoryCircle(64f, 47f, 1f, slate, sx, sy)
+                }
+            }
+            name.contains("beauty") || name.contains("health") -> {
+                drawMarketplaceCategoryRect(32f, 23f, 20f, 29f, white, sx, sy, 4f)
+                drawMarketplaceCategoryRect(37f, 15f, 10f, 9f, slate, sx, sy, 2f)
+                drawMarketplaceCategoryRect(35f, 31f, 14f, 13f, if (name.contains("health")) red else gold, sx, sy, 2f)
+                drawMarketplaceCategoryRect(36f, 45f, 12f, 2f, azure, sx, sy, 1f)
+                drawMarketplaceCategoryRect(58f, 30f, 22f, 22f, paleGold, sx, sy, 5f)
+                drawMarketplaceCategoryRect(62f, 25f, 14f, 7f, gold, sx, sy, 2f)
+                drawMarketplaceCategoryRect(62f, 37f, 14f, 3f, white, sx, sy, 1f)
+                if (name.contains("health")) {
+                    drawMarketplaceCategoryLine(69f, 38f, 69f, 47f, red, sx, sy, 2f)
+                    drawMarketplaceCategoryLine(65f, 42.5f, 73f, 42.5f, red, sx, sy, 2f)
+                }
+            }
+            name.contains("auto parts") -> {
+                // A spare tyre and boxed component read as parts, not a complete vehicle listing.
+                drawMarketplaceCategoryCircle(42f, 34f, 20f, slate, sx, sy)
+                drawMarketplaceCategoryCircle(42f, 34f, 13f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(42f, 34f, 6f, slate, sx, sy)
+                drawMarketplaceCategoryCircle(42f, 34f, 2f, white, sx, sy)
+                drawMarketplaceCategoryRect(66f, 17f, 21f, 9f, azure, sx, sy, 2f)
+                drawMarketplaceCategoryRect(69f, 29f, 18f, 6f, paleBlue, sx, sy, 1f)
+                drawMarketplaceCategoryRect(65f, 39f, 23f, 10f, red, sx, sy, 2f)
+            }
+            name.contains("vehicle") || name.contains("automotive") -> {
+                drawMarketplaceCategoryRect(25f, 32f, 58f, 16f, azure, sx, sy, 5f)
+                drawMarketplaceCategoryRect(37f, 22f, 34f, 15f, white, sx, sy, 4f)
+                drawMarketplaceCategoryRect(41f, 25f, 11f, 9f, paleBlue, sx, sy, 1.5f)
+                drawMarketplaceCategoryRect(55f, 25f, 12f, 9f, paleBlue, sx, sy, 1.5f)
+                drawMarketplaceCategoryCircle(38f, 48f, 6f, slate, sx, sy)
+                drawMarketplaceCategoryCircle(70f, 48f, 6f, slate, sx, sy)
+                drawMarketplaceCategoryCircle(38f, 48f, 2.6f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(70f, 48f, 2.6f, gold, sx, sy)
+                drawMarketplaceCategoryRect(76f, 36f, 5f, 3f, gold, sx, sy, 1f)
+            }
+            name.contains("food") || name.contains("grocery") -> {
+                drawMarketplaceCategoryCircle(38f, 24f, 8f, red, sx, sy)
+                drawMarketplaceCategoryCircle(52f, 21f, 8f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(67f, 24f, 8f, green, sx, sy)
+                drawMarketplaceCategoryLine(38f, 17f, 40f, 14f, green, sx, sy, 2f)
+                drawMarketplaceCategoryLine(52f, 14f, 52f, 12f, green, sx, sy, 2f)
+                drawMarketplaceCategoryLine(67f, 17f, 69f, 14f, green, sx, sy, 2f)
+                drawMarketplaceCategoryRect(28f, 32f, 50f, 20f, slate, sx, sy, 4f)
+                drawMarketplaceCategoryRect(32f, 35f, 42f, 13f, paleGold, sx, sy, 2f)
+                for (i in 0..5) drawMarketplaceCategoryLine(34f + i * 7f, 35f, 38f + i * 7f, 48f, gold, sx, sy, 1f)
+                drawMarketplaceCategoryLine(28f, 32f, 78f, 32f, green, sx, sy, 3f)
+            }
+            name.contains("agriculture") || name.contains("garden") -> {
+                drawMarketplaceCategoryCircle(77f, 16f, 8f, gold, sx, sy)
+                drawMarketplaceCategoryRect(22f, 47f, 64f, 7f, Color(0xFFB47A4A), sx, sy, 3f)
+                drawMarketplaceCategoryLine(54f, 48f, 54f, 22f, green, sx, sy, 3f)
+                drawMarketplaceCategoryLine(54f, 35f, 38f, 27f, green, sx, sy, 2.5f)
+                drawMarketplaceCategoryLine(55f, 31f, 70f, 22f, green, sx, sy, 2.5f)
+                drawMarketplaceCategoryCircle(38f, 27f, 7f, green, sx, sy)
+                drawMarketplaceCategoryCircle(70f, 22f, 7f, green, sx, sy)
+                drawMarketplaceCategoryCircle(48f, 18f, 5f, paleGreen, sx, sy)
+                drawMarketplaceCategoryLine(28f, 50f, 80f, 50f, gold, sx, sy, 1.5f)
+            }
+            name.contains("baby") || name.contains("kids") || name.contains("toy") -> {
+                drawMarketplaceCategoryRect(27f, 33f, 21f, 21f, red, sx, sy, 3f)
+                drawMarketplaceCategoryRect(48f, 24f, 20f, 30f, azure, sx, sy, 3f)
+                drawMarketplaceCategoryRect(68f, 37f, 15f, 17f, gold, sx, sy, 3f)
+                drawMarketplaceCategoryCircle(80f, 19f, 8f, paleGreen, sx, sy)
+                drawMarketplaceCategoryCircle(80f, 19f, 5f, green, sx, sy)
+                drawMarketplaceCategoryLine(80f, 11f, 80f, 7f, slate, sx, sy, 1.4f)
+                drawMarketplaceCategoryLine(33f, 41f, 42f, 41f, white, sx, sy, 2f)
+                drawMarketplaceCategoryLine(37.5f, 37f, 37.5f, 46f, white, sx, sy, 2f)
+            }
+            name.contains("book") || name.contains("education") || name.contains("office") -> {
+                drawMarketplaceCategoryRect(25f, 37f, 57f, 15f, slate, sx, sy, 3f)
+                drawMarketplaceCategoryRect(29f, 33f, 49f, 13f, red, sx, sy, 2f)
+                drawMarketplaceCategoryRect(32f, 28f, 44f, 13f, azure, sx, sy, 2f)
+                drawMarketplaceCategoryRect(36f, 17f, 36f, 19f, white, sx, sy, 2f)
+                drawMarketplaceCategoryLine(54f, 18f, 54f, 34f, gold, sx, sy, 1.8f)
+                drawMarketplaceCategoryLine(40f, 22f, 49f, 22f, azure, sx, sy, 1.2f)
+                drawMarketplaceCategoryLine(40f, 26f, 49f, 26f, azure, sx, sy, 1.2f)
+            }
+            name.contains("sport") || name.contains("fitness") || name.contains("outdoor") -> {
+                drawMarketplaceCategoryCircle(54f, 33f, 21f, white, sx, sy)
+                drawMarketplaceCategoryCircle(54f, 33f, 21f, slate.copy(alpha = 0.15f), sx, sy)
+                drawMarketplaceCategoryCircle(54f, 33f, 19f, white, sx, sy)
+                drawMarketplaceCategoryLine(54f, 15f, 54f, 51f, slate, sx, sy, 1.2f)
+                drawMarketplaceCategoryLine(37f, 27f, 71f, 39f, slate, sx, sy, 1.2f)
+                drawMarketplaceCategoryLine(37f, 39f, 71f, 27f, slate, sx, sy, 1.2f)
+                drawMarketplaceCategoryLine(45f, 18f, 45f, 48f, azure, sx, sy, 1f)
+                drawMarketplaceCategoryLine(63f, 18f, 63f, 48f, azure, sx, sy, 1f)
+            }
+            name.contains("building") -> {
+                // Stacked masonry blocks represent construction materials.
+                drawMarketplaceCategoryRect(24f, 17f, 60f, 37f, slate, sx, sy, 3f)
+                drawMarketplaceCategoryRect(28f, 21f, 24f, 8f, red, sx, sy, 1f)
+                drawMarketplaceCategoryRect(55f, 21f, 24f, 8f, red, sx, sy, 1f)
+                drawMarketplaceCategoryRect(40f, 32f, 25f, 8f, gold, sx, sy, 1f)
+                drawMarketplaceCategoryRect(28f, 43f, 24f, 7f, red, sx, sy, 1f)
+                drawMarketplaceCategoryRect(55f, 43f, 24f, 7f, red, sx, sy, 1f)
+            }
+            name.contains("tool") || name.contains("service") || name.contains("workshop") || name.contains("business") -> {
+                drawMarketplaceCategoryRect(28f, 31f, 51f, 23f, azure, sx, sy, 4f)
+                drawMarketplaceCategoryRect(43f, 25f, 21f, 7f, slate, sx, sy, 2f)
+                drawMarketplaceCategoryRect(47f, 27f, 13f, 3f, gold, sx, sy, 1f)
+                drawMarketplaceCategoryRect(36f, 36f, 9f, 12f, white, sx, sy, 1.5f)
+                drawMarketplaceCategoryRect(51f, 36f, 9f, 12f, paleGold, sx, sy, 1.5f)
+                drawMarketplaceCategoryLine(65f, 38f, 76f, 47f, slate, sx, sy, 3.8f)
+                drawMarketplaceCategoryLine(67f, 36f, 72f, 31f, slate, sx, sy, 2.8f)
+                drawMarketplaceCategoryLine(72f, 31f, 78f, 35f, slate, sx, sy, 2.8f)
+            }
+            name.contains("handmade") || name.contains("local") -> {
+                // Woven basket and thread/spool scene for handmade and locally produced goods.
+                drawMarketplaceCategoryRect(27f, 31f, 57f, 23f, Color(0xFFB47A4A), sx, sy, 5f)
+                for (i in 0..5) drawMarketplaceCategoryLine(32f + i * 8f, 32f, 36f + i * 8f, 53f, paleGold, sx, sy, 1.4f)
+                drawMarketplaceCategoryLine(29f, 38f, 82f, 38f, gold, sx, sy, 1.4f)
+                drawMarketplaceCategoryLine(29f, 46f, 82f, 46f, gold, sx, sy, 1.4f)
+                drawMarketplaceCategoryCircle(76f, 19f, 8f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(76f, 19f, 4f, paleGold, sx, sy)
+                drawMarketplaceCategoryLine(72f, 27f, 66f, 34f, slate, sx, sy, 2f)
+            }
+            else -> {
+                // Neutral storefront/box scene for Other and future categories.
+                drawMarketplaceCategoryRect(31f, 28f, 47f, 27f, white, sx, sy, 3f)
+                drawMarketplaceCategoryRect(27f, 20f, 55f, 12f, azure, sx, sy, 3f)
+                drawMarketplaceCategoryRect(34f, 32f, 9f, 9f, paleBlue, sx, sy, 1f)
+                drawMarketplaceCategoryRect(49f, 32f, 9f, 23f, paleGold, sx, sy, 1f)
+                drawMarketplaceCategoryRect(64f, 32f, 9f, 9f, paleGreen, sx, sy, 1f)
+            }
+        }
+    }
+}
+
 @Composable
 private fun MarketplaceExploreCategoryTiles(
     categories: List<String>,
     selectedCategory: String,
     onSelect: (String) -> Unit
 ) {
+    // Category scenes are illustration-only, offline-safe discovery artwork. Live seller media
+    // remains the source of truth for product cards and Great Deals.
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         categories.forEach { itemCategory ->
-            val icon = when (itemCategory.lowercase(Locale.US)) {
-                "electronics" -> Icons.Default.Devices
-                "fashion" -> Icons.Default.ShoppingBag
-                "home" -> Icons.Default.Home
-                "beauty" -> Icons.Default.Face
-                "vehicles" -> Icons.Default.DirectionsCar
-                "services" -> Icons.Default.Build
-                else -> Icons.Default.Storefront
-            }
+            val selected = selectedCategory.equals(itemCategory, ignoreCase = true)
             Surface(
                 onClick = { onSelect(itemCategory) },
-                shape = RoundedCornerShape(16.dp),
-                color = if (selectedCategory == itemCategory) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.width(94.dp)
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                border = BorderStroke(
+                    width = if (selected) 1.5.dp else 1.dp,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                ),
+                modifier = Modifier.width(108.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 7.dp),
+                    modifier = Modifier.padding(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
-                        modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(66.dp)
+                            .clip(RoundedCornerShape(13.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(23.dp))
+                        MarketplaceCategoryArtwork(itemCategory, Modifier.fillMaxSize())
                     }
-                    Text(itemCategory, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        itemCategory,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        maxLines = 2,
+                        minLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -474,7 +798,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
-    val categories = listOf("All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other")
+    val categories = listOf("All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other")
     var sellerReputations by remember { mutableStateOf<Map<String, FynxMarketplaceClient.SellerReputation>>(emptyMap()) }
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
 
@@ -1442,7 +1766,73 @@ private fun MarketplacePaymentDialog(context: android.content.Context, order: Fy
 
 @Composable
 private fun MarketplaceSellDialog(context: android.content.Context, onPublished: (String) -> Unit, onCancel: () -> Unit) {
-    var title by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var condition by remember { mutableStateOf("NEW") }; var brand by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var size by remember { mutableStateOf("") }; var color by remember { mutableStateOf("") }; var material by remember { mutableStateOf("") }; var dimensions by remember { mutableStateOf("") }; var warranty by remember { mutableStateOf("") }; var vehicleYear by remember { mutableStateOf("") }; var mileage by remember { mutableStateOf("") }; var beautyDetails by remember { mutableStateOf("") }; var serviceDetails by remember { mutableStateOf("") }; var generalDetails by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
+    var title by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var subcategory by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("NEW") }; var brand by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var size by remember { mutableStateOf("") }; var color by remember { mutableStateOf("") }; var material by remember { mutableStateOf("") }; var dimensions by remember { mutableStateOf("") }; var warranty by remember { mutableStateOf("") }; var vehicleYear by remember { mutableStateOf("") }; var mileage by remember { mutableStateOf("") }; var beautyDetails by remember { mutableStateOf("") }; var serviceDetails by remember { mutableStateOf("") }; var generalDetails by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
+    var showEnhancementPicker by remember { mutableStateOf(false) }
+    var showEnhancementPreview by remember { mutableStateOf(false) }
+    var enhancementBusy by remember { mutableStateOf(false) }
+    var enhancementIndex by remember { mutableIntStateOf(-1) }
+    var enhancementSource by remember { mutableStateOf<Uri?>(null) }
+    var enhancementPreviewUri by remember { mutableStateOf<Uri?>(null) }
+    var enhancementError by remember { mutableStateOf<String?>(null) }
+    var originalByEnhancedUri by remember { mutableStateOf<Map<String, Uri>>(emptyMap()) }
+
+    fun clearCategorySpecificFields() {
+        brand = ""
+        model = ""
+        size = ""
+        color = ""
+        material = ""
+        dimensions = ""
+        warranty = ""
+        vehicleYear = ""
+        mileage = ""
+        beautyDetails = ""
+        serviceDetails = ""
+        generalDetails = ""
+    }
+
+    fun cleanupGeneratedPhotoFiles() {
+        val generated = originalByEnhancedUri.keys.map { Uri.parse(it) } + listOfNotNull(enhancementPreviewUri)
+        FynxMarketplacePhotoEnhancement.discardAll(generated)
+        originalByEnhancedUri = emptyMap()
+        enhancementPreviewUri = null
+        enhancementSource = null
+        enhancementIndex = -1
+        showEnhancementPreview = false
+        showEnhancementPicker = false
+    }
+
+    fun keepOriginalPhotoPreview() {
+        FynxMarketplacePhotoEnhancement.discard(enhancementPreviewUri)
+        enhancementPreviewUri = null
+        enhancementSource = null
+        enhancementIndex = -1
+        showEnhancementPreview = false
+    }
+
+    fun startPhotoEnhancement(index: Int, uri: Uri) {
+        if (enhancementBusy || contextIsVideo(context, uri)) return
+        enhancementIndex = index
+        enhancementSource = uri
+        enhancementPreviewUri = null
+        enhancementError = null
+        showEnhancementPicker = false
+        enhancementBusy = true
+        scope.launch {
+            val result = FynxMarketplacePhotoEnhancement.enhance(context, uri)
+            result.onSuccess { output ->
+                enhancementPreviewUri = output
+                showEnhancementPreview = true
+            }.onFailure { failure ->
+                enhancementError = failure.message
+                    ?.takeIf { it.contains("temporarily unavailable on Android 16 and newer") }
+                    ?: "FYNX could not separate this photo's background on this device. Your original is unchanged; try another photo or keep it as-is."
+                showEnhancementPicker = true
+            }
+            enhancementBusy = false
+        }
+    }
+
     val sellerLocationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         if (permissions.values.any { it }) {
             scope.launch {
@@ -1468,33 +1858,127 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         } else sellerLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
     val selectedChipColors = fynxMarketplaceSelectedChipColors()
-    val listingDescription = remember(desc, category, brand, model, size, color, material, dimensions, warranty, vehicleYear, mileage, beautyDetails, serviceDetails, generalDetails) {
-        val specifications = when (category) {
-            "Electronics" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty)
-            "Fashion" -> listOf("Size" to size, "Colour" to color, "Material" to material)
-            "Home" -> listOf("Material" to material, "Dimensions" to dimensions, "Colour" to color)
-            "Vehicles" -> listOf("Make / brand" to brand, "Model" to model, "Year" to vehicleYear, "Mileage" to mileage)
-            "Beauty" -> listOf("Brand" to brand, "Size / volume" to size, "Product details" to beautyDetails)
-            "Services" -> listOf("Service details" to serviceDetails)
-            else -> listOf("Brand / maker" to brand, "Colour" to color, "Additional details" to generalDetails)
-        }.filter { it.second.isNotBlank() }
+    val specifications = when (category) {
+        "Electronics", "Phones & Computers" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty)
+        "Fashion" -> listOf("Size" to size, "Colour" to color, "Material" to material)
+        "Personal Accessories" -> listOf("Brand / maker" to brand, "Size" to size, "Colour" to color, "Material" to material)
+        "Home", "Furniture" -> listOf("Material" to material, "Dimensions" to dimensions, "Colour / finish" to color)
+        "Appliances" -> listOf("Brand" to brand, "Model" to model, "Warranty" to warranty, "Dimensions" to dimensions)
+        "Vehicles" -> listOf("Make / brand" to brand, "Model" to model, "Year" to vehicleYear, "Mileage" to mileage)
+        "Auto Parts" -> listOf("Part manufacturer / brand" to brand, "Part number / compatible vehicle" to model, "Fitment, condition, and included parts" to generalDetails)
+        "Beauty", "Health" -> listOf("Brand" to brand, "Size / volume" to size, "Product details" to beautyDetails)
+        "Food" -> listOf("Brand / producer" to brand, "Pack size / weight" to size, "Ingredients, allergens, expiry, or storage details" to generalDetails)
+        "Agriculture" -> listOf("Brand / maker" to brand, "Variety / material" to material, "Season, care, or farming-use details" to generalDetails)
+        "Garden & Outdoor" -> listOf("Brand / maker" to brand, "Material / variety" to material, "Season, care, variety, or intended use" to generalDetails)
+        "Building Materials" -> listOf("Material / grade" to material, "Dimensions / pack size" to dimensions, "Colour / finish" to color, "Additional details" to generalDetails)
+        "Handmade & Local" -> listOf("Maker" to brand, "Material" to material, "Additional details" to generalDetails)
+        "Office & Education", "Business & Workshop Supplies" -> listOf("Brand / maker" to brand, "Model / item type" to model, "Additional details" to generalDetails)
+        "Sports" -> listOf("Brand" to brand, "Model" to model, "Size / fit" to size, "Colour" to color, "Material" to material, "Additional details" to generalDetails)
+        "Tools" -> listOf("Brand / maker" to brand, "Model" to model, "Material" to material, "Dimensions" to dimensions, "Additional details" to generalDetails)
+        "Baby & Kids" -> listOf("Brand / maker" to brand, "Age range / size" to size, "Colour" to color, "Safety and included accessories" to generalDetails)
+        "Books" -> listOf("Publisher / brand" to brand, "Edition / ISBN / level" to model, "Subject, contents, or condition" to generalDetails)
+        "Property" -> listOf("Property type / estate" to brand, "Dimensions / plot size" to dimensions, "Availability, utilities, or paperwork notes" to generalDetails)
+        "Services" -> listOf("Service details" to serviceDetails)
+        else -> listOf("Brand / maker" to brand, "Colour" to color, "Additional details" to generalDetails)
+    }.filter { it.second.isNotBlank() }
+    val allSpecifications = if (subcategory.isBlank()) specifications else listOf("Subcategory" to subcategory) + specifications
+    val maximumSavedDescriptionLength = minOf(4_000, FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)
+    val specificationSection = if (allSpecifications.isEmpty()) "" else buildString {
+        append("\n\nProduct specifications\n")
+        allSpecifications.forEachIndexed { index, (label, value) ->
+            if (index > 0) append('\n')
+            append(label).append(": ").append(value.trim())
+        }
+    }
+    val descriptionBodyLimit = (maximumSavedDescriptionLength - specificationSection.length).coerceAtLeast(0)
+    val listingDescription = remember(desc, specificationSection, descriptionBodyLimit, maximumSavedDescriptionLength) {
         buildString {
-            append(desc.trim())
-            if (specifications.isNotEmpty()) {
-                append("\n\nProduct specifications\n")
-                specifications.forEach { (label, value) -> append(label).append(": ").append(value.trim()).append('\n') }
-            }
-        }.trim().take(FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)
+            append(desc.trim().take(descriptionBodyLimit))
+            append(specificationSection)
+        }.trim().take(maximumSavedDescriptionLength)
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA)) { uris -> if (uris.isNotEmpty()) media = FynxMarketplaceSellerFlowSupport.normalizedMedia(context, media + uris) }
-    AlertDialog(onDismissRequest = { if (!busy) onCancel() }, title = { Text("Sell on FYNX") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    AlertDialog(onDismissRequest = { if (!busy && !enhancementBusy) { cleanupGeneratedPhotoFiles(); onCancel() } }, title = { Text("Sell on FYNX") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Add product media, then enter the key details.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text("Product media (${media.size}/${FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA})", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Collections, null); Spacer(Modifier.width(5.dp)); Text("Choose media") }; OutlinedButton(onClick = { showCamera = true }, enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera") } }
-        if (media.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) { items(media, key = { it.toString() }) { uri -> Box(Modifier.width(78.dp).height(78.dp)) { val isVideo = contextIsVideo(LocalContext.current, uri); if (isVideo) Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.Videocam, "Video") } else AndroidView(factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { imageView -> imageView.setImageURI(uri) }, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))); IconButton(onClick = { media = media.filterNot { it == uri } }, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) { Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error) } } } }
+        if (media.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
+            items(media, key = { it.toString() }) { uri ->
+                Column(Modifier.width(78.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.width(78.dp).height(78.dp)) {
+                        val isVideo = contextIsVideo(LocalContext.current, uri)
+                        if (isVideo) {
+                            Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.Videocam, "Video") }
+                        } else {
+                            AndroidView(factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { imageView -> imageView.setImageURI(uri) }, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
+                        }
+                        IconButton(
+                            onClick = {
+                                media = media.filterNot { it == uri }
+                                if (originalByEnhancedUri.containsKey(uri.toString())) {
+                                    originalByEnhancedUri = originalByEnhancedUri - uri.toString()
+                                    FynxMarketplacePhotoEnhancement.discard(uri)
+                                }
+                            },
+                            modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
+                        ) { Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error) }
+                    }
+                    val original = originalByEnhancedUri[uri.toString()]
+                    if (original != null) {
+                        TextButton(
+                            onClick = {
+                                media = FynxMarketplaceSellerFlowSupport.normalizedMedia(
+                                    context,
+                                    media.map { if (it == uri) original else it }
+                                )
+                                originalByEnhancedUri = originalByEnhancedUri - uri.toString()
+                                FynxMarketplacePhotoEnhancement.discard(uri)
+                            },
+                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                        ) { Text("Undo", style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+            }
+        }
+        if (media.any { !contextIsVideo(context, it) }) {
+            if (FynxMarketplacePhotoEnhancement.isSupportedOnCurrentAndroid()) {
+                OutlinedButton(
+                    onClick = { showEnhancementPicker = true; enhancementError = null },
+                    enabled = !busy && !enhancementBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Clean up photo background (optional)") }
+                Text(
+                    "Preview before using it. The original stays available for Undo. First use may download a model through Google Play services and may use mobile data; photo pixels are processed on this device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    "Photo background cleanup is temporarily unavailable on Android 16 and newer. Your original photos still work and can be published normally.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        enhancementError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         Text("1. Product basics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(title, { title = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) }, label = { Text("Product name") }, supportingText = { Text("Use a clear name buyers can search for.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Category", style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }, colors = selectedChipColors) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { if (category != item) clearCategorySpecificFields(); category = item; subcategory = "" }, label = { Text(item) }, colors = selectedChipColors) } }
+        val categorySubcategories = marketplaceSubcategoriesFor(category)
+        Text("Subcategory (optional)", style = MaterialTheme.typography.labelLarge)
+        if (categorySubcategories.isNotEmpty()) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                categorySubcategories.forEach { item ->
+                    FilterChip(
+                        selected = subcategory == item,
+                        onClick = { subcategory = if (subcategory == item) "" else item },
+                        label = { Text(item) },
+                        colors = selectedChipColors
+                    )
+                }
+            }
+            Text("Choose a closer match. FYNX keeps the main category unchanged for existing search and filter compatibility.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Text("Condition", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }, colors = selectedChipColors) } }
         Text("2. Price and stock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -1505,17 +1989,19 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("3. Details buyers care about", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("These optional fields are added to your product description so buyers can compare listings more confidently.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         when (category) {
-            "Electronics" -> {
+            "Electronics", "Phones & Computers", "Appliances" -> {
                 OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(model, { model = it.take(100) }, label = { Text("Model / model number") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(warranty, { warranty = it.take(160) }, label = { Text("Warranty or included accessories") }, modifier = Modifier.fillMaxWidth())
+                if (category == "Appliances") OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Dimensions") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
-            "Fashion" -> {
-                OutlinedTextField(size, { size = it.take(80) }, label = { Text("Size / fit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            "Fashion", "Personal Accessories" -> {
+                OutlinedTextField(size, { size = it.take(80) }, label = { Text(if (category == "Personal Accessories") "Item size" else "Size / fit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(color, { color = it.take(80) }, label = { Text("Colour") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material / fabric") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text(if (category == "Personal Accessories") "Material / finish" else "Material / fabric") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (category == "Personal Accessories") OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / maker") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
-            "Home" -> {
+            "Home", "Furniture" -> {
                 OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Dimensions (e.g. 120 × 60 × 75 cm)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(color, { color = it.take(80) }, label = { Text("Colour / finish") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -1526,10 +2012,70 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                 OutlinedTextField(vehicleYear, { vehicleYear = it.filter(Char::isDigit).take(4) }, label = { Text("Year") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(mileage, { mileage = it.take(80) }, label = { Text("Mileage / usage") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
-            "Beauty" -> {
+            "Auto Parts" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Part manufacturer / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Part number / compatible vehicle") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Fitment, condition, and included parts") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Beauty", "Health" -> {
                 OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(size, { size = it.take(80) }, label = { Text("Size / volume") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(beautyDetails, { beautyDetails = it.take(500) }, label = { Text("Ingredients, skin/hair type, or expiry details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Food" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / producer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(size, { size = it.take(80) }, label = { Text("Pack size / weight") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Ingredients, allergens, expiry, or storage details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Agriculture", "Garden & Outdoor" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Producer / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Variety / material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Season, care, variety, or intended use") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Baby & Kids" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / maker") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(size, { size = it.take(80) }, label = { Text("Age range / size") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(color, { color = it.take(80) }, label = { Text("Colour") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Safety, included accessories, or toy details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Books" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Publisher / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Edition / ISBN / level") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Subject, contents, or condition") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Office & Education", "Business & Workshop Supplies" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / maker") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Model / item type") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Additional details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Sports" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand / maker") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(size, { size = it.take(80) }, label = { Text("Size / fit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Sport, fit, or included gear") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Tools" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Manufacturer / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Model / part number") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material / grade") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Dimensions") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Size, use, or included parts") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Building Materials" -> {
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material / grade") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Size / dimensions") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(color, { color = it.take(80) }, label = { Text("Colour / finish") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Quantity, grade, and delivery notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Handmade & Local" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Maker / artisan") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Craft method, origin, or custom options") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Property" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Property type / estate") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Dimensions / plot size") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Availability, utilities, or paperwork notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             }
             "Services" -> OutlinedTextField(serviceDetails, { serviceDetails = it.take(500) }, label = { Text("What is included, duration, and service area") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             else -> {
@@ -1538,13 +2084,131 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                 OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Other useful product details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             }
         }
-        OutlinedTextField(desc, { desc = it.take(4000) }, label = { Text("Product description") }, supportingText = { Text("Describe condition, included items, defects, and anything buyers should know.") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(desc.take(descriptionBodyLimit), { desc = it.take(descriptionBodyLimit) }, label = { Text("Product description") }, supportingText = { Text("Description and saved specifications share a 4,000-character limit. Up to $descriptionBodyLimit characters are available for this category.") }, minLines = 3, modifier = Modifier.fillMaxWidth())
         Text("4. Location and delivery", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(location, { location = it.take(160) }, label = { Text("Listing area") }, supportingText = { Text("Use a town, city, or state buyers recognise.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedButton(onClick = { useCurrentListingLocation() }, enabled = !busy && !locationLoading, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (locationLoading) "Finding your area..." else "Use my current area") }
         Text("FYNX uses a human-readable area for discovery; your exact GPS coordinates are not published with the listing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delivery, { delivery = it }); Text("Delivery") }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(pickup, { pickup = it }); Text("Pickup") }; error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { listingId -> onPublished(listingId) }.onFailure { error = marketplaceSafeError(it, "Listing could not be published."); busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") } })
+    } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { listingId -> cleanupGeneratedPhotoFiles(); onPublished(listingId) }.onFailure { error = marketplaceSafeError(it, "Listing could not be published."); busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = { cleanupGeneratedPhotoFiles(); onCancel() }, enabled = !busy && !enhancementBusy) { Text("Cancel") } })
+    if (showEnhancementPicker) {
+        AlertDialog(
+            onDismissRequest = { if (!enhancementBusy) showEnhancementPicker = false },
+            title = { Text("Choose a product photo") },
+            text = {
+                Column(
+                    Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Only still photos can be cleaned up. Processing runs on your device; the original image is not overwritten.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    enhancementError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                    media.forEachIndexed { index, uri ->
+                        if (!contextIsVideo(context, uri)) {
+                            Card(Modifier.fillMaxWidth()) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    AndroidView(
+                                        factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
+                                        update = { it.setImageURI(uri) },
+                                        modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp))
+                                    )
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Photo ${index + 1}", style = MaterialTheme.typography.titleSmall)
+                                        if (originalByEnhancedUri.containsKey(uri.toString())) {
+                                            Text("Already enhanced; use Undo in the photo strip to restore it.", style = MaterialTheme.typography.bodySmall)
+                                        } else {
+                                            Text("Original retained", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    Button(
+                                        onClick = { if (!originalByEnhancedUri.containsKey(uri.toString())) startPhotoEnhancement(index, uri) },
+                                        enabled = !enhancementBusy && !originalByEnhancedUri.containsKey(uri.toString())
+                                    ) { Text("Enhance") }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showEnhancementPicker = false }, enabled = !enhancementBusy) { Text("Close") }
+            }
+        )
+    }
+    if (enhancementBusy) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Enhancing photo on this device") },
+            text = {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(Modifier.size(24.dp))
+                    Text("The first run may need to download the segmentation model. Your selected original remains unchanged.")
+                }
+            },
+            confirmButton = {}
+        )
+    }
+    if (showEnhancementPreview && enhancementSource != null && enhancementPreviewUri != null) {
+        AlertDialog(
+            onDismissRequest = { keepOriginalPhotoPreview() },
+            title = { Text("Review enhanced photo") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Compare the original with the cleaned background. Use Enhanced replaces only this item; Undo restores the original.", style = MaterialTheme.typography.bodySmall)
+                    Text("Original", style = MaterialTheme.typography.labelLarge)
+                    AndroidView(
+                        factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
+                        update = { it.setImageURI(enhancementSource) },
+                        modifier = Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+                    Text("Enhanced preview", style = MaterialTheme.typography.labelLarge)
+                    AndroidView(
+                        factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
+                        update = { it.setImageURI(enhancementPreviewUri) },
+                        modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val original = enhancementSource
+                    val enhanced = enhancementPreviewUri
+                    val index = enhancementIndex
+                    if (original != null && enhanced != null && index in media.indices && media[index] == original) {
+                        val replacedOld = media[index]
+                        // Re-enhancement must keep Undo pointed at the first, untouched source photo.
+                        val rootOriginal = originalByEnhancedUri[original.toString()] ?: original
+                        media = media.toMutableList().also { it[index] = enhanced }
+                        originalByEnhancedUri = (originalByEnhancedUri - replacedOld.toString()) + (enhanced.toString() to rootOriginal)
+                        if (replacedOld != rootOriginal) {
+                            FynxMarketplacePhotoEnhancement.discard(replacedOld)
+                        }
+                        enhancementPreviewUri = null
+                        enhancementSource = null
+                        enhancementIndex = -1
+                        showEnhancementPreview = false
+                        enhancementError = null
+                    } else {
+                        enhancementError = "This photo changed while it was being enhanced. The original selection was kept."
+                        keepOriginalPhotoPreview()
+                    }
+                }) { Text("Use Enhanced") }
+            },
+            dismissButton = { TextButton(onClick = { keepOriginalPhotoPreview() }) { Text("Keep Original") } }
+        )
+    }
     if (showCamera) Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, _ -> media = FynxMarketplaceSellerFlowSupport.addMedia(context, media, uri); showCamera = false }, onDismiss = { showCamera = false }) } } }
 }
 

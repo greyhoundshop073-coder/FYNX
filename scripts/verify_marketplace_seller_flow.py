@@ -8,8 +8,14 @@ ad_support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCarouselS
 hero = marketplace[marketplace.index("private fun MarketplaceSmartDealsHero"):marketplace.index("@Composable\nfun FynxMarketplacePanel")]
 checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text()
 detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt").read_text()
+marketplace_reference_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text()
+design_system = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt").read_text()
 product_card = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceProductComponents.kt").read_text()
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
+photo_enhancement = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePhotoEnhancement.kt").read_text()
+app_gradle = (ROOT / "app/build.gradle.kts").read_text()
+app_manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text()
+file_provider_paths = (ROOT / "app/src/main/res/xml/fynx_file_paths.xml").read_text()
 seller_orders = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt").read_text()
 app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 saved_products_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSavedMarketplaceProductsPanel.kt").read_text()
@@ -33,7 +39,7 @@ shop_profile_routes = (ROOT / "backend/marketplaceShopProfiles.js").read_text()
 
 import re
 
-EXPECTED_DISCOVERY_CATEGORIES = ["All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other"]
+EXPECTED_DISCOVERY_CATEGORIES = ["All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other"]
 EXPECTED_SELLER_CATEGORIES = EXPECTED_DISCOVERY_CATEGORIES[1:]
 
 def _extract_string_list(pattern: str, source: str):
@@ -58,14 +64,71 @@ checks = [
     ("active seller flow previews selected media", "ImageView" in marketplace and "contextIsVideo" in marketplace),
     ("active seller flow supports media removal", 'media = media.filterNot { it == uri }' in marketplace),
     ("active seller flow publishes the selected media list", "createMarketplaceListing" in marketplace and ", media)" in marketplace),
+    ("Marketplace category tiles use offline category artwork rather than the old generic icon mapping", "MarketplaceCategoryArtwork(itemCategory" in marketplace and "Canvas(modifier = modifier)" in marketplace and "private fun MarketplaceCategoryArtwork" in marketplace),
+    ("Marketplace category artwork covers the current discovery taxonomy", all(token in marketplace for token in ('name.contains("electronics")', 'name.contains("fashion")', 'name.contains("personal accessories")', 'name.contains("home")', 'name.contains("beauty")', 'name.contains("vehicle")', 'name.contains("food")', 'name.contains("agriculture")', 'name.contains("baby")', 'name.contains("book")', 'name.contains("sport")', 'name.contains("tool")', 'name.contains("appliance")', 'name.contains("auto parts")', 'name.contains("building")', 'name.contains("office")', 'name.contains("garden")', 'name.contains("handmade")', 'name.contains("local")', 'name.contains("workshop")', 'name.contains("business")', 'Neutral storefront/box scene'))),
+    ("Marketplace category artwork remains separate from real seller inventory photos", "never used as seller listing media" in marketplace and "MarketplaceCategoryArtwork" not in hero and "RemoteMarketMedia(" in hero),
+    ("My Shop active listing thumbnails use the real seller media and a consistent crop", "mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())" in seller_center and "modifier = Modifier.size(88.dp),\n                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop" in seller_center),
+    ("My Shop archived listing thumbnails use the real seller media and a consistent crop", "mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())" in seller_center and "modifier = Modifier.size(72.dp),\n                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop" in seller_center),
+    ("seller photo cleanup uses on-device ML Kit subject segmentation instead of a remote processing API", "SubjectSegmentation.getClient" in photo_enhancement and "segmenter.process(input)" in photo_enhancement and "FynxProductionMessaging.uploadMedia" not in photo_enhancement),
+    ("seller photo cleanup fails closed on Android 16+ while the beta segmentation SDK has an open native-crash report",
+     "if (Build.VERSION.SDK_INT >= 36)" in photo_enhancement
+     and "temporarily unavailable on Android 16 and newer" in photo_enhancement
+     and photo_enhancement.index("if (Build.VERSION.SDK_INT >= 36)") < photo_enhancement.index("SubjectSegmentation.getClient")
+     and "failure.message" in marketplace
+     and 'it.contains("temporarily unavailable on Android 16 and newer")' in marketplace),
+    ("Marketplace hides the unsupported photo cleanup action on Android 16 and explains originals remain publishable",
+     "fun isSupportedOnCurrentAndroid(): Boolean = Build.VERSION.SDK_INT < 36" in photo_enhancement
+     and "if (FynxMarketplacePhotoEnhancement.isSupportedOnCurrentAndroid())" in marketplace
+     and "Photo background cleanup is temporarily unavailable on Android 16 and newer." in marketplace
+     and "Your original photos still work and can be published normally." in marketplace),
+    ("seller photo cleanup preserves the original and offers preview, Keep Original, Use Enhanced and Undo", all(token in marketplace for token in ("Review enhanced photo", "Keep Original", "Use Enhanced", "Text(\"Undo\"")) and "originalByEnhancedUri" in marketplace),
+    ("re-enhancing a seller photo preserves the first original for Undo and deletes only the superseded generated image",
+     "val rootOriginal = originalByEnhancedUri[original.toString()] ?: original" in marketplace
+     and "originalByEnhancedUri = (originalByEnhancedUri - replacedOld.toString()) + (enhanced.toString() to rootOriginal)" in marketplace
+     and "if (replacedOld != rootOriginal)" in marketplace
+     and "FynxMarketplacePhotoEnhancement.discard(replacedOld)" in marketplace),
+    ("seller photo cleanup uses app-private temporary files and a scoped FileProvider path", "FileProvider.getUriForFile" in photo_enhancement and 'name="marketplace_photo_enhancements"' in file_provider_paths and '"\u0024{context.packageName}.fileprovider"' in photo_enhancement),
+    ("seller photo cleanup requests the Play services model only after the seller opts in, avoiding an install-time model download",
+     "play-services-mlkit-subject-segmentation:16.0.0-beta1" in app_gradle
+     and "installer.areModulesAvailable(segmenter)" in photo_enhancement
+     and "installer.installModules(request)" in photo_enhancement
+     and 'android:name="com.google.mlkit.vision.DEPENDENCIES"' not in app_manifest
+     and 'android:value="subject_segment"' not in app_manifest),
+    ("seller photo cleanup refuses missing foreground results instead of silently publishing an unchanged image as enhanced", "No product foreground was found." in photo_enhancement and "The background could not be separated clearly." in photo_enhancement),
+    ("seller photo enhancement releases temporary subject, scaled-working, and output bitmaps on every failure path",
+     "private fun renderProductPhoto(foreground: Bitmap): Bitmap" in photo_enhancement
+     and "var subject: Bitmap? = null" in photo_enhancement
+     and "var output: Bitmap? = null" in photo_enhancement
+     and "var completed = false" in photo_enhancement
+     and "subject?.takeIf { it !== working }?.recycle()" in photo_enhancement
+     and "if (working !== foreground) working.recycle()" in photo_enhancement
+     and "if (!completed) output?.recycle()" in photo_enhancement),
+    ("seller photo cleanup keeps output proportions and uses a bounded working image", "MAX_WORKING_DIMENSION = 1600" in photo_enhancement and "SUBJECT_PADDING" in photo_enhancement and "canvas.drawBitmap(" in photo_enhancement),
     ("Marketplace discovery client sends category under the backend-supported query key", '&category=${URLEncoder.encode(category, "UTF-8")}' in remote_client and 'req.query?.category' in discovery_routes),
     ("Marketplace backend filters selected categories exactly and leaves All unfiltered", 'category.toLowerCase() !== "all"' in discovery_routes and 'where.push("l.category=$" + params.length)' in discovery_routes),
     ("seller form and discovery expose the same expanded category set",
      _extract_string_list(r"val categories = listOf\(([^)]*)\)", marketplace) == EXPECTED_DISCOVERY_CATEGORIES
      and _extract_string_list(r'Text\("Category"[\s\S]*?listOf\(([^)]*)\)\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
      and '"REFURBISHED" to "Refurbished"' in marketplace),
+    ("Marketplace seller flow exposes optional category-specific subcategories and resets stale selections when the main category changes",
+     "internal fun marketplaceSubcategoriesFor(category: String)" in marketplace
+     and 'Text("Subcategory (optional)"' in marketplace
+     and "val categorySubcategories = marketplaceSubcategoriesFor(category)" in marketplace
+     and 'onClick = { if (category != item) clearCategorySpecificFields(); category = item; subcategory = "" }' in marketplace
+     and all(token in marketplace for token in ('"auto parts" ->', '"appliances" ->', '"building materials" ->', '"office & education" ->', '"garden & outdoor" ->', '"handmade & local" ->', '"personal accessories" ->', '"business & workshop supplies" ->'))),
+    ("selected Marketplace subcategory is saved in the listing description while the existing main-category value remains the backend category",
+     'listOf("Subcategory" to subcategory) + specifications' in marketplace
+     and "createMarketplaceListing(context, title, listingDescription" in marketplace
+     and "currency, category, condition" in marketplace),
     ("seller form shows category-specific product specifications", all(term in marketplace for term in ('"Brand"', '"Model / model number"', '"Size / fit"', '"Dimensions (e.g. 120 × 60 × 75 cm)"', '"Year"', '"Ingredients, skin/hair type, or expiry details"', '"What is included, duration, and service area"'))),
+    ("switching seller category clears prior category-specific values to prevent incorrect details being published", "fun clearCategorySpecificFields()" in marketplace and "if (category != item) clearCategorySpecificFields()" in marketplace),
     ("category specifications are included in the saved product description with bounded length", 'append("\\n\\nProduct specifications\\n")' in marketplace and "MAX_DESCRIPTION_LENGTH" in marketplace and "listingDescription" in marketplace),
+    ("Marketplace descriptions reserve space for category specifications within the backend 4,000-character limit",
+     "val maximumSavedDescriptionLength = minOf(4_000, FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)" in marketplace
+     and "val descriptionBodyLimit = (maximumSavedDescriptionLength - specificationSection.length).coerceAtLeast(0)" in marketplace
+     and "append(desc.trim().take(descriptionBodyLimit))" in marketplace
+     and "append(specificationSection)" in marketplace
+     and "Up to $descriptionBodyLimit characters are available for this category." in marketplace),
     ("seller publishes selected condition and composed specifications through the existing listing path", 'title, listingDescription, "", price.toDouble(), currency, category, condition' in marketplace and 'validListing(title, listingDescription' in marketplace),
     ("active marketplace remains backend listing driven", "FynxRemoteSocialClient.listings" in marketplace),
     ("Marketplace discovery includes the signed-in seller own active products while the detail UI disables self-purchase and backend checkout rejects it", 'const params = [req.user.sub]' in discovery_routes and 'l.seller_id<>$1' not in discovery_routes and 'canPurchase = !isOwnListing' in marketplace and 'Buyers can see it in Marketplace, but you cannot buy your own product.' in marketplace and 'enabled = canPurchase && l.quantity > 0' in marketplace and "you cannot purchase your own listing" in marketplace_checkout_route),
@@ -111,7 +174,8 @@ checks = [
     ("protected orders expose cancellation for unpaid orders", "cancelMarketplaceOrder" in marketplace and "PAYMENT_PENDING" in marketplace),
     ("completed protected orders support seller reviews", "reviewMarketplaceOrder" in marketplace and "Submit review" in marketplace),
     ("seller publish still requires a real listing area", "location.trim().isNotBlank()" in marketplace and "validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media)" in marketplace),
-    ("seller publishing presents the category choices once, without a duplicate selector", sell_dialog.count('listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other")') == 1),
+    ("seller publishing presents the approved category choices once, with subcategories in a separate selector", sell_dialog.count('Text("Category", style = MaterialTheme.typography.labelLarge)') == 1 and 'Text("Subcategory (optional)"' in sell_dialog),
+    ("expanded Marketplace categories expose specific details for appliances, auto parts, and building materials", all(token in marketplace for token in ('"Electronics", "Phones & Computers", "Appliances" ->', '"Personal Accessories" ->', '"Home", "Furniture" ->', '"Beauty", "Health" ->', '"Baby & Kids" ->', '"Books" ->', '"Property" ->', '"Auto Parts" ->', '"Building Materials" ->', '"Part number / compatible vehicle"', '"Material / grade"'))),
     ("saved-product IDs hydrate from the authenticated endpoint and reset per account", "var savedProductIds by remember(cartOwnerKey)" in marketplace and "var savedProductBusyIds by remember(cartOwnerKey)" in marketplace and "LaunchedEffect(cartOwnerKey)" in marketplace and "FynxRemoteSocialClient.savedMarketplaceProducts(context)" in marketplace and "savedProductStateLoaded = true" in marketplace),
     ("saved-product state sync cannot overwrite a user toggle made while the request is in flight", "val requestGeneration = savedProductStateGeneration" in marketplace and "if (savedProductStateGeneration == requestGeneration)" in marketplace and "savedProductStateGeneration += 1" in marketplace),
     ("saved-product toggles resolve server state before mutation when local state is unknown", "toggleMarketplaceProductSaved(context, listingId, knownSavedProductState(listingId))" in marketplace and "val current = knownSaved?.let { Result.success(it) } ?: marketplaceProductSaved(context, listingId)" in remote_client and "if (currentlySaved) unsaveMarketplaceProduct(context, listingId)" in remote_client),
@@ -124,11 +188,64 @@ checks = [
     ("My Shop profile save success uses semantic success green while profile failures remain errors", 'shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }' in seller_center and 'shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }' in seller_center),
     ("My Shop clears stale profile errors when any field changes and before retrying save", all(fragment in seller_center for fragment in ("shopName = it.take(120); shopMessage = null; shopError = null", "shopDescription = it.take(800); shopMessage = null; shopError = null", "shopLocation = it.take(160); shopMessage = null; shopError = null", "shopContactPhone = it.take(40); shopMessage = null; shopError = null", "shopSaving = true\n                            shopMessage = null\n                            shopError = null"))),
     ("My Shop preserves listing edit, delete, and per-listing delivery/pickup settings", 'Icon(Icons.Default.Edit, "Edit listing")' in seller_center and 'Icon(Icons.Default.Delete, "Remove listing")' in seller_center and "FynxMarketplaceShippingSettingsCard(" in seller_center),
-    ("My Shop stock editor and inventory cards label total stock and backend rejects quantities below existing reservations", 'label = { Text("Total stock (0 = out of stock)") }' in seller_center and '${listing.quantity} total stock • ${listing.category} • ${listing.condition}' in seller_center and "Stock cannot be reduced below items already reserved by active orders." in seller_center and "if (quantity < reservedQuantity)" in social_routes and "reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE" in social_routes),
+    ("My Shop listing edit uses the approved exact category list and preserves existing unknown legacy categories without free-text typos",
+     "val standardMarketplaceCategories = listOf(" in seller_center
+     and "val editCategoryOptions = if (" in seller_center
+     and "DropdownMenuItem(" in seller_center
+     and "editCategory = option" in seller_center
+     and "standardMarketplaceCategories + editCategory" in seller_center
+     and "onValueChange = { editCategory = it.take(40) }" not in seller_center
+     and _extract_string_list(r"val standardMarketplaceCategories = listOf\(([^)]*)\)", seller_center) == EXPECTED_SELLER_CATEGORIES
+     and "DropdownMenu(" in seller_center
+     and all(value in seller_center for value in ('"Phones & Computers"', '"Auto Parts"', '"Business & Workshop Supplies"'))),
+    ("My Shop edit listing offers matching subcategories and clears stale choices when the main category changes",
+     'var editSubcategory by rememberSaveable { mutableStateOf("") }' in seller_center
+     and seller_center.count("editSubcategory = marketplaceDescriptionSubcategory(listing.description)") == 2
+     and "val editSubcategoryOptions = marketplaceSubcategoriesFor(editCategory)" in seller_center
+     and 'if (!editCategory.equals(option, ignoreCase = true)) editSubcategory = ""' in seller_center
+     and 'Text("Subcategory (optional)"' in seller_center
+     and "editSubcategoryOptions.forEach { option ->" in seller_center
+     and "internal fun marketplaceSubcategoriesFor(category: String)" in marketplace),
+    ("My Shop edit persists the selected subcategory through its existing authenticated listing update",
+     "marketplaceDescriptionWithSubcategory(editDescription, editSubcategory)" in seller_center
+     and "updateListing(context, selectedListing.id, editTitle, savedDescription, editCategory" in seller_center
+     and seller_center.count("description = savedDescription,") == 2
+     and "private fun marketplaceDescriptionSubcategory(description: String)" in seller_center
+     and "private fun marketplaceDescriptionWithSubcategory(description: String, subcategory: String)" in seller_center
+     and 'val cleaned = Regex("' in seller_center
+     and 'val cleaned = Regex("(?m)' not in seller_center
+     and 'append("Subcategory: ").append(subcategory.trim())' in seller_center),
+    ("My Shop edit reserves the backend description limit for category subcategory metadata",
+     "val maximumDescriptionLength = minOf(" in seller_center
+     and "FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH" in seller_center
+     and "val specificationSection = buildString" in seller_center
+     and "val descriptionBodyLimit = (" in seller_center
+     and "maximumDescriptionLength - specificationSection.length - separator.length" in seller_center
+     and "val limitedBody = descriptionBody.take(descriptionBodyLimit).trimEnd()" in seller_center
+     and ").take(maximumDescriptionLength)" in seller_center
+     and '.put("description", cleanDescription.take(4000))' in marketplace_client
+     and ".slice(0, 4000)" in social_routes),
+("My Shop stock editor and inventory cards label total stock and backend rejects quantities below existing reservations", 'label = { Text("Total stock (0 = out of stock)") }' in seller_center and '${listing.quantity} total stock • ${listing.category} • ${listing.condition}' in seller_center and "Stock cannot be reduced below items already reserved by active orders." in seller_center and "if (quantity < reservedQuantity)" in social_routes and "reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE" in social_routes),
     ("buyer-facing Marketplace uses available stock after reservations while My Shop retains total stock", social_routes.count("AS available_quantity") >= 3 and discovery_routes.count("AS available_quantity") >= 2 and 'val stockValue = if (o.has("available_quantity") && !o.isNull("available_quantity")) {' in remote_client and 'o.opt("available_quantity")' in remote_client and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client and 'label = { Text("Total stock (0 = out of stock)") }' in seller_center),
     ("paginated Marketplace discovery parses available_quantity instead of total quantity", 'FynxMarketplaceClient.parseListings(raw, preferAvailableStock = true)' in discovery_client and 'if (preferAvailableStock)' in marketplace_client and 'else null' in marketplace_client[marketplace_client.index("val stockValue = if (preferAvailableStock)"):marketplace_client.index("return Listing(")] and 'o.opt("available_quantity")' in marketplace_client and "marketplaceRequiredInventoryQuantity(stockValue)" in marketplace_client and "AS available_quantity" in discovery_routes),
     ("public Marketplace detail and fallback parsers use available stock while My Shop explicitly keeps total stock", 'parseListings(raw, preferAvailableStock = true, activeOmittedMeansActive = true)' in marketplace_client and 'parseListingObject(JSONObject(raw).getJSONObject("listing"), preferAvailableStock = true)' in marketplace_client and 'parseListings(raw, preferAvailableStock = false)' in marketplace_client and 'if (preferAvailableStock)' in marketplace_client and 'else null' in marketplace_client[marketplace_client.index("val stockValue = if (preferAvailableStock)"):marketplace_client.index("return Listing(")] and 'o.opt("available_quantity")' in marketplace_client and 'o.opt("quantity")' in marketplace_client and "marketplaceRequiredInventoryQuantity(stockValue)" in marketplace_client),
-    ("My Shop edit form and authenticated backend update description, category, condition, and location while retaining seller ownership and price-watch notifications", all(fragment in seller_center for fragment in ('label = { Text("Product description") }', 'label = { Text("Category") }', 'Text("Condition", style = MaterialTheme.typography.labelLarge)', 'listOf("NEW", "USED", "REFURBISHED")', 'label = { Text("Product location") }', 'verticalScroll(rememberScrollState())')) and all(fragment in marketplace_client for fragment in ('"description", cleanDescription.take(4000)', '"category", cleanCategory.take(40)', '"condition", cleanCondition', '"location", cleanLocation.take(160)')) and all(fragment in social_routes for fragment in ('description = $4, category = $5, condition = $6, location = $7', 'WHERE id = $1 AND seller_id = $2 FOR UPDATE', 'if (priceChanged)'))),
+    ("My Shop edit form and authenticated backend update description, category, condition, and location while retaining seller ownership and price-watch notifications", (
+       'label = { Text("Product description") }' in seller_center
+       and (
+           'label = { Text("Category") }' in seller_center
+           or (
+               'val standardMarketplaceCategories = listOf(' in seller_center
+               and 'Text(editCategory.ifBlank { "Choose category" }' in seller_center
+               and "DropdownMenu(" in seller_center
+               and "DropdownMenuItem(" in seller_center
+               and "editCategory = option" in seller_center
+           )
+       )
+       and 'Text("Condition", style = MaterialTheme.typography.labelLarge)' in seller_center
+       and 'listOf("NEW", "USED", "REFURBISHED")' in seller_center
+       and 'label = { Text("Product location") }' in seller_center
+       and "verticalScroll(rememberScrollState())" in seller_center
+    ) and all(fragment in marketplace_client for fragment in ('"description", cleanDescription.take(4000)', '"category", cleanCategory.take(40)', '"condition", cleanCondition', '"location", cleanLocation.take(160)')) and all(fragment in social_routes for fragment in ('description = $4, category = $5, condition = $6, location = $7', 'WHERE id = $1 AND seller_id = $2 FOR UPDATE', 'if (priceChanged)'))),
     ("My Shop listing cards display the first uploaded product image and an explicit fallback when no media exists", 'FynxRemoteMedia(' in seller_center and 'FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())' in seller_center and 'Product image unavailable' in seller_center),
     ("My Shop keeps seller-order review in Orders and driver assignments in Delivery & drivers", 'if (activeSection == "Orders")' in seller_center and "FynxMarketplaceSellerOrders(context = context" in seller_center and 'if (activeSection == "Delivery & drivers")' in seller_center and "showDriverAssignments = true" in seller_center),
     ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Recent earnings history (latest 100; showing 20)"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
@@ -250,11 +367,15 @@ checks.extend([
 ])
 
 checks.extend([
-    ("Marketplace sell-form category, condition and currency chips use the local cobalt palette",
+    ("Marketplace sell-form category, condition and currency chips use the approved Azure Blue palette",
      "val selectedChipColors = fynxMarketplaceSelectedChipColors()" in marketplace
      and marketplace.count("colors = selectedChipColors") >= 3
+     and "selectedContainerColor = if (isLight) FynxDesign.AzureBlue" in marketplace_reference_components
+     and "val AzureBlue = Color(0xFF007FFF)" in design_system
+     and "val ClassicGreen = Color(0xFF008000)" in design_system
+     and "val CrimsonRed = Color(0xFFDC143C)" in design_system
      and "private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 15_000L" in marketplace),
-    ("multi-product checkout Delivery and Pickup selections keep Marketplace cobalt colors",
+    ("multi-product checkout Delivery and Pickup selections keep Marketplace Azure Blue colors",
      'label={Text("Delivery")},enabled=!busy,colors=fynxMarketplaceSelectedChipColors()' in marketplace
      and 'label={Text("Pickup")},enabled=!busy,colors=fynxMarketplaceSelectedChipColors()' in marketplace),
     ("My Shop selected section tab scrolls fully into view on narrow screens",
