@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -844,16 +845,28 @@ fun FynxMarketplaceSellerCenterPanel() {
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             editMediaUris.take(6).forEach { uri ->
-                                AndroidView(
-                                    factory = { viewContext ->
-                                        ImageView(viewContext).apply {
-                                            scaleType = ImageView.ScaleType.CENTER_CROP
-                                            contentDescription = "Selected replacement product media"
+                                val mimeType = context.contentResolver.getType(uri)?.trim()?.lowercase(Locale.US).orEmpty()
+                                if (mimeType.startsWith("video/")) {
+                                    Surface(
+                                        modifier = Modifier.size(84.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.Videocam, contentDescription = "Selected replacement video")
                                         }
-                                    },
-                                    update = { imageView -> imageView.setImageURI(uri) },
-                                    modifier = Modifier.size(84.dp)
-                                )
+                                    }
+                                } else {
+                                    AndroidView(
+                                        factory = { viewContext ->
+                                            ImageView(viewContext).apply {
+                                                scaleType = ImageView.ScaleType.CENTER_CROP
+                                                contentDescription = "Selected replacement product photo"
+                                            }
+                                        },
+                                        update = { imageView -> imageView.setImageURI(uri) },
+                                        modifier = Modifier.size(84.dp)
+                                    )
+                                }
                             }
                         }
                     }
