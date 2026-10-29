@@ -23,6 +23,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -120,7 +121,8 @@ internal object FynxMarketplacePhotoEnhancement {
         val available = installer.areModulesAvailable(segmenter).awaitResult()
         if (available.areModulesAvailable()) return
 
-        suspendCancellableCoroutine<Unit> { continuation ->
+        val installationCompleted = withTimeoutOrNull(120_000L) {
+            suspendCancellableCoroutine<Unit> { continuation ->
             val lock = Any()
             val finished = AtomicBoolean(false)
             var targetSessionId: Int? = null
@@ -188,6 +190,10 @@ internal object FynxMarketplacePhotoEnhancement {
                 .addOnFailureListener { error ->
                     finish(IllegalStateException("Google Play services could not prepare the photo model.", error))
                 }
+            }
+        }
+        if (installationCompleted == null) {
+            throw IllegalStateException("Photo model download timed out. Your original photo is unchanged; retry when the connection is more reliable.")
         }
 
         val confirmed = installer.areModulesAvailable(segmenter).awaitResult()
