@@ -756,18 +756,36 @@ if VISUALS_ONLY and not error:
         night_mode = run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "2", timeout=15)
     if night_mode.returncode == 0:
         time.sleep(1.2)
-        dark_home_xml = restore_home_after_restart("home-mirror-glass-dark-mode")
-        settled_dark_xml, _ = wait_for_home_feed_settled(timeout=20.0)
-        if settled_dark_xml:
-            dark_home_xml = settled_dark_xml
-        if (dark_home_xml
+        # Prefer the currently rendered screen. force-stopping here used to discard
+        # the debug-only local UI session and could leave UIAutomator on the launcher.
+        dark_home_xml = dump_ui("home-mirror-glass-dark-probe.xml")
+        home_ready = bool(
+            dark_home_xml
+            and find_control(dark_home_xml, ["FYNX Assistance"])
+            and find_control(dark_home_xml, ["Your feed"])
+        )
+        if not home_ready:
+            # Restore through the same explicit debug-only UI-entry path used by the
+            # initial capture; never infer success from the launcher or login form.
+            dark_home_xml, dark_login_error = login()
+            home_ready = bool(
+                not dark_login_error
+                and dark_home_xml
                 and find_control(dark_home_xml, ["FYNX Assistance"])
-                and find_control(dark_home_xml, ["Your feed"])):
+                and find_control(dark_home_xml, ["Your feed"])
+            )
+            if dark_login_error:
+                report.append("- Dark Home recovery detail: " + dark_login_error)
+        if home_ready:
+            settled_dark_xml, _ = wait_for_home_feed_settled(timeout=20.0)
+            if settled_dark_xml and find_control(settled_dark_xml, ["FYNX Assistance"]):
+                dark_home_xml = settled_dark_xml
             screenshot("home-mirror-glass-dark.png")
             (ROOT / "home-mirror-glass-dark.xml").write_text(dark_home_xml + "\n", encoding="utf-8")
-            report.append("- PASS: captured the real Home mirror-glass surface in Android dark mode; the real feed state is preserved without sample posts.")
+            report.append("- PASS: captured the real Home mirror-glass surface in Android dark mode; the real feed/error state is preserved without sample posts.")
         else:
-            FAILURES.append("Home mirror-glass dark-mode capture did not reach the real Home screen")
+            markers = visible_marker_summary(dark_home_xml)
+            FAILURES.append("Home mirror-glass dark-mode capture could not recover the real Home surface; last visible markers: " + markers)
     else:
         FAILURES.append("Android emulator night mode could not be enabled for Home mirror-glass visual proof")
     # Restore the original light capture mode before Marketplace/My Shop screenshots.
