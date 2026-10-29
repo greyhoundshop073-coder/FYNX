@@ -691,7 +691,7 @@ fun FynxCameraCapturePanel(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { if (recording == null) onDismiss() }, enabled = recording == null) {
+                IconButton(onClick = { if (recording == null) onDismiss() }, enabled = recording == null, modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape)) {
                     Icon(Icons.Default.Close, "Close camera")
                 }
                 if (!liveProofMode) {
@@ -717,28 +717,33 @@ fun FynxCameraCapturePanel(
                 Spacer(Modifier.weight(1f))
                 IconButton(
                     onClick = { if (recording == null) { error = null; lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK; showCaptureControls = true } },
+                    modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape),
                     enabled = recording == null
                 ) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera") }
                 IconButton(
                     onClick = { if (recording == null) { if (cameraInfo?.hasFlashUnit() == true) { torchEnabled = !torchEnabled; cameraControl?.enableTorch(torchEnabled) } else error = "Flash is not available on this camera."; showCaptureControls = true } },
+                    modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape),
                     enabled = recording == null
                 ) { Icon(Icons.Default.FlashOn, if (torchEnabled) "Turn flash off" else "Turn flash on") }
                 IconButton(
                     onClick = { if (recording == null) { showGrid = !showGrid; showCaptureControls = true } },
+                    modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape),
                     enabled = recording == null
                 ) { Icon(if (showGrid) Icons.Default.GridOff else Icons.Default.GridOn, if (showGrid) "Hide grid" else "Show grid") }
                 if (!fastCapture && !liveProofMode) {
                     IconButton(
                         onClick = { galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)); showCaptureControls = true },
+                        modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape),
                         enabled = recording == null
                     ) { Icon(Icons.Default.PhotoLibrary, "Open Gallery") }
                 }
             }
         }
 
-        if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp),horizontalAlignment=Alignment.CenterHorizontally){
+        if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.Black.copy(alpha = 0.84f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=10.dp,bottom=12.dp),horizontalAlignment=Alignment.CenterHorizontally){
+            Box(Modifier.padding(bottom = 8.dp).size(width = 38.dp, height = 4.dp).background(Color.White.copy(alpha = 0.42f), androidx.compose.foundation.shape.CircleShape))
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
-            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.43f).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.34f).verticalScroll(rememberScrollState())) {
             if (recording == null && !fastCapture) {
                 TextButton(
                     onClick = { showAdjustments = !showAdjustments; showCaptureControls = true },
