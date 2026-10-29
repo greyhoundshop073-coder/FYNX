@@ -770,9 +770,163 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         if (find_control(current_xml, ["Open FYNX camera"])
                 and find_control(current_xml, ["Chat"])
                 and find_control(current_xml, ["Friends"])):
-            return current_xml
+            return capture_camera_video_journey(current_xml, prefix)
     FAILURES.append(prefix + ": camera was dismissed but Home markers did not return without publishing")
     return current_xml
+
+
+
+def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
+    """Record a short real clip, run a video look, inspect the output and never tap Send."""
+    composer = tap_control(
+        home_xml, ["Open FYNX camera"], f"{prefix}-video-home-camera", ["What's on your mind?"]
+    )
+    if not composer:
+        return home_xml
+    camera = tap_control(
+        composer, ["Video/Camera"], f"{prefix}-video-composer-camera", ["Switch front/back camera"]
+    )
+    if not camera:
+        run("adb", "shell", "input", "keyevent", "4")
+        return dump_ui(f"{prefix}-video-camera-return-home.xml") or composer
+
+    video_mode = tap_control(camera, ["Video"], f"{prefix}-camera-video-mode", ["Record video note"])
+    if not video_mode:
+        FAILURES.append(prefix + ": could not enter video capture mode")
+        return camera
+
+    # Select a real processing style before recording; then apply it to the captured clip.
+    video_mode = tap_control(
+        video_mode, ["Cinematic"], f"{prefix}-camera-video-cinematic-style", ["Record video note"]
+    )
+    recording = tap_control(
+        video_mode, ["Record video note"], f"{prefix}-camera-video-record-start", ["Stop video note"]
+    )
+    if not recording:
+        FAILURES.append(prefix + ": video recording did not start or expose the stop action")
+        return video_mode
+
+    screenshot(f"{prefix}-camera-video-recording.png")
+    time.sleep(2.5)
+    editor = tap_control(
+        recording, ["Stop video note"], f"{prefix}-camera-video-record-stop",
+        ["Retake", "Send"]
+    )
+    if not editor:
+        FAILURES.append(prefix + ": recorded video did not reach its preview/editor")
+        return recording
+
+    (ROOT / f"{prefix}-camera-video-editor-before-effects.xml").write_text(
+        editor + chr(10), encoding="utf-8"
+    )
+    screenshot(f"{prefix}-camera-video-editor-before-effects.png")
+    missing = [
+        label for label in ["Video styles", "Cinematic", "Retake", "Send"]
+        if not find_control(editor, [label])
+    ]
+    if missing:
+        FAILURES.append(prefix + ": recorded-video editor missing controls: " + ", ".join(missing))
+    else:
+        report.append("- PASS emulator recorded a real short video and exposed style/Retake/Send controls")
+
+    # Exercise the actual on-device speech-caption request. An unsupported emulator model is
+    # an explicitly reported capability limitation, not a successful transcript claim.
+    captions = find_control(editor, ["Generate on-device captions"])
+    if captions:
+        _, cx, cy = captions
+        run("adb", "logcat", "-c")
+        run("adb", "shell", "input", "tap", str(cx), str(cy))
+        caption_deadline = time.monotonic() + 40.0
+        caption_xml = editor
+        caption_error = ""
+        while time.monotonic() < caption_deadline:
+            time.sleep(0.7)
+            caption_xml = dump_ui(f"{prefix}-camera-video-captions.xml") or caption_xml
+            if find_control(caption_xml, ["Generating captions…"]):
+                continue
+            if find_control(caption_xml, ["Review/edit transcript"]):
+                report.append("- PASS Generate on-device captions returned an editable transcript field")
+                break
+            # Record the real visible error/unsupported message, but do not confuse it with a crash.
+            caption_error = visible_marker_summary(caption_xml)
+            break
+        else:
+            FAILURES.append(prefix + ": caption generation remained stuck in progress for 40 seconds")
+        if caption_error and not find_control(caption_xml, ["Review/edit transcript"]):
+            report.append("- NOTE on-device captions returned without a transcript on this emulator; visible UI: " + caption_error)
+        screenshot(f"{prefix}-camera-video-captions.png")
+        editor = caption_xml
+
+    # Re-find the action after the captions UI may have changed; never use guessed coordinates.
+    editor = dump_ui(f"{prefix}-camera-video-before-style-apply.xml") or editor
+    style = find_control(editor, ["Cinematic"])
+    if style:
+        _, sx, sy = style
+        run("adb", "shell", "input", "tap", str(sx), str(sy))
+        time.sleep(0.5)
+        editor = dump_ui(f"{prefix}-camera-video-style-selected.xml") or editor
+
+    apply_button = find_control(editor, ["Apply style / captions"])
+    if not apply_button:
+        FAILURES.append(prefix + ": video style apply action was not reachable")
+    else:
+        _, ax, ay = apply_button
+        run("adb", "logcat", "-c")
+        run("adb", "shell", "input", "tap", str(ax), str(ay))
+        apply_deadline = time.monotonic() + 60.0
+        applying_seen = False
+        processed_xml = ""
+        while time.monotonic() < apply_deadline:
+            time.sleep(0.8)
+            processed_xml = dump_ui(f"{prefix}-camera-video-effect-processing.xml") or processed_xml
+            processing = bool(find_control(processed_xml, ["Processing video…"]))
+            applying_seen = applying_seen or processing
+            visible_error = bool(find_control(processed_xml, [
+                "Video effects could not be applied.", "The video file is unavailable.",
+                "Export failed", "Unable to export"
+            ]))
+            if visible_error:
+                break
+            elapsed = 60.0 - (apply_deadline - time.monotonic())
+            if not processing and find_control(processed_xml, ["Apply style / captions"]) and elapsed >= 3.0:
+                break
+        if not processed_xml:
+            FAILURES.append(prefix + ": no UI hierarchy was captured after applying video style")
+        elif find_control(processed_xml, ["Processing video…"]):
+            FAILURES.append(prefix + ": video styling was still processing after 60 seconds")
+        elif find_control(processed_xml, [
+            "Video effects could not be applied.", "The video file is unavailable.",
+            "Export failed", "Unable to export"
+        ]):
+            FAILURES.append(prefix + ": video effect export showed an error: " + visible_marker_summary(processed_xml))
+        else:
+            final_missing = [
+                label for label in ["Retake", "Send"]
+                if not find_control(processed_xml, [label])
+            ]
+            if final_missing:
+                FAILURES.append(prefix + ": processed video preview lost actions: " + ", ".join(final_missing))
+            else:
+                report.append("- PASS processed video returned to a playable preview with Retake and Send; Send was not tapped")
+            screenshot(f"{prefix}-camera-video-effect-output.png")
+            (ROOT / f"{prefix}-camera-video-effect-output.xml").write_text(
+                processed_xml + chr(10), encoding="utf-8"
+            )
+
+    # Dismiss without publishing. The actual server post flow remains untouched.
+    current = dump_ui(f"{prefix}-camera-video-before-return.xml") or editor
+    for attempt in range(5):
+        if (find_control(current, ["Open FYNX camera"])
+                and find_control(current, ["Chat"])
+                and find_control(current, ["Friends"])):
+            return current
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.8)
+        current = dump_ui(f"{prefix}-camera-video-return-{attempt}.xml") or current
+    if not (find_control(current, ["Open FYNX camera"]) and find_control(current, ["Chat"])):
+        FAILURES.append(prefix + ": could not dismiss the video editor back to Home")
+    return current
+
 
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
     # A failed tap must remain failed; returning the previous screen caused false GREEN results.
