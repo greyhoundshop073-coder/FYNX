@@ -144,12 +144,12 @@ private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Mo
         val paleGreen = Color(0xFFE4F3E8)
         val paleGold = Color(0xFFFFF4D7)
         val accent = when {
-            name.contains("electronic") || name.contains("phone") || name.contains("computer") -> azure
-            name.contains("fashion") || name.contains("accessor") -> gold
-            name.contains("home") || name.contains("furniture") || name.contains("property") -> green
+            name.contains("electronic") || name.contains("phone") || name.contains("computer") || name.contains("appliance") -> azure
+            name.contains("fashion") || name.contains("accessor") || name.contains("handmade") || name.contains("local") -> gold
+            name.contains("home") || name.contains("furniture") || name.contains("property") || name.contains("building") -> green
             name.contains("beauty") || name.contains("health") -> red
             name.contains("food") || name.contains("grocery") || name.contains("agriculture") || name.contains("garden") -> green
-            name.contains("vehicle") || name.contains("automotive") -> azure
+            name.contains("vehicle") || name.contains("automotive") || name.contains("auto parts") -> azure
             else -> gold
         }
         drawRoundRect(
@@ -176,6 +176,18 @@ private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Mo
                 drawMarketplaceCategoryRect(57f, 30f, 22f, 11f, azure, sx, sy, 1f)
                 drawMarketplaceCategoryRect(47f, 48f, 43f, 3.5f, slate, sx, sy, 1.8f)
                 drawMarketplaceCategoryLine(58f, 49f, 79f, 49f, gold, sx, sy, 1.2f)
+            }
+            name.contains("appliance") -> {
+                // Fridge and washer/dryer shapes make household appliances distinct from phones.
+                drawMarketplaceCategoryRect(27f, 12f, 31f, 43f, white, sx, sy, 4f)
+                drawMarketplaceCategoryRect(31f, 16f, 23f, 17f, paleBlue, sx, sy, 2f)
+                drawMarketplaceCategoryRect(31f, 36f, 23f, 15f, paleBlue, sx, sy, 2f)
+                drawMarketplaceCategoryLine(49f, 23f, 49f, 28f, azure, sx, sy, 1.5f)
+                drawMarketplaceCategoryLine(49f, 39f, 49f, 45f, azure, sx, sy, 1.5f)
+                drawMarketplaceCategoryRect(64f, 22f, 21f, 31f, slate, sx, sy, 4f)
+                drawMarketplaceCategoryCircle(74f, 38f, 7f, paleBlue, sx, sy)
+                drawMarketplaceCategoryCircle(74f, 38f, 4f, azure, sx, sy)
+                drawMarketplaceCategoryCircle(74f, 38f, 1.4f, white, sx, sy)
             }
             name.contains("fashion") || name.contains("accessor") -> {
                 drawMarketplaceCategoryLine(52f, 11f, 56f, 15f, slate, sx, sy, 2.2f)
@@ -223,6 +235,16 @@ private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Mo
                     drawMarketplaceCategoryLine(69f, 38f, 69f, 47f, red, sx, sy, 2f)
                     drawMarketplaceCategoryLine(65f, 42.5f, 73f, 42.5f, red, sx, sy, 2f)
                 }
+            }
+            name.contains("auto parts") -> {
+                // A spare tyre and boxed component read as parts, not a complete vehicle listing.
+                drawMarketplaceCategoryCircle(42f, 34f, 20f, slate, sx, sy)
+                drawMarketplaceCategoryCircle(42f, 34f, 13f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(42f, 34f, 6f, slate, sx, sy)
+                drawMarketplaceCategoryCircle(42f, 34f, 2f, white, sx, sy)
+                drawMarketplaceCategoryRect(66f, 17f, 21f, 9f, azure, sx, sy, 2f)
+                drawMarketplaceCategoryRect(69f, 29f, 18f, 6f, paleBlue, sx, sy, 1f)
+                drawMarketplaceCategoryRect(65f, 39f, 23f, 10f, red, sx, sy, 2f)
             }
             name.contains("vehicle") || name.contains("automotive") -> {
                 drawMarketplaceCategoryRect(25f, 32f, 58f, 16f, azure, sx, sy, 5f)
@@ -287,7 +309,16 @@ private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Mo
                 drawMarketplaceCategoryLine(45f, 18f, 45f, 48f, azure, sx, sy, 1f)
                 drawMarketplaceCategoryLine(63f, 18f, 63f, 48f, azure, sx, sy, 1f)
             }
-            name.contains("tool") || name.contains("service") || name.contains("building") || name.contains("workshop") -> {
+            name.contains("building") -> {
+                // Stacked masonry blocks represent construction materials.
+                drawMarketplaceCategoryRect(24f, 17f, 60f, 37f, slate, sx, sy, 3f)
+                drawMarketplaceCategoryRect(28f, 21f, 24f, 8f, red, sx, sy, 1f)
+                drawMarketplaceCategoryRect(55f, 21f, 24f, 8f, red, sx, sy, 1f)
+                drawMarketplaceCategoryRect(40f, 32f, 25f, 8f, gold, sx, sy, 1f)
+                drawMarketplaceCategoryRect(28f, 43f, 24f, 7f, red, sx, sy, 1f)
+                drawMarketplaceCategoryRect(55f, 43f, 24f, 7f, red, sx, sy, 1f)
+            }
+            name.contains("tool") || name.contains("service") || name.contains("workshop") || name.contains("business") -> {
                 drawMarketplaceCategoryRect(28f, 31f, 51f, 23f, azure, sx, sy, 4f)
                 drawMarketplaceCategoryRect(43f, 25f, 21f, 7f, slate, sx, sy, 2f)
                 drawMarketplaceCategoryRect(47f, 27f, 13f, 3f, gold, sx, sy, 1f)
@@ -296,6 +327,16 @@ private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Mo
                 drawMarketplaceCategoryLine(65f, 38f, 76f, 47f, slate, sx, sy, 3.8f)
                 drawMarketplaceCategoryLine(67f, 36f, 72f, 31f, slate, sx, sy, 2.8f)
                 drawMarketplaceCategoryLine(72f, 31f, 78f, 35f, slate, sx, sy, 2.8f)
+            }
+            name.contains("handmade") || name.contains("local") -> {
+                // Woven basket and thread/spool scene for handmade and locally produced goods.
+                drawMarketplaceCategoryRect(27f, 31f, 57f, 23f, Color(0xFFB47A4A), sx, sy, 5f)
+                for (i in 0..5) drawMarketplaceCategoryLine(32f + i * 8f, 32f, 36f + i * 8f, 53f, paleGold, sx, sy, 1.4f)
+                drawMarketplaceCategoryLine(29f, 38f, 82f, 38f, gold, sx, sy, 1.4f)
+                drawMarketplaceCategoryLine(29f, 46f, 82f, 46f, gold, sx, sy, 1.4f)
+                drawMarketplaceCategoryCircle(76f, 19f, 8f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(76f, 19f, 4f, paleGold, sx, sy)
+                drawMarketplaceCategoryLine(72f, 27f, 66f, 34f, slate, sx, sy, 2f)
             }
             else -> {
                 // Neutral storefront/box scene for Other and future categories.
@@ -716,7 +757,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
-    val categories = listOf("All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other")
+    val categories = listOf("All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other")
     var sellerReputations by remember { mutableStateOf<Map<String, FynxMarketplaceClient.SellerReputation>>(emptyMap()) }
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
 
@@ -1835,7 +1876,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("1. Product basics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(title, { title = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) }, label = { Text("Product name") }, supportingText = { Text("Use a clear name buyers can search for.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Category", style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }, colors = selectedChipColors) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }, colors = selectedChipColors) } }
         Text("Condition", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }, colors = selectedChipColors) } }
         Text("2. Price and stock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -1846,7 +1887,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("3. Details buyers care about", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("These optional fields are added to your product description so buyers can compare listings more confidently.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         when (category) {
-            "Electronics" -> {
+            "Electronics", "Appliances" -> {
                 OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(model, { model = it.take(100) }, label = { Text("Model / model number") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(warranty, { warranty = it.take(160) }, label = { Text("Warranty or included accessories") }, modifier = Modifier.fillMaxWidth())
@@ -1861,6 +1902,11 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                 OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Dimensions (e.g. 120 × 60 × 75 cm)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(color, { color = it.take(80) }, label = { Text("Colour / finish") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
+            "Auto Parts" -> {
+                OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Part manufacturer / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(model, { model = it.take(100) }, label = { Text("Part number / compatible vehicle") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Fitment, condition, and included parts") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
             "Vehicles" -> {
                 OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Make / brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(model, { model = it.take(100) }, label = { Text("Model / trim") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -1871,6 +1917,11 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                 OutlinedTextField(brand, { brand = it.take(100) }, label = { Text("Brand") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(size, { size = it.take(80) }, label = { Text("Size / volume") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(beautyDetails, { beautyDetails = it.take(500) }, label = { Text("Ingredients, skin/hair type, or expiry details") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+            "Building Materials" -> {
+                OutlinedTextField(material, { material = it.take(120) }, label = { Text("Material / grade") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(dimensions, { dimensions = it.take(120) }, label = { Text("Size / dimensions") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(generalDetails, { generalDetails = it.take(500) }, label = { Text("Quantity, grade, and delivery notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             }
             "Services" -> OutlinedTextField(serviceDetails, { serviceDetails = it.take(500) }, label = { Text("What is included, duration, and service area") }, minLines = 2, modifier = Modifier.fillMaxWidth())
             else -> {
