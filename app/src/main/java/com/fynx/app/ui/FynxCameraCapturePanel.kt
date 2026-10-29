@@ -397,17 +397,32 @@ fun FynxCameraCapturePanel(
         enhancing = true
         error = null
         scope.launch {
-            val result = withContext(Dispatchers.IO) { FynxAiPhotoEnhancer.enhance(context, source) }
-            result.onSuccess { enhancedUri ->
+            val result = withContext(Dispatchers.IO) {
+                FynxAiPhotoEnhancer.enhance(context, source).mapCatching { enhancedUri ->
+                    val enhancedFile = File(enhancedUri.path ?: error("Enhanced photo path is missing"))
+                    val baselineFile = File.createTempFile("fynx_smart_enhanced_base_", ".jpg", context.cacheDir)
+                    try {
+                        enhancedFile.copyTo(baselineFile, overwrite = true)
+                        // Separate output and baseline files so later effect changes always start
+                        // from a clean enhanced image instead of mutating their own source.
+                        enhancedUri to Uri.fromFile(baselineFile)
+                    } catch (failure: Exception) {
+                        baselineFile.delete()
+                        enhancedFile.delete()
+                        throw failure
+                    }
+                }
+            }
+            result.onSuccess { (enhancedUri, baselineUri) ->
                 val previousOriginal = pendingOriginalUri
                 if (enhancedUri != source) deleteUri(source)
                 if (previousOriginal != null && previousOriginal != source && previousOriginal != enhancedUri) {
                     deleteUri(previousOriginal)
                 }
-                // The enhancement already includes the active image edits. Make it the new
-                // baseline and clear baked effect selections so the next edit is not applied twice.
+                // The enhancement already includes the active image edits. Make its separate
+                // baseline the reset point and clear baked selections so edits are not duplicated.
                 pendingUri = enhancedUri
-                pendingOriginalUri = enhancedUri
+                pendingOriginalUri = baselineUri
                 filter = CameraFilter.NATURAL
                 faceEffect = CameraFaceEffect.OFF
                 backgroundEffect = CameraBackgroundEffect.OFF
