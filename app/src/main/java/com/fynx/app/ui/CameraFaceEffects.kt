@@ -10,6 +10,7 @@ import android.graphics.RectF
 import android.net.Uri
 import android.os.SystemClock
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
 import androidx.camera.view.PreviewView
 import com.google.android.gms.tasks.Tasks
@@ -74,6 +75,7 @@ internal class FynxCameraFaceAnalyzer(
     private val lastFrameAt = AtomicLong(0L)
     private val closed = AtomicLong(0L)
 
+    @OptIn(ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
         if (closed.get() != 0L || !isActive()) {
             imageProxy.close()
