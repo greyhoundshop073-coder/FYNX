@@ -143,7 +143,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }
 
     if (settingsOpen) {
-        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onSignOut = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, onOpenAccountProfile = { settingsOpen = false; editing = true })
+        SettingsPanel(profile = profile, settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onSignOut = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, onOpenAccountProfile = { settingsOpen = false; editing = true })
         return
     }
 
@@ -332,7 +332,8 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
 
 @Composable
 fun SettingsPanel(
-    settings: FynxSettings,
+    profile: FynxProfile,
+    settings: FynxSettings, 
     onSettingsChange: (FynxSettings) -> Unit,
     onBack: () -> Unit,
     onAppearanceChanged: (String) -> Unit = {},
@@ -388,6 +389,7 @@ fun SettingsPanel(
     val query = search.trim().lowercase()
     if (showAccountProfile) {
         AccountProfileSettingsPanel(
+            profile = profile,
             onBack = { showAccountProfile = false },
             onEditProfile = { showAccountProfile = false; onOpenAccountProfile() },
             onOpenPrivacy = { showAccountProfile = false; onOpenPrivacy() },
@@ -879,13 +881,13 @@ private fun LanguageSelectionPanel(onBack: () -> Unit) {
 
 @Composable
 private fun AccountProfileSettingsPanel(
+    profile: FynxProfile,
     onBack: () -> Unit,
     onEditProfile: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
-    val profile = remember { FynxPreferencesStore.loadProfile(context, null) }
     var infoTitle by remember { mutableStateOf<String?>(null) }
     var infoText by remember { mutableStateOf("") }
 
