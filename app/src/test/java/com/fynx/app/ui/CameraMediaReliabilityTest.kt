@@ -28,6 +28,7 @@ class CameraMediaReliabilityTest {
             assertTrue(filter.saturation.isFinite())
             assertTrue(filter.brightness.isFinite())
             assertTrue(filter.contrast.isFinite())
+            assertTrue(filter.warmth.isFinite())
             assertTrue(filter.saturation >= 0f)
             assertTrue(filter.contrast > 0f)
         }
@@ -40,6 +41,9 @@ class CameraMediaReliabilityTest {
         assertTrue(CameraFilter.CINEMATIC.contrast > CameraFilter.NATURAL.contrast)
         assertTrue(CameraFilter.FLASH_2000S.saturation > CameraFilter.NATURAL.saturation)
         assertEquals("Warm Glow", CameraFilter.WARM.label)
+        assertTrue(CameraFilter.WARM.warmth > CameraFilter.NATURAL.warmth)
+        assertTrue(CameraFilter.COOL.warmth < CameraFilter.NATURAL.warmth)
+        assertEquals(0f, CameraFilter.NATURAL.warmth, 0f)
     }
 
     @Test

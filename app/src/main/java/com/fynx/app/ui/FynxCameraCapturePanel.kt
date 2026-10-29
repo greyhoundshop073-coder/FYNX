@@ -374,17 +374,17 @@ fun FynxCameraCapturePanel(
 }
 private fun formatCameraRecordingTime(milliseconds:Long):String{val totalSeconds=milliseconds/1000L;return "%02d:%02d".format(totalSeconds/60L,totalSeconds%60L)}
 enum class CameraMode{PHOTO,VIDEO}
-enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float){
+enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float,val warmth:Float = 0f){
     NATURAL("Natural",1f,0f,1f),
     PORTRAIT("Portrait",0.96f,0.025f,1.01f),
-    BEAUTY_GLOW("Beauty Glow",1.04f,0.075f,1.02f),
+    BEAUTY_GLOW("Beauty Glow",1.04f,0.075f,1.02f,0.025f),
     BRIGHT("Bright",1.03f,0.08f,1.02f),
-    WARM("Warm Glow",1.10f,0.04f,1.02f),
-    CINEMATIC("Cinematic",0.86f,-0.01f,1.14f),
+    WARM("Warm Glow",1.10f,0.04f,1.02f,0.10f),
+    CINEMATIC("Cinematic",0.86f,-0.01f,1.14f,-0.035f),
     LOW_LIGHT("Low-Light Rescue",0.96f,0.16f,1.06f),
-    FLASH_2000S("2000s Flash",1.20f,0.075f,1.12f),
-    COOL("Cool",0.92f,0.02f,1.02f),
-    VINTAGE("Vintage",0.82f,0.015f,0.94f),
+    FLASH_2000S("2000s Flash",1.20f,0.075f,1.12f,0.065f),
+    COOL("Cool",0.92f,0.02f,1.02f,-0.12f),
+    VINTAGE("Vintage",0.82f,0.015f,0.94f,0.035f),
     BW("B&W",0f,0f,1.08f)
 }
 private fun cameraFilterMatrix(filter: CameraFilter, intensity: Float): ColorMatrix {
@@ -396,6 +396,15 @@ private fun cameraFilterMatrix(filter: CameraFilter, intensity: Float): ColorMat
             1f + (filter.contrast - 1f) * strength,
             1f
         )
+        val temperature = filter.warmth * strength
+        if (temperature != 0f) {
+            postConcat(ColorMatrix(floatArrayOf(
+                1f + temperature, 0f, 0f, 0f, 0f,
+                0f, 1f + temperature * 0.12f, 0f, 0f, 0f,
+                0f, 0f, 1f - temperature, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f
+            )))
+        }
     }
 }
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
