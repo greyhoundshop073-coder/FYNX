@@ -754,9 +754,10 @@ private fun rotateCameraPhotoFile(file: File) {
     val temp = File(file.parentFile ?: error("Photo directory is unavailable"), file.name + ".rotating-" + System.currentTimeMillis())
     try {
         val matrix = Matrix().apply { postRotate(90f) }
-        rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        val rotatedBitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        rotated = rotatedBitmap
         FileOutputStream(temp).use {
-            check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) {
+            check(rotatedBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) {
                 "Unable to save rotated photo"
             }
         }
