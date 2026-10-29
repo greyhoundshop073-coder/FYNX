@@ -79,6 +79,16 @@ checks = [
      _extract_string_list(r"val categories = listOf\(([^)]*)\)", marketplace) == EXPECTED_DISCOVERY_CATEGORIES
      and _extract_string_list(r'Text\("Category"[\s\S]*?listOf\(([^)]*)\)\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
      and '"REFURBISHED" to "Refurbished"' in marketplace),
+    ("Marketplace seller flow exposes optional category-specific subcategories and resets stale selections when the main category changes",
+     "internal fun marketplaceSubcategoriesFor(category: String)" in marketplace
+     and 'Text("Subcategory (optional)")' in marketplace
+     and "val categorySubcategories = marketplaceSubcategoriesFor(category)" in marketplace
+     and 'onClick = { category = item; subcategory = "" }' in marketplace
+     and all(token in marketplace for token in ('"auto parts" ->', '"appliances" ->', '"building materials" ->', '"office & education" ->', '"garden & outdoor" ->', '"handmade & local" ->', '"business & workshop supplies" ->'))),
+    ("selected Marketplace subcategory is saved in the listing description while the existing main-category value remains the backend category",
+     'listOf("Subcategory" to subcategory) + specifications' in marketplace
+     and "createMarketplaceListing(context, title, listingDescription" in marketplace
+     and "currency, category, condition" in marketplace),
     ("seller form shows category-specific product specifications", all(term in marketplace for term in ('"Brand"', '"Model / model number"', '"Size / fit"', '"Dimensions (e.g. 120 × 60 × 75 cm)"', '"Year"', '"Ingredients, skin/hair type, or expiry details"', '"What is included, duration, and service area"'))),
     ("category specifications are included in the saved product description with bounded length", 'append("\\n\\nProduct specifications\\n")' in marketplace and "MAX_DESCRIPTION_LENGTH" in marketplace and "listingDescription" in marketplace),
     ("seller publishes selected condition and composed specifications through the existing listing path", 'title, listingDescription, "", price.toDouble(), currency, category, condition' in marketplace and 'validListing(title, listingDescription' in marketplace),
