@@ -211,7 +211,18 @@ private fun extractFynxVideoAudio(video: File, audio: File) {
             buffer.clear()
             val size = extractor.readSampleData(buffer, 0)
             if (size < 0) break
-            info.set(0, size, extractor.sampleTime, extractor.sampleFlags)
+            val extractedFlags = extractor.sampleFlags
+            check((extractedFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED) == 0) {
+                "Encrypted audio samples cannot be captioned."
+            }
+            var muxerFlags = 0
+            if ((extractedFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                muxerFlags = muxerFlags or MediaCodec.BUFFER_FLAG_KEY_FRAME
+            }
+            if ((extractedFlags and MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME) != 0) {
+                muxerFlags = muxerFlags or MediaCodec.BUFFER_FLAG_PARTIAL_FRAME
+            }
+            info.set(0, size, extractor.sampleTime, muxerFlags)
             muxer.writeSampleData(outputTrack, buffer, info)
             if (!extractor.advance()) break
         }
