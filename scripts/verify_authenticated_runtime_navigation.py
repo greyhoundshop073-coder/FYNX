@@ -756,17 +756,18 @@ if VISUALS_ONLY and not error:
         night_mode = run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "2", timeout=15)
     if night_mode.returncode == 0:
         time.sleep(1.2)
-        # Prefer the currently rendered screen. force-stopping here used to discard
-        # the debug-only local UI session and could leave UIAutomator on the launcher.
-        dark_home_xml = dump_ui("home-mirror-glass-dark-probe.xml")
+        # Theme changes can surface Android's notification-permission dialog.
+        # Dismiss only the real system prompt through the existing safe handler; do
+        # not force-stop a valid debug UI session just to capture a screenshot.
+        dark_home_xml = dismiss_runtime_permission_prompt() or dump_ui("home-mirror-glass-dark-probe.xml")
         home_ready = bool(
             dark_home_xml
             and find_control(dark_home_xml, ["FYNX Assistance"])
             and find_control(dark_home_xml, ["Your feed"])
         )
         if not home_ready:
-            # Restore through the same explicit debug-only UI-entry path used by the
-            # initial capture; never infer success from the launcher or login form.
+            # The prompt may have been stacked or the activity may have returned to
+            # the login gate. Reuse the same explicit debug-only entry path once.
             dark_home_xml, dark_login_error = login()
             home_ready = bool(
                 not dark_login_error
@@ -793,7 +794,26 @@ if VISUALS_ONLY and not error:
     if light_mode.returncode != 0:
         run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "1", timeout=15)
     time.sleep(1.0)
-    xml = restore_home_after_restart("authenticated-home-marketplace-entry") or xml
+    # Reuse the current Home session after changing the system theme back; handle
+    # any system permission sheet before attempting Marketplace navigation.
+    xml = dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-marketplace-light-probe.xml")
+    light_home_ready = bool(
+        xml
+        and find_control(xml, ["FYNX Assistance"])
+        and find_control(xml, ["Your feed"])
+    )
+    if not light_home_ready:
+        xml, light_login_error = login()
+        light_home_ready = bool(
+            not light_login_error
+            and xml
+            and find_control(xml, ["FYNX Assistance"])
+            and find_control(xml, ["Your feed"])
+        )
+        if light_login_error:
+            FAILURES.append("Could not restore Home after returning to light mode: " + light_login_error)
+    if not light_home_ready:
+        FAILURES.append("Home was not available for Marketplace navigation after restoring light mode; last visible markers: " + visible_marker_summary(xml))
 
 # Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an
 # unrelated instrumentation test fails. This branch performs read-only navigation:
