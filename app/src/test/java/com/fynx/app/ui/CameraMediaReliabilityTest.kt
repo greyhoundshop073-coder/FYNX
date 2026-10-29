@@ -19,7 +19,7 @@ class CameraMediaReliabilityTest {
 
     @Test
     fun cameraFiltersHaveStableUserFacingOptions() {
-        assertEquals(listOf("Natural", "Portrait", "Bright", "Warm", "Cool", "Vintage", "B&W"), CameraFilter.values().map { it.label })
+        assertEquals(listOf("Natural", "Portrait", "Beauty Glow", "Bright", "Warm Glow", "Cinematic", "Low-Light Rescue", "2000s Flash", "Cool", "Vintage", "B&W"), CameraFilter.values().map { it.label })
     }
 
     @Test
@@ -31,6 +31,15 @@ class CameraMediaReliabilityTest {
             assertTrue(filter.saturation >= 0f)
             assertTrue(filter.contrast > 0f)
         }
+    }
+
+    @Test
+    fun stageOneLightingPresetsAreAvailableAndDistinct() {
+        assertTrue(CameraFilter.BEAUTY_GLOW.brightness > CameraFilter.NATURAL.brightness)
+        assertTrue(CameraFilter.LOW_LIGHT.brightness > CameraFilter.BRIGHT.brightness)
+        assertTrue(CameraFilter.CINEMATIC.contrast > CameraFilter.NATURAL.contrast)
+        assertTrue(CameraFilter.FLASH_2000S.saturation > CameraFilter.NATURAL.saturation)
+        assertEquals("Warm Glow", CameraFilter.WARM.label)
     }
 
     @Test
