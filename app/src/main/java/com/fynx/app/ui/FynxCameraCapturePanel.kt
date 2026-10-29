@@ -278,8 +278,6 @@ fun FynxCameraCapturePanel(
                     ColorMatrixColorFilter(cameraFilterMatrix(filter, filterIntensity))
                 )
             )
-        } else {
-            previewView.setRenderEffect(null)
         }
     }
 
