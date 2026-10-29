@@ -110,7 +110,8 @@ checks.extend([
     (
         "Marketplace app title and floating navigation share scroll-away behavior",
         'selected != "Home" && selected != "Marketplace"' in app_source
-        and 'selected == "Marketplace") Modifier.height(52.dp * (1f - homeChromeProgress))' in app_source
+        and 'if (selected == "Marketplace") {' in app_source
+        and '.height(52.dp * (1f - homeChromeProgress))' in app_source
         and 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' in app_source,
     ),
     (
