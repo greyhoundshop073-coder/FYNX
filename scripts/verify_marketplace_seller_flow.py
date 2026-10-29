@@ -214,7 +214,7 @@ checks = [
      and "private fun marketplaceDescriptionWithSubcategory(description: String, subcategory: String)" in seller_center
      and 'val cleaned = Regex("' in seller_center
      and 'val cleaned = Regex("(?m)' not in seller_center
-     and 'val subcategoryLine = "Subcategory: ${subcategory.trim()}' in seller_center),
+     and 'append("Subcategory: ").append(subcategory.trim())' in seller_center),
     ("My Shop edit reserves the backend description limit for category subcategory metadata",
      "val maximumDescriptionLength = minOf(" in seller_center
      and "FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH" in seller_center
