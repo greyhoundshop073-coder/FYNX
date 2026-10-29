@@ -71,7 +71,9 @@ assistant_card_end = visible_updates.find('Text("FYNX Assistance"', assistant_ca
 if assistant_card_start < 0 or assistant_card_end < 0:
     raise SystemExit("HOME INTERACTIONS RED: FYNX Assistance card structure is missing")
 assistant_card_header = visible_updates[assistant_card_start:assistant_card_end]
-require(assistant_card_header, "Brush.linearGradient(", "FYNX Assistance reflective silver glass gradient")
+require(visible_updates, "val assistanceGlassBrush = if (isDarkGlassTheme)", "FYNX Assistance uses a theme-aware silver mirror-glass gradient")
+require(visible_updates, "Color(0xFFE0E6ED).copy(alpha = 0.68f)", "FYNX Assistance uses a visible silver reflection in dark mode")
+require(assistant_card_header, "assistanceGlassBrush", "FYNX Assistance card renders its glass gradient")
 require(assistant_card_header, "containerColor = Color.Transparent", "FYNX Assistance lets the glass gradient show through")
 require(visible_updates, "Color.Black.copy(alpha = 0.82f)", "FYNX AI prompt remains a high-contrast dark inset")
 require(home, "Brush.verticalGradient(", "Home feed uses a restrained reflective background behind real posts")
