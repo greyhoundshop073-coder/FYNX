@@ -22,7 +22,9 @@ import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.UUID
@@ -47,8 +49,8 @@ internal object FynxMarketplacePhotoEnhancement {
     private const val MIN_ALPHA = 18
     private val generatedFiles = ConcurrentHashMap<String, File>()
 
-    suspend fun enhance(context: Context, source: Uri): Result<Uri> {
-        return try {
+    suspend fun enhance(context: Context, source: Uri): Result<Uri> = withContext(Dispatchers.IO) {
+        try {
             val mime = context.contentResolver.getType(source).orEmpty().lowercase()
             require(mime.startsWith("image/") || mime.isBlank()) {
                 "Choose a still photo. Video enhancement is not supported."
