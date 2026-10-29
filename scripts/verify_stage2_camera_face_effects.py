@@ -21,6 +21,8 @@ checks = [
     ("Gallery can select both photos and videos through the system photo picker", "ActivityResultContracts.PickVisualMedia()" in camera and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in camera),
     ("Gallery media is copied locally into bounded app-cache files before editing", "copyCameraGalleryMediaToCache(context, selectedUri)" in camera and "resolver.openInputStream(uri)" in camera and "MAX_CAMERA_GALLERY_IMAGE_BYTES" in camera and "MAX_CAMERA_GALLERY_VIDEO_BYTES" in camera),
     ("Gallery selections preserve the original image and route video notes correctly", "pendingOriginalUri = Uri.fromFile(original)" in camera and "if (selectedType == \"video\" && videoNoteMode) \"video_note\" else selectedType" in camera),
+    ("Newly tapped Studio effect is passed directly into photo processing", "studioEffectOverride: CameraStudioEffect? = null" in camera and "studioEffectOverride = option" in camera),
+    ("Newly tapped background effect is passed directly into photo processing", "backgroundEffectOverride: CameraBackgroundEffect? = null" in camera and "backgroundEffectOverride = option" in camera),
     ("Existing capture-to-post callback preserved", "onCaptured(previewUri,previewType)" in camera),
 ]
 for name, ok in checks:

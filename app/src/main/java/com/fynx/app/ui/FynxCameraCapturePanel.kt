@@ -308,16 +308,23 @@ fun FynxCameraCapturePanel(
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
     fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; videoStyle = CameraVideoStyle.NATURAL; videoCaptionText = ""; applyingVideoEffects = false; generatingCaptions = false; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
     fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
-    fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) {
+    fun applyFilterToPhoto(
+        selected: CameraFilter,
+        intensity: Float = filterIntensity,
+        faceEffectOverride: CameraFaceEffect? = null,
+        backgroundEffectOverride: CameraBackgroundEffect? = null,
+        studioEffectOverride: CameraStudioEffect? = null
+    ) {
         val current = pendingUri ?: return
         val original = pendingOriginalUri ?: current
         if (pendingType != "image" || applyingFilter) return
         val source = original.path?.let { File(it) } ?: return
         val target = current.path?.let { File(it) } ?: return
         val strength = intensity.coerceIn(0f, 1f)
-        val selectedFaceEffect = faceEffect
-        val selectedBackgroundEffect = backgroundEffect
-        val selectedStudioEffect = studioEffect
+        // Explicit overrides avoid reading the previous Compose state after a chip tap.
+        val selectedFaceEffect = faceEffectOverride ?: faceEffect
+        val selectedBackgroundEffect = backgroundEffectOverride ?: backgroundEffect
+        val selectedStudioEffect = studioEffectOverride ?: studioEffect
         filter = selected
         filterIntensity = strength
         applyingFilter = true
@@ -443,7 +450,7 @@ fun FynxCameraCapturePanel(
                                 enabled = !enhancing && !applyingFilter,
                                 onClick = {
                                     studioEffect = option
-                                    applyFilterToPhoto(filter, filterIntensity)
+                                    applyFilterToPhoto(filter, filterIntensity, studioEffectOverride = option)
                                 },
                                 label = { Text(option.label) }
                             )
@@ -458,7 +465,7 @@ fun FynxCameraCapturePanel(
                                 enabled = !enhancing && !applyingFilter,
                                 onClick = {
                                     backgroundEffect = option
-                                    applyFilterToPhoto(filter, filterIntensity)
+                                    applyFilterToPhoto(filter, filterIntensity, backgroundEffectOverride = option)
                                 },
                                 label = { Text(option.label) }
                             )
