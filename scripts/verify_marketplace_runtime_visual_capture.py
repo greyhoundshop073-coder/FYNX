@@ -53,6 +53,14 @@ checks = [
         and "remained in a loading state after 20 seconds; the screenshot is retained for diagnosis." in navigation,
     ),
     (
+        "dark Home mirror-glass capture keeps the active session and recovers through the real debug UI entry",
+        'dark_home_xml = dump_ui("home-mirror-glass-dark-probe.xml")' in navigation
+        and 'dark_home_xml, dark_login_error = login()' in navigation
+        and 'screenshot("home-mirror-glass-dark.png")' in navigation
+        and "Home mirror-glass dark-mode capture could not recover the real Home surface" in navigation
+        and 'restore_home_after_restart("home-mirror-glass-dark-mode")' not in navigation,
+    ),
+    (
         "product details require an actual clickable card carrying a displayed NGN/USD price",
         "def marketplace_product_card_target(xml_text: str):" in navigation
         and "NGN" in navigation and "USD" in navigation
