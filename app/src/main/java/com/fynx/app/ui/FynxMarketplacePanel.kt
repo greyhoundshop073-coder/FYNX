@@ -631,7 +631,13 @@ private fun MarketplaceSmartDealsHero(
                             Surface(
                                 onClick = { onOpenListing(listing) },
                                 shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.surface,
+                                color = MaterialTheme.colorScheme.surface.copy(
+                                    alpha = if (isDarkGlassTheme) 0.78f else 0.82f
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)
+                                ),
                                 modifier = Modifier.width(adWidth)
                             ) {
                                 Row(
