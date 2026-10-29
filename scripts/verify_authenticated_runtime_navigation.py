@@ -3,7 +3,7 @@
 # Keep authenticated recovery coverage enabled after detector corrections.
 # Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
-import os, subprocess, time, html, re, json
+import os, subprocess, time, html, re, json, shutil
 import urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -776,8 +776,51 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
 
 
+def list_app_cache_videos() -> set[str]:
+    """List debug-app cache videos without modifying the app's media or post state."""
+    result = run(
+        "adb", "shell", "run-as", PACKAGE, "sh", "-c",
+        "ls -1 cache/fynx_video_*.mp4 cache/fynx_video_edit_*.mp4 2>/dev/null"
+    )
+    return {
+        line.strip() for line in (result.stdout or "").splitlines()
+        if line.strip().endswith(".mp4")
+    }
+
+def pull_app_cache_file(relative_path: str, destination: Path) -> bool:
+    """Pull one app-owned cache file for local media-stream inspection."""
+    try:
+        result = subprocess.run(
+            ["adb", "exec-out", "run-as", PACKAGE, "cat", relative_path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    if result.returncode != 0 or len(result.stdout) < 1024:
+        return False
+    destination.write_bytes(result.stdout)
+    return True
+
+def probe_media_stream_types(path: Path) -> set[str] | None:
+    """Return ffprobe stream types when ffprobe is installed on the CI runner."""
+    if not shutil.which("ffprobe"):
+        return None
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
+             "-of", "csv=p=0", str(path)],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=25, check=False
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return set()
+    if result.returncode != 0:
+        return set()
+    return {line.strip().lower() for line in result.stdout.splitlines() if line.strip()}
+
 def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     """Record a short real clip, run a video look, inspect the output and never tap Send."""
+    video_files_before = list_app_cache_videos()
     composer = tap_control(
         home_xml, ["Open FYNX camera"], f"{prefix}-video-home-camera", ["What's on your mind?"]
     )
@@ -819,6 +862,29 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     (ROOT / f"{prefix}-camera-video-editor-before-effects.xml").write_text(
         editor + chr(10), encoding="utf-8"
     )
+
+    new_source_candidates = [
+        path for path in list_app_cache_videos() - video_files_before
+        if Path(path).name.startswith("fynx_video_")
+        and not Path(path).name.startswith("fynx_video_edit_")
+    ]
+    source_cache_path = sorted(new_source_candidates)[-1] if new_source_candidates else ""
+    source_local = ROOT / f"{prefix}-recorded-source.mp4"
+    source_streams: set[str] | None = None
+    if not source_cache_path:
+        FAILURES.append(prefix + ": no newly recorded source video was found in the app cache")
+    elif pull_app_cache_file(source_cache_path, source_local):
+        source_streams = probe_media_stream_types(source_local)
+        if source_streams is not None and "video" not in source_streams:
+            FAILURES.append(prefix + ": recorded source file has no readable video stream")
+        elif source_streams and "audio" in source_streams:
+            report.append("- PASS recorded source video contains an audio stream")
+        elif source_streams is not None:
+            report.append("- NOTE emulator recording produced no detectable audio stream; audio-preservation comparison is inconclusive")
+        else:
+            report.append("- NOTE ffprobe is not available; input/output stream-level audio comparison could not run")
+    else:
+        report.append("- NOTE app cache video could not be copied out for stream-level verification")
     screenshot(f"{prefix}-camera-video-editor-before-effects.png")
     missing = [
         label for label in ["Video styles", "Cinematic", "Retake", "Send"]
@@ -912,6 +978,31 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             (ROOT / f"{prefix}-camera-video-effect-output.xml").write_text(
                 processed_xml + chr(10), encoding="utf-8"
             )
+
+            created_outputs = [
+                path for path in list_app_cache_videos() - video_files_before
+                if Path(path).name.startswith("fynx_video_edit_")
+            ]
+            output_cache_path = sorted(created_outputs)[-1] if created_outputs else ""
+            if not output_cache_path:
+                FAILURES.append(prefix + ": Cinematic action returned without producing an edited MP4 cache file")
+            elif source_cache_path and pull_app_cache_file(
+                output_cache_path, ROOT / f"{prefix}-processed-output.mp4"
+            ):
+                output_streams = probe_media_stream_types(ROOT / f"{prefix}-processed-output.mp4")
+                if output_streams is not None:
+                    if "video" not in output_streams:
+                        FAILURES.append(prefix + ": processed output has no readable video stream")
+                    elif source_streams and "audio" in source_streams and "audio" not in output_streams:
+                        FAILURES.append(prefix + ": processed video dropped the source audio stream")
+                    elif source_streams and "audio" in source_streams and "audio" in output_streams:
+                        report.append("- PASS processed video retains both video and audio streams")
+                    elif source_streams is not None and "audio" not in source_streams:
+                        report.append("- NOTE output stream check passed, but the emulator source had no audio track to preserve")
+                    else:
+                        report.append("- PASS processed MP4 contains a readable video stream; audio track comparison was inconclusive")
+                else:
+                    report.append("- NOTE ffprobe is not available; output file was produced but audio-track preservation could not be independently checked")
 
     # Dismiss without publishing. The actual server post flow remains untouched.
     current = dump_ui(f"{prefix}-camera-video-before-return.xml") or editor
