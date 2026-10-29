@@ -138,7 +138,7 @@ class CameraPhotoEffectsInstrumentationTest {
                     abs(Color.red(a) - Color.red(b)) +
                     abs(Color.green(a) - Color.green(b)) +
                     abs(Color.blue(a) - Color.blue(b))
-                if (difference > 90) count++
+                if (difference > 35) count++
                 x += stepX
             }
             y += stepY
