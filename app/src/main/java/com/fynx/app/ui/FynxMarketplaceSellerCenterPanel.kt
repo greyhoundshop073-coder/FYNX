@@ -69,6 +69,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     var editTitle by rememberSaveable { mutableStateOf("") }
     var editDescription by rememberSaveable { mutableStateOf("") }
     var editCategory by rememberSaveable { mutableStateOf("") }
+    var editCategoryExpanded by remember { mutableStateOf(false) }
     var editCondition by rememberSaveable { mutableStateOf("NEW") }
     var editLocation by rememberSaveable { mutableStateOf("") }
     var editPrice by rememberSaveable { mutableStateOf("") }
@@ -94,6 +95,17 @@ fun FynxMarketplaceSellerCenterPanel() {
     var showDriverAssignments by remember { mutableStateOf(false) }
     var activeSection by rememberSaveable { mutableStateOf("Overview") }
     val selectedChipColors = fynxMarketplaceSelectedChipColors()
+    val standardMarketplaceCategories = listOf(
+        "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property",
+        "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools",
+        "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education",
+        "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other"
+    )
+    // Existing legacy categories remain selectable until the seller intentionally picks a supported value.
+    val editCategoryOptions = if (
+        editCategory.isNotBlank() &&
+        standardMarketplaceCategories.none { it.equals(editCategory.trim(), ignoreCase = true) }
+    ) standardMarketplaceCategories + editCategory else standardMarketplaceCategories
     var shopName by rememberSaveable { mutableStateOf("") }
     var shopDescription by rememberSaveable { mutableStateOf("") }
     var shopLocation by rememberSaveable { mutableStateOf("") }
@@ -737,14 +749,32 @@ fun FynxMarketplaceSellerCenterPanel() {
                         maxLines = 5,
                         enabled = !editSaving
                     )
-                    OutlinedTextField(
-                        value = editCategory,
-                        onValueChange = { editCategory = it.take(40) },
-                        label = { Text("Category") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        enabled = !editSaving
-                    )
+                    Box(Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { editCategoryExpanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !editSaving
+                        ) {
+                            Text(editCategory.ifBlank { "Choose category" }, modifier = Modifier.weight(1f))
+                            Icon(Icons.Default.ExpandMore, contentDescription = "Choose listing category")
+                        }
+                        DropdownMenu(
+                            expanded = editCategoryExpanded,
+                            onDismissRequest = { editCategoryExpanded = false },
+                            modifier = Modifier.heightIn(max = 300.dp)
+                        ) {
+                            editCategoryOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        editCategory = option
+                                        editCategoryExpanded = false
+                                    },
+                                    enabled = !editSaving
+                                )
+                            }
+                        }
+                    }
                     Text("Condition", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                         listOf("NEW", "USED", "REFURBISHED").forEach { condition ->
