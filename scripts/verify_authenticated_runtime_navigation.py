@@ -724,8 +724,57 @@ def restore_home_after_restart(name:str)->str:
         return current
     return current
 
+def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
+    """Read the actual accessibility enabled state of a visible control."""
+    if not xml_text:
+        return False
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    node = _find_control_node(root, [label.lower() for label in labels])
+    return bool(node) and node.attrib.get("enabled", "true").lower() != "false"
+
+
+def camera_wait_for_control(
+    initial_xml: str, labels: list[str], *, enabled: bool | None = None,
+    timeout: float = 30.0, prefix: str = "camera-control"
+) -> str:
+    """Poll the real UI until a control reaches the requested enabled/visible state."""
+    deadline = time.monotonic() + timeout
+    latest = initial_xml
+    while time.monotonic() < deadline:
+        visible = bool(find_control(latest, labels))
+        enabled_ok = enabled is None or control_is_enabled(latest, labels) == enabled
+        if visible and enabled_ok:
+            return latest
+        time.sleep(0.5)
+        latest = dump_ui(f"{prefix}-wait.xml") or latest
+    state = "enabled" if enabled else "disabled" if enabled is False else "visible"
+    FAILURES.append(f"{prefix}: control {labels} did not become {state} within {timeout:.0f}s")
+    screenshot(f"{prefix}-timeout.png")
+    (ROOT / f"{prefix}-timeout.xml").write_text(latest + chr(10), encoding="utf-8")
+    return latest
+
+
+def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> str:
+    """Dismiss camera/editor surfaces using Back until the real Home camera entry returns."""
+    latest = current_xml
+    for attempt in range(attempts):
+        if (find_control(latest, ["Open FYNX camera"])
+                and find_control(latest, ["Chat"])
+                and find_control(latest, ["Friends"])):
+            return latest
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.8)
+        latest = dump_ui(f"{prefix}-return-home-{attempt}.xml") or latest
+    FAILURES.append(prefix + ": could not return to Home without sending/publishing media")
+    screenshot(f"{prefix}-return-home-failed.png")
+    return latest
+
+
 def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
-    """Capture the actual camera preview and photo editor from the running APK, without publishing."""
+    """Exercise the real camera preview/photo editor and safe controls without publishing a post."""
     composer_xml = tap_control(
         home_xml, ["Open FYNX camera"], f"{prefix}-home-camera-composer",
         ["What's on your mind?"]
@@ -742,37 +791,141 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         time.sleep(0.8)
         return dump_ui(f"{prefix}-camera-return-home.xml") or composer_xml
 
+    screenshot(f"{prefix}-camera-live-preview.png")
     (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + chr(10), encoding="utf-8")
-    missing_live = [label for label in ["Switch front/back camera", "Face FX", "Cute Ears"] if not find_control(camera_xml, [label])]
+    missing_live = [
+        label for label in ["Switch front/back camera", "Face FX", "Cute Ears", "Gallery", "Take photo"]
+        if not find_control(camera_xml, [label])
+    ]
     if missing_live:
         FAILURES.append(prefix + ": live camera missing visible controls: " + ", ".join(missing_live))
     else:
-        report.append("- PASS live camera screenshot exposes the camera switch and tracked Face FX choices")
+        report.append("- PASS live camera screenshot exposes camera switch, tracked Face FX, Gallery and capture")
+
+    # A virtual Pixel should provide both camera lenses. Switch away and back, asserting that
+    # CameraX rebinds to a usable preview rather than merely changing the button state.
+    for lens_step in ("front", "back"):
+        switch = find_control(camera_xml, ["Switch front/back camera"])
+        if not switch:
+            FAILURES.append(prefix + f": camera switch disappeared while testing the {lens_step} lens")
+            break
+        _, sx, sy = switch
+        run("adb", "shell", "input", "tap", str(sx), str(sy))
+        time.sleep(1.4)
+        camera_xml = dump_ui(f"{prefix}-camera-switch-{lens_step}.xml") or camera_xml
+        screenshot(f"{prefix}-camera-switch-{lens_step}.png")
+        if find_control(camera_xml, ["Front camera is not available", "Back camera is not available", "Camera could not start"]):
+            FAILURES.append(prefix + f": CameraX could not bind the {lens_step} camera")
+            break
+        if not find_control(camera_xml, ["Switch front/back camera"]):
+            FAILURES.append(prefix + f": camera preview controls did not return after switching to {lens_step} lens")
+            break
+    else:
+        report.append("- PASS front/back camera switching returned to a usable camera preview")
+
+    # Toggle torch on and back off when this emulator reports a flash unit; absence of hardware
+    # flash is an expected capability limitation, not a broken camera test.
+    camera_xml = dump_ui(f"{prefix}-camera-before-flash.xml") or camera_xml
+    flash = find_control(camera_xml, ["Turn flash on"])
+    if flash:
+        _, fx, fy = flash
+        run("adb", "shell", "input", "tap", str(fx), str(fy))
+        time.sleep(0.5)
+        flash_xml = dump_ui(f"{prefix}-camera-flash-on.xml") or camera_xml
+        if find_control(flash_xml, ["Turn flash off"]):
+            off = find_control(flash_xml, ["Turn flash off"])
+            if off:
+                _, ox, oy = off
+                run("adb", "shell", "input", "tap", str(ox), str(oy))
+                time.sleep(0.4)
+                camera_xml = dump_ui(f"{prefix}-camera-flash-off.xml") or flash_xml
+                if find_control(camera_xml, ["Turn flash on"]):
+                    report.append("- PASS camera torch toggled on and back off")
+                else:
+                    FAILURES.append(prefix + ": torch did not return to the off control state")
+        elif find_control(flash_xml, ["Flash is not available on this camera"]):
+            report.append("- NOTE camera flash test skipped because the active emulator camera reports no flash unit")
+            camera_xml = flash_xml
+        else:
+            FAILURES.append(prefix + ": flash control neither enabled torch nor reported the no-flash capability")
+            camera_xml = flash_xml
+    else:
+        report.append("- NOTE camera exposes no flash-on control on this active lens")
+
+    # Open the Android system photo picker, verify that picker UI actually appeared, then back out.
+    gallery_xml = tap_control(camera_xml, ["Gallery"], f"{prefix}-camera-gallery", None)
+    picker_labels = ["Photos", "Albums", "Browse", "Recent", "Select photos", "Select a photo", "Photo picker"]
+    picker_text = " ".join(
+        (node.attrib.get("text") or "") + " " + (node.attrib.get("content-desc") or "")
+        for node in nodes(gallery_xml)
+    ).casefold()
+    package_names = " ".join(node.attrib.get("package", "") for node in nodes(gallery_xml)).casefold()
+    if any(find_control(gallery_xml, [label]) for label in picker_labels) or "photo picker" in package_names or "providers.media" in package_names:
+        report.append("- PASS Gallery opened Android's real photo-picker UI")
+        screenshot(f"{prefix}-camera-gallery-picker.png")
+        (ROOT / f"{prefix}-camera-gallery-picker.xml").write_text(gallery_xml + chr(10), encoding="utf-8")
+    else:
+        FAILURES.append(prefix + ": Gallery did not expose a recognizable Android photo-picker surface: " + visible_marker_summary(gallery_xml))
+        screenshot(f"{prefix}-camera-gallery-picker-missing.png")
+        (ROOT / f"{prefix}-camera-gallery-picker-missing.xml").write_text(gallery_xml + chr(10), encoding="utf-8")
+    run("adb", "shell", "input", "keyevent", "4")
+    time.sleep(0.9)
+    camera_xml = dump_ui(f"{prefix}-camera-after-gallery-back.xml") or gallery_xml
+    if find_control(camera_xml, ["Switch front/back camera"]) and find_control(camera_xml, ["Take photo"]):
+        report.append("- PASS Gallery cancellation returned to the live camera without loading/publishing media")
+    else:
+        FAILURES.append(prefix + ": backing out of Gallery did not return to the camera preview")
 
     editor_xml = tap_control(
         camera_xml, ["Take photo"], f"{prefix}-camera-photo-capture", ["Send"]
     )
-    if editor_xml:
-        screenshot(f"{prefix}-camera-photo-editor-effects.png")
-        (ROOT / f"{prefix}-camera-photo-editor-effects.xml").write_text(editor_xml + chr(10), encoding="utf-8")
-        missing_editor = [label for label in ["Face FX", "Cute Ears", "Retake", "Send"] if not find_control(editor_xml, [label])]
-        if missing_editor:
-            FAILURES.append(prefix + ": captured-photo editor missing expected effect or action controls: " + ", ".join(missing_editor))
-        else:
-            report.append("- PASS captured-photo editor screenshot exposes Face FX and persistent Retake/Send controls")
+    if not editor_xml:
+        return camera_return_to_home(camera_xml, prefix + "-photo-capture-failed")
 
-    # Dismiss only; do not tap Send or create a post. Return to Home through the in-app back stack.
-    current_xml = editor_xml or camera_xml
-    for attempt in range(4):
-        run("adb", "shell", "input", "keyevent", "4")
-        time.sleep(0.8)
-        current_xml = dump_ui(f"{prefix}-camera-return-home-{attempt}.xml") or current_xml
-        if (find_control(current_xml, ["Open FYNX camera"])
-                and find_control(current_xml, ["Chat"])
-                and find_control(current_xml, ["Friends"])):
-            return capture_camera_video_journey(current_xml, prefix)
-    FAILURES.append(prefix + ": camera was dismissed but Home markers did not return without publishing")
-    return current_xml
+    screenshot(f"{prefix}-camera-photo-editor-initial.png")
+    (ROOT / f"{prefix}-camera-photo-editor-initial.xml").write_text(editor_xml + chr(10), encoding="utf-8")
+    missing_editor = [
+        label for label in ["Face FX", "Cute Ears", "AI Studio", "Portrait Blur", "Retake", "Send"]
+        if not find_control(editor_xml, [label])
+    ]
+    if missing_editor:
+        FAILURES.append(prefix + ": captured-photo editor missing expected effect/action controls: " + ", ".join(missing_editor))
+    else:
+        report.append("- PASS photo editor exposes face, background, Studio and Retake/Send controls")
+
+    # Exercise a filter through the actual editor UI. Portrait must process onto the saved file;
+    # Send must become enabled only after processing is complete. Never publish the image.
+    portrait = find_control(editor_xml, ["Portrait"])
+    if portrait:
+        _, px, py = portrait
+        run("adb", "shell", "input", "tap", str(px), str(py))
+        time.sleep(0.4)
+        editor_xml = dump_ui(f"{prefix}-camera-portrait-selected.xml") or editor_xml
+        editor_xml = camera_wait_for_control(
+            editor_xml, ["Send"], enabled=True, timeout=35.0,
+            prefix=f"{prefix}-camera-portrait-processing"
+        )
+        if control_is_enabled(editor_xml, ["Send"]):
+            report.append("- PASS choosing Portrait completed photo processing and left Send enabled")
+            screenshot(f"{prefix}-camera-photo-editor-portrait-ready.png")
+            (ROOT / f"{prefix}-camera-photo-editor-portrait-ready.xml").write_text(editor_xml + chr(10), encoding="utf-8")
+    else:
+        FAILURES.append(prefix + ": Portrait look was not exposed in the captured-photo editor")
+        screenshot(f"{prefix}-camera-portrait-look-missing.png")
+
+    # Retake is a safe local action. Assert it returns to a fresh live camera and never reaches Send.
+    retake_xml = tap_control(
+        editor_xml, ["Retake"], f"{prefix}-camera-photo-retake",
+        ["Take photo", "Switch front/back camera"]
+    )
+    if retake_xml and find_control(retake_xml, ["Take photo"]) and find_control(retake_xml, ["Switch front/back camera"]):
+        report.append("- PASS Retake returned from the edited image to the live camera preview")
+        screenshot(f"{prefix}-camera-after-retake.png")
+    else:
+        FAILURES.append(prefix + ": Retake did not return to the live camera preview")
+
+    home = camera_return_to_home(retake_xml or editor_xml, prefix + "-photo-journey-return")
+    return capture_camera_video_journey(home, prefix)
 
 
 
