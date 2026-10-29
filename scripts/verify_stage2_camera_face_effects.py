@@ -27,6 +27,8 @@ checks = [
     ("Gallery selections preserve the original image and route video notes correctly", "pendingOriginalUri = Uri.fromFile(original)" in camera and "if (selectedType == \"video\" && videoNoteMode) \"video_note\" else selectedType" in camera),
     ("Newly tapped Studio effect is passed directly into photo processing", "studioEffectOverride: CameraStudioEffect? = null" in camera and "studioEffectOverride = option" in camera),
     ("Newly tapped background effect is passed directly into photo processing", "backgroundEffectOverride: CameraBackgroundEffect? = null" in camera and "backgroundEffectOverride = option" in camera),
+    ("Live camera settings scroll within the screen while capture controls stay outside the scroll region", "heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.54f).verticalScroll(rememberScrollState())" in camera and "onClick={if(mode==CameraMode.PHOTO)" in camera),
+    ("Photo and video editing controls scroll above the persistent Retake/Send footer", "heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f).verticalScroll(rememberScrollState())" in camera and "onCaptured(previewUri,previewType)" in camera and camera.index("heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f)") < camera.index("onCaptured(previewUri,previewType)")),
     ("Existing capture-to-post callback preserved", "onCaptured(previewUri,previewType)" in camera),
 ]
 for name, ok in checks:

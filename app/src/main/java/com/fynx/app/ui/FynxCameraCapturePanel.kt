@@ -38,6 +38,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
@@ -431,6 +433,7 @@ fun FynxCameraCapturePanel(
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp)){
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}
+                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f).verticalScroll(rememberScrollState())) {
                 if(previewType=="image"){Text("Edit photo",style=MaterialTheme.typography.labelLarge)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){
                         CameraFilter.values().forEach{option->
@@ -507,6 +510,7 @@ fun FynxCameraCapturePanel(
                     Button(onClick = ::applyVideoEdits, enabled = !applyingVideoEffects && !generatingCaptions && (videoStyle != CameraVideoStyle.NATURAL || videoCaptionText.isNotBlank()), modifier = Modifier.fillMaxWidth()) {
                         Text(if (applyingVideoEffects) "Processing video…" else "Apply style / captions")
                     }
+                }
                 }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)retake()},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing && !applyingFilter)rotatePhoto()},enabled=!enhancing && !applyingFilter,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)onCaptured(previewUri,previewType)},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
             }
@@ -590,6 +594,7 @@ fun FynxCameraCapturePanel(
         if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp),horizontalAlignment=Alignment.CenterHorizontally){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")};if(!fastCapture && !liveProofMode)TextButton(onClick={galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo));showCaptureControls=true},enabled=recording==null){Text("Gallery")}}
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
+            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.54f).verticalScroll(rememberScrollState())) {
             if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
             if (liveProofMode) {
                 Button(onClick = onLiveProofStart, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
@@ -674,6 +679,7 @@ fun FynxCameraCapturePanel(
                         FilterChip(selected = videoStyle == option, onClick = { videoStyle = option; showCaptureControls = true }, label = { Text(option.label) })
                     }
                 }
+            }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null){mode=CameraMode.PHOTO;showCaptureControls=true}},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(onClick={
                 if(mode==CameraMode.PHOTO){if(captureTimerSeconds>0){if(timerCountingDown==0){timerCountingDown=captureTimerSeconds;showCaptureControls=false;scope.launch{delay(captureTimerSeconds*1000L);timerCountingDown=0;capturePhotoNow()}}}else capturePhotoNow()}else{val active=recording;if(active!=null)active.stop()else{if(!hasAudio){audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);return@FilledIconButton};val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingOriginalUri=Uri.fromFile(file);pendingType=if(videoNoteMode)"video_note" else "video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},modifier=Modifier.size(80.dp),shape=androidx.compose.foundation.shape.CircleShape,colors=IconButtonDefaults.filledIconButtonColors(containerColor=Color.White,contentColor=Color.Black)){
