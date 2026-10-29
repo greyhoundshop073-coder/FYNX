@@ -52,7 +52,6 @@ private data class SellerMoneySnapshot(
     val totals: Map<String, SellerMoneyTotals>?
 )
 
-/** Seller management surface connected to authenticated Marketplace settlement APIs. */
 private fun marketplaceDescriptionSubcategory(description: String): String =
     Regex("(?m)^[ \t]*Subcategory:[ \t]*([^\r\n]+)[ \t]*$")
         .find(description)
@@ -69,7 +68,7 @@ private fun marketplaceDescriptionWithSubcategory(description: String, subcatego
     val normalized = description.replace("\r\n", "\n").trim()
     val withoutOldSubcategory = Regex("(?m)^[ \t]*Subcategory:[ \t]*[^\r\n]*(?:\n|$)")
         .replace(normalized, "")
-    val cleaned = Regex("(?m)(?:\n[ \t]*)?Product specifications[ \t]*\n?[ \t]*$")
+    val cleaned = Regex("(?:\n[ \t]*)?Product specifications[ \t]*\n?[ \t]*$")
         .replace(withoutOldSubcategory, "")
         .trim()
     if (subcategory.isBlank()) return cleaned
@@ -92,6 +91,7 @@ private fun marketplaceDescriptionWithSubcategory(description: String, subcatego
     }
 }
 
+/** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
 fun FynxMarketplaceSellerCenterPanel() {
     val context = LocalContext.current
