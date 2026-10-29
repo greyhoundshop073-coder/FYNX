@@ -153,6 +153,10 @@ jobs:
         run: python3 scripts/verify_batch10_create_post_hardening.py
       - name: Verify Camera to Post journey
         run: python3 scripts/verify_camera_post_journey.py
+      - name: Validate camera runtime certification script syntax
+        run: |
+          python3 -m py_compile scripts/verify_authenticated_runtime_navigation.py scripts/verify_marketplace_runtime_visual_capture.py
+          bash -n scripts/run_android_runtime_certification.sh
       - name: Verify Batch 11 chat expressions and reactions
         run: python3 scripts/verify_batch11_chat_expressions.py
       - name: Verify FYNX AI extension contract
