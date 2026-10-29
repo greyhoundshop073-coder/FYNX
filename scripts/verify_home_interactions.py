@@ -64,6 +64,17 @@ if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 for needle in ('MaterialTheme.colorScheme','FynxDesign.LargeCardShape','key = "feed_header"','key = "feed_loading"','key = "feed_loading_more"','key = "feed_error"','key = "feed_empty"','"Create Post"','"Like"','"Comment"','"Post options"','onDismissRequest =','enabled = !feedRequestInFlight'):
     require(home, needle, f"Home 4F polish/integration surface {needle}")
+
+# Reference-driven Home mirror-glass surfaces: the real card and feed remain functional.
+assistant_card_start = visible_updates.find('modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)')
+assistant_card_end = visible_updates.find('Text("FYNX Assistance"', assistant_card_start)
+if assistant_card_start < 0 or assistant_card_end < 0:
+    raise SystemExit("HOME INTERACTIONS RED: FYNX Assistance card structure is missing")
+assistant_card_header = visible_updates[assistant_card_start:assistant_card_end]
+require(assistant_card_header, "Brush.linearGradient(", "FYNX Assistance reflective silver glass gradient")
+require(assistant_card_header, "containerColor = Color.Transparent", "FYNX Assistance lets the glass gradient show through")
+require(visible_updates, "Color.Black.copy(alpha = 0.82f)", "FYNX AI prompt remains a high-contrast dark inset")
+require(home, "Brush.verticalGradient(", "Home feed uses a restrained reflective background behind real posts")
 if 'feed_load_more' in home or 'Load more posts' in home:
     raise SystemExit("HOME INTERACTIONS RED: Home feed must load the next page automatically; manual Load more control remains")
 if '"Refresh feed"' in home:
