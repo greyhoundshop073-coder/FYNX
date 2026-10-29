@@ -298,91 +298,103 @@ internal object FynxMarketplacePhotoEnhancement {
             )
         } else foreground
 
-        val width = working.width
-        val height = working.height
-        val row = IntArray(width)
-        var left = width
-        var top = height
-        var right = -1
-        var bottom = -1
-        for (y in 0 until height) {
-            working.getPixels(row, 0, width, 0, y, width, 1)
-            for (x in 0 until width) {
-                if (Color.alpha(row[x]) > MIN_ALPHA) {
-                    if (x < left) left = x
-                    if (x > right) right = x
-                    if (y < top) top = y
-                    if (y > bottom) bottom = y
+        var subject: Bitmap? = null
+        var output: Bitmap? = null
+        var completed = false
+        try {
+            val width = working.width
+            val height = working.height
+            val row = IntArray(width)
+            var left = width
+            var top = height
+            var right = -1
+            var bottom = -1
+            for (y in 0 until height) {
+                working.getPixels(row, 0, width, 0, y, width, 1)
+                for (x in 0 until width) {
+                    if (Color.alpha(row[x]) > MIN_ALPHA) {
+                        if (x < left) left = x
+                        if (x > right) right = x
+                        if (y < top) top = y
+                        if (y > bottom) bottom = y
+                    }
                 }
             }
-        }
-        if (right < left || bottom < top) {
-            throw IllegalStateException("No product foreground was found.")
-        }
+            if (right < left || bottom < top) {
+                throw IllegalStateException("No product foreground was found.")
+            }
 
-        // A completely opaque image often means the segmentation model did not remove its
-        // background. Refuse to label that as enhanced rather than silently make a false result.
-        val corners = intArrayOf(
-            working.getPixel(0, 0),
-            working.getPixel(width - 1, 0),
-            working.getPixel(0, height - 1),
-            working.getPixel(width - 1, height - 1)
-        )
-        val subjectWidth = right - left + 1
-        val subjectHeight = bottom - top + 1
-        val coversAlmostEverything = subjectWidth.toLong() * subjectHeight.toLong() >=
-            width.toLong() * height.toLong() * 98L / 100L
-        if (coversAlmostEverything && corners.all { Color.alpha(it) >= 250 }) {
-            throw IllegalStateException("The background could not be separated clearly.")
-        }
-
-        val subject = Bitmap.createBitmap(working, left, top, subjectWidth, subjectHeight)
-        val output = Bitmap.createBitmap(OUTPUT_SIZE, OUTPUT_SIZE, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(output)
-        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(
-                0f, 0f, OUTPUT_SIZE.toFloat(), OUTPUT_SIZE.toFloat(),
-                Color.WHITE, Color.rgb(245, 247, 250), Shader.TileMode.CLAMP
+            // A completely opaque image often means segmentation did not remove its
+            // background. Never label that unchanged result as enhanced.
+            val corners = intArrayOf(
+                working.getPixel(0, 0),
+                working.getPixel(width - 1, 0),
+                working.getPixel(0, height - 1),
+                working.getPixel(width - 1, height - 1)
             )
+            val subjectWidth = right - left + 1
+            val subjectHeight = bottom - top + 1
+            val coversAlmostEverything = subjectWidth.toLong() * subjectHeight.toLong() >=
+                width.toLong() * height.toLong() * 98L / 100L
+            if (coversAlmostEverything && corners.all { Color.alpha(it) >= 250 }) {
+                throw IllegalStateException("The background could not be separated clearly.")
+            }
+
+            val subjectBitmap = Bitmap.createBitmap(working, left, top, subjectWidth, subjectHeight)
+            subject = subjectBitmap
+            val outputBitmap = Bitmap.createBitmap(OUTPUT_SIZE, OUTPUT_SIZE, Bitmap.Config.ARGB_8888)
+            output = outputBitmap
+            val canvas = Canvas(outputBitmap)
+            val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(
+                    0f, 0f, OUTPUT_SIZE.toFloat(), OUTPUT_SIZE.toFloat(),
+                    Color.WHITE, Color.rgb(245, 247, 250), Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawRect(0f, 0f, OUTPUT_SIZE.toFloat(), OUTPUT_SIZE.toFloat(), backgroundPaint)
+
+            val factor = minOf(
+                SUBJECT_PADDING.toFloat() / subjectBitmap.width.coerceAtLeast(1),
+                SUBJECT_PADDING.toFloat() / subjectBitmap.height.coerceAtLeast(1)
+            )
+            val targetWidth = subjectBitmap.width * factor
+            val targetHeight = subjectBitmap.height * factor
+            val target = RectF(
+                (OUTPUT_SIZE - targetWidth) / 2f,
+                (OUTPUT_SIZE - targetHeight) / 2f - 12f,
+                (OUTPUT_SIZE + targetWidth) / 2f,
+                (OUTPUT_SIZE + targetHeight) / 2f - 12f
+            )
+
+            // A small soft oval grounds the object without changing its shape or proportions.
+            val shadowBounds = RectF(
+                target.left + target.width() * 0.17f,
+                target.bottom - 5f,
+                target.right - target.width() * 0.17f,
+                target.bottom + 20f
+            )
+            val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(24, 28, 36, 52)
+                setShadowLayer(20f, 0f, 6f, Color.argb(38, 28, 36, 52))
+            }
+            canvas.drawOval(shadowBounds, shadowPaint)
+
+            val subjectPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawBitmap(
+                subjectBitmap,
+                Rect(0, 0, subjectBitmap.width, subjectBitmap.height),
+                target,
+                subjectPaint
+            )
+            completed = true
+            return outputBitmap
+        } finally {
+            // Rendering can fail after the segmenter returns a bitmap (including on OOM).
+            // Release intermediates on every path without recycling the returned image.
+            subject?.takeIf { it !== working }?.recycle()
+            if (working !== foreground) working.recycle()
+            if (!completed) output?.recycle()
         }
-        canvas.drawRect(0f, 0f, OUTPUT_SIZE.toFloat(), OUTPUT_SIZE.toFloat(), backgroundPaint)
-
-        val factor = minOf(
-            SUBJECT_PADDING.toFloat() / subject.width.coerceAtLeast(1),
-            SUBJECT_PADDING.toFloat() / subject.height.coerceAtLeast(1)
-        )
-        val targetWidth = subject.width * factor
-        val targetHeight = subject.height * factor
-        val target = RectF(
-            (OUTPUT_SIZE - targetWidth) / 2f,
-            (OUTPUT_SIZE - targetHeight) / 2f - 12f,
-            (OUTPUT_SIZE + targetWidth) / 2f,
-            (OUTPUT_SIZE + targetHeight) / 2f - 12f
-        )
-
-        // A small soft oval grounds the object without changing its shape or proportions.
-        val shadowBounds = RectF(
-            target.left + target.width() * 0.17f,
-            target.bottom - 5f,
-            target.right - target.width() * 0.17f,
-            target.bottom + 20f
-        )
-        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(24, 28, 36, 52)
-            setShadowLayer(20f, 0f, 6f, Color.argb(38, 28, 36, 52))
-        }
-        canvas.drawOval(shadowBounds, shadowPaint)
-
-        val subjectPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        canvas.drawBitmap(
-            subject,
-            Rect(0, 0, subject.width, subject.height),
-            target,
-            subjectPaint
-        )
-        if (subject !== working) subject.recycle()
-        if (working !== foreground) working.recycle()
-        return output
     }
 
     private suspend fun <T> Task<T>.awaitResult(): T =
