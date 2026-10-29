@@ -161,6 +161,21 @@ checks = [
      and _extract_string_list(r"val standardMarketplaceCategories = listOf\(([^)]*)\)", seller_center) == EXPECTED_SELLER_CATEGORIES
      and "DropdownMenu(" in seller_center
      and all(value in seller_center for value in ('"Phones & Computers"', '"Auto Parts"', '"Business & Workshop Supplies"'))),
+    ("My Shop edit listing offers matching subcategories and clears stale choices when the main category changes",
+     'var editSubcategory by rememberSaveable { mutableStateOf("") }' in seller_center
+     and seller_center.count("editSubcategory = marketplaceDescriptionSubcategory(listing.description)") == 2
+     and "val editSubcategoryOptions = marketplaceSubcategoriesFor(editCategory)" in seller_center
+     and 'if (!editCategory.equals(option, ignoreCase = true)) editSubcategory = ""' in seller_center
+     and 'Text("Subcategory (optional)"' in seller_center
+     and "editSubcategoryOptions.forEach { option ->" in seller_center
+     and "internal fun marketplaceSubcategoriesFor(category: String)" in marketplace),
+    ("My Shop edit persists the selected subcategory through its existing authenticated listing update",
+     "marketplaceDescriptionWithSubcategory(editDescription, editSubcategory)" in seller_center
+     and "updateListing(context, selectedListing.id, editTitle, savedDescription, editCategory" in seller_center
+     and seller_center.count("description = savedDescription,") == 2
+     and "private fun marketplaceDescriptionSubcategory(description: String)" in seller_center
+     and "private fun marketplaceDescriptionWithSubcategory(description: String, subcategory: String)" in seller_center
+     and 'val subcategoryLine = "Subcategory: \${subcategory.trim()}' in seller_center),
     ("My Shop stock editor and inventory cards label total stock and backend rejects quantities below existing reservations", 'label = { Text("Total stock (0 = out of stock)") }' in seller_center and '${listing.quantity} total stock • ${listing.category} • ${listing.condition}' in seller_center and "Stock cannot be reduced below items already reserved by active orders." in seller_center and "if (quantity < reservedQuantity)" in social_routes and "reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE" in social_routes),
     ("buyer-facing Marketplace uses available stock after reservations while My Shop retains total stock", social_routes.count("AS available_quantity") >= 3 and discovery_routes.count("AS available_quantity") >= 2 and 'val stockValue = if (o.has("available_quantity") && !o.isNull("available_quantity")) {' in remote_client and 'o.opt("available_quantity")' in remote_client and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client and 'label = { Text("Total stock (0 = out of stock)") }' in seller_center),
     ("paginated Marketplace discovery parses available_quantity instead of total quantity", 'FynxMarketplaceClient.parseListings(raw, preferAvailableStock = true)' in discovery_client and 'if (preferAvailableStock)' in marketplace_client and 'else null' in marketplace_client[marketplace_client.index("val stockValue = if (preferAvailableStock)"):marketplace_client.index("return Listing(")] and 'o.opt("available_quantity")' in marketplace_client and "marketplaceRequiredInventoryQuantity(stockValue)" in marketplace_client and "AS available_quantity" in discovery_routes),
