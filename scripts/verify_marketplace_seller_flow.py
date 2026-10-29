@@ -493,6 +493,10 @@ checks.extend([
      'contentDescription = "Next advertised product"' in hero
      and '"Products will appear here when live seller listings are available."' in hero
      and 'contentDescription = "Refresh advertised products"' in hero),
+    ("Great Deals product tile stays translucent so the silver mirror-glass treatment remains visible",
+     "isDarkGlassTheme) 0.78f else 0.82f" in hero
+     and "border = BorderStroke(" in hero
+     and "MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)" in hero),
 
 ])
 checks.extend([
