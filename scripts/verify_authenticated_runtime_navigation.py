@@ -748,11 +748,40 @@ if install.returncode!=0:
 
 xml,error=login()
 
+# Capture the Home glass surface in the same system dark mode as the supplied reference.
+# This is a read-only screenshot: preserve the actual feed/error state and never invent posts.
+if VISUALS_ONLY and not error:
+    night_mode = run("adb", "shell", "cmd", "uimode", "night", "yes", timeout=15)
+    if night_mode.returncode != 0:
+        night_mode = run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "2", timeout=15)
+    if night_mode.returncode == 0:
+        time.sleep(1.2)
+        dark_home_xml = restore_home_after_restart("home-mirror-glass-dark-mode")
+        settled_dark_xml, _ = wait_for_home_feed_settled(timeout=20.0)
+        if settled_dark_xml:
+            dark_home_xml = settled_dark_xml
+        if (dark_home_xml
+                and find_control(dark_home_xml, ["FYNX Assistance"])
+                and find_control(dark_home_xml, ["Your feed"])):
+            screenshot("home-mirror-glass-dark.png")
+            (ROOT / "home-mirror-glass-dark.xml").write_text(dark_home_xml + "\n", encoding="utf-8")
+            report.append("- PASS: captured the real Home mirror-glass surface in Android dark mode; the real feed state is preserved without sample posts.")
+        else:
+            FAILURES.append("Home mirror-glass dark-mode capture did not reach the real Home screen")
+    else:
+        FAILURES.append("Android emulator night mode could not be enabled for Home mirror-glass visual proof")
+    # Restore the original light capture mode before Marketplace/My Shop screenshots.
+    light_mode = run("adb", "shell", "cmd", "uimode", "night", "no", timeout=15)
+    if light_mode.returncode != 0:
+        run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "1", timeout=15)
+    time.sleep(1.0)
+    xml = restore_home_after_restart("authenticated-home-marketplace-entry") or xml
+
 # Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an
 # unrelated instrumentation test fails. This branch performs read-only navigation:
 # it never publishes a listing, changes inventory, creates an order, or initiates payment.
 if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
-    report.append("- Capture scope: Marketplace and My Shop only; no listing/order/payment mutations.")
+    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace and My Shop; no listing/order/payment mutations.")
     if error:
         report += [
             "",
