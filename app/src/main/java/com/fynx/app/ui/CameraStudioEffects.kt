@@ -31,7 +31,21 @@ enum class CameraStudioEffect(val label: String) {
 
 internal fun applyCameraStudioEffectToPhotoFile(file: File, effect: CameraStudioEffect) {
     if (effect == CameraStudioEffect.OFF) return
-    val decoded = BitmapFactory.decodeFile(file.absolutePath)
+    // Inspect dimensions first and use decoder subsampling so a 12–48 MP original is never
+    // fully expanded into an ARGB bitmap before this on-device effect runs.
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.absolutePath, bounds)
+    require(bounds.outWidth > 0 && bounds.outHeight > 0) {
+        "Unable to read the captured photo for Studio effects"
+    }
+    val originalLongestEdge = max(bounds.outWidth, bounds.outHeight)
+    var sampleSize = 1
+    while (originalLongestEdge / sampleSize > 2400) sampleSize *= 2
+    val decodeOptions = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+    }
+    val decoded = BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
         ?: error("Unable to decode the captured photo for Studio effects")
     val source = if (max(decoded.width, decoded.height) > 1600) {
         val ratio = 1600f / max(decoded.width, decoded.height).toFloat()
@@ -44,6 +58,7 @@ internal fun applyCameraStudioEffectToPhotoFile(file: File, effect: CameraStudio
     source.getPixels(sourcePixels, 0, width, 0, 0, width, height)
     val outputPixels = sourcePixels.copyOf()
     var detector: FaceDetector? = null
+    var detectedFaces: List<com.google.mlkit.vision.face.Face>? = null
     try {
         when (effect) {
             CameraStudioEffect.OFF -> return
@@ -56,6 +71,7 @@ internal fun applyCameraStudioEffectToPhotoFile(file: File, effect: CameraStudio
                         .build()
                 )
                 val faces = Tasks.await(detector.process(InputImage.fromBitmap(source, 0)))
+                detectedFaces = faces
                 require(faces.isNotEmpty()) { "No clear face was found. Try a front-facing photo in good light." }
                 if (effect == CameraStudioEffect.FACE_SYMMETRY) {
                     faces.forEach { face ->
@@ -106,9 +122,8 @@ internal fun applyCameraStudioEffectToPhotoFile(file: File, effect: CameraStudio
                     strokeWidth = max(1.3f, width * 0.0015f)
                 }
                 // Wrinkle accents are constrained to detected face bounds rather than the whole image.
-                val faceBounds = Tasks.await(
-                    (detector ?: error("Face detector was not ready")).process(InputImage.fromBitmap(source, 0))
-                )
+                val faceBounds = detectedFaces
+                    ?: error("Face detector results were not available")
                 faceBounds.forEach { face ->
                     val rect = RectF(face.boundingBox)
                     val faceWidth = rect.width()
