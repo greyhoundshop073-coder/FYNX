@@ -1696,7 +1696,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
 
     fun cleanupGeneratedPhotoFiles() {
         val generated = originalByEnhancedUri.keys.map { Uri.parse(it) } + listOfNotNull(enhancementPreviewUri)
-        FynxMarketplacePhotoEnhancement.discardAll(context, generated)
+        FynxMarketplacePhotoEnhancement.discardAll(generated)
         originalByEnhancedUri = emptyMap()
         enhancementPreviewUri = null
         enhancementSource = null
@@ -1706,7 +1706,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
     }
 
     fun keepOriginalPhotoPreview() {
-        FynxMarketplacePhotoEnhancement.discard(context, enhancementPreviewUri)
+        FynxMarketplacePhotoEnhancement.discard(enhancementPreviewUri)
         enhancementPreviewUri = null
         enhancementSource = null
         enhancementIndex = -1
@@ -1796,7 +1796,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                                 media = media.filterNot { it == uri }
                                 if (originalByEnhancedUri.containsKey(uri.toString())) {
                                     originalByEnhancedUri = originalByEnhancedUri - uri.toString()
-                                    FynxMarketplacePhotoEnhancement.discard(context, uri)
+                                    FynxMarketplacePhotoEnhancement.discard(uri)
                                 }
                             },
                             modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
@@ -1811,7 +1811,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                                     media.map { if (it == uri) original else it }
                                 )
                                 originalByEnhancedUri = originalByEnhancedUri - uri.toString()
-                                FynxMarketplacePhotoEnhancement.discard(context, uri)
+                                FynxMarketplacePhotoEnhancement.discard(uri)
                             },
                             contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
                         ) { Text("Undo", style = MaterialTheme.typography.labelSmall) }
