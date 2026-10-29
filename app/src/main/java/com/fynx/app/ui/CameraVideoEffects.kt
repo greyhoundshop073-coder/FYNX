@@ -17,7 +17,7 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import androidx.media3.common.Effect
-import androidx.media3.common.Effects
+import androidx.media3.transformer.Effects
 import androidx.media3.common.MediaItem
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.HslAdjustment
@@ -32,7 +32,7 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
-import com.google.mlkit.genai.speechrecognition.AudioSource
+import com.google.mlkit.genai.common.AudioSource
 import com.google.mlkit.genai.speechrecognition.SpeechRecognition
 import com.google.mlkit.genai.speechrecognition.SpeechRecognizerOptions
 import com.google.mlkit.genai.speechrecognition.SpeechRecognizerResponse
