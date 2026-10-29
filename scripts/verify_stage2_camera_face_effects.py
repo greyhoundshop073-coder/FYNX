@@ -6,12 +6,14 @@ def read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 camera = read("app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt")
+video = read("app/src/main/java/com/fynx/app/ui/CameraVideoEffects.kt")
 effects = read("app/src/main/java/com/fynx/app/ui/CameraFaceEffects.kt")
 build = read("app/build.gradle.kts")
 test = read("app/src/test/java/com/fynx/app/ui/CameraMediaReliabilityTest.kt")
 
 checks = [
     ("ML Kit face detection dependency", "com.google.mlkit:face-detection:16.1.5" in build),
+    ("Speech captions use the SDK version with file AudioSource support", "com.google.mlkit:genai-speech-recognition:1.0.0-alpha2" in build and "com.google.mlkit.genai.common.audio.AudioSource" in video and "AudioSource.fromFile(audio)" in video),
     ("CameraX analysis retains latest frame only", "STRATEGY_KEEP_ONLY_LATEST" in camera and "ImageAnalysis" in camera),
     ("Face detector tracks landmarks on device", "setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)" in effects and "enableTracking()" in effects),
     ("Front-camera overlay is mirrored", "isFrontCamera()" in effects and "viewWidth - right" in effects),
