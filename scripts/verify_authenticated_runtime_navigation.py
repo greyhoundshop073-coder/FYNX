@@ -773,6 +773,53 @@ def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> s
     return latest
 
 
+def tap_control_permission_aware(
+    xml_text: str, labels: list[str], name: str, expected_labels: list[str],
+    timeout: float = 22.0
+) -> str:
+    """Tap once, grant runtime permissions if prompted, and replay the action once if needed."""
+    control = find_control(xml_text, labels)
+    if not control:
+        FAILURES.append(name + ": control not found before permission-aware tap: " + ", ".join(labels))
+        screenshot(name + "-control-missing.png")
+        return ""
+    _, x, y = control
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    deadline = time.monotonic() + timeout
+    latest = xml_text
+    permission_handled = False
+    action_replayed = False
+    while time.monotonic() < deadline:
+        time.sleep(0.45)
+        latest = dump_ui(name + "-wait.xml") or latest
+        camera_permission = find_control(latest, ["Allow camera"]) if "camera" in name.lower() else None
+        permission = camera_permission or find_control(
+            latest, ["While using the app", "While using app", "Only this time", "Allow"]
+        )
+        if permission:
+            _, px, py = permission
+            run("adb", "shell", "input", "tap", str(px), str(py))
+            permission_handled = True
+            time.sleep(0.45)
+            continue
+        if any(find_control(latest, [expected]) for expected in expected_labels):
+            screenshot(name + "-ready.png")
+            return latest
+        if permission_handled and not action_replayed and find_control(latest, labels):
+            retry = find_control(latest, labels)
+            if retry:
+                _, rx, ry = retry
+                run("adb", "shell", "input", "tap", str(rx), str(ry))
+                action_replayed = True
+                continue
+    FAILURES.append(
+        name + ": expected control did not appear after permission handling: " + ", ".join(expected_labels)
+    )
+    screenshot(name + "-timeout.png")
+    (ROOT / (name + "-timeout.xml")).write_text(latest + chr(10), encoding="utf-8")
+    return ""
+
+
 def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     """Exercise the real camera preview/photo editor and safe controls without publishing a post."""
     composer_xml = tap_control(
@@ -782,7 +829,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     if not composer_xml:
         return home_xml
 
-    camera_xml = tap_control(
+    camera_xml = tap_control_permission_aware(
         composer_xml, ["Video/Camera"], f"{prefix}-composer-camera",
         ["Switch front/back camera"]
     )
@@ -994,8 +1041,9 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     video_mode = tap_control(
         video_mode, ["Cinematic"], f"{prefix}-camera-video-cinematic-style", ["Record video note"]
     )
-    recording = tap_control(
-        video_mode, ["Record video note"], f"{prefix}-camera-video-record-start", ["Stop video note"]
+    recording = tap_control_permission_aware(
+        video_mode, ["Record video note"], f"{prefix}-camera-video-record-start",
+        ["Stop video note"]
     )
     if not recording:
         FAILURES.append(prefix + ": video recording did not start or expose the stop action")
