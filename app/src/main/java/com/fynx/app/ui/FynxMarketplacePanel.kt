@@ -10,6 +10,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -79,33 +87,241 @@ internal fun advanceMarketplaceListingsOffset(currentOffset: Int, requestedLimit
 
 
 
+private fun DrawScope.drawMarketplaceCategoryRect(
+    x: Float, y: Float, width: Float, height: Float, color: Color,
+    scaleX: Float, scaleY: Float, radius: Float = 4f
+) {
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(x * scaleX, y * scaleY),
+        size = Size(width * scaleX, height * scaleY),
+        cornerRadius = CornerRadius(radius * scaleX, radius * scaleY)
+    )
+}
+
+private fun DrawScope.drawMarketplaceCategoryCircle(
+    x: Float, y: Float, radius: Float, color: Color,
+    scaleX: Float, scaleY: Float
+) {
+    drawCircle(
+        color = color,
+        radius = radius * minOf(scaleX, scaleY),
+        center = Offset(x * scaleX, y * scaleY)
+    )
+}
+
+private fun DrawScope.drawMarketplaceCategoryLine(
+    x1: Float, y1: Float, x2: Float, y2: Float, color: Color,
+    scaleX: Float, scaleY: Float, stroke: Float = 2f
+) {
+    drawLine(
+        color = color,
+        start = Offset(x1 * scaleX, y1 * scaleY),
+        end = Offset(x2 * scaleX, y2 * scaleY),
+        strokeWidth = stroke * minOf(scaleX, scaleY),
+        cap = StrokeCap.Round
+    )
+}
+
+/**
+ * Offline category artwork only. These illustrations help buyers recognize a category;
+ * they are never used as seller listing media or as Great Deals product photos.
+ */
+@Composable
+private fun MarketplaceCategoryArtwork(category: String, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val sx = size.width / 108f
+        val sy = size.height / 66f
+        val name = category.trim().lowercase(Locale.US)
+        val azure = Color(0xFF007FFF)
+        val green = Color(0xFF008000)
+        val red = Color(0xFFDC143C)
+        val gold = Color(0xFFD4AF37)
+        val slate = Color(0xFF1C2434)
+        val cloud = Color(0xFFF5F7FA)
+        val white = Color.White
+        val paleBlue = Color(0xFFE5F1FF)
+        val paleGreen = Color(0xFFE4F3E8)
+        val paleGold = Color(0xFFFFF4D7)
+        val accent = when {
+            name.contains("electronic") || name.contains("phone") || name.contains("computer") -> azure
+            name.contains("fashion") || name.contains("accessor") -> gold
+            name.contains("home") || name.contains("furniture") || name.contains("property") -> green
+            name.contains("beauty") || name.contains("health") -> red
+            name.contains("food") || name.contains("grocery") || name.contains("agriculture") || name.contains("garden") -> green
+            name.contains("vehicle") || name.contains("automotive") -> azure
+            else -> gold
+        }
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                colors = listOf(cloud, accent.copy(alpha = 0.17f)),
+                start = Offset.Zero,
+                end = Offset(size.width, size.height)
+            ),
+            size = size,
+            cornerRadius = CornerRadius(13.dp.toPx())
+        )
+        drawMarketplaceCategoryCircle(18f, 15f, 12f, white.copy(alpha = 0.72f), sx, sy)
+        drawMarketplaceCategoryCircle(90f, 53f, 17f, accent.copy(alpha = 0.10f), sx, sy)
+
+        when {
+            name.contains("electronics") || name.contains("phones") || name.contains("computer") -> {
+                // Smartphone and laptop, with screens that read clearly at compact sizes.
+                drawMarketplaceCategoryRect(25f, 10f, 20f, 41f, slate, sx, sy, 4f)
+                drawMarketplaceCategoryRect(27.5f, 14f, 15f, 31f, paleBlue, sx, sy, 2f)
+                drawMarketplaceCategoryRect(30f, 18f, 10f, 21f, azure, sx, sy, 1.5f)
+                drawMarketplaceCategoryCircle(35f, 48f, 1.2f, white, sx, sy)
+                drawMarketplaceCategoryRect(51f, 25f, 34f, 23f, slate, sx, sy, 3f)
+                drawMarketplaceCategoryRect(54f, 28f, 28f, 16f, paleBlue, sx, sy, 1f)
+                drawMarketplaceCategoryRect(57f, 30f, 22f, 11f, azure, sx, sy, 1f)
+                drawMarketplaceCategoryRect(47f, 48f, 43f, 3.5f, slate, sx, sy, 1.8f)
+                drawMarketplaceCategoryLine(58f, 49f, 79f, 49f, gold, sx, sy, 1.2f)
+            }
+            name.contains("fashion") || name.contains("accessor") -> {
+                drawMarketplaceCategoryLine(52f, 11f, 56f, 15f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryLine(56f, 15f, 52f, 19f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryLine(52f, 19f, 30f, 19f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryLine(30f, 19f, 30f, 24f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryLine(30f, 24f, 78f, 24f, slate, sx, sy, 2.2f)
+                drawMarketplaceCategoryRect(35f, 26f, 38f, 28f, azure, sx, sy, 5f)
+                drawMarketplaceCategoryRect(41f, 29f, 26f, 21f, white.copy(alpha = 0.95f), sx, sy, 4f)
+                drawMarketplaceCategoryLine(46f, 28f, 54f, 35f, gold, sx, sy, 2f)
+                drawMarketplaceCategoryLine(62f, 28f, 54f, 35f, gold, sx, sy, 2f)
+                drawMarketplaceCategoryRect(39f, 47f, 30f, 3f, gold, sx, sy, 1f)
+            }
+            name.contains("home") || name.contains("property") || name.contains("furniture") -> {
+                if (name.contains("furniture")) {
+                    drawMarketplaceCategoryRect(26f, 32f, 55f, 17f, azure, sx, sy, 5f)
+                    drawMarketplaceCategoryRect(30f, 26f, 47f, 15f, white, sx, sy, 5f)
+                    drawMarketplaceCategoryRect(33f, 29f, 19f, 10f, paleBlue, sx, sy, 3f)
+                    drawMarketplaceCategoryRect(55f, 29f, 18f, 10f, paleBlue, sx, sy, 3f)
+                    drawMarketplaceCategoryRect(31f, 47f, 4f, 8f, slate, sx, sy, 1.5f)
+                    drawMarketplaceCategoryRect(73f, 47f, 4f, 8f, slate, sx, sy, 1.5f)
+                    drawMarketplaceCategoryCircle(80f, 18f, 8f, paleGreen, sx, sy)
+                    drawMarketplaceCategoryLine(80f, 28f, 80f, 40f, green, sx, sy, 2f)
+                    drawMarketplaceCategoryCircle(75f, 26f, 4.5f, green, sx, sy)
+                    drawMarketplaceCategoryCircle(85f, 23f, 4.5f, green, sx, sy)
+                } else {
+                    drawMarketplaceCategoryLine(24f, 29f, 54f, 8f, slate, sx, sy, 3f)
+                    drawMarketplaceCategoryLine(54f, 8f, 84f, 29f, slate, sx, sy, 3f)
+                    drawMarketplaceCategoryRect(31f, 28f, 46f, 26f, white, sx, sy, 2f)
+                    drawMarketplaceCategoryRect(37f, 34f, 11f, 10f, paleBlue, sx, sy, 1.5f)
+                    drawMarketplaceCategoryRect(59f, 34f, 11f, 10f, paleBlue, sx, sy, 1.5f)
+                    drawMarketplaceCategoryRect(50f, 39f, 9f, 15f, gold, sx, sy, 1.5f)
+                    drawMarketplaceCategoryCircle(64f, 47f, 1f, slate, sx, sy)
+                }
+            }
+            name.contains("beauty") || name.contains("health") -> {
+                drawMarketplaceCategoryRect(32f, 23f, 20f, 29f, white, sx, sy, 4f)
+                drawMarketplaceCategoryRect(37f, 15f, 10f, 9f, slate, sx, sy, 2f)
+                drawMarketplaceCategoryRect(35f, 31f, 14f, 13f, if (name.contains("health")) red else gold, sx, sy, 2f)
+                drawMarketplaceCategoryRect(36f, 45f, 12f, 2f, azure, sx, sy, 1f)
+                drawMarketplaceCategoryRect(58f, 30f, 22f, 22f, paleGold, sx, sy, 5f)
+                drawMarketplaceCategoryRect(62f, 25f, 14f, 7f, gold, sx, sy, 2f)
+                drawMarketplaceCategoryRect(62f, 37f, 14f, 3f, white, sx, sy, 1f)
+                if (name.contains("health")) {
+                    drawMarketplaceCategoryLine(69f, 38f, 69f, 47f, red, sx, sy, 2f)
+                    drawMarketplaceCategoryLine(65f, 42.5f, 73f, 42.5f, red, sx, sy, 2f)
+                }
+            }
+            name.contains("vehicle") || name.contains("automotive") -> {
+                drawMarketplaceCategoryRect(25f, 32f, 58f, 16f, azure, sx, sy, 5f)
+                drawMarketplaceCategoryRect(37f, 22f, 34f, 15f, white, sx, sy, 4f)
+                drawMarketplaceCategoryRect(41f, 25f, 11f, 9f, paleBlue, sx, sy, 1.5f)
+                drawMarketplaceCategoryRect(55f, 25f, 12f, 9f, paleBlue, sx, sy, 1.5f)
+                drawMarketplaceCategoryCircle(38f, 48f, 6f, slate, sx, sy)
+                drawMarketplaceCategoryCircle(70f, 48f, 6f, slate, sx, sy)
+                drawMarketplaceCategoryCircle(38f, 48f, 2.6f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(70f, 48f, 2.6f, gold, sx, sy)
+                drawMarketplaceCategoryRect(76f, 36f, 5f, 3f, gold, sx, sy, 1f)
+            }
+            name.contains("food") || name.contains("grocery") -> {
+                drawMarketplaceCategoryCircle(38f, 24f, 8f, red, sx, sy)
+                drawMarketplaceCategoryCircle(52f, 21f, 8f, gold, sx, sy)
+                drawMarketplaceCategoryCircle(67f, 24f, 8f, green, sx, sy)
+                drawMarketplaceCategoryLine(38f, 17f, 40f, 14f, green, sx, sy, 2f)
+                drawMarketplaceCategoryLine(52f, 14f, 52f, 12f, green, sx, sy, 2f)
+                drawMarketplaceCategoryLine(67f, 17f, 69f, 14f, green, sx, sy, 2f)
+                drawMarketplaceCategoryRect(28f, 32f, 50f, 20f, slate, sx, sy, 4f)
+                drawMarketplaceCategoryRect(32f, 35f, 42f, 13f, paleGold, sx, sy, 2f)
+                for (i in 0..5) drawMarketplaceCategoryLine(34f + i * 7f, 35f, 38f + i * 7f, 48f, gold, sx, sy, 1f)
+                drawMarketplaceCategoryLine(28f, 32f, 78f, 32f, green, sx, sy, 3f)
+            }
+            name.contains("agriculture") || name.contains("garden") -> {
+                drawMarketplaceCategoryCircle(77f, 16f, 8f, gold, sx, sy)
+                drawMarketplaceCategoryRect(22f, 47f, 64f, 7f, Color(0xFFB47A4A), sx, sy, 3f)
+                drawMarketplaceCategoryLine(54f, 48f, 54f, 22f, green, sx, sy, 3f)
+                drawMarketplaceCategoryLine(54f, 35f, 38f, 27f, green, sx, sy, 2.5f)
+                drawMarketplaceCategoryLine(55f, 31f, 70f, 22f, green, sx, sy, 2.5f)
+                drawMarketplaceCategoryCircle(38f, 27f, 7f, green, sx, sy)
+                drawMarketplaceCategoryCircle(70f, 22f, 7f, green, sx, sy)
+                drawMarketplaceCategoryCircle(48f, 18f, 5f, paleGreen, sx, sy)
+                drawMarketplaceCategoryLine(28f, 50f, 80f, 50f, gold, sx, sy, 1.5f)
+            }
+            name.contains("baby") || name.contains("kids") || name.contains("toy") -> {
+                drawMarketplaceCategoryRect(27f, 33f, 21f, 21f, red, sx, sy, 3f)
+                drawMarketplaceCategoryRect(48f, 24f, 20f, 30f, azure, sx, sy, 3f)
+                drawMarketplaceCategoryRect(68f, 37f, 15f, 17f, gold, sx, sy, 3f)
+                drawMarketplaceCategoryCircle(80f, 19f, 8f, paleGreen, sx, sy)
+                drawMarketplaceCategoryCircle(80f, 19f, 5f, green, sx, sy)
+                drawMarketplaceCategoryLine(80f, 11f, 80f, 7f, slate, sx, sy, 1.4f)
+                drawMarketplaceCategoryLine(33f, 41f, 42f, 41f, white, sx, sy, 2f)
+                drawMarketplaceCategoryLine(37.5f, 37f, 37.5f, 46f, white, sx, sy, 2f)
+            }
+            name.contains("book") || name.contains("education") || name.contains("office") -> {
+                drawMarketplaceCategoryRect(25f, 37f, 57f, 15f, slate, sx, sy, 3f)
+                drawMarketplaceCategoryRect(29f, 33f, 49f, 13f, red, sx, sy, 2f)
+                drawMarketplaceCategoryRect(32f, 28f, 44f, 13f, azure, sx, sy, 2f)
+                drawMarketplaceCategoryRect(36f, 17f, 36f, 19f, white, sx, sy, 2f)
+                drawMarketplaceCategoryLine(54f, 18f, 54f, 34f, gold, sx, sy, 1.8f)
+                drawMarketplaceCategoryLine(40f, 22f, 49f, 22f, azure, sx, sy, 1.2f)
+                drawMarketplaceCategoryLine(40f, 26f, 49f, 26f, azure, sx, sy, 1.2f)
+            }
+            name.contains("sport") || name.contains("fitness") || name.contains("outdoor") -> {
+                drawMarketplaceCategoryCircle(54f, 33f, 21f, white, sx, sy)
+                drawMarketplaceCategoryCircle(54f, 33f, 21f, slate.copy(alpha = 0.15f), sx, sy)
+                drawMarketplaceCategoryCircle(54f, 33f, 19f, white, sx, sy)
+                drawMarketplaceCategoryLine(54f, 15f, 54f, 51f, slate, sx, sy, 1.2f)
+                drawMarketplaceCategoryLine(37f, 27f, 71f, 39f, slate, sx, sy, 1.2f)
+                drawMarketplaceCategoryLine(37f, 39f, 71f, 27f, slate, sx, sy, 1.2f)
+                drawMarketplaceCategoryLine(45f, 18f, 45f, 48f, azure, sx, sy, 1f)
+                drawMarketplaceCategoryLine(63f, 18f, 63f, 48f, azure, sx, sy, 1f)
+            }
+            name.contains("tool") || name.contains("service") || name.contains("building") || name.contains("workshop") -> {
+                drawMarketplaceCategoryRect(28f, 31f, 51f, 23f, azure, sx, sy, 4f)
+                drawMarketplaceCategoryRect(43f, 25f, 21f, 7f, slate, sx, sy, 2f)
+                drawMarketplaceCategoryRect(47f, 27f, 13f, 3f, gold, sx, sy, 1f)
+                drawMarketplaceCategoryRect(36f, 36f, 9f, 12f, white, sx, sy, 1.5f)
+                drawMarketplaceCategoryRect(51f, 36f, 9f, 12f, paleGold, sx, sy, 1.5f)
+                drawMarketplaceCategoryLine(65f, 38f, 76f, 47f, slate, sx, sy, 3.8f)
+                drawMarketplaceCategoryLine(67f, 36f, 72f, 31f, slate, sx, sy, 2.8f)
+                drawMarketplaceCategoryLine(72f, 31f, 78f, 35f, slate, sx, sy, 2.8f)
+            }
+            else -> {
+                // Neutral storefront/box scene for Other and future categories.
+                drawMarketplaceCategoryRect(31f, 28f, 47f, 27f, white, sx, sy, 3f)
+                drawMarketplaceCategoryRect(27f, 20f, 55f, 12f, azure, sx, sy, 3f)
+                drawMarketplaceCategoryRect(34f, 32f, 9f, 9f, paleBlue, sx, sy, 1f)
+                drawMarketplaceCategoryRect(49f, 32f, 9f, 23f, paleGold, sx, sy, 1f)
+                drawMarketplaceCategoryRect(64f, 32f, 9f, 9f, paleGreen, sx, sy, 1f)
+            }
+        }
+    }
+}
+
 @Composable
 private fun MarketplaceExploreCategoryTiles(
     categories: List<String>,
     selectedCategory: String,
     onSelect: (String) -> Unit
 ) {
-    // Category art is intentionally a safe, offline-ready fallback. Real listing photos
-    // belong to product cards; never show a category illustration as if it were a seller item.
+    // Category scenes are illustration-only, offline-safe discovery artwork. Live seller media
+    // remains the source of truth for product cards and Great Deals.
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         categories.forEach { itemCategory ->
-            val icon = when (itemCategory.trim().lowercase(Locale.US)) {
-                "electronics", "phones & computers" -> Icons.Default.Devices
-                "fashion" -> Icons.Default.ShoppingBag
-                "home", "furniture" -> Icons.Default.Home
-                "beauty", "health" -> Icons.Default.Face
-                "vehicles" -> Icons.Default.DirectionsCar
-                "services", "tools" -> Icons.Default.Build
-                "food" -> Icons.Default.ShoppingBag
-                "property" -> Icons.Default.Home
-                "books" -> Icons.Default.Devices
-                "sports" -> Icons.Default.DirectionsCar
-                "baby & kids" -> Icons.Default.Face
-                else -> Icons.Default.Storefront
-            }
             val selected = selectedCategory.equals(itemCategory, ignoreCase = true)
             Surface(
                 onClick = { onSelect(itemCategory) },
@@ -126,16 +342,10 @@ private fun MarketplaceExploreCategoryTiles(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(66.dp)
-                            .clip(RoundedCornerShape(13.dp))
-                            .background(MaterialTheme.colorScheme.surface),
+                            .clip(RoundedCornerShape(13.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            icon,
-                            contentDescription = "$itemCategory category",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(36.dp)
-                        )
+                        MarketplaceCategoryArtwork(itemCategory, Modifier.fillMaxSize())
                     }
                     Text(
                         itemCategory,
