@@ -693,13 +693,32 @@ def login():
     screenshot("authenticated-home-timeout.png")
     return last_xml, "login did not reach authenticated Home within 65 seconds; last visible markers: " + (last_markers or visible_marker_summary(last_xml))
 
+def prepare_debug_visual_capture_permissions():
+    """Keep Android's first-run notification modal from stealing read-only UI navigation."""
+    if not VISUALS_ONLY:
+        return
+    result = run("adb", "shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
+    if result.returncode == 0:
+        print("DEBUG VISUAL MODE: POST_NOTIFICATIONS granted before launching FYNX so the system dialog cannot block screenshot navigation.")
+    else:
+        print("DEBUG VISUAL MODE: POST_NOTIFICATIONS pre-grant was unavailable; keep the notification-dialog recovery path enabled.")
+
 def dismiss_runtime_permission_prompt()->str:
     for _ in range(6):
         xml=dump_ui("authenticated-permission-check.xml")
         if not xml: time.sleep(.5); continue
-        allow=find_control(xml,["Don’t allow","Don't allow"])
-        if allow:
-            _,x,y=allow; run("adb","shell","input","tap",str(x),str(y)); time.sleep(1)
+        is_notification_prompt = (
+            VISUALS_ONLY
+            and "com.google.android.permissioncontroller" in xml
+            and find_control(xml, ["Allow FYNX to send you notifications?"]) is not None
+        )
+        action = (
+            find_control(xml, ["Allow"])
+            if is_notification_prompt
+            else find_control(xml, ["Don’t allow","Don't allow"])
+        )
+        if action:
+            _,x,y=action; run("adb","shell","input","tap",str(x),str(y)); time.sleep(1)
             return dump_ui("authenticated-home-after-permission.xml")
         if find_control(xml,["Chat","Friends","Stories","More","Features"]): return xml
         time.sleep(.5)
@@ -745,7 +764,10 @@ report.append(f"- APK install: {'PASS' if install.returncode==0 else 'FAIL'}")
 if install.returncode!=0:
     report.append("- "+install.stdout.strip().replace("\n"," | ")); raise SystemExit(1)
 
-
+# On the offline/debug visual path only, pre-grant the notification permission in
+# the disposable emulator before the first FYNX launch. This prevents the Android
+# system dialog from intercepting taps intended for the real Marketplace surface.
+prepare_debug_visual_capture_permissions()
 xml,error=login()
 
 # Capture the Home glass surface in the same system dark mode as the supplied reference.
