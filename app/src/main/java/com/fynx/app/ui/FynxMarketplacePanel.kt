@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -120,72 +121,235 @@ private fun MarketplaceExploreCategoryTiles(
     }
 }
 
+private const val MARKETPLACE_AD_ROTATION_INTERVAL_MS = 4_500L
+
 @Composable
 private fun MarketplaceSmartDealsHero(
     listings: List<FynxRemoteSocialClient.MarketplaceListing>,
+    sellerReputations: Map<String, FynxMarketplaceClient.SellerReputation> = emptyMap(),
     onOpenListing: (FynxRemoteSocialClient.MarketplaceListing) -> Unit,
     onShopNow: () -> Unit,
     onOrders: () -> Unit,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val currency = listings.groupingBy { it.currency.trim().uppercase(Locale.US) }
-        .eachCount().maxByOrNull { it.value }?.key
-    val deals = remember(listings, currency) {
-        listings.filter { it.active && it.quantity > 0 && it.price >= 0.0 &&
-            (currency == null || it.currency.trim().uppercase(Locale.US) == currency) }
-            .distinctBy { it.id }
-            .sortedBy { it.price }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val successfulSalesBySeller = remember(sellerReputations) {
+        sellerReputations.entries.associate { (username, reputation) ->
+            username.removePrefix("@").trim().lowercase(Locale.US) to reputation.successfulSales
+        }
+    }
+    val deals = remember(listings, successfulSalesBySeller) {
+        val listingById = listings
+            .distinctBy { it.id.trim() }
+            .associateBy { it.id.trim() }
+        val candidates = listings.map { listing ->
+            MarketplaceAdvertisingCandidate(
+                id = listing.id,
+                sellerUsername = listing.sellerUsername,
+                title = listing.title,
+                price = listing.price,
+                currency = listing.currency,
+                quantity = listing.quantity,
+                active = listing.active
+            )
+        }
+        selectMarketplaceAdvertisingCandidates(candidates, successfulSalesBySeller)
+            .mapNotNull { candidate -> listingById[candidate.id.trim()] }
+    }
+    // Duplicating the first item allows an animated end-to-start transition.
+    val carouselListings = remember(deals) {
+        if (deals.size > 1) deals + deals.first() else deals
     }
     val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(deals.map { it.id }) {
-        if (deals.size > 3) {
-            while (true) {
-                delay(4500)
-                val next = if (rowState.firstVisibleItemIndex + 3 >= deals.size) 0 else rowState.firstVisibleItemIndex + 1
-                rowState.animateScrollToItem(next)
+    val currentAdIndex by remember(deals.map { it.id }) {
+        derivedStateOf {
+            if (deals.isEmpty()) 0 else rowState.firstVisibleItemIndex.coerceIn(0, deals.lastIndex)
+        }
+    }
+
+    fun advanceAdvertisement() {
+        if (deals.size <= 1) return
+        scope.launch {
+            val target = nextMarketplaceAdvertisingDisplayIndex(
+                rowState.firstVisibleItemIndex,
+                deals.size
+            ) ?: return@launch
+            if (target == 0) {
+                rowState.scrollToItem(0)
+            } else {
+                rowState.animateScrollToItem(target)
+                if (target == deals.size) rowState.scrollToItem(0)
             }
         }
     }
-    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.primaryContainer, modifier = modifier) {
+
+    LaunchedEffect(deals.map { it.id }) {
+        rowState.scrollToItem(0)
+        if (deals.size > 1) {
+            while (true) {
+                delay(MARKETPLACE_AD_ROTATION_INTERVAL_MS)
+                val target = nextMarketplaceAdvertisingDisplayIndex(
+                    rowState.firstVisibleItemIndex,
+                    deals.size
+                ) ?: break
+                if (target == 0) {
+                    rowState.scrollToItem(0)
+                } else {
+                    rowState.animateScrollToItem(target)
+                    if (target == deals.size) rowState.scrollToItem(0)
+                }
+            }
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        modifier = modifier
+    ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("Great Deals", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Better Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Featured Products", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("Real products from FYNX sellers", style = MaterialTheme.typography.bodySmall)
                 }
-                IconButton(onClick = onOrders) { Icon(Icons.Default.ReceiptLong, contentDescription = "Orders", tint = MaterialTheme.colorScheme.primary) }
-                IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = "Refresh listings", tint = MaterialTheme.colorScheme.primary) }
-                IconButton(onClick = onShopNow) { Icon(Icons.Default.Storefront, contentDescription = "Browse all products", tint = MaterialTheme.colorScheme.primary) }
+                IconButton(onClick = onOrders) {
+                    Icon(Icons.Default.ReceiptLong, contentDescription = "Orders", tint = MaterialTheme.colorScheme.onPrimary)
+                }
+                IconButton(onClick = onRefresh) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh advertised products", tint = MaterialTheme.colorScheme.onPrimary)
+                }
+                IconButton(onClick = onShopNow) {
+                    Icon(Icons.Default.Storefront, contentDescription = "Browse all products", tint = MaterialTheme.colorScheme.onPrimary)
+                }
             }
+
             if (deals.isEmpty()) {
-                Text("Products will appear here when live seller listings are available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Products will appear here when live seller listings are available.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.88f)
+                )
             } else {
-                LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 4.dp)) {
-                    items(deals, key = { "smart-deal-${it.id}" }) { listing ->
-                        Surface(onClick = { onOpenListing(listing) }, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.width(116.dp)) {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(7.dp)) {
-                                if (listing.mediaIds.isNotEmpty()) {
-                                    RemoteMarketMedia(LocalContext.current, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)), listing.mediaTypes.firstOrNull())
-                                } else {
-                                    Box(Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) {
-                                        Icon(Icons.Default.ShoppingBag, contentDescription = "Product image unavailable", modifier = Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val adWidth = maxWidth
+                    LazyRow(
+                        state = rowState,
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(
+                            count = carouselListings.size,
+                            key = { index -> "smart-ad-$index-${carouselListings[index].id}" }
+                        ) { index ->
+                            val listing = carouselListings[index]
+                            val sellerName = listing.sellerDisplayName.trim()
+                                .ifBlank { listing.storeName.trim() }
+                                .ifBlank { listing.sellerUsername.removePrefix("@").trim() }
+                            Surface(
+                                onClick = { onOpenListing(listing) },
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier.width(adWidth)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp).heightIn(min = 112.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (listing.mediaIds.isNotEmpty()) {
+                                        RemoteMarketMedia(
+                                            context,
+                                            listing.mediaIds.first(),
+                                            Modifier.size(104.dp).clip(RoundedCornerShape(10.dp)),
+                                            listing.mediaTypes.firstOrNull()
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier.size(104.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.ShoppingBag,
+                                                contentDescription = "Product image unavailable",
+                                                modifier = Modifier.size(34.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            listing.title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            listing.currency.trim().uppercase(Locale.US) + " " +
+                                                String.format(Locale.US, "%,.2f", listing.price),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            "Sold by $sellerName",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            "Tap to view product",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
-                                Text(listing.title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text(listing.currency.uppercase(Locale.US) + " " + String.format(Locale.US, "%,.2f", listing.price), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
                 }
             }
-            TextButton(onClick = onShopNow, modifier = Modifier.align(Alignment.End)) {
-                Text("Shop Now")
-                Spacer(Modifier.width(5.dp))
-                Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(3.dp))
-                Icon(Icons.Default.Add, contentDescription = "Browse Marketplace", modifier = Modifier.size(16.dp))
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (deals.size > 1) {
+                    Text(
+                        "Product ${currentAdIndex + 1} of ${deals.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                    )
+                    IconButton(onClick = { advanceAdvertisement() }, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = "Next advertised product",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(
+                    onClick = onShopNow,
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimary)
+                ) {
+                    Text("Shop Now")
+                    Spacer(Modifier.width(5.dp))
+                    Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Icon(Icons.Default.Add, contentDescription = "Browse Marketplace", modifier = Modifier.size(16.dp))
+                }
             }
         }
     }
@@ -593,6 +757,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     item(key = "marketplace-offline-hero") {
                         MarketplaceSmartDealsHero(
                             listings = listings,
+                            sellerReputations = sellerReputations,
                             onOpenListing = { selected = it },
                             onShopNow = { showAllProducts = true },
                             onOrders = { showOrders = true; reloadOrders() },
@@ -698,6 +863,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     item(key = "marketplace-hero") {
                         MarketplaceSmartDealsHero(
                             listings = listings,
+                            sellerReputations = sellerReputations,
                             onOpenListing = { selected = it },
                             onShopNow = { showAllProducts = true },
                             onOrders = { showOrders = true; reloadOrders() },

@@ -18,6 +18,14 @@ checks = [
         'if [ "$VISUAL_EXIT" -ne 0 ]; then' in runner and 'exit "$TEST_EXIT"' in runner,
     ),
     (
+        "green instrumentation selects authenticated navigation only when backend health is ready",
+        'if node --input-type=module -e' in runner
+        and 'body?.database !== "ready"' in runner
+        and 'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
+        and 'Live backend is unavailable; running read-only Marketplace/My Shop visual certification' in runner
+        and 'TEST_EXIT=$?' in runner,
+    ),
+    (
         "focused navigation mode is isolated from unrelated Home/Chat/Status journey loops",
         'if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":' in navigation
         and 'raise SystemExit(1 if FAILURES else 0)' in navigation,
@@ -69,6 +77,12 @@ checks = [
     (
         "the CI workflow executes this visual-capture regression guard",
         "python3 scripts/verify_marketplace_runtime_visual_capture.py" in workflow,
+    ),
+    (
+        "full runtime certification remains explicitly runnable on integration and deliberate home-cert pushes",
+        "inputs.full_runtime == 'true'" in workflow
+        and "refs/heads/integration/fynx-single-apk-20261013" in workflow
+        and "contains(github.event.head_commit.message, '[home-cert]')" in workflow,
     ),
 ]
 

@@ -4,6 +4,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerFlowSupport.kt").read_text()
 marketplace = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
+ad_support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCarouselSupport.kt").read_text()
+hero = marketplace[marketplace.index("private fun MarketplaceSmartDealsHero"):marketplace.index("@Composable\nfun FynxMarketplacePanel")]
 checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text()
 detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt").read_text()
 product_card = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceProductComponents.kt").read_text()
@@ -27,6 +29,7 @@ discovery_routes = (ROOT / "backend/discoveryRoutes.js").read_text()
 social_routes = (ROOT / "backend/socialRoutes.js").read_text()
 marketplace_checkout_route = (ROOT / "backend/marketplaceCheckout.js").read_text()
 settlement_routes = (ROOT / "backend/marketplaceSettlement.js").read_text()
+shop_profile_routes = (ROOT / "backend/marketplaceShopProfiles.js").read_text()
 
 import re
 
@@ -117,6 +120,7 @@ checks = [
     ("My Shop has separate overview, profile, listings, orders, delivery/drivers, and earnings/payout destinations", all(f'"{section}"' in seller_center for section in ("Overview", "Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts"))),
     ("My Shop overview links to each management destination and uses existing loaded counts", "Your shop at a glance" in seller_center and 'activeSection = "Shop profile"' in seller_center and 'activeSection = "Listings"' in seller_center and 'activeSection = "Orders"' in seller_center and 'activeSection = "Delivery & drivers"' in seller_center and 'activeSection = "Earnings & payouts"' in seller_center and "listings.size" in seller_center and "moneyRecords.size" in seller_center),
     ("My Shop preserves authenticated shop profile editing and save path", 'Text("Shop identity"' in seller_center and '"/api/marketplace/my-shop"' in seller_center and 'Text("Save shop details")' in seller_center),
+    ("first My Shop save creates a seller shop profile and later saves update that same authenticated seller row", "export function ensureMarketplaceShopProfileSchema(pool)" in shop_profile_routes and "CREATE TABLE IF NOT EXISTS marketplace_shop_profiles" in shop_profile_routes and "app.patch('/api/marketplace/my-shop', auth" in shop_profile_routes and "INSERT INTO marketplace_shop_profiles (seller_id, shop_name, description, location, contact_phone)" in shop_profile_routes and "ON CONFLICT (seller_id) DO UPDATE SET" in shop_profile_routes and "WHERE u.id = $1" in shop_profile_routes and "req.user.sub" in shop_profile_routes and "if (shopName.length < 2)" in shop_profile_routes),
     ("My Shop profile save success uses semantic success green while profile failures remain errors", 'shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }' in seller_center and 'shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }' in seller_center),
     ("My Shop clears stale profile errors when any field changes and before retrying save", all(fragment in seller_center for fragment in ("shopName = it.take(120); shopMessage = null; shopError = null", "shopDescription = it.take(800); shopMessage = null; shopError = null", "shopLocation = it.take(160); shopMessage = null; shopError = null", "shopContactPhone = it.take(40); shopMessage = null; shopError = null", "shopSaving = true\n                            shopMessage = null\n                            shopError = null"))),
     ("My Shop preserves listing edit, delete, and per-listing delivery/pickup settings", 'Icon(Icons.Default.Edit, "Edit listing")' in seller_center and 'Icon(Icons.Default.Delete, "Remove listing")' in seller_center and "FynxMarketplaceShippingSettingsCard(" in seller_center),
@@ -339,6 +343,34 @@ checks.extend([
      and "marketplaceReceiptAmountsMatch(delivery, sumDelivery)" in receipt
      and "marketplaceReceiptAmountsMatch(marketplaceFee, sumMarketplaceFee)" in receipt
      and "marketplaceReceiptAmountsMatch(buyerTotal, sumBuyerTotal)" in receipt),
+
+    ("Great Deals carousel selects only valid, active, in-stock unique listings and keeps one deterministic currency",
+     "selectMarketplaceAdvertisingCandidates" in ad_support
+     and "it.active" in ad_support
+     and "it.quantity > 0" in ad_support
+     and "it.price.isFinite()" in ad_support
+     and ".distinctBy { it.id.trim() }" in ad_support
+     and 'groupingBy { it.currency.trim().uppercase(Locale.US) }' in ad_support),
+    ("Great Deals carousel uses real successful-sales evidence with a safe price-order fallback",
+     "successfulSalesBySeller" in ad_support
+     and "reputation.successfulSales" in marketplace
+     and "thenBy { it.price }" in ad_support),
+    ("Great Deals advert slides show real listing media, seller identity, price and exact-listing navigation",
+     "RemoteMarketMedia(" in hero
+     and '"Sold by $sellerName"' in hero
+     and 'String.format(Locale.US, "%,.2f", listing.price)' in hero
+     and "onClick = { onOpenListing(listing) }" in hero
+     and "sellerReputations = sellerReputations" in marketplace),
+    ("Great Deals advert rotation supports small lists, loops through a duplicate-first slide and runs in a cancellable composition effect",
+     "MARKETPLACE_AD_ROTATION_INTERVAL_MS" in hero
+     and "nextMarketplaceAdvertisingDisplayIndex" in hero
+     and "if (deals.size > 1) deals + deals.first() else deals" in hero
+     and "rowState.animateScrollToItem(target)" in hero),
+    ("Great Deals advert has accessible manual next navigation and a truthful empty state",
+     'contentDescription = "Next advertised product"' in hero
+     and '"Products will appear here when live seller listings are available."' in hero
+     and 'contentDescription = "Refresh advertised products"' in hero),
+
 ])
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
