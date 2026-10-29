@@ -841,16 +841,29 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     screenshot(f"{prefix}-camera-live-preview.png")
     (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + chr(10), encoding="utf-8")
     missing_live = [
-        label for label in ["Switch front/back camera", "Looks", "Face FX", "Gallery", "Take photo"]
+        label for label in ["Switch front/back camera", "Effects", "Gallery", "Take photo"]
         if not find_control(camera_xml, [label])
     ]
     if missing_live:
         FAILURES.append(prefix + ": live camera missing visible controls: " + ", ".join(missing_live))
     else:
-        report.append("- PASS live camera screenshot exposes the compact top toolbar, effect-category selector and capture control")
+        report.append("- PASS clean live camera shows the compact toolbar, Effects shortcut, shutter and Gallery shortcut")
 
-    # Face FX is deliberately grouped behind its category selector to keep the preview clean.
-    # Open that category and prove the individual tracked effects are still reachable.
+    # TikTok-style flow: effects live in a deliberate tray opened from the shutter row,
+    # not four permanently stacked lists that reduce the preview area.
+    tray_xml = tap_control(
+        camera_xml, ["Effects"], f"{prefix}-camera-effects-tray",
+        ["Looks", "Face FX", "Background", "AI Studio"]
+    )
+    if tray_xml and all(find_control(tray_xml, [label]) for label in ["Looks", "Face FX", "Background", "AI Studio"]):
+        report.append("- PASS Effects opens one compact category tray above the separate shutter row")
+        screenshot(f"{prefix}-camera-effects-tray.png")
+        (ROOT / f"{prefix}-camera-effects-tray.xml").write_text(tray_xml + chr(10), encoding="utf-8")
+        camera_xml = tray_xml
+    else:
+        FAILURES.append(prefix + ": Effects shortcut did not open the four-tab effects tray")
+
+    # Face FX stays inside the single tray; open it to prove the actual tracked effects remain reachable.
     face_fx_xml = tap_control(
         camera_xml, ["Face FX"], f"{prefix}-camera-face-fx-category", ["Cute Ears"]
     )
