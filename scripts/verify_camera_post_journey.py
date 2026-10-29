@@ -32,6 +32,8 @@ checks = [
      "def capture_camera_video_journey(" in runtime
      and '["Video"]' in runtime
      and "Cinematic" in runtime
+     and 'video_mode, ["Video FX"]' in runtime
+     and "compact video style tray" in runtime
      and "list_app_cache_videos" in runtime
      and "processed video dropped the source audio stream" in runtime
      and "Generate on-device captions" in runtime

@@ -775,7 +775,7 @@ fun FynxCameraCapturePanel(
                     }
                 }
             }
-            if (showEffectTray && recording == null && !fastCapture && mode == CameraMode.PHOTO) {
+            if (showEffectTray && recording == null && !fastCapture) {
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 20.dp, bottomEnd = 20.dp),
@@ -784,7 +784,17 @@ fun FynxCameraCapturePanel(
                     shadowElevation = 8.dp
                 ) {
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                        val effectOptions = when (selectedCameraTool) {
+                        val effectOptions = if (mode == CameraMode.VIDEO) {
+                            CameraVideoStyle.values().map { option ->
+                                CameraEffectOption(
+                                    label = option.label,
+                                    glyph = cameraEffectGlyph("Video FX", option.label),
+                                    selected = videoStyle == option,
+                                    enabled = !applyingVideoEffects && !applyingFilter && !enhancing,
+                                    onClick = { videoStyle = option; showCaptureControls = true }
+                                )
+                            }
+                        } else when (selectedCameraTool) {
                             "Face FX" -> CameraFaceEffect.values().map { option ->
                                 CameraEffectOption(
                                     label = option.label,
@@ -829,11 +839,11 @@ fun FynxCameraCapturePanel(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            listOf("Looks", "Face FX", "Background", "AI Studio").forEach { category ->
-                                val selected = selectedCameraTool == category
+                            (if (mode == CameraMode.VIDEO) listOf("Video FX") else listOf("Looks", "Face FX", "Background", "AI Studio")).forEach { category ->
+                                val selected = mode == CameraMode.VIDEO || selectedCameraTool == category
                                 Surface(
                                     onClick = {
-                                        selectedCameraTool = category
+                                        if (mode == CameraMode.PHOTO) selectedCameraTool = category
                                         showCaptureControls = true
                                     },
                                     shape = RoundedCornerShape(18.dp),
@@ -888,18 +898,7 @@ fun FynxCameraCapturePanel(
                     }
                 }
             }
-            if (recording == null && !fastCapture && mode == CameraMode.VIDEO) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Video styles", style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Applied after recording", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
-                }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp).horizontalScroll(rememberScrollState()).padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    CameraVideoStyle.values().forEach { option ->
-                        FilterChip(selected = videoStyle == option, onClick = { videoStyle = option; showCaptureControls = true }, label = { Text(option.label) })
-                    }
-                }
-            }
+
             }
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 18.dp),
@@ -923,7 +922,7 @@ fun FynxCameraCapturePanel(
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
                         Text(
-                            "Effects",
+                            if (mode == CameraMode.VIDEO) "Video FX" else "Effects",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White
                         )
@@ -1021,7 +1020,7 @@ fun FynxCameraCapturePanel(
             ) {
                 FilterChip(
                     selected = mode == CameraMode.PHOTO,
-                    onClick = { if (recording == null) { mode = CameraMode.PHOTO; showCaptureControls = true } },
+                    onClick = { if (recording == null) { mode = CameraMode.PHOTO; showEffectTray = false; showCaptureControls = true } },
                     label = { Text("Photo") },
                     leadingIcon = { Icon(Icons.Default.PhotoCamera, null) }
                 )
@@ -1031,6 +1030,7 @@ fun FynxCameraCapturePanel(
                     onClick = {
                         if (recording == null) {
                             mode = CameraMode.VIDEO
+                            showEffectTray = false
                             filter = CameraFilter.NATURAL
                             filterIntensity = 1f
                             showCaptureControls = true
@@ -1145,6 +1145,15 @@ private fun cameraEffectGlyph(category: String, label: String): String = when (c
         "Face Symmetry" -> "◐"
         "Anime / Cartoon" -> "🎨"
         else -> "✨"
+    }
+    "Video FX" -> when (label) {
+        "Natural" -> "◉"
+        "Cinematic" -> "🎬"
+        "Warm Film" -> "🌅"
+        "Vintage" -> "◷"
+        "B&W" -> "◐"
+        "Vivid" -> "🌈"
+        else -> "✦"
     }
     else -> when (label) {
         "Natural" -> "◉"

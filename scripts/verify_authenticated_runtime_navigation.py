@@ -751,9 +751,17 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         FAILURES.append(prefix + ": could not enter video capture mode")
         return camera_return_to_home(camera, prefix + "-video-mode-failed")
 
+    # Video FX opens the same compact thumbnail tray used by photo effects.
+    video_fx = tap_control(
+        video_mode, ["Video FX"], f"{prefix}-camera-video-effects-tray", ["Cinematic"]
+    )
+    if not video_fx:
+        FAILURES.append(prefix + ": Video FX did not open the compact video style tray")
+        return camera_return_to_home(video_mode, prefix + "-video-effects-tray-failed")
+
     # Select a real processing style before recording; then apply it to the captured clip.
     video_mode = tap_control(
-        video_mode, ["Cinematic"], f"{prefix}-camera-video-cinematic-style", ["Record video note"]
+        video_fx, ["Cinematic"], f"{prefix}-camera-video-cinematic-style", ["Record video note"]
     )
     recording = tap_control_permission_aware(
         video_mode, ["Record video note"], f"{prefix}-camera-video-record-start",
