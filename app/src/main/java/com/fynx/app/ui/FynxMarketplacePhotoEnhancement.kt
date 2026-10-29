@@ -2,8 +2,10 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Rect
@@ -11,8 +13,11 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.net.Uri
 import androidx.core.content.FileProvider
+import androidx.exifinterface.media.ExifInterface
+import com.google.android.gms.common.moduleinstall.InstallStatusListener
 import com.google.android.gms.common.moduleinstall.ModuleInstall
 import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
+import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate
 import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
@@ -21,6 +26,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -46,28 +52,24 @@ internal object FynxMarketplacePhotoEnhancement {
             require(mime.startsWith("image/") || mime.isBlank()) {
                 "Choose a still photo. Video enhancement is not supported."
             }
-            val input = InputImage.fromFilePath(context, source)
+            val preparedBitmap = decodeBoundedInputBitmap(context, source)
+            val input = InputImage.fromBitmap(preparedBitmap, 0)
             val segmenter = SubjectSegmentation.getClient(
                 SubjectSegmenterOptions.Builder().enableForegroundBitmap().build()
             )
             val foreground = try {
-                val moduleInstaller = ModuleInstall.getClient(context)
-                val availability = moduleInstaller.areModulesAvailable(segmenter).awaitResult()
-                if (!availability.areModulesAvailable()) {
-                    // Sideloaded/debug APKs may not have received Play Store install-time model download.
-                    moduleInstaller.installModules(
-                        ModuleInstallRequest.newBuilder().addApi(segmenter).build()
-                    ).awaitResult()
-                }
-                // Await model initialization before processing so first-use installation does not
-                // silently return an empty result while Google Play services is still preparing it.
-                segmenter.initTask.awaitResult()
+                ensureSegmenterModelAvailable(context, segmenter)
                 segmenter.process(input).awaitResult().foregroundBitmap
                     ?: throw IllegalStateException("No clean foreground was found.")
             } finally {
                 segmenter.close()
+                preparedBitmap.recycle()
             }
-            val finished = renderProductPhoto(foreground)
+            val finished = try {
+                renderProductPhoto(foreground)
+            } finally {
+                foreground.recycle()
+            }
             val directory = File(context.cacheDir, "marketplace-photo-enhancements")
             if (!directory.exists() && !directory.mkdirs()) {
                 throw IllegalStateException("Temporary photo storage is unavailable.")
@@ -103,6 +105,154 @@ internal object FynxMarketplacePhotoEnhancement {
 
     fun discardAll(uris: Collection<Uri>) {
         uris.distinct().forEach { discard(it) }
+    }
+
+
+    /**
+     * Explicitly wait for an on-demand model install to reach a terminal state.
+     * installModules() by itself only confirms the request was accepted.
+     */
+    private suspend fun ensureSegmenterModelAvailable(
+        context: Context,
+        segmenter: com.google.mlkit.vision.segmentation.subject.SubjectSegmenter
+    ) {
+        val installer = ModuleInstall.getClient(context)
+        val available = installer.areModulesAvailable(segmenter).awaitResult()
+        if (available.areModulesAvailable()) return
+
+        suspendCancellableCoroutine<Unit> { continuation ->
+            val lock = Any()
+            val finished = AtomicBoolean(false)
+            var targetSessionId: Int? = null
+            val pendingUpdates = mutableListOf<ModuleInstallStatusUpdate>()
+
+            lateinit var listener: InstallStatusListener
+
+            fun finish(error: Throwable?) {
+                if (!finished.compareAndSet(false, true)) return
+                runCatching { installer.unregisterListener(listener) }
+                if (!continuation.isActive) return
+                if (error == null) continuation.resume(Unit)
+                else continuation.resumeWithException(error)
+            }
+
+            fun processUpdate(update: ModuleInstallStatusUpdate) {
+                val expectedSession = synchronized(lock) { targetSessionId }
+                if (expectedSession == null || update.sessionId != expectedSession) return
+                when (update.installState) {
+                    ModuleInstallStatusUpdate.InstallState.STATE_COMPLETED -> finish(null)
+                    ModuleInstallStatusUpdate.InstallState.STATE_FAILED ->
+                        finish(IllegalStateException("Google Play services could not install the photo model."))
+                    ModuleInstallStatusUpdate.InstallState.STATE_CANCELED ->
+                        finish(IllegalStateException("Photo model installation was cancelled."))
+                }
+            }
+
+            listener = object : InstallStatusListener {
+                override fun onInstallStatusUpdated(update: ModuleInstallStatusUpdate) {
+                    var canProcess = false
+                    synchronized(lock) {
+                        val expectedSession = targetSessionId
+                        if (expectedSession == null) {
+                            pendingUpdates.add(update)
+                        } else if (update.sessionId == expectedSession) {
+                            canProcess = true
+                        }
+                    }
+                    if (canProcess) processUpdate(update)
+                }
+            }
+
+            continuation.invokeOnCancellation {
+                finish(IllegalStateException("Photo enhancement was cancelled."))
+            }
+
+            val request = ModuleInstallRequest.newBuilder()
+                .addApi(segmenter)
+                .setListener(listener)
+                .build()
+            installer.installModules(request)
+                .addOnSuccessListener { response ->
+                    if (response.areModulesAlreadyInstalled() || response.sessionId == 0) {
+                        finish(null)
+                    } else {
+                        val matchingUpdates = synchronized(lock) {
+                            targetSessionId = response.sessionId
+                            pendingUpdates.filter { it.sessionId == response.sessionId }.also {
+                                pendingUpdates.clear()
+                            }
+                        }
+                        matchingUpdates.forEach(::processUpdate)
+                    }
+                }
+                .addOnFailureListener { error ->
+                    finish(IllegalStateException("Google Play services could not prepare the photo model.", error))
+                }
+        }
+
+        val confirmed = installer.areModulesAvailable(segmenter).awaitResult()
+        if (!confirmed.areModulesAvailable()) {
+            throw IllegalStateException("The photo model is still unavailable. Keep the original photo and retry later.")
+        }
+    }
+
+    /**
+     * Decode to a bounded bitmap before ML inference. This prevents very high-resolution
+     * gallery images from being passed to the segmenter at their full camera resolution and
+     * honors EXIF rotation/mirroring so the clean-up preview stays upright.
+     */
+    private fun decodeBoundedInputBitmap(context: Context, uri: Uri): Bitmap {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, bounds)
+        } ?: throw IllegalStateException("The selected photo could not be opened.")
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw IllegalStateException("The selected photo could not be decoded.")
+        }
+        var sample = 1
+        while (bounds.outWidth / sample > MAX_WORKING_DIMENSION ||
+            bounds.outHeight / sample > MAX_WORKING_DIMENSION) {
+            sample *= 2
+        }
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val decoded = context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, options)
+        } ?: throw IllegalStateException("The selected photo could not be decoded.")
+
+        val orientation = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                if (stream != null) ExifInterface(stream).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL
+                ) else ExifInterface.ORIENTATION_NORMAL
+            } ?: ExifInterface.ORIENTATION_NORMAL
+        }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.setRotate(180f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.setScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.setRotate(90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.setRotate(90f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.setRotate(270f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(270f)
+        }
+        if (matrix.isIdentity) return decoded
+        return try {
+            Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+        } finally {
+            decoded.recycle()
+        }
     }
 
     private fun renderProductPhoto(foreground: Bitmap): Bitmap {
