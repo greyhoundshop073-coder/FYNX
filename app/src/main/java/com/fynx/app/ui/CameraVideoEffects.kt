@@ -216,14 +216,9 @@ private fun extractFynxVideoAudio(video: File, audio: File) {
             check((extractedFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED) == 0) {
                 "Encrypted audio samples cannot be captioned."
             }
-            var muxerFlags = 0
-            if ((extractedFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
-                muxerFlags = muxerFlags or MediaCodec.BUFFER_FLAG_KEY_FRAME
-            }
-            if ((extractedFlags and MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME) != 0) {
-                muxerFlags = muxerFlags or MediaCodec.BUFFER_FLAG_PARTIAL_FRAME
-            }
-            info.set(0, size, extractor.sampleTime, muxerFlags)
+            // MediaExtractor sample flags and MediaCodec buffer flags are different
+            // flag domains. AAC audio samples do not need video key-frame flags.
+            info.set(0, size, extractor.sampleTime, 0)
             muxer.writeSampleData(outputTrack, buffer, info)
             if (!extractor.advance()) break
         }
