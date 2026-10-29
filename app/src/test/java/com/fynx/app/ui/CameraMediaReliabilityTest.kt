@@ -42,6 +42,14 @@ class CameraMediaReliabilityTest {
     }
 
     @Test
+    fun stageFourStudioEffectsExposeSymmetryMatureLookAndCartoon() {
+        assertEquals(
+            listOf("Off", "Mature Look", "Face Symmetry", "Anime / Cartoon"),
+            CameraStudioEffect.values().map { it.label }
+        )
+    }
+
+    @Test
     fun cameraFilterParametersAreFinite() {
         CameraFilter.values().forEach { filter ->
             assertTrue(filter.saturation.isFinite())

@@ -45,7 +45,8 @@ internal fun applyCameraBackgroundEffectToPhotoFile(file: File, effect: CameraBa
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) error("Unable to read the captured photo")
 
     val longest = max(bounds.outWidth, bounds.outHeight)
-    val sample = max(1, longest / 1440)
+    var sample = 1
+    while (longest / sample > 1800) sample *= 2
     val decodeOptions = BitmapFactory.Options().apply {
         inSampleSize = sample
         inPreferredConfig = Bitmap.Config.ARGB_8888

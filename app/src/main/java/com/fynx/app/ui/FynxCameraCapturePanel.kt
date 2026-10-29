@@ -128,6 +128,7 @@ fun FynxCameraCapturePanel(
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
     var faceEffect by remember { mutableStateOf(CameraFaceEffect.OFF) }
     var backgroundEffect by remember { mutableStateOf(CameraBackgroundEffect.OFF) }
+    var studioEffect by remember { mutableStateOf(CameraStudioEffect.OFF) }
     var trackedFaceBounds by remember { mutableStateOf<List<CameraFaceBounds>>(emptyList()) }
     var filterIntensity by remember { mutableFloatStateOf(1f) }
     var enhancing by remember { mutableStateOf(false) }
@@ -206,7 +207,7 @@ fun FynxCameraCapturePanel(
     }
     DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
-    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
+    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
     fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
     fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) {
         val current = pendingUri ?: return
@@ -217,6 +218,7 @@ fun FynxCameraCapturePanel(
         val strength = intensity.coerceIn(0f, 1f)
         val selectedFaceEffect = faceEffect
         val selectedBackgroundEffect = backgroundEffect
+        val selectedStudioEffect = studioEffect
         filter = selected
         filterIntensity = strength
         applyingFilter = true
@@ -244,6 +246,9 @@ fun FynxCameraCapturePanel(
                     if (selectedBackgroundEffect != CameraBackgroundEffect.OFF) {
                         applyCameraBackgroundEffectToPhotoFile(target, selectedBackgroundEffect)
                     }
+                    if (selectedStudioEffect != CameraStudioEffect.OFF) {
+                        applyCameraStudioEffectToPhotoFile(target, selectedStudioEffect)
+                    }
                     if (selectedFaceEffect != CameraFaceEffect.OFF) {
                         applyCameraFaceEffectToPhotoFile(context, target, selectedFaceEffect)
                     }
@@ -268,7 +273,7 @@ fun FynxCameraCapturePanel(
                     pendingType = "image"
                     error = null
                     showCaptureControls = true
-                    if (filter != CameraFilter.NATURAL || faceEffect != CameraFaceEffect.OFF || backgroundEffect != CameraBackgroundEffect.OFF) applyFilterToPhoto(filter, filterIntensity)
+                    if (filter != CameraFilter.NATURAL || faceEffect != CameraFaceEffect.OFF || backgroundEffect != CameraBackgroundEffect.OFF || studioEffect != CameraStudioEffect.OFF) applyFilterToPhoto(filter, filterIntensity)
                 }
                     .onFailure { file.delete(); original.delete(); error = it.message ?: "Photo could not be prepared"; showCaptureControls = true }
             }
@@ -294,6 +299,21 @@ fun FynxCameraCapturePanel(
                             )
                         }
                     }
+                    Text("AI Studio", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CameraStudioEffect.values().forEach { option ->
+                            FilterChip(
+                                selected = studioEffect == option,
+                                enabled = !enhancing && !applyingFilter,
+                                onClick = {
+                                    studioEffect = option
+                                    applyFilterToPhoto(filter, filterIntensity)
+                                },
+                                label = { Text(option.label) }
+                            )
+                        }
+                    }
+                    Text("Mature Look is a stylized edit; these effects run locally on the photo.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Background replacement", style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         CameraBackgroundEffect.values().forEach { option ->
@@ -442,6 +462,21 @@ fun FynxCameraCapturePanel(
                             selected = backgroundEffect == option,
                             enabled = !applyingFilter && !enhancing,
                             onClick = { backgroundEffect = option; showCaptureControls = true },
+                            label = { Text(option.label) }
+                        )
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("AI Studio", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Local photo styling · applied after capture", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CameraStudioEffect.values().forEach { option ->
+                        FilterChip(
+                            selected = studioEffect == option,
+                            enabled = !applyingFilter && !enhancing,
+                            onClick = { studioEffect = option; showCaptureControls = true },
                             label = { Text(option.label) }
                         )
                     }
