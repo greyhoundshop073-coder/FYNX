@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -629,7 +630,7 @@ fun FynxCameraCapturePanel(
         }
         if (pendingUri == null && liveProofMode) {
             Surface(
-                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 10.dp),
                 shape = RoundedCornerShape(18.dp),
                 color = Color.Black.copy(alpha = 0.62f)
             ) {
@@ -641,22 +642,56 @@ fun FynxCameraCapturePanel(
             }
         }
         if (pendingUri == null) {
-            Surface(
-                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 8.dp),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+            Row(
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    profilePhotoId?.takeIf { it.isNotBlank() }?.let { photoId ->
-                        FynxRemoteMedia("/api/media/$photoId", "image", Modifier.size(34.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop, rounded = true)
-                    } ?: Surface(Modifier.size(34.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
-                    Spacer(Modifier.width(8.dp))
-                    Text(profileDisplayName.ifBlank { session.username?.removePrefix("@").orEmpty() }, maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                IconButton(onClick = { if (recording == null) onDismiss() }, enabled = recording == null) {
+                    Icon(Icons.Default.Close, "Close camera")
+                }
+                if (!liveProofMode) {
+                    Surface(
+                        modifier = Modifier.widthIn(max = 96.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.Black.copy(alpha = 0.68f)
+                    ) {
+                        Row(Modifier.padding(horizontal = 7.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            profilePhotoId?.takeIf { it.isNotBlank() }?.let { photoId ->
+                                FynxRemoteMedia("/api/media/$photoId", "image", Modifier.size(26.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop, rounded = true)
+                            } ?: Surface(Modifier.size(26.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                profileDisplayName.ifBlank { session.username?.removePrefix("@").orEmpty() },
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.widthIn(max = 52.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                IconButton(
+                    onClick = { if (recording == null) { error = null; lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK; showCaptureControls = true } },
+                    enabled = recording == null
+                ) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera") }
+                IconButton(
+                    onClick = { if (recording == null) { if (cameraInfo?.hasFlashUnit() == true) { torchEnabled = !torchEnabled; cameraControl?.enableTorch(torchEnabled) } else error = "Flash is not available on this camera."; showCaptureControls = true } },
+                    enabled = recording == null
+                ) { Icon(Icons.Default.FlashOn, if (torchEnabled) "Turn flash off" else "Turn flash on") }
+                IconButton(
+                    onClick = { if (recording == null) { showGrid = !showGrid; showCaptureControls = true } },
+                    enabled = recording == null
+                ) { Text(if (showGrid) "▦" else "▤", color = Color.White, style = MaterialTheme.typography.titleMedium) }
+                if (!fastCapture && !liveProofMode) {
+                    IconButton(
+                        onClick = { galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)); showCaptureControls = true },
+                        enabled = recording == null
+                    ) { Icon(Icons.Default.PhotoLibrary, "Open Gallery") }
                 }
             }
         }
+
         if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp),horizontalAlignment=Alignment.CenterHorizontally){
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")};if(!fastCapture && !liveProofMode)TextButton(onClick={galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo));showCaptureControls=true},enabled=recording==null){Text("Gallery")}}
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
             Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.43f).verticalScroll(rememberScrollState())) {
             if (recording == null && !fastCapture) {
