@@ -11,6 +11,8 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
@@ -49,6 +51,17 @@ internal object FynxMarketplacePhotoEnhancement {
                 SubjectSegmenterOptions.Builder().enableForegroundBitmap().build()
             )
             val foreground = try {
+                val moduleInstaller = ModuleInstall.getClient(context)
+                val availability = moduleInstaller.areModulesAvailable(segmenter).awaitResult()
+                if (!availability.areModulesAvailable()) {
+                    // Sideloaded/debug APKs may not have received Play Store install-time model download.
+                    moduleInstaller.installModules(
+                        ModuleInstallRequest.newBuilder().addApi(segmenter).build()
+                    ).awaitResult()
+                }
+                // Await model initialization before processing so first-use installation does not
+                // silently return an empty result while Google Play services is still preparing it.
+                segmenter.initTask.awaitResult()
                 segmenter.process(input).awaitResult().foregroundBitmap
                     ?: throw IllegalStateException("No clean foreground was found.")
             } finally {
@@ -81,15 +94,15 @@ internal object FynxMarketplacePhotoEnhancement {
     }
 
     /** Delete only files created by this helper. Never delete gallery or camera originals. */
-    fun discard(context: Context, uri: Uri?) {
+    fun discard(uri: Uri?) {
         if (uri == null) return
         generatedFiles.remove(uri.toString())?.let { file ->
             runCatching { file.delete() }
         }
     }
 
-    fun discardAll(context: Context, uris: Collection<Uri>) {
-        uris.distinct().forEach { discard(context, it) }
+    fun discardAll(uris: Collection<Uri>) {
+        uris.distinct().forEach { discard(it) }
     }
 
     private fun renderProductPhoto(foreground: Bitmap): Bitmap {
