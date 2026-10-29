@@ -158,6 +158,8 @@ checks = [
      and "editCategory = option" in seller_center
      and "standardMarketplaceCategories + editCategory" in seller_center
      and "onValueChange = { editCategory = it.take(40) }" not in seller_center
+     and _extract_string_list(r"val standardMarketplaceCategories = listOf\(([^)]*)\)", seller_center) == EXPECTED_SELLER_CATEGORIES
+     and "DropdownMenu(" in seller_center
      and all(value in seller_center for value in ('"Phones & Computers"', '"Auto Parts"', '"Business & Workshop Supplies"'))),
     ("My Shop stock editor and inventory cards label total stock and backend rejects quantities below existing reservations", 'label = { Text("Total stock (0 = out of stock)") }' in seller_center and '${listing.quantity} total stock • ${listing.category} • ${listing.condition}' in seller_center and "Stock cannot be reduced below items already reserved by active orders." in seller_center and "if (quantity < reservedQuantity)" in social_routes and "reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE" in social_routes),
     ("buyer-facing Marketplace uses available stock after reservations while My Shop retains total stock", social_routes.count("AS available_quantity") >= 3 and discovery_routes.count("AS available_quantity") >= 2 and 'val stockValue = if (o.has("available_quantity") && !o.isNull("available_quantity")) {' in remote_client and 'o.opt("available_quantity")' in remote_client and "marketplaceRequiredInventoryQuantity(stockValue)" in remote_client and 'label = { Text("Total stock (0 = out of stock)") }' in seller_center),
