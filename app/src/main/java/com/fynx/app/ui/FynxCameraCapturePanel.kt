@@ -3,7 +3,6 @@ package com.fynx.app.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.Context
-import android.graphics.BitmapFactory
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.RectF

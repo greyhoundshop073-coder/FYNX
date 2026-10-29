@@ -56,13 +56,22 @@ internal fun decodeCameraEditingBitmap(file: File, maxEdge: Int = 2400): Bitmap 
     BitmapFactory.decodeFile(file.absolutePath, bounds)
     require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Unable to read the selected photo" }
     var sampleSize = 1
-    while (max(bounds.outWidth, bounds.outHeight) / sampleSize > maxEdge) sampleSize *= 2
+    while (max(bounds.outWidth, bounds.outHeight).toFloat() / sampleSize > maxEdge * 1.8f) sampleSize *= 2
     val options = BitmapFactory.Options().apply {
         inSampleSize = sampleSize
         inPreferredConfig = Bitmap.Config.ARGB_8888
     }
-    return BitmapFactory.decodeFile(file.absolutePath, options)
+    val decoded = BitmapFactory.decodeFile(file.absolutePath, options)
         ?: error("Unable to decode the selected photo")
+    val decodedLongestEdge = max(decoded.width, decoded.height)
+    if (decodedLongestEdge <= maxEdge) return decoded
+    val scale = maxEdge.toFloat() / decodedLongestEdge.toFloat()
+    return Bitmap.createScaledBitmap(
+        decoded,
+        max(1, (decoded.width * scale).toInt()),
+        max(1, (decoded.height * scale).toInt()),
+        true
+    ).also { if (it !== decoded) decoded.recycle() }
 }
 
 private fun newFynxFaceDetector(): FaceDetector {
