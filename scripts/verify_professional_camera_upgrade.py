@@ -123,7 +123,7 @@ checks["right-rail actions hide while the effect picker is open to prevent visua
 )
 checks["effects panel stays dismissible after the right rail hides"] = 'contentDescription = "Close effects"' in camera and "onClick = { showEffectCarousel = false }" in camera
 checks["photo and video capture close the effects picker without disabling the chosen effect"] = camera.count("showEffectCarousel = false") >= 3 and "captureStyleFilter = option" in camera and "fynxCameraLiveEffects(captureStyleFilter, liveEffectIntensity)" in camera
-checks["effects panel leaves sufficient room for category and effect controls"] = ".width(176.dp).heightIn(max = 282.dp)" in camera and ".heightIn(max = 260.dp)" in camera and ".width(70.dp)" in camera and ".height(70.dp)" in camera
+checks["effects panel leaves sufficient room for category and effect controls"] = ".fillMaxWidth().widthIn(max = 520.dp).heightIn(max = 282.dp)" in camera and ".heightIn(max = 260.dp).padding(horizontal = 10.dp, vertical = 8.dp)" in camera and ".width(70.dp)" in camera and ".height(70.dp)" in camera
 
 checks["Status camera keeps Text as a separate action beside Photo and Video"] = 'if (statusCapture) {' in camera and 'Text("Text"' in camera and 'onClick = { if (recording == null) onDismiss() }' in camera
 checks["live effect carousel opens on demand and does not cover the shutter by default"] = 'var showEffectCarousel by remember { mutableStateOf(false) }' in camera and 'Modifier.align(Alignment.BottomCenter)' in camera and 'bottom = 210.dp' in camera and 'FynxCameraRailAction("Effects"' in camera
