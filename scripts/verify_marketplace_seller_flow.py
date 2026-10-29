@@ -69,6 +69,11 @@ checks = [
     ("My Shop archived listing thumbnails use the real seller media and a consistent crop", "mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())" in seller_center and "modifier = Modifier.size(72.dp),\n                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop" in seller_center),
     ("seller photo cleanup uses on-device ML Kit subject segmentation instead of a remote processing API", "SubjectSegmentation.getClient" in photo_enhancement and "segmenter.process(input)" in photo_enhancement and "FynxProductionMessaging.uploadMedia" not in photo_enhancement),
     ("seller photo cleanup preserves the original and offers preview, Keep Original, Use Enhanced and Undo", all(token in marketplace for token in ("Review enhanced photo", "Keep Original", "Use Enhanced", "Text(\"Undo\"")) and "originalByEnhancedUri" in marketplace),
+    ("re-enhancing a seller photo preserves the first original for Undo and deletes only the superseded generated image",
+     "val rootOriginal = originalByEnhancedUri[original.toString()] ?: original" in marketplace
+     and "originalByEnhancedUri = (originalByEnhancedUri - replacedOld.toString()) + (enhanced.toString() to rootOriginal)" in marketplace
+     and "if (replacedOld != rootOriginal)" in marketplace
+     and "FynxMarketplacePhotoEnhancement.discard(replacedOld)" in marketplace),
     ("seller photo cleanup uses app-private temporary files and a scoped FileProvider path", "FileProvider.getUriForFile" in photo_enhancement and 'name="marketplace_photo_enhancements"' in file_provider_paths and '"\u0024{context.packageName}.fileprovider"' in photo_enhancement),
     ("seller photo cleanup registers the Play services subject model and its dependency", "play-services-mlkit-subject-segmentation:16.0.0-beta1" in app_gradle and 'android:name="com.google.mlkit.vision.DEPENDENCIES"' in app_manifest and 'android:value="subject_segment"' in app_manifest),
     ("seller photo cleanup refuses missing foreground results instead of silently publishing an unchanged image as enhanced", "No product foreground was found." in photo_enhancement and "The background could not be separated clearly." in photo_enhancement),
