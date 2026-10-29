@@ -66,7 +66,7 @@ for needle in ('MaterialTheme.colorScheme','FynxDesign.LargeCardShape','key = "f
     require(home, needle, f"Home 4F polish/integration surface {needle}")
 
 # Reference-driven Home mirror-glass surfaces: the real card and feed remain functional.
-assistant_card_start = visible_updates.find('modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)')
+assistant_card_start = visible_updates.find('modifier = Modifier.fillMaxWidth()\n                .padding(horizontal = 4.dp)')
 assistant_card_end = visible_updates.find('Text("FYNX Assistance"', assistant_card_start)
 if assistant_card_start < 0 or assistant_card_end < 0:
     raise SystemExit("HOME INTERACTIONS RED: FYNX Assistance card structure is missing")
