@@ -1,7 +1,13 @@
 package com.fynx.app.ui
 
+import android.net.Uri
+import android.widget.ImageView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -125,6 +131,12 @@ fun FynxMarketplaceSellerCenterPanel() {
     var editDescription by rememberSaveable { mutableStateOf("") }
     var editCategory by rememberSaveable { mutableStateOf("") }
     var editSubcategory by rememberSaveable { mutableStateOf("") }
+    var editMediaUris by remember { mutableStateOf(emptyList<Uri>()) }
+    val editMediaPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA)
+    ) { uris ->
+        if (uris.isNotEmpty()) editMediaUris = FynxMarketplaceSellerFlowSupport.normalizedMedia(context, uris)
+    }
     var editCategoryExpanded by remember { mutableStateOf(false) }
     var editCondition by rememberSaveable { mutableStateOf("NEW") }
     var editLocation by rememberSaveable { mutableStateOf("") }
@@ -657,6 +669,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             else Row {
                                 IconButton(onClick = {
                                     editingListing = listing
+                                    editMediaUris = emptyList()
                                     editTitle = listing.title
                                     editDescription = listing.description
                                     editCategory = listing.category
@@ -729,6 +742,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             }
                             IconButton(onClick = {
                                 editingListing = listing
+                                    editMediaUris = emptyList()
                                 editTitle = listing.title
                                 editDescription = listing.description
                                 editCategory = listing.category
@@ -790,7 +804,59 @@ fun FynxMarketplaceSellerCenterPanel() {
                     modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Update the product details, price and available stock. Existing orders, photos and delivery settings are preserved.", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (editMediaUris.isEmpty()) {
+                            "Update product details. Existing photos stay in place unless you choose replacements."
+                        } else {
+                            "Selected ${editMediaUris.size} replacement photo/video item(s). Saving will replace the current listing media."
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (selectedListing.mediaIds.isNotEmpty()) {
+                        Text("Current product media", style = MaterialTheme.typography.labelLarge)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            selectedListing.mediaIds.take(4).forEachIndexed { index, mediaId ->
+                                FynxRemoteMedia(
+                                    mediaUrl = FynxMarketplaceClient.mediaUrl(context, mediaId),
+                                    type = FynxMarketplaceClient.mediaDisplayType(selectedListing.mediaTypes.getOrNull(index)),
+                                    modifier = Modifier.size(84.dp)
+                                )
+                            }
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            editMediaPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                            )
+                        },
+                        enabled = !editSaving,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (editMediaUris.isEmpty()) "Choose replacement photos/videos" else "Choose different replacement media")
+                    }
+                    if (editMediaUris.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            editMediaUris.take(6).forEach { uri ->
+                                AndroidView(
+                                    factory = { viewContext ->
+                                        ImageView(viewContext).apply {
+                                            scaleType = ImageView.ScaleType.CENTER_CROP
+                                            contentDescription = "Selected replacement product media"
+                                        }
+                                    },
+                                    update = { imageView -> imageView.setImageURI(uri) },
+                                    modifier = Modifier.size(84.dp)
+                                )
+                            }
+                        }
+                    }
                     OutlinedTextField(
                         value = editTitle,
                         onValueChange = { editTitle = it.take(160) },
@@ -909,34 +975,66 @@ fun FynxMarketplaceSellerCenterPanel() {
                         editSaving = true
                         editError = null
                         scope.launch {
-                            FynxMarketplaceClient.updateListing(context, selectedListing.id, editTitle, savedDescription, editCategory, editCondition, editLocation, price, quantity)
-                                .onSuccess {
-                                    listings = listings.map { current ->
-                                        if (current.id == selectedListing.id) current.copy(
-                                            title = editTitle.trim(),
-                                            description = savedDescription,
-                                            category = editCategory.trim(),
-                                            condition = editCondition.trim().uppercase(Locale.US),
-                                            location = editLocation.trim(),
-                                            price = price,
-                                            quantity = quantity
-                                        ) else current
+                            runCatching {
+                                val uploadedMedia = if (editMediaUris.isNotEmpty()) {
+                                    editMediaUris.map { uri ->
+                                        val mimeType = context.contentResolver.getType(uri)?.trim()?.lowercase(Locale.US).orEmpty()
+                                        require(mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
+                                            "Marketplace listing media must be an image or video."
+                                        }
+                                        FynxProductionMessaging.uploadMedia(context, uri, mimeType).getOrThrow()
                                     }
-                                    archivedListings = archivedListings.map { current ->
-                                        if (current.id == selectedListing.id) current.copy(
-                                            title = editTitle.trim(),
-                                            description = savedDescription,
-                                            category = editCategory.trim(),
-                                            condition = editCondition.trim().uppercase(Locale.US),
-                                            location = editLocation.trim(),
-                                            price = price,
-                                            quantity = quantity
-                                        ) else current
-                                    }
-                                    editingListing = null
-                                    error = null
+                                } else {
+                                    null
                                 }
-                                .onFailure { editError = marketplaceSafeError(it, "Listing could not be updated.") }
+                                FynxMarketplaceClient.updateListing(
+                                    context,
+                                    selectedListing.id,
+                                    editTitle,
+                                    savedDescription,
+                                    editCategory,
+                                    editCondition,
+                                    editLocation,
+                                    price,
+                                    quantity,
+                                    mediaIds = uploadedMedia?.map { it.id }
+                                ).getOrThrow()
+                                uploadedMedia
+                            }.onSuccess { uploadedMedia ->
+                                val replacementIds = uploadedMedia?.map { it.id }
+                                val replacementTypes = uploadedMedia?.map { it.mimeType }
+                                listings = listings.map { current ->
+                                    if (current.id == selectedListing.id) current.copy(
+                                        title = editTitle.trim(),
+                                        description = savedDescription,
+                                        category = editCategory.trim(),
+                                        condition = editCondition.trim().uppercase(Locale.US),
+                                        location = editLocation.trim(),
+                                        price = price,
+                                        quantity = quantity,
+                                        mediaIds = replacementIds ?: current.mediaIds,
+                                        mediaTypes = replacementTypes ?: current.mediaTypes
+                                    ) else current
+                                }
+                                archivedListings = archivedListings.map { current ->
+                                    if (current.id == selectedListing.id) current.copy(
+                                        title = editTitle.trim(),
+                                        description = savedDescription,
+                                        category = editCategory.trim(),
+                                        condition = editCondition.trim().uppercase(Locale.US),
+                                        location = editLocation.trim(),
+                                        price = price,
+                                        quantity = quantity,
+                                        mediaIds = replacementIds ?: current.mediaIds,
+                                        mediaTypes = replacementTypes ?: current.mediaTypes
+                                    ) else current
+                                }
+                                editMediaUris = emptyList()
+                                editingListing = null
+                                error = null
+                            }.onFailure {
+                                editError = marketplaceSafeError(it, "Listing could not be updated.")
+                            }
                             editSaving = false
                         }
                     }
