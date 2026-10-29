@@ -29,6 +29,8 @@ enum class FynxAccent(
     // Default FYNX brand palette: Azure Blue primary, existing blue companion, Classic Green tertiary.
     Blue(FynxDesign.AzureBlue, Color(0xFF3C73BD), FynxDesign.ClassicGreen),
     Purple(Color(0xFF7C5CFF), Color(0xFFB18CFF), Color(0xFFA4778A)),
+    Green(FynxDesign.ClassicGreen, Color(0xFF2E7D32), Color(0xFF66BB6A)),
+    // Legacy stored value only; the accent picker now offers Green instead.
     Charcoal(Color(0xFF37474F), Color(0xFF607D8B), Color(0xFF8A9499))
 }
 
@@ -60,6 +62,12 @@ object FynxDesign {
     // Subtle neutral/reflective tones: deliberately restrained so light mode stays white.
     val BlueLightCompanionContainer = Color(0xFFE6F4EA)
     val BlueDarkCompanionContainer = Color(0xFF153A27)
+    val GreenLightSelectedContainer = Color(0xFFDDF4E3)
+    val GreenDarkSelectedContainer = Color(0xFF123C26)
+    val GreenLightCompanionContainer = Color(0xFFE6F4EA)
+    val GreenDarkCompanionContainer = Color(0xFF153A27)
+    val GreenLightOutlineVariant = Color(0xFFD4E6D8)
+    val GreenDarkOutlineVariant = Color(0xFF31533D)
     /** Exact user-approved success and brand-error colors. */
     val ClassicGreen = Color(0xFF008000)
     val CrimsonRed = Color(0xFFDC143C)
@@ -176,6 +184,7 @@ fun FynxTheme(
                 charcoal -> FynxDesign.CharcoalSelectedContainer
                 effectiveAccent == FynxAccent.Purple -> FynxDesign.PurpleDarkCompanionContainer
                 effectiveAccent == FynxAccent.Blue -> FynxDesign.SelectedContainer
+                effectiveAccent == FynxAccent.Green -> FynxDesign.GreenDarkSelectedContainer
                 else -> FynxDesign.CharcoalSelectedContainer
             },
             onPrimaryContainer = when {
@@ -209,6 +218,7 @@ fun FynxTheme(
                 charcoal -> FynxDesign.CharcoalDarkCompanionContainer
                 effectiveAccent == FynxAccent.Purple -> FynxDesign.PurpleDarkCompanionContainer
                 effectiveAccent == FynxAccent.Blue -> FynxDesign.BlueDarkCompanionContainer
+                effectiveAccent == FynxAccent.Green -> FynxDesign.GreenDarkCompanionContainer
                 else -> FynxDesign.CharcoalDarkCompanionContainer
             },
             onTertiaryContainer = when {
@@ -220,6 +230,7 @@ fun FynxTheme(
                 charcoal -> FynxDesign.CharcoalDarkOutlineVariant
                 effectiveAccent == FynxAccent.Purple -> FynxDesign.PurpleDarkOutlineVariant
                 effectiveAccent == FynxAccent.Blue -> FynxDesign.BlueDarkOutlineVariant
+                effectiveAccent == FynxAccent.Green -> FynxDesign.GreenDarkOutlineVariant
                 else -> FynxDesign.CharcoalDarkOutlineVariant
             }
         )
@@ -230,6 +241,7 @@ fun FynxTheme(
             primaryContainer = when (effectiveAccent) {
                 FynxAccent.Blue -> FynxDesign.LightSelectedContainer
                 FynxAccent.Purple -> FynxDesign.PurpleLightCompanionContainer
+                FynxAccent.Green -> FynxDesign.GreenLightSelectedContainer
                 FynxAccent.Charcoal -> FynxDesign.CharcoalLightCompanionContainer
             },
             onPrimaryContainer = FynxDesign.LightTextPrimary,
@@ -242,6 +254,7 @@ fun FynxTheme(
             tertiaryContainer = when (effectiveAccent) {
                 FynxAccent.Blue -> FynxDesign.BlueLightCompanionContainer
                 FynxAccent.Purple -> FynxDesign.PurpleLightCompanionContainer
+                FynxAccent.Green -> FynxDesign.GreenLightCompanionContainer
                 FynxAccent.Charcoal -> FynxDesign.CharcoalLightCompanionContainer
             },
             onTertiaryContainer = Color(0xFF20252A),
@@ -263,6 +276,7 @@ fun FynxTheme(
             outlineVariant = when (effectiveAccent) {
                 FynxAccent.Blue -> FynxDesign.BlueLightOutlineVariant
                 FynxAccent.Purple -> FynxDesign.PurpleLightOutlineVariant
+                FynxAccent.Green -> FynxDesign.GreenLightOutlineVariant
                 FynxAccent.Charcoal -> FynxDesign.CharcoalLightOutlineVariant
             }
         )

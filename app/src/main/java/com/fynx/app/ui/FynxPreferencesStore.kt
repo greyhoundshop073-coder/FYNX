@@ -70,7 +70,7 @@ object FynxPreferencesStore {
     fun loadAccent(context: Context): FynxAccent {
         val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ACCENT, FynxAccent.Blue.name)
         return when (stored) {
-            "Black" -> FynxAccent.Charcoal
+            "Black", "Charcoal", "Charcoal Black" -> FynxAccent.Green
             "White" -> FynxAccent.Blue
             else -> runCatching { FynxAccent.valueOf(stored ?: FynxAccent.Blue.name) }.getOrDefault(FynxAccent.Blue)
         }

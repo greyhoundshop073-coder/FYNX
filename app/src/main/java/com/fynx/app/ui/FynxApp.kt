@@ -380,7 +380,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             modifier = Modifier.nestedScroll(homeScrollConnection),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-            if (selected == "Home") {
+            if (selected == "Profile" && openProfileSettings) {
+                Spacer(Modifier.height(0.dp))
+            } else if (selected == "Home") {
                 // Home header is part of the normal top-bar flow, not a floating overlay.
                 // This keeps the feed clear while preserving the profile, FYNX title,
                 // camera, Settings and notification controls.

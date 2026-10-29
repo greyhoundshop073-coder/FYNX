@@ -775,11 +775,10 @@ private fun AppearanceSettingsPanel(
     val themes = listOf(
         Triple("System", "System Default", Color(0xFF64748B)),
         Triple("Light", "Soft white surfaces with subtle FYNX blue accents", Color(0xFFF5F7FB)),
-        Triple("Dark", "Deep navy surfaces with subtle blue reflections", Color(0xFF101827)),
         Triple("Black AMOLED", "True black surfaces, white text, blue selection", Color.Black)
     )
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back to settings") }
             Column(Modifier.weight(1f)) {
                 Text("Appearance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -787,7 +786,7 @@ private fun AppearanceSettingsPanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
             item { SettingsSectionTitle("THEME") }
             items(themes) { (value, description, swatch) ->
                 val selected = appearance == value
@@ -806,7 +805,7 @@ private fun AppearanceSettingsPanel(
                     )
                 ) {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
@@ -834,7 +833,12 @@ private fun AppearanceSettingsPanel(
             item { SettingsSectionTitle("ACCENT COLOR") }
             item {
                 SettingsReferenceRow(Icons.Default.Palette, "Accent Color", accentName,
-                    androidx.compose.ui.graphics.Color(0xFF5677E8), onAccentClick)
+                    when (accentName) {
+                        "Green" -> FynxDesign.ClassicGreen
+                        "Purple" -> Color(0xFF7C5CFF)
+                        "Charcoal" -> Color(0xFF37474F)
+                        else -> FynxDesign.AzureBlue
+                    }, onAccentClick)
             }
             item { SettingsSectionTitle("APP APPEARANCE") }
             item {
