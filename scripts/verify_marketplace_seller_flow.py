@@ -95,6 +95,14 @@ checks = [
      and 'android:name="com.google.mlkit.vision.DEPENDENCIES"' not in app_manifest
      and 'android:value="subject_segment"' not in app_manifest),
     ("seller photo cleanup refuses missing foreground results instead of silently publishing an unchanged image as enhanced", "No product foreground was found." in photo_enhancement and "The background could not be separated clearly." in photo_enhancement),
+    ("seller photo enhancement releases temporary subject, scaled-working, and output bitmaps on every failure path",
+     "private fun renderProductPhoto(foreground: Bitmap): Bitmap" in photo_enhancement
+     and "var subject: Bitmap? = null" in photo_enhancement
+     and "var output: Bitmap? = null" in photo_enhancement
+     and "var completed = false" in photo_enhancement
+     and "subject?.takeIf { it !== working }?.recycle()" in photo_enhancement
+     and "if (working !== foreground) working.recycle()" in photo_enhancement
+     and "if (!completed) output?.recycle()" in photo_enhancement),
     ("seller photo cleanup keeps output proportions and uses a bounded working image", "MAX_WORKING_DIMENSION = 1600" in photo_enhancement and "SUBJECT_PADDING" in photo_enhancement and "canvas.drawBitmap(" in photo_enhancement),
     ("Marketplace discovery client sends category under the backend-supported query key", '&category=${URLEncoder.encode(category, "UTF-8")}' in remote_client and 'req.query?.category' in discovery_routes),
     ("Marketplace backend filters selected categories exactly and leaves All unfiltered", 'category.toLowerCase() !== "all"' in discovery_routes and 'where.push("l.category=$" + params.length)' in discovery_routes),
