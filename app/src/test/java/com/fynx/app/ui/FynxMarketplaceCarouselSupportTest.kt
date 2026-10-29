@@ -57,7 +57,7 @@ class FynxMarketplaceCarouselSupportTest {
                 product("empty-stock", quantity = 0),
                 product("negative-price", price = -1.0),
                 product("infinite-price", price = Double.POSITIVE_INFINITY),
-                product("blank-id", id = " "),
+                product(id = " "),
                 product("blank-title", title = " "),
                 product("blank-currency", currency = " "),
                 product("blank-seller", seller = " ")
