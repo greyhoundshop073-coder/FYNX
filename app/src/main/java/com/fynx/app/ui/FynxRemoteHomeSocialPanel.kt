@@ -477,7 +477,23 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
-    LazyColumn(state = feedListState, modifier = modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)) {
+    LazyColumn(
+        state = feedListState,
+        modifier = modifier.fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                        MaterialTheme.colorScheme.background.copy(alpha = 0.94f),
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
+                        MaterialTheme.colorScheme.background.copy(alpha = 0.98f)
+                    )
+                )
+            )
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)
+    ) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
