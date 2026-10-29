@@ -506,7 +506,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     Modifier.fillMaxWidth()
                         .statusBarsPadding()
                         .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .then(if (selected == "Marketplace") Modifier.height(52.dp * (1f - homeChromeProgress)).graphicsLayer { alpha = 1f - homeChromeProgress } else Modifier),
+                        .then(
+                            if (selected == "Marketplace") {
+                                Modifier
+                                    .height(52.dp * (1f - homeChromeProgress))
+                                    .graphicsLayer { alpha = 1f - homeChromeProgress }
+                            } else {
+                                Modifier
+                            }
+                        ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Spacer(Modifier.size(48.dp))
