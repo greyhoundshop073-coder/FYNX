@@ -1823,8 +1823,10 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             result.onSuccess { output ->
                 enhancementPreviewUri = output
                 showEnhancementPreview = true
-            }.onFailure {
-                enhancementError = "FYNX could not separate this photo's background on this device. Your original is unchanged; try another photo or keep it as-is."
+            }.onFailure { failure ->
+                enhancementError = failure.message
+                    ?.takeIf { it.contains("temporarily unavailable on Android 16 and newer") }
+                    ?: "FYNX could not separate this photo's background on this device. Your original is unchanged; try another photo or keep it as-is."
                 showEnhancementPicker = true
             }
             enhancementBusy = false
