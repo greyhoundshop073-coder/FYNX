@@ -71,7 +71,9 @@ checks = [
     ("seller photo cleanup fails closed on Android 16+ while the beta segmentation SDK has an open native-crash report",
      "if (Build.VERSION.SDK_INT >= 36)" in photo_enhancement
      and "temporarily unavailable on Android 16 and newer" in photo_enhancement
-     and photo_enhancement.index("if (Build.VERSION.SDK_INT >= 36)") < photo_enhancement.index("SubjectSegmentation.getClient")),
+     and photo_enhancement.index("if (Build.VERSION.SDK_INT >= 36)") < photo_enhancement.index("SubjectSegmentation.getClient")
+     and "failure.message" in marketplace
+     and 'it.contains("temporarily unavailable on Android 16 and newer")' in marketplace),
     ("seller photo cleanup preserves the original and offers preview, Keep Original, Use Enhanced and Undo", all(token in marketplace for token in ("Review enhanced photo", "Keep Original", "Use Enhanced", "Text(\"Undo\"")) and "originalByEnhancedUri" in marketplace),
     ("re-enhancing a seller photo preserves the first original for Undo and deletes only the superseded generated image",
      "val rootOriginal = originalByEnhancedUri[original.toString()] ?: original" in marketplace
