@@ -137,7 +137,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     var activeSection by rememberSaveable { mutableStateOf("Overview") }
     val selectedChipColors = fynxMarketplaceSelectedChipColors()
     val standardMarketplaceCategories = listOf(
-        "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services", "Food", "Property",
+        "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property",
         "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools",
         "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education",
         "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other"
