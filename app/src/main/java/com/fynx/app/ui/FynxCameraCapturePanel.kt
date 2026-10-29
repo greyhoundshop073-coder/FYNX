@@ -183,12 +183,6 @@ fun FynxCameraCapturePanel(
         val current = pendingUri ?: return
         val original = pendingOriginalUri ?: current
         if (pendingType != "image" || applyingFilter) return
-        if (selected == CameraFilter.NATURAL) {
-            filter = selected
-            filterIntensity = intensity.coerceIn(0f, 1f)
-            error = null
-            return
-        }
         val source = original.path?.let { File(it) } ?: return
         val target = current.path?.let { File(it) } ?: return
         val strength = intensity.coerceIn(0f, 1f)
@@ -199,18 +193,22 @@ fun FynxCameraCapturePanel(
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
-                    try {
-                        val matrix = cameraFilterMatrix(selected, strength)
-                        val outputBitmap = android.graphics.Bitmap.createBitmap(bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888)
+                    if (selected == CameraFilter.NATURAL) {
+                        source.copyTo(target, overwrite = true)
+                    } else {
+                        val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
                         try {
-                            android.graphics.Canvas(outputBitmap).drawBitmap(bitmap, 0f, 0f, android.graphics.Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) })
-                            FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) { "Unable to save filtered photo" } }
+                            val matrix = cameraFilterMatrix(selected, strength)
+                            val outputBitmap = android.graphics.Bitmap.createBitmap(bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888)
+                            try {
+                                android.graphics.Canvas(outputBitmap).drawBitmap(bitmap, 0f, 0f, android.graphics.Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) })
+                                FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) { "Unable to save filtered photo" } }
+                            } finally {
+                                outputBitmap.recycle()
+                            }
                         } finally {
-                            outputBitmap.recycle()
+                            bitmap.recycle()
                         }
-                    } finally {
-                        bitmap.recycle()
                     }
                 }
             }
