@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -482,12 +483,21 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         modifier = modifier.fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
-                        MaterialTheme.colorScheme.background.copy(alpha = 0.94f),
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
-                        MaterialTheme.colorScheme.background.copy(alpha = 0.98f)
-                    )
+                    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+                        listOf(
+                            Color(0xFFC9D2DE).copy(alpha = 0.16f),
+                            Color.Black.copy(alpha = 0.96f),
+                            Color(0xFF8797A9).copy(alpha = 0.14f),
+                            Color.Black.copy(alpha = 0.93f)
+                        )
+                    } else {
+                        listOf(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.10f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.14f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)
+                        )
+                    }
                 )
             )
             .navigationBarsPadding(),
