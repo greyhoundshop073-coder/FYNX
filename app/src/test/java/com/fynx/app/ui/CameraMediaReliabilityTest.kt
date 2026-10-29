@@ -63,6 +63,14 @@ class CameraMediaReliabilityTest {
     }
 
     @Test
+    fun videoCaptionTimelineRejectsEmptySpeechOrInvalidDuration() {
+        assertTrue(buildCameraCaptionCues("", 10_000L).isEmpty())
+        assertTrue(buildCameraCaptionCues("   ", 10_000L).isEmpty())
+        assertTrue(buildCameraCaptionCues("Spoken words", 0L).isEmpty())
+        assertTrue(buildCameraCaptionCues("Spoken words", -1L).isEmpty())
+    }
+
+    @Test
     fun cameraFilterParametersAreFinite() {
         CameraFilter.values().forEach { filter ->
             assertTrue(filter.saturation.isFinite())
