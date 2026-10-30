@@ -487,7 +487,9 @@ fun FynxCameraCapturePanel(
         applyingVideoEffects = true
         error = null
         scope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { applyFynxVideoEdits(context, source, videoStyle, videoCaptionText) } }
+            // Media3 Transformer is main-thread confined for construction/start/callback wiring.
+            // It performs export work asynchronously itself; do not invoke it from Dispatchers.IO.
+            val result = runCatching { applyFynxVideoEdits(context, source, videoStyle, videoCaptionText) }
             result.onSuccess { output ->
                 if (current != source) deleteUri(current)
                 pendingUri = output
