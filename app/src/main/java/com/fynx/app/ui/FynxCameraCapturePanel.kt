@@ -1,5 +1,7 @@
 package com.fynx.app.ui
 
+import com.fynx.app.R
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.Context
