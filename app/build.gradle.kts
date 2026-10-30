@@ -23,11 +23,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi"
-    }
     buildFeatures { compose = true }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget("17")
+        optIn.add("androidx.compose.foundation.ExperimentalFoundationApi")
+    }
 }
 
 dependencies {
@@ -44,13 +47,21 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("io.github.webrtc-sdk:android:144.7559.14")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.mlkit:face-detection:16.1.5")
+    // Bundled, on-device subject segmentation for privacy-preserving camera backgrounds.
+    implementation("com.google.mlkit:segmentation-selfie:16.0.0-beta6")
+    implementation("androidx.media3:media3-transformer:1.11.1")
+    implementation("androidx.media3:media3-effect:1.11.1")
+    implementation("androidx.media3:media3-common:1.11.1")
+    implementation("com.google.mlkit:genai-speech-recognition:1.0.0-alpha2")
     implementation("androidx.camera:camera-core:1.5.3")
     implementation("androidx.camera:camera-camera2:1.5.3")
     implementation("androidx.camera:camera-lifecycle:1.5.3")
     implementation("androidx.camera:camera-view:1.5.3")
     implementation("androidx.camera:camera-video:1.5.3")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
-    // Optional, on-device subject cutout for Marketplace product photos; model is delivered by Play services.
+
+    // Preserve existing on-device subject segmentation used by Marketplace product photos.
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
 
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
