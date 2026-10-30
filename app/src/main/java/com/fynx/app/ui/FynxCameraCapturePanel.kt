@@ -931,10 +931,7 @@ fun FynxCameraCapturePanel(
                         }
                         Spacer(Modifier.height(8.dp))
                         // A compact five-column portrait gallery follows the category tabs.
-                        // TikTok's effects tray is a single horizontal browsing lane. Keeping
-                        // thumbnails in one row prevents a second grid from pushing the shutter
-                        // below the visible screen on compact Android phones.
-                        Column(
+                            Column(
                             Modifier.fillMaxWidth()
                                 .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.29f)
                                 .verticalScroll(rememberScrollState()),
@@ -943,7 +940,7 @@ fun FynxCameraCapturePanel(
                             effectOptions.chunked(5).forEach { optionsRow ->
                                 Row(
                                     Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
                                     verticalAlignment = Alignment.Top
                                 ) {
                                     optionsRow.forEach { option ->
@@ -954,7 +951,7 @@ fun FynxCameraCapturePanel(
                                             selected = option.selected,
                                             enabled = option.enabled,
                                             onClick = option.onClick,
-                                            modifier = Modifier.width(60.dp)
+                                            modifier = Modifier.width(56.dp)
                                         )
                                     }
                                     repeat(5 - optionsRow.size) {
@@ -1104,8 +1101,7 @@ fun FynxCameraCapturePanel(
     }
 }
 
-/** Compact, consistent effect tiles inspired by familiar short-video camera trays. */
-/** Compact effect previews: circular visual first, two-line label below. */
+/** Portrait effect tiles styled for quick browsing in the camera creator tray. */
 private data class CameraEffectOption(
     val label: String,
     val category: String,
