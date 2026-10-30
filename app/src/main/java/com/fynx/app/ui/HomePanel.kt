@@ -36,6 +36,7 @@ fun HomePanel(
     onOpenCamera: () -> Unit = {},
     onOpenFastCamera: () -> Unit = onOpenCamera,
     onOpenStatusOwner: (String) -> Unit = {},
+    onCreateStatus: (() -> Unit)? = null,
     onCreatePost: () -> Unit = {},
     onOpenAuthorProfile: (String) -> Unit = {},
     initialPostId: String? = null,
@@ -47,6 +48,7 @@ fun HomePanel(
     var showCreateMenu by remember { mutableStateOf(false) }
     var showMatureStatusComposer by remember { mutableStateOf(false) }
     var showStatusCreatorHub by remember { mutableStateOf(false) }
+    val openStatusCreator: () -> Unit = onCreateStatus ?: { showStatusCreatorHub = true }
     var isPullRefreshing by remember { mutableStateOf(false) }
 
     fun dismissCreateMenu() {
@@ -99,6 +101,7 @@ fun HomePanel(
                         onOpenMarketplaceListing = { listingId -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(listingId)))) },
                         onCreatePost = { showCreateMenu = true },
                         onOpenAuthorProfile = onOpenAuthorProfile,
+                        onOpenStatusOwner = onOpenStatusOwner,
                         initialPostId = initialPostId,
                         initialCommentId = initialCommentId,
                         onInitialPostConsumed = onInitialPostConsumed,
@@ -108,7 +111,7 @@ fun HomePanel(
                             onOpenAi = onOpenAi,
                             onOpenCamera = onOpenCamera,
                             onOpenFastCamera = onOpenFastCamera,
-                            onCreateStatus = { showStatusCreatorHub = true },
+                            onCreateStatus = openStatusCreator,
                             onOpenStatusOwner = onOpenStatusOwner
                         ) }
                     )
@@ -126,7 +129,7 @@ fun HomePanel(
             },
             onStatus = {
                 dismissCreateMenu()
-                showStatusCreatorHub = true
+                openStatusCreator()
             },
             onMarketplace = {
                 dismissCreateMenu()

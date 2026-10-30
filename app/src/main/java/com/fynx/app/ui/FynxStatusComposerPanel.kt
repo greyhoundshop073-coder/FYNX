@@ -71,6 +71,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
 
     fun publish() {
         if (publishing) return
+        if (type == FynxStatusType.MUSIC) { error = "Choose a published track from the FYNX Music picker."; return }
         if (type == FynxStatusType.TEXT && text.isBlank()) { error = "Write something first."; return }
         if (type != FynxStatusType.TEXT && mediaUri == null) { error = "Choose media first."; return }
         publishing = true; error = null
@@ -78,7 +79,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
             try {
                 val source = mediaUri
                 val mediaId = if (type == FynxStatusType.TEXT) null else {
-                    val mime = context.contentResolver.getType(source!!) ?: when (type) { FynxStatusType.PHOTO -> "image/jpeg"; FynxStatusType.VIDEO -> "video/mp4"; FynxStatusType.VOICE -> "audio/mp4"; FynxStatusType.TEXT -> "text/plain" }
+                    val mime = context.contentResolver.getType(source!!) ?: when (type) { FynxStatusType.PHOTO -> "image/jpeg"; FynxStatusType.VIDEO -> "video/mp4"; FynxStatusType.VOICE -> "audio/mp4"; FynxStatusType.MUSIC -> "audio/mpeg"; FynxStatusType.TEXT -> "text/plain" }
                     FynxStatusClient.uploadMedia(context, source, mime).getOrElse { error = it.message ?: "Media upload failed."; return@launch }
                 }
                 val now = System.currentTimeMillis()
@@ -95,7 +96,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeContent)) {
         LazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 116.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) { Text("Create Status", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("A polished moment, visible for 24 hours", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; TextButton(onClick = onClose) { Text("Close") } } }
-            item { StatusSectionCard("Create with", "Choose the format that fits your moment") { val options = FynxStatusType.values().toList(); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { options.take(2).forEach { option -> StatusTypeChoice(option, type == option, !recording) { type = option } } }; Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { options.drop(2).forEach { option -> StatusTypeChoice(option, type == option, !recording) { type = option } } } } }
+            item { StatusSectionCard("Create with", "Choose the format that fits your moment") { val options = FynxStatusType.values().filter { it != FynxStatusType.MUSIC }; Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { options.take(2).forEach { option -> StatusTypeChoice(option, type == option, !recording) { type = option } } }; Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { options.drop(2).forEach { option -> StatusTypeChoice(option, type == option, !recording) { type = option } } } } }
             item {
                 when (type) {
                     FynxStatusType.TEXT -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -105,6 +106,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
                     }
                     FynxStatusType.PHOTO -> MediaPickerCard("Photo", mediaUri) { pickImage.launch(arrayOf("image/*")) }
                     FynxStatusType.VIDEO -> MediaPickerCard("Video", mediaUri) { pickVideo.launch(arrayOf("video/*")) }
+                    FynxStatusType.MUSIC -> Text("Choose a published track from the FYNX Music picker.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FynxStatusType.VOICE -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { VoiceRecorderCard(recording, elapsed, mediaUri != null, { if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startStatusRecording(context) { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true } else micPermission.launch(Manifest.permission.RECORD_AUDIO) }, { stopStatusRecording(recorder, recordingFile) { uri -> mediaUri = uri; recorder = null; recordingFile = null; recording = false; type = FynxStatusType.VOICE } }); StatusSectionCard("Voice style", "Choose a calm background for the voice card") { ColorChoices(STATUS_BACKGROUNDS, background) { background = it } } }
                 }
             }
@@ -117,7 +119,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
 
 @Composable private fun StatusSectionCard(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))) { Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { Column(verticalArrangement = Arrangement.spacedBy(2.dp)) { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; content() } } }
 
-@Composable private fun RowScope.StatusTypeChoice(type: FynxStatusType, selected: Boolean, enabled: Boolean, onClick: () -> Unit) { val title = type.name.lowercase().replaceFirstChar { it.uppercase() }; val description = when (type) { FynxStatusType.TEXT -> "Write"; FynxStatusType.PHOTO -> "Image"; FynxStatusType.VIDEO -> "Clip"; FynxStatusType.VOICE -> "Audio" }; Surface(Modifier.weight(1f).height(70.dp).clickable(enabled = enabled, onClick = onClick), shape = RoundedCornerShape(17.dp), color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface, border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) { Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text(title, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold); Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+@Composable private fun RowScope.StatusTypeChoice(type: FynxStatusType, selected: Boolean, enabled: Boolean, onClick: () -> Unit) { val title = type.name.lowercase().replaceFirstChar { it.uppercase() }; val description = when (type) { FynxStatusType.TEXT -> "Write"; FynxStatusType.PHOTO -> "Image"; FynxStatusType.VIDEO -> "Clip"; FynxStatusType.VOICE -> "Audio"; FynxStatusType.MUSIC -> "Music" }; Surface(Modifier.weight(1f).height(70.dp).clickable(enabled = enabled, onClick = onClick), shape = RoundedCornerShape(17.dp), color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface, border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) { Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text(title, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold); Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 
 @Composable private fun StatusEditorSection(title: String, content: @Composable () -> Unit) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant); content() } }
 
