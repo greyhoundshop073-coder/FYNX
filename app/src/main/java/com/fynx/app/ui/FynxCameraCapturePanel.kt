@@ -898,35 +898,33 @@ fun FynxCameraCapturePanel(
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        // TikTok-inspired compact thumbnail grid: four options per row,
-                        // with a bounded inner scroll so the shutter stays visible.
-                        Column(
+                        Text(
+                            if (mode == CameraMode.VIDEO) "Video effects" else "Choose an effect",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(bottom = 5.dp)
+                        )
+                        // TikTok's effects tray is a single horizontal browsing lane. Keeping
+                        // thumbnails in one row prevents a second grid from pushing the shutter
+                        // below the visible screen on compact Android phones.
+                        Row(
                             Modifier.fillMaxWidth()
-                                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.26f)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                                .horizontalScroll(rememberScrollState())
+                                .padding(bottom = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(9.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            effectOptions.chunked(4).forEach { optionsRow ->
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    optionsRow.forEach { option ->
-                                        CameraEffectTile(
-                                            category = option.category,
-                                            label = option.label,
-                                            previewStyle = option.previewStyle,
-                                            selected = option.selected,
-                                            enabled = option.enabled,
-                                            onClick = option.onClick,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                    repeat(4 - optionsRow.size) {
-                                        Spacer(Modifier.weight(1f).height(1.dp))
-                                    }
-                                }
+                            effectOptions.forEach { option ->
+                                CameraEffectTile(
+                                    category = option.category,
+                                    label = option.label,
+                                    previewStyle = option.previewStyle,
+                                    selected = option.selected,
+                                    enabled = option.enabled,
+                                    onClick = option.onClick,
+                                    modifier = Modifier.width(78.dp)
+                                )
                             }
                         }
                     }
@@ -1111,7 +1109,7 @@ private fun CameraEffectTile(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 94.dp),
+        modifier = modifier.heightIn(min = 112.dp),
         shape = RoundedCornerShape(14.dp),
         color = Color.Transparent
     ) {
@@ -1122,7 +1120,7 @@ private fun CameraEffectTile(
         ) {
             Box(
                 modifier = Modifier
-                    .size(60.dp)
+                    .size(width = 66.dp, height = 78.dp)
                     .clip(shape)
                     .border(
                         if (selected) 2.dp else 1.dp,
