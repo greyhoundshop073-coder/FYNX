@@ -532,12 +532,12 @@ fun FynxCameraCapturePanel(
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                     .imePadding()
-                    .background(Color(0xE91B202A), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 12.dp)
+                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 30.dp)
             ) {
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
-                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.24f else 0.42f).verticalScroll(rememberScrollState())) {
+                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.18f else 0.30f).verticalScroll(rememberScrollState())) {
                 if (previewType == "image") {
                     Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Row(
@@ -837,13 +837,13 @@ fun FynxCameraCapturePanel(
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                 .imePadding()
-                .background(Color(0xE91B202A), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 12.dp),
+                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))
-            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.36f).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.30f).verticalScroll(rememberScrollState())) {
             if (recording == null && !fastCapture) {
                 
                 if (showAdjustments) {
