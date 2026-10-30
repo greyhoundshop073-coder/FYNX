@@ -744,34 +744,66 @@ fun FynxCameraCapturePanel(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                IconButton(
-                    onClick = { if (recording == null) { error = null; lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK; showCaptureControls = true } },
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape),
-                    enabled = recording == null
-                ) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera") }
-                IconButton(
-                    onClick = { if (recording == null) { if (cameraInfo?.hasFlashUnit() == true) { torchEnabled = !torchEnabled; cameraControl?.enableTorch(torchEnabled) } else error = "Flash is not available on this camera."; showCaptureControls = true } },
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape),
-                    enabled = recording == null
-                ) { Icon(Icons.Default.FlashOn, if (torchEnabled) "Turn flash off" else "Turn flash on") }
-                IconButton(
-                    onClick = { if (recording == null) { showGrid = !showGrid; showCaptureControls = true } },
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape),
-                    enabled = recording == null
-                ) { Icon(if (showGrid) Icons.Default.GridOff else Icons.Default.GridOn, if (showGrid) "Hide grid" else "Show grid") }
+                
+            }
+        }
+
+        if (pendingUri == null && !fastCapture && recording == null) {
+            Column(
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding()
+                    .padding(end = 8.dp, top = 64.dp)
+                    .width(58.dp)
+                    .background(Color.Black.copy(alpha = 0.42f), RoundedCornerShape(24.dp))
+                    .padding(vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = {
+                            error = null
+                            lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
+                            showCaptureControls = true
+                        },
+                        modifier = Modifier.size(42.dp)
+                    ) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera", tint = Color.White) }
+                    Text("Flip", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = {
+                            if (cameraInfo?.hasFlashUnit() == true) {
+                                torchEnabled = !torchEnabled
+                                cameraControl?.enableTorch(torchEnabled)
+                            } else error = "Flash is not available on this camera."
+                            showCaptureControls = true
+                        },
+                        modifier = Modifier.size(42.dp)
+                    ) { Icon(Icons.Default.FlashOn, if (torchEnabled) "Turn flash off" else "Turn flash on", tint = if (torchEnabled) Color(0xFFFFD76A) else Color.White) }
+                    Text("Flash", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = { showGrid = !showGrid; showCaptureControls = true },
+                        modifier = Modifier.size(42.dp)
+                    ) { Icon(if (showGrid) Icons.Default.GridOff else Icons.Default.GridOn, if (showGrid) "Hide grid" else "Show grid", tint = Color.White) }
+                    Text("Grid", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                }
+                Text(
+                    "Timer",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.clickable { showAdjustments = !showAdjustments; showCaptureControls = true }
+                        .padding(horizontal = 7.dp, vertical = 12.dp)
+                )
             }
         }
 
         if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(top=8.dp,bottom=12.dp),horizontalAlignment=Alignment.CenterHorizontally){
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))
-            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.34f).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.42f).verticalScroll(rememberScrollState())) {
             if (recording == null && !fastCapture) {
-                TextButton(
-                    onClick = { showAdjustments = !showAdjustments; showCaptureControls = true },
-                    modifier = Modifier.align(Alignment.End).padding(horizontal = 18.dp)
-                ) {
-                    Text(if (showAdjustments) "Hide adjustments ▴" else "Adjustments ▾")
-                }
+                
                 if (showAdjustments) {
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp),
@@ -898,33 +930,37 @@ fun FynxCameraCapturePanel(
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text(
-                            if (mode == CameraMode.VIDEO) "Video effects" else "Choose an effect",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(bottom = 5.dp)
-                        )
+                        // A compact five-column portrait gallery follows the category tabs.
                         // TikTok's effects tray is a single horizontal browsing lane. Keeping
                         // thumbnails in one row prevents a second grid from pushing the shutter
                         // below the visible screen on compact Android phones.
-                        Row(
+                        Column(
                             Modifier.fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(bottom = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(9.dp),
-                            verticalAlignment = Alignment.Top
+                                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.29f)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            effectOptions.forEach { option ->
-                                CameraEffectTile(
-                                    category = option.category,
-                                    label = option.label,
-                                    previewStyle = option.previewStyle,
-                                    selected = option.selected,
-                                    enabled = option.enabled,
-                                    onClick = option.onClick,
-                                    modifier = Modifier.width(78.dp)
-                                )
+                            effectOptions.chunked(5).forEach { optionsRow ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    optionsRow.forEach { option ->
+                                        CameraEffectTile(
+                                            category = option.category,
+                                            label = option.label,
+                                            previewStyle = option.previewStyle,
+                                            selected = option.selected,
+                                            enabled = option.enabled,
+                                            onClick = option.onClick,
+                                            modifier = Modifier.width(60.dp)
+                                        )
+                                    }
+                                    repeat(5 - optionsRow.size) {
+                                        Spacer(Modifier.weight(1f).height(1.dp))
+                                    }
+                                }
                             }
                         }
                     }
@@ -960,29 +996,25 @@ fun FynxCameraCapturePanel(
                     leadingIcon = { Icon(Icons.Default.Videocam, null) }
                 )
             }
-            // Main capture row: Gallery on the left, shutter centered, Effects on the right.
+            // Main capture row: Effects on the left, shutter centered, Gallery on the right.
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!fastCapture && !liveProofMode) Surface(
-                    onClick = {
-                        galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                        showCaptureControls = true
-                    },
+                if (!fastCapture) Surface(
+                    onClick = { showEffectTray = !showEffectTray; showCaptureControls = true },
                     modifier = Modifier.size(width = 64.dp, height = 64.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFF22252E),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+                    color = if (showEffectTray) Color(0xFF3A315A) else Color(0xFF22252E),
+                    border = androidx.compose.foundation.BorderStroke(
+                        if (showEffectTray) 1.5.dp else 1.dp,
+                        if (showEffectTray) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.12f)
+                    )
                 ) {
-                    Column(
-                        Modifier.fillMaxSize().padding(4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
-                        Text("Gallery", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                        Text(if (mode == CameraMode.VIDEO) "Video FX" else "Effects", style = MaterialTheme.typography.labelSmall, color = Color.White)
                     }
                 } else Spacer(Modifier.size(width = 64.dp, height = 64.dp))
                 FilledIconButton(onClick = {
@@ -1050,27 +1082,19 @@ fun FynxCameraCapturePanel(
                         )
                     }
                 }
-                if (!fastCapture) Surface(
-                    onClick = { showEffectTray = !showEffectTray; showCaptureControls = true },
+                if (!fastCapture && !liveProofMode) Surface(
+                    onClick = {
+                        galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        showCaptureControls = true
+                    },
                     modifier = Modifier.size(width = 64.dp, height = 64.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = if (showEffectTray) Color(0xFF3A315A) else Color(0xFF22252E),
-                    border = androidx.compose.foundation.BorderStroke(
-                        if (showEffectTray) 1.5.dp else 1.dp,
-                        if (showEffectTray) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.12f)
-                    )
+                    color = Color(0xFF22252E),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
                 ) {
-                    Column(
-                        Modifier.fillMaxSize().padding(4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-                        Text(
-                            if (mode == CameraMode.VIDEO) "Video FX" else "Effects",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White
-                        )
+                    Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                        Text("Gallery", style = MaterialTheme.typography.labelSmall, color = Color.White)
                     }
                 } else Spacer(Modifier.size(width = 64.dp, height = 64.dp))
             }
@@ -1109,7 +1133,7 @@ private fun CameraEffectTile(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 112.dp),
+        modifier = modifier.heightIn(min = 98.dp),
         shape = RoundedCornerShape(14.dp),
         color = Color.Transparent
     ) {
@@ -1120,7 +1144,7 @@ private fun CameraEffectTile(
         ) {
             Box(
                 modifier = Modifier
-                    .size(width = 66.dp, height = 78.dp)
+                    .size(width = 50.dp, height = 62.dp)
                     .clip(shape)
                     .border(
                         if (selected) 2.dp else 1.dp,
