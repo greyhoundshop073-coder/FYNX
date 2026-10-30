@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
 import androidx.compose.material3.darkColorScheme
@@ -789,13 +790,15 @@ fun FynxCameraCapturePanel(
                     ) { Icon(if (showGrid) Icons.Default.GridOff else Icons.Default.GridOn, if (showGrid) "Hide grid" else "Show grid", tint = Color.White) }
                     Text("Grid", color = Color.White, style = MaterialTheme.typography.labelSmall)
                 }
-                Text(
-                    "Timer",
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.clickable { showAdjustments = !showAdjustments; showCaptureControls = true }
-                        .padding(horizontal = 7.dp, vertical = 12.dp)
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = { showAdjustments = !showAdjustments; showCaptureControls = true },
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Icon(Icons.Default.Timer, contentDescription = "Set capture timer", tint = Color.White)
+                    }
+                    Text("Timer", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
 
