@@ -527,9 +527,17 @@ fun FynxCameraCapturePanel(
     if(previewUri!=null && previewType!=null){
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp)){
+            Column(
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .imePadding()
+                    .background(Color(0xE91B202A), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 12.dp)
+            ) {
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
-                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.30f else 0.55f).verticalScroll(rememberScrollState())) {
+                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.24f else 0.42f).verticalScroll(rememberScrollState())) {
                 if (previewType == "image") {
                     Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Row(
@@ -824,9 +832,18 @@ fun FynxCameraCapturePanel(
             }
         }
 
-        if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(top=8.dp,bottom=12.dp),horizontalAlignment=Alignment.CenterHorizontally){
+        if (showCaptureControls || recording != null) Column(
+            Modifier.align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .imePadding()
+                .background(Color(0xE91B202A), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))
-            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.42f).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.36f).verticalScroll(rememberScrollState())) {
             if (recording == null && !fastCapture) {
                 
                 if (showAdjustments) {
@@ -862,7 +879,7 @@ fun FynxCameraCapturePanel(
             }
             if (showEffectTray && recording == null && !fastCapture) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, bottom = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).padding(bottom = 6.dp),
                     shape = RoundedCornerShape(20.dp),
                     color = Color(0xD9232732),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
@@ -1130,9 +1147,15 @@ private data class CameraEffectOption(
 )
 
 /**
- * Each effect tile uses a bundled photographic portrait preview, graded locally to illustrate
- * the selected look. The preview is offline-safe and never uploads a camera image.
+ * Each effect tile uses a bundled female portrait, graded locally to illustrate the selected look.
+ * Three portraits rotate through the carousel so adjacent effects do not repeat one face.
  */
+private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (previewStyle % 3) {
+    0 -> R.drawable.camera_effect_portrait_1
+    1 -> R.drawable.camera_effect_portrait_2
+    else -> R.drawable.camera_effect_portrait_3
+}
+
 @Composable
 private fun CameraEffectTile(
     category: String,
@@ -1168,7 +1191,7 @@ private fun CameraEffectTile(
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.camera_effect_preview),
+                    painter = painterResource(id = cameraEffectPreviewPortraitRes(previewStyle)),
                     contentDescription = "$category $label photo preview",
                     contentScale = ContentScale.Crop,
                     colorFilter = ColorFilter.colorMatrix(cameraEffectPreviewMatrix(previewStyle)),
