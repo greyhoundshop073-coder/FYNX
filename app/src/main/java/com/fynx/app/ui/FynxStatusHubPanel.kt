@@ -68,6 +68,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
     var addStatusOpen by remember { mutableStateOf(startWithCreator) }
     var composing by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
+    var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var timelineRefreshKey by remember { mutableIntStateOf(0) }
     var selectedInitialMedia by remember { mutableStateOf<FynxRecentMedia?>(null) }
@@ -172,6 +173,14 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { if (startWithCreator) onExitCreator() else addStatusOpen = false },
                     onCamera = {
+                        cameraInitialMode = CameraMode.PHOTO
+                        if (!cameraOpen) {
+                            cameraError = null
+                            cameraOpen = true
+                        }
+                    },
+                    onRecordVideo = {
+                        cameraInitialMode = CameraMode.VIDEO
                         if (!cameraOpen) {
                             cameraError = null
                             cameraOpen = true

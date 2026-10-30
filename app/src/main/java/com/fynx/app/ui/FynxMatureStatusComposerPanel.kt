@@ -83,6 +83,7 @@ fun FynxMatureStatusComposerPanel(
     initialMediaUri: Uri? = null,
     initialType: FynxStatusType? = null,
     initialMusic: FynxMusicCatalogueTrack? = null,
+    onChooseMusic: () -> Unit = {},
     onClose: () -> Unit = {},
     initialText: String? = null
 ) {
