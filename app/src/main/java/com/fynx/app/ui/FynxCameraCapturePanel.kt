@@ -862,13 +862,13 @@ fun FynxCameraCapturePanel(
             }
             if (showEffectTray && recording == null && !fastCapture) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 20.dp, bottomEnd = 20.dp),
-                    color = Color(0xF012141C),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, bottom = 6.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xD9232732),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
-                    shadowElevation = 8.dp
+                    shadowElevation = 3.dp
                 ) {
-                    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
                         val effectOptions = if (mode == CameraMode.VIDEO) {
                             CameraVideoStyle.values().map { option ->
                                 CameraEffectOption(
@@ -877,7 +877,7 @@ fun FynxCameraCapturePanel(
                                     previewStyle = cameraEffectPreviewStyle("Video FX", option.label),
                                     selected = videoStyle == option,
                                     enabled = !applyingVideoEffects && !applyingFilter && !enhancing,
-                                    onClick = { videoStyle = option; showCaptureControls = true }
+                                    onClick = { videoStyle = option; showEffectTray = false; showCaptureControls = true }
                                 )
                             }
                         } else when (selectedCameraTool) {
@@ -888,7 +888,7 @@ fun FynxCameraCapturePanel(
                                     previewStyle = cameraEffectPreviewStyle("Face FX", option.label),
                                     selected = faceEffect == option,
                                     enabled = !applyingFilter && !enhancing,
-                                    onClick = { faceEffect = option; showCaptureControls = true }
+                                    onClick = { faceEffect = option; showEffectTray = false; showCaptureControls = true }
                                 )
                             }
                             "Background" -> CameraBackgroundEffect.values().map { option ->
@@ -898,7 +898,7 @@ fun FynxCameraCapturePanel(
                                     previewStyle = cameraEffectPreviewStyle("Background", option.label),
                                     selected = backgroundEffect == option,
                                     enabled = !applyingFilter && !enhancing,
-                                    onClick = { backgroundEffect = option; showCaptureControls = true }
+                                    onClick = { backgroundEffect = option; showEffectTray = false; showCaptureControls = true }
                                 )
                             }
                             "AI Studio" -> CameraStudioEffect.values().map { option ->
@@ -908,7 +908,7 @@ fun FynxCameraCapturePanel(
                                     previewStyle = cameraEffectPreviewStyle("AI Studio", option.label),
                                     selected = studioEffect == option,
                                     enabled = !applyingFilter && !enhancing,
-                                    onClick = { studioEffect = option; showCaptureControls = true }
+                                    onClick = { studioEffect = option; showEffectTray = false; showCaptureControls = true }
                                 )
                             }
                             else -> CameraFilter.values().map { option ->
@@ -918,7 +918,7 @@ fun FynxCameraCapturePanel(
                                     previewStyle = cameraEffectPreviewStyle("Looks", option.label),
                                     selected = filter == option,
                                     enabled = recording == null && !applyingFilter && !enhancing,
-                                    onClick = { filter = option; filterIntensity = 1f; showCaptureControls = true }
+                                    onClick = { filter = option; filterIntensity = 1f; showEffectTray = false; showCaptureControls = true }
                                 )
                             }
                         }
