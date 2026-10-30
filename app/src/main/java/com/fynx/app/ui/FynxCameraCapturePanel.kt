@@ -750,8 +750,8 @@ fun FynxCameraCapturePanel(
 
         if (pendingUri == null && !fastCapture && recording == null) {
             Column(
-                modifier = Modifier.align(Alignment.CenterEnd)
-                    .padding(end = 8.dp, top = 88.dp, bottom = 228.dp)
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding()
+                    .padding(end = 8.dp, top = 64.dp)
                     .width(58.dp)
                     .background(Color.Black.copy(alpha = 0.42f), RoundedCornerShape(24.dp))
                     .padding(vertical = 6.dp),
@@ -793,7 +793,7 @@ fun FynxCameraCapturePanel(
                     "Timer",
                     color = Color.White,
                     style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.clickable { showAdjustments = true; showCaptureControls = true }
+                    modifier = Modifier.clickable { showAdjustments = !showAdjustments; showCaptureControls = true }
                         .padding(horizontal = 7.dp, vertical = 12.dp)
                 )
             }
@@ -803,12 +803,7 @@ fun FynxCameraCapturePanel(
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))
             Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.42f).verticalScroll(rememberScrollState())) {
             if (recording == null && !fastCapture) {
-                TextButton(
-                    onClick = { showAdjustments = !showAdjustments; showCaptureControls = true },
-                    modifier = Modifier.align(Alignment.End).padding(horizontal = 18.dp)
-                ) {
-                    Text(if (showAdjustments) "Hide adjustments ▴" else "Adjustments ▾")
-                }
+                
                 if (showAdjustments) {
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp),
@@ -935,19 +930,10 @@ fun FynxCameraCapturePanel(
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text(
-                            if (mode == CameraMode.VIDEO) "Video effects" else "Choose an effect",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(bottom = 5.dp)
-                        )
-                        // TikTok's effects tray is a single horizontal browsing lane. Keeping
-                        // thumbnails in one row prevents a second grid from pushing the shutter
-                        // below the visible screen on compact Android phones.
+                        // A compact five-column portrait gallery follows the category tabs.
                         Column(
                             Modifier.fillMaxWidth()
-                                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.25f)
+                                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.29f)
                                 .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
