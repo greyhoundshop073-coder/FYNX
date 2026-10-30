@@ -930,34 +930,24 @@ fun FynxCameraCapturePanel(
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        // A compact five-column portrait gallery follows the category tabs.
-                            Column(
+                        // One horizontal effects carousel keeps the live preview and capture controls clear.
+                        Row(
                             Modifier.fillMaxWidth()
-                                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.29f)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                .horizontalScroll(rememberScrollState())
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            effectOptions.chunked(5).forEach { optionsRow ->
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    optionsRow.forEach { option ->
-                                        CameraEffectTile(
-                                            category = option.category,
-                                            label = option.label,
-                                            previewStyle = option.previewStyle,
-                                            selected = option.selected,
-                                            enabled = option.enabled,
-                                            onClick = option.onClick,
-                                            modifier = Modifier.width(56.dp)
-                                        )
-                                    }
-                                    repeat(5 - optionsRow.size) {
-                                        Spacer(Modifier.weight(1f).height(1.dp))
-                                    }
-                                }
+                            effectOptions.forEach { option ->
+                                CameraEffectTile(
+                                    category = option.category,
+                                    label = option.label,
+                                    previewStyle = option.previewStyle,
+                                    selected = option.selected,
+                                    enabled = option.enabled,
+                                    onClick = option.onClick,
+                                    modifier = Modifier.width(76.dp)
+                                )
                             }
                         }
                     }
@@ -1129,7 +1119,7 @@ private fun CameraEffectTile(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 98.dp),
+        modifier = modifier.heightIn(min = 112.dp),
         shape = RoundedCornerShape(14.dp),
         color = Color.Transparent
     ) {
@@ -1140,7 +1130,7 @@ private fun CameraEffectTile(
         ) {
             Box(
                 modifier = Modifier
-                    .size(width = 50.dp, height = 62.dp)
+                    .size(width = 56.dp, height = 70.dp)
                     .clip(shape)
                     .border(
                         if (selected) 2.dp else 1.dp,
