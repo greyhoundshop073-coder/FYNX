@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
 import android.view.ViewGroup
@@ -45,6 +47,9 @@ import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -72,16 +78,19 @@ import java.util.UUID
 private val MATURE_STATUS_BACKGROUNDS = listOf(0xFF111111, 0xFF4527A0, 0xFF1565C0, 0xFF00695C, 0xFF2E7D32, 0xFFEF6C00, 0xFFC62828, 0xFFAD1457, 0xFF37474F, 0xFF455A64)
 private val MATURE_STATUS_TEXT_COLORS = listOf(0xFFFFFFFF, 0xFF000000, 0xFFFFEB3B, 0xFFFFCDD2, 0xFFB3E5FC)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FynxMatureStatusComposerPanel(
     initialMediaUri: Uri? = null,
     initialType: FynxStatusType? = null,
     initialMusic: FynxMusicCatalogueTrack? = null,
+    onChooseMusic: () -> Unit = {},
     onClose: () -> Unit = {},
     initialText: String? = null
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val activity = remember(view) {
         var current = view.context
         while (current is android.content.ContextWrapper && current !is Activity) current = current.baseContext
@@ -158,27 +167,51 @@ fun FynxMatureStatusComposerPanel(
     var showColors by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
     var showMediaTools by remember { mutableStateOf(false) }
+    var showStatusEmoji by remember { mutableStateOf(false) }
+    var audienceMenu by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
+            val mime = context.contentResolver.getType(it).orEmpty().substringBefore(';').trim().lowercase()
+            when {
+                mime.startsWith("video/") -> { mediaUri = it; type = FynxStatusType.VIDEO }
+                mime.startsWith("image/") -> { mediaUri = it; type = FynxStatusType.PHOTO }
+                else -> {
+                    error = "Choose a photo or video for this Status."
+                    return@let
+                }
+            }
             mediaUri = it
-            val mime = context.contentResolver.getType(it).orEmpty().lowercase()
-            type = if (mime.startsWith("video/")) FynxStatusType.VIDEO else FynxStatusType.PHOTO
             showColors = false
             showTools = false
+            showMediaTools = false
             error = null
         }
     }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true; error = null }, onError = { message -> error = message }) else error = "Microphone permission is required for a voice Status."
     }
+
+    // Back/X while recording finishes a preview instead of destroying the draft or leaking the recorder.
+    fun finishVoiceRecordingToPreview() {
+        if (!recording) return
+        stopMatureVoiceRecording(recorder, recordingFile) { uri, message ->
+            if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."
+            recorder = null
+            recordingFile = null
+            recording = false
+            recordingPaused = false
+            accumulatedRecordingMs = 0L
+            type = FynxStatusType.VOICE
+        }
+    }
     LaunchedEffect(recording, recordingStarted, recordingPaused) {
         while (recording) {
             if (!recordingPaused) {
                 elapsed = accumulatedRecordingMs + (System.currentTimeMillis() - recordingStarted).coerceAtLeast(0L)
                 if (elapsed >= FYNX_STATUS_MAX_VOICE_DURATION_MS) {
-                    stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; recordingPaused = false; accumulatedRecordingMs = 0L; type = FynxStatusType.VOICE }
+                    finishVoiceRecordingToPreview()
                 }
             }
             delay(200)
@@ -186,17 +219,48 @@ fun FynxMatureStatusComposerPanel(
     }
     DisposableEffect(Unit) { onDispose { recorder?.let { runCatching { it.stop() }; runCatching { it.release() } }; recordingFile?.let { if (it.exists()) runCatching { it.delete() } } } }
 
+    // A completed recording is no longer held by recordingFile, so give its draft
+    // URI its own lifecycle. Replacing, deleting, or closing a voice draft removes
+    // only the app-cache file created by this recorder; gallery URIs are untouched.
+    val localVoiceDraft = mediaUri?.takeIf {
+        type == FynxStatusType.VOICE && it.scheme.equals("file", ignoreCase = true)
+    }
+    DisposableEffect(localVoiceDraft) {
+        val capturedDraft = localVoiceDraft
+        onDispose { deleteMatureVoiceDraft(context, capturedDraft) }
+    }
+
+    // Android system Back must behave like the visible close control on every composer mode.
+    // During publishing, ignore Back so an in-flight upload is not abandoned accidentally.
+    BackHandler(enabled = !publishing) {
+        when {
+            recording -> finishVoiceRecordingToPreview()
+            showStatusEmoji -> showStatusEmoji = false
+            audienceMenu -> audienceMenu = false
+            showColors -> showColors = false
+            showTools -> showTools = false
+            showMediaTools -> showMediaTools = false
+            else -> onClose()
+        }
+    }
+
     fun clearDraft() { if (publishing || recording) return; mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; showMediaTools = false; error = null }
     fun publish() {
         if (publishing || recording) return
         if (type == FynxStatusType.TEXT && text.isBlank()) { error = "Write something first."; return }
-        if (type != FynxStatusType.TEXT && mediaUri == null) { error = "Add your media first."; return }
+        if (type == FynxStatusType.MUSIC && selectedMusic == null) { error = "Choose a published FYNX music track first."; return }
+        if (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri == null) { error = "Add your media first."; return }
         publishing = true; error = null; showTools = false; showMediaTools = false
         scope.launch {
             try {
                 val source = mediaUri
-                val mediaId = if (type == FynxStatusType.TEXT) null else {
-                    val mime = context.contentResolver.getType(source!!) ?: when (type) { FynxStatusType.PHOTO -> "image/jpeg"; FynxStatusType.VIDEO -> "video/mp4"; FynxStatusType.VOICE -> "audio/mp4"; FynxStatusType.TEXT -> "text/plain" }
+                val mediaId = if (type == FynxStatusType.TEXT || type == FynxStatusType.MUSIC) null else {
+                    val mime = (context.contentResolver.getType(source!!) ?: when (type) { FynxStatusType.PHOTO -> "image/jpeg"; FynxStatusType.VIDEO -> "video/mp4"; FynxStatusType.VOICE -> "audio/mp4"; FynxStatusType.TEXT, FynxStatusType.MUSIC -> "text/plain" }).substringBefore(';').trim().lowercase()
+                    val expectedPrefix = when (type) { FynxStatusType.PHOTO -> "image/"; FynxStatusType.VIDEO -> "video/"; FynxStatusType.VOICE -> "audio/"; FynxStatusType.TEXT, FynxStatusType.MUSIC -> null }
+                    if (expectedPrefix == null || !mime.startsWith(expectedPrefix)) {
+                        error = "The selected file is not valid media for this Status type."
+                        return@launch
+                    }
                     FynxStatusClient.uploadMedia(context, source, mime).getOrElse { error = it.message ?: "Media upload failed."; return@launch }
                 }
                 val now = System.currentTimeMillis()
@@ -208,14 +272,13 @@ fun FynxMatureStatusComposerPanel(
         }
     }
 
-    BackHandler(enabled = !publishing && !recording) { onClose() }
 
     Box(Modifier.fillMaxSize().background(Color(background))) {
         when (type) {
             FynxStatusType.TEXT -> {
                 val editorTextAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
                 val editorWeight = if (font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
-                BoxWithConstraints(Modifier.fillMaxSize().background(Color(background)), contentAlignment = Alignment.Center) {
+                BoxWithConstraints(Modifier.fillMaxSize().imePadding().background(Color(background)), contentAlignment = Alignment.Center) {
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
@@ -250,8 +313,7 @@ fun FynxMatureStatusComposerPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
-                        .padding(top = 76.dp, bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp)
-                        .imePadding(),
+                        .padding(top = 76.dp, bottom = 24.dp),
                     minLines = 2,
                         maxLines = 10
                     )
@@ -260,9 +322,18 @@ fun FynxMatureStatusComposerPanel(
             FynxStatusType.PHOTO -> mediaUri?.let { MatureStatusMedia(it, false, Modifier.fillMaxSize().padding(top = 64.dp, bottom = if (showMediaTools) 176.dp else 104.dp)) }
             FynxStatusType.VIDEO -> mediaUri?.let { MatureStatusMedia(it, true, Modifier.fillMaxSize().padding(top = 64.dp, bottom = 176.dp)) }
             FynxStatusType.VOICE -> Box(Modifier.fillMaxSize().background(Color(background)).padding(top = 64.dp, bottom = if (showMediaTools) 176.dp else 104.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) { Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(112.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Mic, null, tint = Color(foreground), modifier = Modifier.size(48.dp)) } }; Text(if (recording) formatMatureTime(elapsed) else if (mediaUri != null) "Voice Status ready" else "Press the microphone to record", color = Color(foreground), style = MaterialTheme.typography.titleMedium); if (recording) LinearProgressIndicator(progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f, 1f) }, modifier = Modifier.width(220.dp)) } }
+            FynxStatusType.MUSIC -> Box(Modifier.fillMaxSize().background(Color(background)).padding(horizontal = 28.dp, vertical = 96.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) { Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(124.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.MusicNote, null, tint = Color(foreground), modifier = Modifier.size(58.dp)) } }; Text(selectedMusic?.title ?: "Choose a song", color = Color(foreground), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold); Text(selectedMusic?.artist ?: "FYNX Music", color = Color(foreground).copy(alpha = .76f), style = MaterialTheme.typography.titleMedium); selectedMusic?.let { FynxRemoteAudio("/api/social/music/catalogue/${it.id}/media", Modifier.fillMaxWidth(), it.durationMs.coerceAtLeast(1_000L)) } } }
         }
-        Column(Modifier.fillMaxSize().navigationBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
+            Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { if (!publishing) { if (recording) finishVoiceRecordingToPreview() else onClose() } },
+                    enabled = !publishing,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Back from Status composer", tint = Color.White)
+                }
+                Spacer(Modifier.width(4.dp))
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     FynxProfileImage(username, FynxPreferencesStore.loadProfilePhoto(context), Modifier.size(40.dp).clip(CircleShape))
                     Spacer(Modifier.width(10.dp))
@@ -272,9 +343,9 @@ fun FynxMatureStatusComposerPanel(
                     }
                 }
                 Box {
-                    IconButton(onClick = { showTools = !showTools; showColors = false }, enabled = !recording && !publishing) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }
+                    IconButton(onClick = { showTools = !showTools; showColors = false; showMediaTools = false }, enabled = !recording && !publishing) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }
                     DropdownMenu(expanded = showTools, onDismissRequest = { showTools = false }) {
-                        if (type == FynxStatusType.TEXT) DropdownMenuItem(text = { Text("Text style") }, onClick = { showColors = true; showTools = false })
+                        if (type == FynxStatusType.TEXT) DropdownMenuItem(text = { Text("Text style") }, onClick = { showColors = true; showTools = false; showMediaTools = false })
                         DropdownMenuItem(text = { Text("Clear draft") }, onClick = ::clearDraft)
                     }
                 }
@@ -282,50 +353,35 @@ fun FynxMatureStatusComposerPanel(
             Spacer(Modifier.weight(1f))
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (showColors && type == FynxStatusType.TEXT) {
-                        Surface(
-                            color = Color(0xFF202124),
-                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                            modifier = Modifier.fillMaxWidth()
+                        ModalBottomSheet(
+                            onDismissRequest = { if (!publishing && !recording) showColors = false },
+                            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                            containerColor = Color(0xFF202124),
+                            dragHandle = {
+                                BottomSheetDefaults.DragHandle(
+                                    color = Color(0xFF858A91),
+                                    width = 44.dp,
+                                    height = 5.dp
+                                )
+                            }
                         ) {
                             Column(
                                 Modifier
-                                    .heightIn(max = 360.dp)
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    .fillMaxWidth()
+                                    .heightIn(min = 280.dp, max = 420.dp)
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 16.dp)
                             ) {
-                                var handleDragDistance by remember { mutableFloatStateOf(0f) }
-                                Box(
+                                // Keep the controls scrollable, but pin Done outside the
+                                // scroll area so short screens cannot hide the dismiss action.
+                                Column(
                                     Modifier
-                                        .width(48.dp)
-                                        .height(24.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .pointerInput(showColors, publishing, recording) {
-                                            detectVerticalDragGestures(
-                                                onVerticalDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    handleDragDistance += dragAmount
-                                                },
-                                                onDragEnd = {
-                                                    if (handleDragDistance > 36f && !publishing && !recording) {
-                                                        showColors = false
-                                                    }
-                                                    handleDragDistance = 0f
-                                                },
-                                                onDragCancel = { handleDragDistance = 0f }
-                                            )
-                                        }
-                                        .clickable(enabled = !publishing && !recording) { showColors = false },
-                                    contentAlignment = Alignment.Center
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Box(
-                                        Modifier
-                                            .width(40.dp)
-                                            .height(4.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(Color(0xFF858A91))
-                                    )
-                                }
                                 Text(
                                     "Styling & Options",
                                     color = Color.White,
@@ -382,6 +438,19 @@ fun FynxMatureStatusComposerPanel(
                                         Icon(Icons.Default.FormatAlignRight, "Align right", tint = if (alignment == 2) Color.White else Color.White.copy(alpha = .58f))
                                     }
                                 }
+                                }
+                                Row(
+                                    Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(
+                                        onClick = { showColors = false },
+                                        enabled = !recording && !publishing
+                                    ) {
+                                        Text("Done", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
                             }
                         }
                     }
@@ -407,13 +476,13 @@ fun FynxMatureStatusComposerPanel(
                         ) {
                             // Keep the three composition tools grouped like the reference.
                             IconButton(
-                                onClick = { showColors = !showColors },
+                                onClick = { showColors = !showColors; showMediaTools = false; showTools = false },
                                 enabled = !recording && !publishing,
                                 modifier = Modifier.size(44.dp)
                             ) {
                                 Icon(Icons.Default.TextFields, "Text styling", tint = Color.White)
                             }
-                            var showStatusEmoji by remember { mutableStateOf(false) }
+                            // Shares composer-level state so Back dismisses this menu first.
                             Box {
                                 IconButton(
                                     onClick = { showStatusEmoji = true },
@@ -435,7 +504,7 @@ fun FynxMatureStatusComposerPanel(
                                 }
                             }
                             IconButton(
-                                onClick = { showMediaTools = !showMediaTools },
+                                onClick = { showMediaTools = !showMediaTools; showColors = false; showTools = false },
                                 enabled = !recording && !publishing,
                                 modifier = Modifier.size(44.dp)
                             ) {
@@ -499,11 +568,11 @@ fun FynxMatureStatusComposerPanel(
                             }
                         }
                     }
-                    if (type != FynxStatusType.TEXT && mediaUri != null) {
+                    if (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri != null) {
                         OutlinedTextField(
                             value = text,
                             onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).imePadding(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                             singleLine = true,
                             placeholder = { Text("Add a caption…", color = Color.White.copy(alpha = .72f)) },
                             textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
@@ -519,7 +588,7 @@ fun FynxMatureStatusComposerPanel(
                         )
                     }
                     // Media creation tools stay hidden until the user explicitly opens them.
-                    if (showMediaTools) {
+                    if (showMediaTools && !imeVisible) {
                         LazyRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(18.dp),
@@ -528,11 +597,12 @@ fun FynxMatureStatusComposerPanel(
                             item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
                             item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO || type == FynxStatusType.VIDEO, !recording && !publishing) { pickMedia.launch(arrayOf("image/*", "video/*")) } }
                             item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; mediaUri = null; elapsed = 0L; accumulatedRecordingMs = 0L; if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) } }
+                            item { MatureStatusModeButton(Icons.Default.MusicNote, if (selectedMusic == null) "Add music" else "Change music", selectedMusic != null, !publishing && !recording) { onChooseMusic(); showColors = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; mediaUri = null; elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false } }
                         }
                     }
                     // Media tools are revealed from the photo/add control in the action row.
-                                        if (type == FynxStatusType.VOICE) {
+                                        if (type == FynxStatusType.VOICE && !imeVisible) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                             if (recording) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -552,7 +622,7 @@ fun FynxMatureStatusComposerPanel(
                                     }, enabled = !publishing) {
                                         Text(if (recordingPaused) "Resume" else "Pause")
                                     }
-                                    FilledTonalButton(onClick = { stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; recordingPaused = false; accumulatedRecordingMs = 0L } }) {
+                                    FilledTonalButton(onClick = { finishVoiceRecordingToPreview() }) {
                                         Icon(Icons.Default.Stop, "Stop")
                                         Spacer(Modifier.width(6.dp))
                                         Text("Stop • ${formatMatureTime(elapsed)}")
@@ -560,7 +630,7 @@ fun FynxMatureStatusComposerPanel(
                                 }
                             } else if (mediaUri != null) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FynxRemoteAudio(mediaUri.toString(), Modifier.fillMaxWidth().padding(horizontal = 24.dp), elapsed.coerceAtLeast(1_000L))
+                                    FynxLocalStatusAudioPreview(mediaUri!!, elapsed.coerceAtLeast(1_000L))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                         OutlinedButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) {
                                             Icon(Icons.Default.Close, "Clear voice")
@@ -587,7 +657,33 @@ fun FynxMatureStatusComposerPanel(
                                     }
                                 }
                             } else {
-                                Text("Tap Voice to start recording", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall)
+                                Button(
+                                    onClick = {
+                                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                            beginMatureVoiceRecording(
+                                                context,
+                                                onStarted = { r, f ->
+                                                    recorder = r
+                                                    recordingFile = f
+                                                    recordingStarted = System.currentTimeMillis()
+                                                    elapsed = 0L
+                                                    accumulatedRecordingMs = 0L
+                                                    recordingPaused = false
+                                                    recording = true
+                                                    error = null
+                                                },
+                                                onError = { message -> error = message }
+                                            )
+                                        } else {
+                                            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
+                                    enabled = !publishing
+                                ) {
+                                    Icon(Icons.Default.Mic, contentDescription = "Start voice recording")
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Start recording")
+                                }
                             }
                         }
                     }
@@ -607,7 +703,7 @@ fun FynxMatureStatusComposerPanel(
                         } else {
                             Button(
                                 onClick = ::publish,
-                                enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type != FynxStatusType.TEXT && mediaUri != null)),
+                                enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type == FynxStatusType.MUSIC && selectedMusic != null) || (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri != null)),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
                                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 9.dp)
                             ) {
@@ -726,6 +822,135 @@ private fun MatureStatusColorSwatch(
     )
 }
 private fun matureStatusFont(font: FynxStatusTextFont): FontFamily = when (font) { FynxStatusTextFont.SERIF -> FontFamily.Serif; FynxStatusTextFont.TYPEWRITER -> FontFamily.Monospace; else -> FontFamily.SansSerif }
+
+@Composable
+private fun FynxLocalStatusAudioPreview(uri: Uri, durationMs: Long) {
+    val context = LocalContext.current
+    var player by remember(uri) { mutableStateOf<MediaPlayer?>(null) }
+    var playing by remember(uri) { mutableStateOf(false) }
+    var loading by remember(uri) { mutableStateOf(false) }
+    var positionMs by remember(uri) { mutableLongStateOf(0L) }
+    var actualDurationMs by remember(uri) { mutableLongStateOf(durationMs.coerceAtLeast(1L)) }
+    var error by remember(uri) { mutableStateOf<String?>(null) }
+
+    DisposableEffect(uri) {
+        onDispose {
+            player?.let { current -> runCatching { current.stop() }; runCatching { current.release() } }
+            player = null
+        }
+    }
+    LaunchedEffect(player, playing) {
+        while (playing) {
+            player?.let { current -> runCatching { positionMs = current.currentPosition.toLong() } }
+            delay(120L)
+        }
+    }
+
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            enabled = !loading,
+            onClick = {
+                val current = player
+                if (current != null) {
+                    if (playing) {
+                        runCatching { current.pause(); current.seekTo(0) }
+                        positionMs = 0L
+                        playing = false
+                    } else {
+                        if (actualDurationMs > 0L && positionMs >= actualDurationMs) {
+                            runCatching { current.seekTo(0) }
+                            positionMs = 0L
+                        }
+                        runCatching { current.start() }
+                            .onSuccess { playing = true }
+                            .onFailure { error = "Audio preview unavailable." }
+                    }
+                } else {
+                    loading = true
+                    error = null
+                    var pending: MediaPlayer? = null
+                    try {
+                        val created = MediaPlayer().apply {
+                            setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                                    .build()
+                            )
+                            setDataSource(context, uri)
+                            setOnPreparedListener { prepared ->
+                                actualDurationMs = prepared.duration.toLong().coerceAtLeast(1L)
+                                loading = false
+                                player = prepared
+                                prepared.start()
+                                playing = true
+                            }
+                            setOnCompletionListener { completed ->
+                                positionMs = completed.duration.toLong()
+                                playing = false
+                            }
+                            setOnErrorListener { failed, _, _ ->
+                                loading = false
+                                playing = false
+                                error = "Audio preview unavailable."
+                                if (player === failed) player = null
+                                runCatching { failed.release() }
+                                true
+                            }
+                        }
+                        pending = created
+                        player = created
+                        created.prepareAsync()
+                    } catch (failure: Exception) {
+                        loading = false
+                        playing = false
+                        error = failure.message ?: "Audio preview unavailable."
+                        runCatching { pending?.release() }
+                        player = null
+                    }
+                }
+            },
+            modifier = Modifier.size(42.dp)
+        ) {
+            Icon(
+                if (playing) Icons.Default.Stop else Icons.Default.Mic,
+                contentDescription = if (playing) "Stop voice preview" else "Play voice preview"
+            )
+        }
+        Column(Modifier.weight(1f).padding(start = 8.dp)) {
+            LinearProgressIndicator(
+                progress = {
+                    if (actualDurationMs > 0L) (positionMs.toFloat() / actualDurationMs.toFloat()).coerceIn(0f, 1f) else 0f
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                error ?: when {
+                    loading -> "Preparing voice preview…"
+                    playing -> "Playing voice Status"
+                    else -> "Voice recording · ${formatMatureTime(actualDurationMs)}"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+
+private fun deleteMatureVoiceDraft(context: Context, uri: Uri?) {
+    if (!uri?.scheme.equals("file", ignoreCase = true)) return
+    runCatching {
+        val path = uri?.path ?: return@runCatching
+        val cacheRoot = context.cacheDir.canonicalPath + File.separator
+        val draft = File(path).canonicalFile
+        if (draft.path.startsWith(cacheRoot) && draft.isFile) draft.delete()
+    }
+}
+
 private fun beginMatureVoiceRecording(context: Context, onStarted: (MediaRecorder, File) -> Unit, onError: (String) -> Unit) { val file = File(context.cacheDir, "fynx-status-${System.currentTimeMillis()}.m4a"); var recorder: MediaRecorder? = null; try { recorder = MediaRecorder().apply { setAudioSource(MediaRecorder.AudioSource.MIC); setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); setAudioEncoder(MediaRecorder.AudioEncoder.AAC); setMaxDuration(FYNX_STATUS_MAX_VOICE_DURATION_MS.toInt()); setOutputFile(file.absolutePath); prepare(); start() }; onStarted(recorder, file) } catch (e: Exception) { runCatching { recorder?.reset() }; runCatching { recorder?.release() }; runCatching { file.delete() }; onError(e.message ?: "Unable to start voice recording.") } }
 private fun stopMatureVoiceRecording(recorder: MediaRecorder?, file: File?, onFinished: (Uri?, String?) -> Unit) { if (recorder == null) { onFinished(null, "Voice recorder is not active."); return }; var stopped = false; try { recorder.stop(); stopped = true } catch (e: Exception) { runCatching { recorder.reset() }; onFinished(null, e.message ?: "Unable to stop voice recording.") } finally { runCatching { recorder.release() } }; if (stopped) { val output = file?.takeIf { it.exists() && it.length() > 0L }; if (output != null) onFinished(Uri.fromFile(output), null) else { runCatching { file?.delete() }; onFinished(null, "Voice recording was empty.") } } }
 private fun formatMatureTime(ms: Long): String { val total = (ms / 1000L).coerceAtLeast(0L); return "%02d:%02d".format(total / 60L, total % 60L) }

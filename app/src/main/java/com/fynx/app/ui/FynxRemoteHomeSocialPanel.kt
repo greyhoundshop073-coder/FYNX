@@ -67,7 +67,7 @@ private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
 private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val mutualFriends: Int, val reason: String, val photoId: String?)
 
 @Composable
-fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null, networkReady: Boolean? = null) {
+fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, onOpenStatusOwner: (String) -> Unit = { onOpenAuthorProfile(it) }, header: (@Composable () -> Unit)? = null, networkReady: Boolean? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
@@ -233,13 +233,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
     fun openAuthorStatus(username: String) {
-        scope.launch {
-            FynxStatusClient.list(context).onSuccess { statuses ->
-                val owner = username.removePrefix("@").trim()
-                val ownerStatuses = statuses.filterNot(FynxStatus::isExpired).filter { it.ownerUsername.equals(owner, true) }.sortedBy { it.createdAtMillis }
-                if (ownerStatuses.isNotEmpty()) authorStatusViewer = ownerStatuses else onOpenAuthorProfile(owner)
-            }.onFailure { onOpenAuthorProfile(username.removePrefix("@").trim()) }
-        }
+        val owner = username.removePrefix("@").trim()
+        if (owner.isNotBlank()) onOpenStatusOwner(owner)
     }
     fun hydrateInteractionStates(items: List<FynxRemoteSocialClient.RemotePost>) {
         val ids = items.map { it.id }.filter { it.isNotBlank() && !interactionStates.containsKey(it) }.distinct(); if (ids.isEmpty()) return
@@ -1279,6 +1274,7 @@ private fun HomeAuthorStatusDialog(statuses: List<FynxStatus>, onDismiss: () -> 
                     FynxStatusType.PHOTO -> status.contentUri?.let { FynxRemoteMedia(it, "image", Modifier.fillMaxWidth().heightIn(max = 560.dp)) }
                     FynxStatusType.VIDEO -> status.contentUri?.let { FynxRemoteMedia(it, "video", Modifier.fillMaxWidth().heightIn(max = 560.dp)) }
                     FynxStatusType.VOICE -> Text("Voice Status", color = Color(status.textStyle.foregroundColor))
+                    FynxStatusType.MUSIC -> Text(status.musicTitle?.ifBlank { "Music Status" } ?: "Music Status", color = Color(status.textStyle.foregroundColor))
                 }
                 status.text?.takeIf { status.type != FynxStatusType.TEXT && it.isNotBlank() }?.let { Text(it, color = Color(status.textStyle.foregroundColor), modifier = Modifier.padding(top = 12.dp)) }
             }

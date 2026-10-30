@@ -2,6 +2,8 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -10,7 +12,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
-enum class FynxStatusType { TEXT, PHOTO, VIDEO, VOICE }
+enum class FynxStatusType { TEXT, PHOTO, VIDEO, VOICE, MUSIC }
 enum class FynxStatusAudience { EVERYONE, FRIENDS, ONLY_ME }
 enum class FynxStatusTextFont { CLASSIC, CLEAN, BOLD, SERIF, TYPEWRITER }
 
@@ -40,7 +42,17 @@ data class FynxStatus(
 const val FYNX_STATUS_EXPIRY_MS = 24L * 60L * 60L * 1000L
 const val FYNX_STATUS_MAX_TEXT_LENGTH = 700
 const val FYNX_STATUS_MAX_VIDEO_DURATION_MS = 90_000L
+const val FYNX_STATUS_MAX_VIDEO_BYTES = 10L * 1024L * 1024L
 const val FYNX_STATUS_MAX_VOICE_DURATION_MS = 30_000L
+
+/** Shared pink/green ring used by Status and Stories across Home and the Status hub. */
+fun fynxStatusRingBrush(): Brush = Brush.sweepGradient(
+    listOf(
+        Color(0xFFFF3D8D),
+        Color(0xFF22C55E),
+        Color(0xFFFF3D8D)
+    )
+)
 
 object FynxStatusStore {
     private const val PREFS = "fynx_status_foundation"
@@ -98,7 +110,7 @@ object FynxStatusStore {
                 FynxStatusType.PHOTO -> ".jpg"
                 FynxStatusType.VIDEO -> ".mp4"
                 FynxStatusType.VOICE -> ".m4a"
-                FynxStatusType.TEXT -> return@runCatching null
+                FynxStatusType.MUSIC, FynxStatusType.TEXT -> return@runCatching null
             }
             val account = FynxAuthStore.accountStorageKey(context) ?: return@runCatching null
             val safeAccount = storageKey(account)

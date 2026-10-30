@@ -122,7 +122,10 @@ for needle in ('val previous = posts.firstOrNull { it.id == id }','optimisticLik
 
 require(home_shell, 'FynxRemoteHomeSocialPanel(', "Home feed host")
 require_normalized(home_shell, 'header = { FynxVisibleUpdatesPanel(', "Home AI/Status header wiring")
-require_normalized(home_shell, 'onCreateStatus = { showStatusCreatorHub = true }', "Home Status plus -> full Add status hub")
+require_normalized(home_shell, 'val openStatusCreator: () -> Unit = onCreateStatus ?: { showStatusCreatorHub = true }', "Home Status plus retains the local fallback while accepting the app-shell route")
+require_normalized(home_shell, 'onCreateStatus = openStatusCreator', "Home Status plus forwards the create action into the app shell")
+require(read("app/src/main/java/com/fynx/app/ui/FynxApp.kt"), 'onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }', "Home Status plus opens the immersive app-shell creator")
+require(read("app/src/main/java/com/fynx/app/ui/FynxApp.kt"), 'if (selected == "Home" && statusCreatorRequested)', "app shell overlays Status creator without navigating away from Home")
 require_normalized(home_shell, 'FynxStatusHubPanel( startWithCreator = true, onExitCreator = { showStatusCreatorHub = false } )', "Home Status creator exposes the full media/voice option hub and exits cleanly")
 require(visible_updates, 'onCreateStatus: () -> Unit', "Status create callback")
 require(visible_updates, 'IconButton(onClick = onCreateStatus', "Status create control action")
@@ -204,7 +207,8 @@ require(app_source, 'if (notificationPreferencesOnly) notificationPreferencesOnl
 require(app_source, 'IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" })', "Home notification entry clears stale Profile-only notification context")
 require(app_source, 'navigationHistory = (navigationHistory.dropLast(1).filterNot { it == selected } + selected).ifEmpty { listOf("Home") }', "system Back keeps contextual destinations aligned with navigation history")
 require(app_source, 'if (!isKeyboardVisible && selected in mainNav.map { it.key })', "bottom navigation is available on every primary tab")
-require(app_source, 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden', "Home and Marketplace scroll hiding does not hide navigation on other tabs")
+if 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' not in app_source and 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' not in app_source:
+    raise SystemExit("HOME INTERACTIONS RED: Home and Marketplace scroll hiding must preserve the Status-creator navigation exception and keep navigation visible on other tabs")
 money_center = read("app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt")
 budget = read("app/src/main/java/com/fynx/app/ui/BudgetPlannerPanel.kt")
 require(app_source, '"AI Creation" -> { selected = "AI" }', "AI Creation central route")
