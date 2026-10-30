@@ -207,7 +207,8 @@ require(app_source, 'if (notificationPreferencesOnly) notificationPreferencesOnl
 require(app_source, 'IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" })', "Home notification entry clears stale Profile-only notification context")
 require(app_source, 'navigationHistory = (navigationHistory.dropLast(1).filterNot { it == selected } + selected).ifEmpty { listOf("Home") }', "system Back keeps contextual destinations aligned with navigation history")
 require(app_source, 'if (!isKeyboardVisible && selected in mainNav.map { it.key })', "bottom navigation is available on every primary tab")
-require(app_source, 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' in app_source or 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' in app_source, "Home and Marketplace scroll hiding preserves the Status-creator navigation exception and keeps navigation visible on other tabs")
+if 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' not in app_source and 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' not in app_source:
+    raise SystemExit("HOME INTERACTIONS RED: Home and Marketplace scroll hiding must preserve the Status-creator navigation exception and keep navigation visible on other tabs")
 money_center = read("app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt")
 budget = read("app/src/main/java/com/fynx/app/ui/BudgetPlannerPanel.kt")
 require(app_source, '"AI Creation" -> { selected = "AI" }', "AI Creation central route")
