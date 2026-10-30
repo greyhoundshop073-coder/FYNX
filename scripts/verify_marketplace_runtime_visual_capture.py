@@ -127,7 +127,7 @@ checks.extend([
         'selected != "Home" && selected != "Marketplace"' in app_source
         and 'if (selected == "Marketplace") {' in app_source
         and '.height(52.dp * (1f - homeChromeProgress))' in app_source
-        and 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' in app_source,
+        and ('visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' in app_source or 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' in app_source),
     ),
     (
         "Great Deals uses the Home silver smoky mirror-glass palette with transparent card surface",
