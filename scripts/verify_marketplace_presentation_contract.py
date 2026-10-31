@@ -32,28 +32,32 @@ check("Sell entry point remains visible when Marketplace has no current listings
 check("Sell entry point opens the real product-publish dialog",
       "if (showSell) MarketplaceSellDialog(" in panel and "onPublished = { listingId ->" in panel)
 
-# Marketplace fetches sellerPhotoId/photoId itself. Passing ownerUsername makes the shared
-# avatar composable prefer its separate profile cache and ignore that fetched media ID.
+# Marketplace-specific wrapper prefers the ID fetched for the listing seller while observing
+# identity revisions so authoritative profile photo changes/removals are reflected live.
 def avatar_lines(source: str):
-    return [line.strip() for line in source.splitlines() if "FynxRemoteProfileAvatar(" in line]
+    return [line.strip() for line in source.splitlines() if "FynxMarketplaceSellerAvatar(" in line]
 
 panel_avatars = avatar_lines(panel)
 reference_avatars = avatar_lines(reference)
 storefront_avatars = avatar_lines(storefront)
-check("Marketplace seller-card and details avatars consume fetched photo IDs",
-      len(panel_avatars) == 2 and all("ownerUsername =" not in line for line in panel_avatars)
-      and all("photoId," in line for line in panel_avatars))
+avatar_binding = read("FynxMarketplaceSellerAvatar.kt")
+check("Marketplace seller-card and details avatars receive fetched seller photo IDs",
+      len(panel_avatars) == 2 and all("FynxMarketplaceSellerAvatar(photoId," in line for line in panel_avatars))
 check("Marketplace fetches seller avatars for all currently loaded product sellers",
       "val sellers = listings.distinctBy" in panel
       and "val reputationSellers = sellers.take(12)" in panel
       and "if (!photoMap.containsKey(key))" in panel
       and "FynxProfileRemoteClient.cachedProfilePhotoId(context, username)" in panel)
-check("Marketplace product-card avatar consumes sellerPhotoId directly",
-      len(reference_avatars) == 1 and "FynxRemoteProfileAvatar(sellerPhotoId," in reference_avatars[0]
-      and "ownerUsername =" not in reference_avatars[0])
-check("Public seller-store avatar consumes fetched photoId directly",
-      len(storefront_avatars) == 1 and "FynxRemoteProfileAvatar(photoId," in storefront_avatars[0]
-      and "ownerUsername =" not in storefront_avatars[0])
+check("Marketplace product-card avatar receives sellerPhotoId directly",
+      len(reference_avatars) == 1 and "FynxMarketplaceSellerAvatar(sellerPhotoId," in reference_avatars[0])
+check("Public seller-store avatar receives fetched photoId directly",
+      len(storefront_avatars) == 1 and "FynxMarketplaceSellerAvatar(photoId," in storefront_avatars[0])
+check("Marketplace avatars observe cache revisions and authoritative removals",
+      "FynxAvatarIdentityStore.revisions().collectAsState()" in avatar_binding
+      and "hasCachedProfilePhotoEntry(context, normalizedOwner)" in avatar_binding
+      and "cachedProfilePhotoId(context, it)" in avatar_binding
+      and "FynxRemoteProfileAvatar(" in avatar_binding
+      and "ownerUsername =" not in avatar_binding)
 
 # Verify listing media IDs are wired through the authenticated remote-media loader in all
 # buyer and seller presentation surfaces.
