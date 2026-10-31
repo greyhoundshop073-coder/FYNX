@@ -28,8 +28,13 @@ checks = [
         and 'TEST_EXIT=$?' in runner,
     ),
     (
-        "focused navigation mode is isolated from unrelated Home/Chat/Status journey loops",
-        'if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":' in navigation
+        "Marketplace-only capture skips Home mirror-glass, camera, Chat/Groups and Status journeys",
+        'MARKETPLACE_ONLY=os.environ.get("FYNX_MARKETPLACE_RUNTIME_ONLY") == "1"' in navigation
+        and 'if VISUALS_ONLY and not MARKETPLACE_ONLY and not error:' in navigation
+        and 'if VISUALS_ONLY or MARKETPLACE_ONLY:' in navigation
+        and 'if not MARKETPLACE_ONLY:' in navigation
+        and 'if [ "${FYNX_MARKETPLACE_RUNTIME_ONLY:-0}" != "1" ]; then' in runner
+        and 'leaving Status creator journey untouched.' in runner
         and 'raise SystemExit(1 if FAILURES else 0)' in navigation,
     ),
     (
