@@ -979,18 +979,74 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         FAILURES.append(prefix + ": Portrait look was not exposed in the captured-photo editor")
         screenshot(f"{prefix}-camera-portrait-look-missing.png")
 
-    # Retake is a safe local action. Assert it returns to a fresh live camera and never reaches Send.
+    # Retake must discard the local edit and restore the live camera without publishing.
     retake_xml = tap_control(
         editor_xml, ["Retake"], f"{prefix}-camera-photo-retake",
         ["Take photo", "Switch front/back camera"]
     )
-    if retake_xml and find_control(retake_xml, ["Take photo"]) and find_control(retake_xml, ["Switch front/back camera"]):
+    retake_ready = bool(
+        retake_xml
+        and find_control(retake_xml, ["Take photo"])
+        and find_control(retake_xml, ["Switch front/back camera"])
+    )
+    if retake_ready:
         report.append("- PASS Retake returned from the edited image to the live camera preview")
         screenshot(f"{prefix}-camera-after-retake.png")
+        verify_camera_image_signal(
+            f"{prefix}-camera-after-retake.png",
+            (180, 650, 1260, 1900),
+            prefix + " live preview after Retake"
+        )
     else:
         FAILURES.append(prefix + ": Retake did not return to the live camera preview")
 
+    # Capture a second local photo to verify the camera's Send action hands media to the
+    # actual New post caption draft. The draft is inspected and then dismissed; Post is never tapped.
     home = camera_return_to_home(retake_xml or editor_xml, prefix + "-photo-journey-return")
+    if retake_ready:
+        second_editor = tap_control(
+            retake_xml, ["Take photo"], f"{prefix}-camera-photo-before-post-draft",
+            ["Retake", "Rotate", "Send"]
+        )
+        if second_editor:
+            screenshot(f"{prefix}-camera-photo-editor-for-post-draft.png")
+            verify_camera_controls_fit_safe_area(
+                second_editor, ["Retake", "Rotate", "Send"],
+                prefix + " photo editor before post handoff"
+            )
+            draft_xml = tap_control(
+                second_editor, ["Send"], f"{prefix}-camera-send-to-post-draft",
+                ["New post", "What's on your mind?", "Post"]
+            )
+            if draft_xml:
+                screenshot(f"{prefix}-camera-create-post-caption.png")
+                (ROOT / f"{prefix}-camera-create-post-caption.xml").write_text(
+                    draft_xml + chr(10), encoding="utf-8"
+                )
+                # Keep the caption entry visible in its own capture, then reveal the attached
+                # photo preview and readiness marker in a separate evidence frame.
+                if not find_control(draft_xml, ["Remove photo/video", "1 item ready"]):
+                    run("adb", "shell", "input", "swipe", "540", "1600", "540", "850", "450")
+                    time.sleep(0.6)
+                    draft_xml = dump_ui(f"{prefix}-camera-create-post-media.xml") or draft_xml
+                screenshot(f"{prefix}-camera-create-post-media.png")
+                (ROOT / f"{prefix}-camera-create-post-media.xml").write_text(
+                    draft_xml + chr(10), encoding="utf-8"
+                )
+                if (
+                    find_control(draft_xml, ["Remove photo/video"])
+                    or find_control(draft_xml, ["1 item ready"])
+                ):
+                    report.append("- PASS camera Send handed the second photo to the New post caption draft with its attachment retained; draft was dismissed without publishing")
+                else:
+                    FAILURES.append(prefix + ": New post caption draft opened but the captured photo attachment was not confirmed in its media section")
+                home = camera_return_to_home(draft_xml, prefix + "-post-draft-dismiss")
+            else:
+                FAILURES.append(prefix + ": camera Send did not open the New post caption draft")
+                home = camera_return_to_home(second_editor, prefix + "-post-draft-send-failed")
+        else:
+            FAILURES.append(prefix + ": second photo capture did not reach the editor for Send-to-draft verification")
+
     return capture_camera_video_journey(home, prefix)
 
 def list_app_cache_videos() -> set[str]:
