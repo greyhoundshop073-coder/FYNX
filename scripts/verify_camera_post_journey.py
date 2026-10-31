@@ -20,6 +20,11 @@ checks = [
      "Color(0xFF172438).copy(alpha = 0.62f)" in camera
      and "Color(0xFF25364A).copy(alpha = 0.32f)" in camera
      and "Color.White.copy(alpha = 0.25f)" in camera),
+    ("Camera capture and preview show the selected music chip over the media without replacing the existing catalogue",
+     "CameraMusicChip(" in camera and "selectedMusic: FynxMusicCatalogueTrack?" in camera
+     and "onChooseMusic = onChooseMusic" in camera
+     and "selectedMusic = selectedCatalogueMusic" in home
+     and "showMusicPicker = true" in home),
     ("Camera editor exposes Next and preserves the existing captured-media callback",
      'Text("Next")' in camera and "onCaptured(previewUri, previewType)" in camera),
     ("Next details composer shows media preview, description, tag helpers and privacy entry",
