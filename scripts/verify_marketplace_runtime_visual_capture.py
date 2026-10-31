@@ -84,7 +84,7 @@ checks = [
     ),
     (
         "product-publishing form is captured without submitting a listing",
-        '["Sell something", "Start selling", "Sell your first product"]' in navigation
+        '["Sell", "Sell something", "Start selling", "Sell your first product"]' in navigation
         and "without submitting or creating a listing" in navigation,
     ),
     (
