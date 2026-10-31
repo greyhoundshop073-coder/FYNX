@@ -140,7 +140,7 @@ DIAGNOSTIC_MARKERS = (
     "Open FYNX camera", "FYNX", "Chat", "Chats", "Friends", "More", "Stories",
     "Status", "Find People", "Search username or name", "Search chats",
     "Messages and groups in one place", "Your private conversations",
-    "New post", "What's on your mind?", "Photo", "Video/Camera",
+    "New post", "Add description...", "Photo", "Video/Camera",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
@@ -443,7 +443,7 @@ def camera_wait_for_video_export_idle(
             not processing
             and find_control(latest, ["Apply style / captions"])
             and find_control(latest, ["Retake"])
-            and find_control(latest, ["Send"])
+            and find_control(latest, ["Next"])
             and control_is_enabled(latest, ["Apply style / captions"])
         )
         if visible_error:
@@ -692,7 +692,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     """Exercise the real camera preview/photo editor and safe controls without publishing a post."""
     composer_xml = tap_control(
         home_xml, ["Open FYNX camera"], f"{prefix}-home-camera-composer",
-        ["What's on your mind?"]
+        ["Add description..."]
     )
     if not composer_xml:
         return home_xml
@@ -975,33 +975,33 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         return capture_camera_video_journey(home_after_gallery_abort, prefix)
 
     editor_xml = tap_control(
-        camera_xml, ["Take photo"], f"{prefix}-camera-photo-capture", ["Send"]
+        camera_xml, ["Take photo"], f"{prefix}-camera-photo-capture", ["Next"]
     )
     if not editor_xml:
         return camera_return_to_home(camera_xml, prefix + "-photo-capture-failed")
 
     screenshot(f"{prefix}-camera-photo-editor-initial.png")
     verify_camera_image_signal(f"{prefix}-camera-photo-editor-initial.png", (180, 650, 1260, 1900), prefix + " photo editor preview")
-    verify_camera_controls_fit_safe_area(editor_xml, ["Retake", "Rotate", "Send"], prefix + " photo editor")
+    verify_camera_controls_fit_safe_area(editor_xml, ["Retake", "Rotate", "Next"], prefix + " photo editor")
     (ROOT / f"{prefix}-camera-photo-editor-initial.xml").write_text(editor_xml + chr(10), encoding="utf-8")
     missing_editor = [
-        label for label in ["Looks", "Face FX", "Background", "AI Studio", "Retake", "Send"]
+        label for label in ["Looks", "Face FX", "Background", "AI Studio", "Retake", "Next"]
         if not find_control(editor_xml, [label])
     ]
     if missing_editor:
         FAILURES.append(prefix + ": captured-photo editor missing expected category/action controls: " + ", ".join(missing_editor))
     else:
-        report.append("- PASS photo editor exposes the grouped effect categories and Retake/Rotate/Send actions")
+        report.append("- PASS photo editor exposes the grouped effect categories and Retake/Rotate/Next actions")
 
     # Rotate is a real file operation, not just a decorative action. Exercise it before other
     # edits and require the editor and its safe action row to remain usable afterwards.
     rotate_xml = tap_control(
         editor_xml, ["Rotate"], f"{prefix}-camera-photo-rotate",
-        ["Retake", "Send"]
+        ["Retake", "Next"]
     )
     if rotate_xml:
         editor_xml = camera_wait_for_control(
-            rotate_xml, ["Send"], enabled=True, timeout=20.0,
+            rotate_xml, ["Next"], enabled=True, timeout=20.0,
             prefix=f"{prefix}-camera-photo-rotate-ready"
         )
         screenshot(f"{prefix}-camera-photo-editor-after-rotate.png")
@@ -1011,13 +1011,13 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             prefix + " rotated photo editor preview"
         )
         verify_camera_controls_fit_safe_area(
-            editor_xml, ["Retake", "Rotate", "Send"],
+            editor_xml, ["Retake", "Rotate", "Next"],
             prefix + " rotated photo editor"
         )
-        if control_is_enabled(editor_xml, ["Send"]):
+        if control_is_enabled(editor_xml, ["Next"]):
             report.append("- PASS Rotate completed and the photo editor retained its visible, enabled action row")
         else:
-            FAILURES.append(prefix + ": Send did not remain enabled after photo rotation")
+            FAILURES.append(prefix + ": Next did not remain enabled after photo rotation")
         (ROOT / f"{prefix}-camera-photo-editor-after-rotate.xml").write_text(
             editor_xml + chr(10), encoding="utf-8"
         )
@@ -1051,7 +1051,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         FAILURES.append(prefix + ": photo editor could not return to Looks for the Portrait-processing test")
 
     # Exercise a filter through the actual editor UI. Portrait must process onto the saved file;
-    # Send must become enabled only after processing is complete. Never publish the image.
+    # Next must become enabled only after processing is complete. Never publish the image.
     portrait = find_control(editor_xml, ["Portrait"])
     if portrait:
         _, px, py = portrait
@@ -1059,11 +1059,11 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         time.sleep(0.4)
         editor_xml = dump_ui(f"{prefix}-camera-portrait-selected.xml") or editor_xml
         editor_xml = camera_wait_for_control(
-            editor_xml, ["Send"], enabled=True, timeout=35.0,
+            editor_xml, ["Next"], enabled=True, timeout=35.0,
             prefix=f"{prefix}-camera-portrait-processing"
         )
-        if control_is_enabled(editor_xml, ["Send"]):
-            report.append("- PASS choosing Portrait completed photo processing and left Send enabled")
+        if control_is_enabled(editor_xml, ["Next"]):
+            report.append("- PASS choosing Portrait completed photo processing and left Next enabled")
             screenshot(f"{prefix}-camera-photo-editor-portrait-ready.png")
             (ROOT / f"{prefix}-camera-photo-editor-portrait-ready.xml").write_text(editor_xml + chr(10), encoding="utf-8")
     else:
@@ -1091,22 +1091,22 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     else:
         FAILURES.append(prefix + ": Retake did not return to the live camera preview")
 
-    # Capture a second local photo to verify the camera's Send action hands media to the
+    # Capture a second local photo to verify the camera's Next action hands media to the
     # actual New post caption draft. The draft is inspected and then dismissed; Post is never tapped.
     if retake_ready:
         second_editor = tap_control(
             retake_xml, ["Take photo"], f"{prefix}-camera-photo-before-post-draft",
-            ["Retake", "Rotate", "Send"]
+            ["Retake", "Rotate", "Next"]
         )
         if second_editor:
             screenshot(f"{prefix}-camera-photo-editor-for-post-draft.png")
             verify_camera_controls_fit_safe_area(
-                second_editor, ["Retake", "Rotate", "Send"],
+                second_editor, ["Retake", "Rotate", "Next"],
                 prefix + " photo editor before post handoff"
             )
             draft_xml = tap_control(
-                second_editor, ["Send"], f"{prefix}-camera-send-to-post-draft",
-                ["New post", "What's on your mind?", "Post"]
+                second_editor, ["Next"], f"{prefix}-camera-send-to-post-draft",
+                ["New post", "Add description...", "Post"]
             )
             if draft_xml:
                 screenshot(f"{prefix}-camera-create-post-caption.png")
@@ -1126,15 +1126,15 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     find_control(draft_xml, ["Remove photo/video"])
                     or find_control(draft_xml, ["1 item ready"])
                 ):
-                    report.append("- PASS camera Send handed the second photo to the New post caption draft with its attachment retained; draft was dismissed without publishing")
+                    report.append("- PASS camera Next handed the second photo to the New post caption draft with its attachment retained; draft was dismissed without publishing")
                 else:
                     FAILURES.append(prefix + ": New post caption draft opened but the captured photo attachment was not confirmed in its media section")
                 home = camera_return_to_home(draft_xml, prefix + "-post-draft-dismiss")
             else:
-                FAILURES.append(prefix + ": camera Send did not open the New post caption draft")
+                FAILURES.append(prefix + ": camera Next did not open the New post caption draft")
                 home = camera_return_to_home(second_editor, prefix + "-post-draft-send-failed")
         else:
-            FAILURES.append(prefix + ": second photo capture did not reach the editor for Send-to-draft verification")
+            FAILURES.append(prefix + ": second photo capture did not reach the editor for Next-to-draft verification")
             home = camera_return_to_home(retake_xml or editor_xml, prefix + "-post-draft-capture-failed")
     else:
         home = camera_return_to_home(retake_xml or editor_xml, prefix + "-photo-journey-return")
@@ -1184,10 +1184,10 @@ def probe_media_stream_types(path: Path) -> set[str] | None:
     return {line.strip().lower() for line in result.stdout.splitlines() if line.strip()}
 
 def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
-    """Record a short real clip, run a video look, inspect the output and never tap Send."""
+    """Record a short real clip, run a video look, inspect the output and never tap Next."""
     video_files_before = list_app_cache_videos()
     composer = tap_control(
-        home_xml, ["Open FYNX camera"], f"{prefix}-video-home-camera", ["What's on your mind?"]
+        home_xml, ["Open FYNX camera"], f"{prefix}-video-home-camera", ["Add description..."]
     )
     if not composer:
         return camera_return_to_home(home_xml, prefix + "-video-composer-missing")
@@ -1249,7 +1249,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     time.sleep(2.5)
     editor = tap_control(
         recording, ["Stop video note"], f"{prefix}-camera-video-record-stop",
-        ["Retake", "Send"]
+        ["Retake", "Next"]
     )
     if not editor:
         FAILURES.append(prefix + ": recorded video did not reach its preview/editor")
@@ -1260,7 +1260,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             run("adb", "shell", "input", "tap", str(stop_x), str(stop_y))
             time.sleep(1.0)
             retried_editor = dump_ui(f"{prefix}-video-editor-stop-retry.xml") or current_recording
-            if find_control(retried_editor, ["Retake"]) and find_control(retried_editor, ["Send"]):
+            if find_control(retried_editor, ["Retake"]) and find_control(retried_editor, ["Next"]):
                 editor = retried_editor
             else:
                 return camera_return_to_home(retried_editor, prefix + "-video-editor-retry-failed")
@@ -1295,15 +1295,15 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         report.append("- NOTE app cache video could not be copied out for stream-level verification")
     screenshot(f"{prefix}-camera-video-editor-before-effects.png")
     verify_camera_image_signal(f"{prefix}-camera-video-editor-before-effects.png", (180, 650, 1260, 1900), prefix + " video editor preview")
-    verify_camera_controls_fit_safe_area(editor, ["Retake", "Send"], prefix + " video editor")
+    verify_camera_controls_fit_safe_area(editor, ["Retake", "Next"], prefix + " video editor")
     missing = [
-        label for label in ["Video styles", "Cinematic", "Retake", "Send"]
+        label for label in ["Video styles", "Cinematic", "Retake", "Next"]
         if not find_control(editor, [label])
     ]
     if missing:
         FAILURES.append(prefix + ": recorded-video editor missing controls: " + ", ".join(missing))
     else:
-        report.append("- PASS emulator recorded a real short video and exposed style/Retake/Send controls")
+        report.append("- PASS emulator recorded a real short video and exposed style/Retake/Next controls")
 
     # Exercise the actual on-device speech-caption request. An unsupported emulator model is
     # an explicitly reported capability limitation, not a successful transcript claim.
@@ -1380,7 +1380,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 + visible_marker_summary(processed_xml)
             )
         else:
-            report.append("- PASS Cinematic export returned to a stable, enabled video editor; Send was not tapped")
+            report.append("- PASS Cinematic export returned to a stable, enabled video editor; Next was not tapped")
             screenshot(f"{prefix}-camera-video-effect-output.png")
             (ROOT / f"{prefix}-camera-video-effect-output.xml").write_text(
                 processed_xml + chr(10), encoding="utf-8"
@@ -1468,7 +1468,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         if not output_path or not pull_app_cache_file(output_path, local_output) or not local_output.is_file() or local_output.stat().st_size <= 1024:
             FAILURES.append(prefix + f": {style_label} export did not leave a readable MP4 in the app cache")
             continue
-        verify_camera_controls_fit_safe_area(styled_xml, ["Retake", "Send"], prefix + f" {style_label} video editor")
+        verify_camera_controls_fit_safe_area(styled_xml, ["Retake", "Next"], prefix + f" {style_label} video editor")
         screenshot(f"{prefix}-camera-video-style-{slug}-output.png")
         (ROOT / f"{prefix}-camera-video-style-{slug}-output.xml").write_text(styled_xml + chr(10), encoding="utf-8")
         report.append(f"- PASS {style_label} exported a readable MP4; app-side decoded-frame, video-track and source-audio validation passed")

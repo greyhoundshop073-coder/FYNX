@@ -10,6 +10,22 @@ runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_tex
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
+    ("Camera Dialog applies/restores the actual system-bar window and white icon appearance",
+     "DialogWindowProvider" in camera and "resolveFynxCameraWindow(cameraWindowView)" in camera
+     and "window.setBackgroundDrawable(ColorDrawable(cameraBackdrop))" in camera
+     and "isAppearanceLightStatusBars = false" in camera
+     and "previousStatusBarColor" in camera and "window.setBackgroundDrawable(previousBackground)" in camera),
+    ("Camera cards and control trays use a visibly translucent glass tint",
+     "Color(0xFF172438).copy(alpha = 0.62f)" in camera
+     and "Color(0xFF25364A).copy(alpha = 0.32f)" in camera
+     and "Color.White.copy(alpha = 0.25f)" in camera),
+    ("Camera editor exposes Next and preserves the existing captured-media callback",
+     'Text("Next")' in camera and "onCaptured(previewUri,previewType)" in camera),
+    ("Next details composer shows media preview, description, tag helpers and privacy entry",
+     "selectedComposerVisual" in home and "Add description..." in home
+     and "# Hashtags" in home and "@ Mention" in home
+     and "Who can view this post" in home
+     and 'Text(if (posting) "Publishing…" else "Post")' in home),
     ("Camera dialog keeps a dark backdrop behind white edge-to-edge system icons",
      "if (showCamera || showFastCamera)" in home
      and "Surface(Modifier.fillMaxSize(), color = Color(0xFF080A10))" in home
@@ -51,7 +67,7 @@ checks = [
     ("Runtime camera journey verifies switch, flash capability, Gallery, capture, effects and Retake without publishing",
      "def capture_camera_post_journey(" in runtime
      and '["Take photo"]' in runtime
-     and all(f'"{label}"' in runtime for label in ["Face FX", "Cute Ears", "AI Studio", "Portrait Blur", "Retake", "Send"])
+     and all(f'"{label}"' in runtime for label in ["Face FX", "Cute Ears", "AI Studio", "Portrait Blur", "Retake", "Next"])
      and "camera-photo-editor-initial.png" in runtime
      and "camera-photo-editor-after-rotate.png" in runtime
      and '["Rotate"]' in runtime
@@ -60,7 +76,7 @@ checks = [
      and "camera-after-retake.png" in runtime
      and "camera-create-post-caption.png" in runtime
      and "camera-create-post-media.png" in runtime
-     and all(label in runtime for label in ["New post", "What's on your mind?", "Post"])
+     and all(label in runtime for label in ["New post", "Add description...", "# Hashtags", "@ Mention", "Post"])
      and "gallery_recovered = False" in runtime
      and "if not gallery_recovered:" in runtime
      and "return capture_camera_video_journey(home_after_gallery_abort, prefix)" in runtime
@@ -68,7 +84,7 @@ checks = [
      and ("both front- and back-facing CameraX devices switched to usable previews" in runtime or "this CI AVD exposes only a rear-facing camera" in runtime)
      and "Gallery opened Android's Photo Picker as the focused foreground surface" in runtime
      and "rear-camera torch toggled on and back off" in runtime
-     and "Send must become enabled" in runtime
+     and "Next must become enabled" in runtime
      and "without publishing a post" in runtime),
     ("Runtime video journey records a real clip, applies Cinematic, preserves audio where inspectable, and never publishes",
      "def capture_camera_video_journey(" in runtime
@@ -85,12 +101,12 @@ checks = [
      and "processed video dropped the source audio stream" in runtime
      and "Generate on-device captions" in runtime
      and "camera-video-effect-output.png" in runtime
-     and "never tap Send" in runtime),
+     and "never tap Next" in runtime),
     ("Home camera starts a fresh session", "capturedUris = emptyList()" in home and "cameraOpenedFromComposer = false" in home),
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
     ("Camera dismiss returns to an existing composer draft", "cameraOpenedFromComposer && !posting" in home),
     ("Camera preview supports retake before handoff", 'Text("Retake")' in camera and "retake()" in camera),
-    ("Camera preview sends the captured asset to the composer", 'Text("Send")' in camera and "onCaptured(previewUri,previewType)" in camera),
+    ("Camera preview sends the captured asset to the composer", 'Text("Next")' in camera and "onCaptured(previewUri,previewType)" in camera),
     ("Captured media uses the authoritative media type resolver", "FynxMultiMediaPostClient.mediaKind(context, it)" in home),
     ("Gallery media is deduplicated and capped at four", "uris.distinct().take(4)" in home and ".take(4)" in home),
     ("Combined camera and gallery media remains capped at four", "(capturedUris + uri).distinct().take(4)" in home),

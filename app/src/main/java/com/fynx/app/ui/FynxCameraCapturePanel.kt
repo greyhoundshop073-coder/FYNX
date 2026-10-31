@@ -3,6 +3,11 @@ package com.fynx.app.ui
 import com.fynx.app.R
 
 import android.Manifest
+import android.app.Activity
+import android.content.ContextWrapper
+import android.graphics.drawable.ColorDrawable
+import android.view.View
+import android.view.Window
 import android.content.pm.PackageManager
 import android.content.Context
 import android.graphics.ColorMatrix
@@ -49,6 +54,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOn
@@ -71,14 +77,17 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -87,6 +96,27 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import java.io.File
 import java.io.FileOutputStream
+
+private const val FYNX_CAMERA_WINDOW_BACKGROUND_ARGB: Int = 0xFF080A10.toInt()
+
+/**
+ * Resolve the Window that hosts this composition. The camera normally lives inside
+ * a full-screen Compose Dialog, whose status-bar region is owned by a separate Window.
+ */
+private fun resolveFynxCameraWindow(view: View): Window? {
+    var currentView: View? = view
+    while (currentView != null) {
+        if (currentView is DialogWindowProvider) return currentView.window
+        currentView = currentView.parent as? View
+    }
+
+    var currentContext: android.content.Context = view.context
+    while (currentContext is ContextWrapper) {
+        if (currentContext is Activity) return currentContext.window
+        currentContext = currentContext.baseContext
+    }
+    return (currentContext as? Activity)?.window
+}
 
 private const val MAX_CAMERA_GALLERY_IMAGE_BYTES = 96L * 1024 * 1024
 private const val MAX_CAMERA_GALLERY_VIDEO_BYTES = 512L * 1024 * 1024
@@ -179,6 +209,52 @@ fun FynxCameraCapturePanel(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val cameraWindowView = LocalView.current
+
+    // Apply system-bar presentation to the Dialog Window itself, not only the Activity.
+    // The scoped restore prevents camera settings leaking into the rest of FYNX.
+    DisposableEffect(cameraWindowView) {
+        val window = resolveFynxCameraWindow(cameraWindowView)
+        val previousBackground = window?.decorView?.background
+        val previousStatusBarColor = window?.statusBarColor
+        val previousNavigationBarColor = window?.navigationBarColor
+        val previousSystemUiVisibility = window?.decorView?.systemUiVisibility
+        val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
+        val previousLightStatusBars = controller?.isAppearanceLightStatusBars
+        val previousLightNavigationBars = controller?.isAppearanceLightNavigationBars
+        val previousStatusContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isStatusBarContrastEnforced else null
+        val previousNavigationContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isNavigationBarContrastEnforced else null
+
+        if (window != null) {
+            val cameraBackdrop = FYNX_CAMERA_WINDOW_BACKGROUND_ARGB
+            window.setBackgroundDrawable(ColorDrawable(cameraBackdrop))
+            window.statusBarColor = cameraBackdrop
+            window.navigationBarColor = cameraBackdrop
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                window.isStatusBarContrastEnforced = false
+                window.isNavigationBarContrastEnforced = false
+            }
+            controller?.isAppearanceLightStatusBars = false
+            controller?.isAppearanceLightNavigationBars = false
+        }
+
+        onDispose {
+            if (window != null) {
+                window.setBackgroundDrawable(previousBackground)
+                window.statusBarColor = previousStatusBarColor ?: android.graphics.Color.TRANSPARENT
+                window.navigationBarColor = previousNavigationBarColor ?: android.graphics.Color.TRANSPARENT
+                if (previousSystemUiVisibility != null) {
+                    window.decorView.systemUiVisibility = previousSystemUiVisibility
+                }
+                controller?.isAppearanceLightStatusBars = previousLightStatusBars ?: false
+                controller?.isAppearanceLightNavigationBars = previousLightNavigationBars ?: false
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    previousStatusContrast?.let { window.isStatusBarContrastEnforced = it }
+                    previousNavigationContrast?.let { window.isNavigationBarContrastEnforced = it }
+                }
+            }
+        }
+    }
     val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.PERFORMANCE; scaleType = PreviewView.ScaleType.FILL_CENTER } }
     val scope = rememberCoroutineScope()
     var profilePhotoId by remember { mutableStateOf<String?>(null) }
@@ -562,8 +638,8 @@ fun FynxCameraCapturePanel(
                     .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)
                     .navigationBarsPadding()
                     .imePadding()
-                    .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 76.dp)
             ) {
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
@@ -721,7 +797,7 @@ fun FynxCameraCapturePanel(
                     }
                 }
                 }
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)retake()},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing && !applyingFilter)rotatePhoto()},enabled=!enhancing && !applyingFilter,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)onCaptured(previewUri,previewType)},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)retake()},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing && !applyingFilter)rotatePhoto()},enabled=!enhancing && !applyingFilter,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)onCaptured(previewUri,previewType)},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.ArrowForward,null);Spacer(Modifier.width(4.dp));Text("Next")}}
             }
         }
         }
@@ -774,7 +850,7 @@ fun FynxCameraCapturePanel(
             Surface(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 10.dp),
                 shape = RoundedCornerShape(18.dp),
-                color = Color.Black.copy(alpha = 0.62f)
+                color = Color(0xFF25364A).copy(alpha = 0.50f)
             ) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("LIVE PROOF", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
@@ -788,7 +864,7 @@ fun FynxCameraCapturePanel(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { if (recording == null) onDismiss() }, enabled = recording == null, modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape)) {
+                IconButton(onClick = { if (recording == null) onDismiss() }, enabled = recording == null, modifier = Modifier.background(Color(0xFF25364A).copy(alpha = 0.34f), androidx.compose.foundation.shape.CircleShape).border(1.dp, Color.White.copy(alpha = 0.28f), androidx.compose.foundation.shape.CircleShape)) {
                     Icon(Icons.Default.Close, "Close camera")
                 }
                 if (!liveProofMode) {
@@ -817,7 +893,8 @@ fun FynxCameraCapturePanel(
                 modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding()
                     .padding(end = 8.dp, top = 64.dp)
                     .width(58.dp)
-                    .background(Color.Black.copy(alpha = 0.42f), RoundedCornerShape(24.dp))
+                    .background(Color(0xFF25364A).copy(alpha = 0.32f), RoundedCornerShape(24.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(24.dp))
                     .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -871,8 +948,8 @@ fun FynxCameraCapturePanel(
                 .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)
                     .navigationBarsPadding()
                 .imePadding()
-                .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 76.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -884,7 +961,7 @@ fun FynxCameraCapturePanel(
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp),
                         shape = RoundedCornerShape(18.dp),
-                        color = Color.Black.copy(alpha = 0.70f)
+                        color = Color(0xFF25364A).copy(alpha = 0.52f)
                     ) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -988,7 +1065,7 @@ fun FynxCameraCapturePanel(
                                         showCaptureControls = true
                                     },
                                     shape = RoundedCornerShape(18.dp),
-                                    color = if (selected) Color(0xFF3A315A) else Color(0xFF22252E),
+                                    color = if (selected) Color(0xFF7869A6).copy(alpha = 0.76f) else Color(0xFF25364A).copy(alpha = 0.48f),
                                     border = androidx.compose.foundation.BorderStroke(
                                         if (selected) 1.5.dp else 1.dp,
                                         if (selected) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.10f)

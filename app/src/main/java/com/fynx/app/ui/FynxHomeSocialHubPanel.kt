@@ -146,7 +146,7 @@ fun FynxHomeSocialHubPanel(
 
     LaunchedEffect(cameraRequest) {
         if (cameraRequest > 0) {
-            // Home camera is a fresh "What's on your mind?" entry point.
+            // Home camera is a fresh "Add description..." entry point.
             // Clear any abandoned composer state before opening it so a previous
             // draft/media selection can never leak into a new camera session.
             if (!posting) {
@@ -168,7 +168,7 @@ fun FynxHomeSocialHubPanel(
             }
             cameraOpenedFromComposer = false
             // The Home header camera is the social creation entry point:
-            // open the full "What's on your mind?" composer. The separate
+            // open the full "Add description..." composer. The separate
             // camera button in the Home content remains the intentional
             // fast/direct camera path.
             showCamera = false
@@ -528,14 +528,10 @@ fun FynxHomeSocialHubPanel(
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting && !false) { Icon(Icons.Default.Close, "Close") }
                         Text("New post", style = MaterialTheme.typography.titleLarge)
-                        Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (audience != FynxPostAudience.SELECTED || selectedAudienceIds.isNotEmpty()) && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null), onClick = {
-                            if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
-                            posting = true; notice = null
-                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, null, selectedCatalogueMusic, selectedFeelingActivity) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
-                        }) { Text(if (posting) "Publishing…" else "Post") }
+
                     }
 
-                    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         if (!postingAllowed) Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
 
                         Row(
@@ -600,6 +596,17 @@ fun FynxHomeSocialHubPanel(
                             }
                         }
 
+                        val composerVisualItems = capturedUris.mapIndexedNotNull { index, uri ->
+                            capturedTypes.getOrNull(index)?.takeIf { it == "image" || it == "video" }?.let { type -> Triple(index, uri, type) }
+                        }
+                        val selectedComposerVisual = composerVisualItems.getOrNull(
+                            selectedVisualIndex.coerceIn(0, (composerVisualItems.size - 1).coerceAtLeast(0))
+                        )
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
                         BasicTextField(
                             value = text,
                             onValueChange = { value ->
@@ -607,7 +614,7 @@ fun FynxHomeSocialHubPanel(
                                 if (text.isBlank()) textBackground = null
                             },
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .weight(1f)
                                 .heightIn(min = 190.dp, max = 420.dp)
                                 .padding(top = 4.dp)
                                 .background(
@@ -627,7 +634,7 @@ fun FynxHomeSocialHubPanel(
                                 Box(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                                     if (text.isEmpty()) {
                                         Text(
-                                            "What's on your mind?",
+                                            "Add description...",
                                             style = MaterialTheme.typography.titleLarge.copy(
                                                 fontSize = 22.sp,
                                                 fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
@@ -640,6 +647,53 @@ fun FynxHomeSocialHubPanel(
                                 }
                             }
                         )
+                        selectedComposerVisual?.let { media ->
+                            Box(Modifier.width(136.dp).height(190.dp).clip(RoundedCornerShape(14.dp))) {
+                                if (media.third == "video") {
+                                    AndroidView(
+                                        factory = { VideoView(it).apply { setVideoURI(media.second); setOnPreparedListener { player -> player.isLooping = true; start() } } },
+                                        update = { view ->
+                                            if (view.tag != media.second.toString()) {
+                                                view.tag = media.second.toString()
+                                                view.setVideoURI(media.second)
+                                                view.start()
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    AndroidView(
+                                        factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
+                                        update = { view -> view.setImageURI(media.second) },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                Surface(
+                                    Modifier.align(Alignment.TopStart).padding(8.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color.Black.copy(alpha = 0.42f)
+                                ) {
+                                    Text("Preview", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Color.White, style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                        }
+
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AssistChip(
+                                onClick = { text = (text.trimEnd() + if (text.isBlank()) "# " else " # ").take(4000) },
+                                enabled = !posting && postingAllowed,
+                                label = { Text("# Hashtags") }
+                            )
+                            AssistChip(
+                                onClick = { text = (text.trimEnd() + if (text.isBlank()) "@ " else " @ ").take(4000) },
+                                enabled = !posting && postingAllowed,
+                                label = { Text("@ Mention") }
+                            )
+                        }
 
                         if (text.isNotBlank()) {
                             Text(
@@ -693,40 +747,12 @@ fun FynxHomeSocialHubPanel(
 
                         if (capturedUris.isNotEmpty()) {
                             val audioCount = capturedTypes.count { it == "audio" }
-                            val visualItems = capturedUris.mapIndexedNotNull { index, uri ->
-                                capturedTypes.getOrNull(index)?.takeIf { it == "image" || it == "video" }?.let { type -> Triple(index, uri, type) }
-                            }
-                            val selectedVisual = visualItems.getOrNull(selectedVisualIndex.coerceIn(0, (visualItems.size - 1).coerceAtLeast(0)))
+                            val visualItems = composerVisualItems
 
                             Column(
                                 Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                if (selectedVisual != null) {
-                                    Box(
-                                        Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 320.dp).clip(RoundedCornerShape(12.dp))
-                                    ) {
-                                        if (selectedVisual.third == "video") {
-                                            AndroidView(
-                                                factory = { VideoView(it).apply { setVideoURI(selectedVisual.second); setOnPreparedListener { player -> player.isLooping = true; start() } } },
-                                                update = { view ->
-                                                    if (view.tag != selectedVisual.second.toString()) {
-                                                        view.tag = selectedVisual.second.toString()
-                                                        view.setVideoURI(selectedVisual.second)
-                                                        view.start()
-                                                    }
-                                                },
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        } else {
-                                            AndroidView(
-                                                factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
-                                                update = { view -> view.setImageURI(selectedVisual.second) },
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        }
-                                    }
-                                }
                                 if (visualItems.size > 1) {
                                     Row(
                                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -768,9 +794,49 @@ fun FynxHomeSocialHubPanel(
                             }
                         }
 
-                        Text("Audience: ${audience.label}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(
+                            onClick = { showPeoplePicker = true },
+                            enabled = !posting,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Who can view this post: ${audience.label}")
+                        }
                         if (networkLevel == FynxNetworkQuality.Level.OFFLINE) Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
                         notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .imePadding()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = { showComposerPreview = true },
+                            enabled = !posting && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null),
+                            modifier = Modifier.weight(1f).heightIn(min = 52.dp)
+                        ) { Text("Preview") }
+                        Button(
+                            enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (audience != FynxPostAudience.SELECTED || selectedAudienceIds.isNotEmpty()) && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null),
+                            onClick = {
+                                if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) {
+                                    notice = "You are offline. Reconnect before publishing this post."
+                                    return@Button
+                                }
+                                posting = true
+                                notice = null
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, null, selectedCatalogueMusic, selectedFeelingActivity)
+                                    }
+                                    result.onSuccess { finishComposerAfterSuccess() }
+                                        .onFailure { notice = it.message ?: "Post could not be published." }
+                                    posting = false
+                                }
+                            },
+                            modifier = Modifier.weight(1.25f).heightIn(min = 52.dp)
+                        ) { Text(if (posting) "Publishing…" else "Post") }
                     }
                 }
             }
