@@ -62,3 +62,5 @@ Google Merchant Center and virtual cards are outside this release.
 - Seller Center earnings now labels each recorded order fee as **FYNX commission** and explains the default 5% seller-paid policy. The buyer wallet remains separate from seller proceeds and FYNX platform revenue.
 - Fixed the marketplace fee-mode code fallback so an unset mode defaults to SELLER (with the existing 500-basis-point / 5% default); an explicitly configured ZERO, BUYER or SPLIT policy remains respected. Invalid explicit modes now fail closed instead of silently turning commission off.
 - Provider-generated dedicated account numbers, signed payment webhooks, withdrawals, KYC/custody approval and live-money end-to-end tests remain provider/backend release dependencies.
+
+- The Withdraw screen also lays out disabled bank, account-number and provider-verified account-name fields, so the intended destination form is visible without collecting or storing sensitive bank details before provider-backed verification exists.
