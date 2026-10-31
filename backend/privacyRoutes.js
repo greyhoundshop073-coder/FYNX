@@ -1,10 +1,9 @@
-import pg from "pg";
+import { pool } from "./databasePool.js";
 import jwt from "jsonwebtoken";
 import { inspectTrustSafetyText } from "./trustSafety.js";
-const { Pool } = pg;
-const DATABASE_URL = process.env.DATABASE_URL || "";
+
 const JWT_SECRET = process.env.JWT_SECRET || "";
-const pool = DATABASE_URL ? new Pool({connectionString:DATABASE_URL,ssl:process.env.NODE_ENV === "production" ? {rejectUnauthorized:false}:false,max:3,min:0,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,statement_timeout:10000,query_timeout:12000,keepAlive:true}) : null;
+
 const KEYS=["profile_visibility","online_visibility","posts_visibility","status_visibility","profile_photo_visibility","messages_visibility"];
 const DEFAULT_VISIBILITY="My friends";
 const OPTIONS=new Set(["Everyone",DEFAULT_VISIBILITY,"Nobody"]);

@@ -35,6 +35,7 @@ assert.ok(scalability.includes("sharedPool:pool"),
 assert.ok(backgroundJobs.includes("if (pool && ownsPool) await pool.end();"),
   "background worker shutdown must not close the shared pool");
 const pooledModules = [
+  "adminRoutes.js","groupInviteRoutes.js","groupRoutes.js","notificationPreferences.js","privacyRoutes.js","profileRoutes.js",
   "mediaPrivacy.js","followRoutes.js","businessRoutes.js","socialHardening.js","presencePrivacy.js",
   "monetizationRoutes.js","groupContentRoutes.js","notificationDevices.js","r6gIntegrationRoutes.js",
   "aiConversationRoutes.js","marketplaceProtection.js","marketplacePayoutRetry.js","statusManagementRoutes.js",

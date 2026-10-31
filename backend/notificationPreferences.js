@@ -1,9 +1,8 @@
-import pg from 'pg';
+import { pool } from "./databasePool.js";
 import jwt from 'jsonwebtoken';
-const { Pool } = pg;
-const DATABASE_URL = process.env.DATABASE_URL || '';
+
 const JWT_SECRET = process.env.JWT_SECRET || '';
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, max: 3, min: 0, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000, statement_timeout: 10_000, query_timeout: 12_000, keepAlive: true }) : null;
+
 const DEFAULTS = { enabled:true,pushEnabled:true,reactionsEnabled:true,commentsEnabled:true,friendRequestsEnabled:true,messagesEnabled:true,storiesEnabled:true,remindersEnabled:true,groupEnabled:true,marketplaceEnabled:true,walletEnabled:true,quietMode:false };
 function auth(req,res,next){const header=req.get('authorization')||'';const token=header.startsWith('Bearer ')?header.slice(7).trim():'';if(!token||!JWT_SECRET)return res.status(401).json({error:'authentication required'});try{req.user=jwt.verify(token,JWT_SECRET);return next();}catch{return res.status(401).json({error:'invalid or expired token'});}}
 let schemaPromise;
