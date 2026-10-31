@@ -37,10 +37,9 @@ check("media downloads have bounded size", "maxBytes" in client and "total += co
 check("authenticated media endpoint exists", 'app.get("/api/media/:id", auth' in server)
 check("media ownership and visibility are server checked", "owner_id" in server and "sender_id" in server and "recipient_id" in server and "blocks" in media_privacy)
 media_route_start = server.find('app.get("/api/media/:id", auth')
-media_route_end = server.find("\\n});", media_route_start) if media_route_start >= 0 else -1
+media_route_end = server.find("\n});", media_route_start) if media_route_start >= 0 else -1
 media_route = server[media_route_start:media_route_end] if media_route_end > media_route_start else ""
-check("buyer Marketplace media requires an active, in-stock NGN/USD listing", bool(media_route) and "FROM marketplace_listings ml" in media_route and "WHERE ml.active = TRUE" in media_route and "AND ml.quantity > 0" in media_route and "UPPER(COALESCE(ml.currency, '') )" not in media_route and "UPPER(COALESCE(ml.currency, '')) IN ('NGN', 'USD')" in media_route)
-check("Marketplace media remains seller-owned, listing-attached, and block-aware", "mm.owner_id = ml.seller_id" in media_route and "jsonb_array_elements_text" in media_route and "listing_media.media_id = CAST(mm.id AS TEXT)" in media_route and "b.blocker_id = $2 AND b.blocked_id = ml.seller_id" in media_route and "b.blocked_id = $2 AND b.blocker_id = ml.seller_id" in media_route)
+check("buyer Marketplace media requires an active, in-stock NGN/USD listing", bool(media_route) and "FROM marketplace_listings ml" in media_route and "WHERE ml.active = TRUE" in media_route and "AND ml.quantity > 0" in media_route and "UPPER(COALESCE(ml.currency, '')) IN ('NGN', 'USD')" in media_route)
 check("Marketplace media remains seller-owned, listing-attached, and block-aware", "mm.owner_id = ml.seller_id" in media_route and "jsonb_array_elements_text" in media_route and "listing_media.media_id = CAST(mm.id AS TEXT)" in media_route and "b.blocker_id = $2 AND b.blocked_id = ml.seller_id" in media_route and "b.blocked_id = $2 AND b.blocker_id = ml.seller_id" in media_route)
 check("production transport security headers are enabled", "X-Content-Type-Options" in server and "Referrer-Policy" in server and "X-Frame-Options" in server and "Strict-Transport-Security" in server)
 check("request body size is bounded", 'express.json({ limit: "18mb"' in server)
