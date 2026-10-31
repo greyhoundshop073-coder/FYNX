@@ -171,8 +171,10 @@ checks = [
      and 'Intent.createChooser(sendIntent, "Share to")' in home),
     ("More options reuses the existing music, people, location, gallery and voice actions",
      all(marker in home for marker in ["showMusicPicker = true", "showPeoplePicker = true", "requestComposerLocation()", "PickVisualMedia.ImageAndVideo", "showVoiceRecorder = true"])),
-    ("Runtime test navigates through More options and checks the supplied post-details sequence and local draft",
-     '["More options"]' in runtime and '["Add photo or video"]' in runtime
+    ("Runtime test opens the real camera from More options without confusing Gallery selection, then checks the supplied post-details sequence and local draft",
+     '["More options"]' in runtime and '["Take photo or video"]' in runtime and '["Add photo or video"]' in runtime
+     and 'Text("Take photo or video")' in home
+     and "cameraOpenedFromComposer = true" in home and "showCamera = true" in home
      and "required_top = [\"Add description...\", \"# Hashtags\", \"@ Mention\", \"Edit cover\"]" in runtime
      and "required_options = [\"Content disclosure and ads\", \"Location\", \"Add link\", \"More options\", \"Share to\", \"Post\"]" in runtime
      and "local post Drafts saved captured media" in runtime
