@@ -725,7 +725,8 @@ fun FynxHomeSocialHubPanel(
                                 Surface(
                                     Modifier.align(Alignment.TopStart).padding(8.dp),
                                     shape = RoundedCornerShape(8.dp),
-                                    color = Color.Black.copy(alpha = 0.42f)
+                                    color = Color(0xFF25364A).copy(alpha = 0.48f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
                                 ) {
                                     Text("Preview", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Color.White, style = MaterialTheme.typography.labelMedium)
                                 }
@@ -733,7 +734,7 @@ fun FynxHomeSocialHubPanel(
                                     onClick = { showCoverInfo = true },
                                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(7.dp),
                                     shape = RoundedCornerShape(9.dp),
-                                    color = Color(0xFF141923).copy(alpha = 0.68f),
+                                    color = Color(0xFF25364A).copy(alpha = 0.48f),
                                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
                                 ) {
                                     Text(
