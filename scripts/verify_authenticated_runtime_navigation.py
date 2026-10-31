@@ -143,7 +143,7 @@ DIAGNOSTIC_MARKERS = (
     "New post", "What's on your mind?", "Photo", "Video/Camera",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
-    "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
+    "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
@@ -1446,11 +1446,98 @@ if VISUALS_ONLY and not error:
     if not light_home_ready:
         FAILURES.append("Home was not available for Marketplace navigation after restoring light mode; last visible markers: " + visible_marker_summary(xml))
 
+def find_wallet_feature_entry(xml_text:str):
+    """Return the clickable FYNX Wallet feature card, never the search field."""
+    if not xml_text:
+        return None
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+    for node in root.iter("node"):
+        label=(node.attrib.get("text") or "").strip().lower()
+        if label != "fynx wallet":
+            continue
+        cur=node
+        while cur is not None:
+            if cur.attrib.get("clickable","false").lower()=="true":
+                center=_center(cur)
+                bounds=cur.attrib.get("bounds","")
+                try:
+                    left_top,right_bottom=bounds.split("][",1)
+                    left,top=map(int,left_top.strip("[]").split(","))
+                    right,bottom=map(int,right_bottom.strip("[]").split(","))
+                    width,height=right-left,bottom-top
+                    if center and width >= 500 and 70 <= height <= 320:
+                        return center
+                except (ValueError,IndexError):
+                    pass
+                break
+            cur=parents.get(id(cur))
+    return None
+
+
+def capture_wallet_from_features(prefix:str):
+    """Open the real FYNX Wallet destination and capture it without touching money."""
+    home_xml=restore_home_after_restart(prefix+"-home")
+    if not home_xml:
+        return False, "Home could not be restored for Wallet navigation."
+    feature_xml=tap_control(
+        home_xml, ["More","Features"], prefix+"-features", ["FYNX Features"]
+    )
+    if not feature_xml:
+        return False, "FYNX Features could not be opened."
+    search=find_control(feature_xml, ["Search FYNX tools"])
+    if not search:
+        return False, "The FYNX Features search field was not available."
+    _,sx,sy=search
+    run("adb","shell","input","tap",str(sx),str(sy))
+    time.sleep(.3)
+    run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+    run("adb","shell","input","keyevent","KEYCODE_DEL")
+    typed=input_text("FYNX Wallet")
+    if typed.returncode != 0:
+        return False, "FYNX Wallet search text could not be entered."
+    time.sleep(.8)
+    feature_xml=dump_ui(prefix+"-wallet-search.xml")
+    target=find_wallet_feature_entry(feature_xml)
+    if not target:
+        return False, "The searchable FYNX Wallet feature card was not exposed."
+    wx,wy=target
+    run("adb","logcat","-c")
+    run("adb","shell","input","tap",str(wx),str(wy))
+    wallet_xml=""
+    for attempt in range(20):
+        time.sleep(.5)
+        wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
+        if (
+            wallet_xml
+            and find_control(wallet_xml, ["Understand your money"])
+            and find_control(wallet_xml, ["Balance details"])
+        ):
+            break
+    if not (
+        wallet_xml
+        and find_control(wallet_xml, ["FYNX Wallet"])
+        and find_control(wallet_xml, ["Understand your money"])
+        and find_control(wallet_xml, ["Balance details"])
+    ):
+        screenshot(prefix+"-wallet-destination-incomplete.png")
+        return False, "Wallet destination did not expose its title, balance card and balance details."
+    screenshot("authenticated-wallet.png")
+    (ROOT/"authenticated-wallet.xml").write_text(wallet_xml+"\n",encoding="utf-8")
+    return True, "Captured the actual FYNX Wallet screen from the installed APK."
+
+
 # Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an
 # unrelated instrumentation test fails. This branch performs read-only navigation:
 # it never publishes a listing, changes inventory, creates an order, or initiates payment.
 if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
-    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace and My Shop; no listing/order/payment mutations.")
+    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace, My Shop and Wallet; no listing/order/payment mutations.")
     if error:
         report += [
             "",
@@ -1601,6 +1688,13 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             report.append("- BLOCKED: Marketplace -> My Shop did not reach the seller control center.")
     else:
         report.append("- BLOCKED: Home -> Marketplace did not reach the real Marketplace search surface.")
+
+    wallet_captured, wallet_message = capture_wallet_from_features("marketplace-visual-wallet")
+    if wallet_captured:
+        report.append("- PASS: "+wallet_message)
+    else:
+        report.append("- BLOCKED: "+wallet_message)
+        FAILURES.append("Read-only Wallet screen capture: "+wallet_message)
 
     report += [
         "",
@@ -2018,6 +2112,7 @@ def open_features(target_labels:list[str]|None=None):
         report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
         journeys=(
             ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
+            ("wallet",["FYNX Wallet"],["FYNX Wallet","Understand your money","Balance details"]),
             ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
         )
         for name,labels,expected in journeys:
@@ -2033,6 +2128,9 @@ def open_features(target_labels:list[str]|None=None):
             screenshot(f"authenticated-{name}.png")
             if not after:
                 FAILURES.append("authenticated Features -> "+name)
+                continue
+            if name == "wallet" and not all(find_control(after,[marker]) for marker in ["FYNX Wallet","Understand your money","Balance details"]):
+                FAILURES.append("authenticated Features -> Wallet did not expose the complete wallet summary surface")
                 continue
             if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
             else: FAILURES.append("authenticated Features -> "+name)
@@ -2056,7 +2154,7 @@ else:
     
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png","",
+           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-wallet.png","- authenticated-ai.png","- authenticated-marketplace.png","",
            f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")

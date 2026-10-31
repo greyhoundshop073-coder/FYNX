@@ -15,7 +15,13 @@ const checks = [
   ["ledger is append-only and double-entry balanced", source.includes("fynx_buyer_wallet_reject_ledger_mutation") && source.includes("BEFORE UPDATE OR DELETE ON buyer_wallet_ledger_entries") && source.includes("buyer wallet transaction is not double-entry balanced") && source.includes("DEFERRABLE INITIALLY DEFERRED")],
   ["no negative spendable/reserved/pending buckets", source.includes("buyer wallet available, reserved or withdrawal balance cannot be negative")],
   ["authenticated private summary", source.includes("app.get('/api/wallet/summary', auth") && source.includes("Cache-Control', 'no-store, private")],
-  ["authenticated buyer-scoped activity", source.includes("app.get('/api/wallet/transactions', auth") && source.includes("WHERE user_id=$1 AND wallet_id=$2")],
+  ["authenticated buyer-scoped activity", source.includes("app.get('/api/wallet/transactions', auth") && source.includes("WHERE t.user_id=$1 AND t.wallet_id=$2")],
+  ["activity cursor validates paired timestamp and UUID values", source.includes("parseBuyerWalletActivityCursor") && source.includes("activity cursor fields must be single strings") && source.includes("activity cursor date is invalid") && source.includes("activity cursor id is invalid")],
+  ["activity cursor retains exact validated timestamp precision", source.includes("return { cursor: { createdAt, id: id.toLowerCase() }, error: null }") && !source.includes("parsedDate.toISOString()")],
+  ["activity history uses stable keyset pagination after server-side direction filtering", source.includes("(t.created_at,t.id) < ($4::timestamptz,$5::uuid)") && source.includes("ORDER BY t.created_at DESC,t.id DESC") && source.includes("LIMIT $")],
+  ["activity page returns continuation metadata", source.includes("hasMore,") && source.includes("nextCursor: hasMore && lastRow")],
+  ["activity direction validates a single ALL/IN/OUT value", source.includes("parseBuyerWalletActivityDirection") && source.includes("activity direction must be a single string") && source.includes("['ALL', 'IN', 'OUT']")],
+  ["direction filtering is applied before keyset pagination", source.includes("activity_delta.wallet_delta") && source.includes("$3::text='IN'") && source.includes("$3::text='OUT'") && source.includes("LEFT JOIN LATERAL")],
   ["real-money capabilities are off before provider approval", source.includes("canFund: false") && source.includes("canSpend: false") && source.includes("canWithdraw: false") && !source.includes("app.post('/api/wallet/")],
   ["named PL/pgSQL dollar quotes are paired", source.split("RETURNS trigger AS $fynxwallet$").length - 1 >= 7 && source.split("$fynxwallet$ LANGUAGE plpgsql;").length - 1 === source.split("RETURNS trigger AS $fynxwallet$").length - 1]
 ];

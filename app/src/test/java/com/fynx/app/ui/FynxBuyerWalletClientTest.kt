@@ -42,9 +42,41 @@ class FynxBuyerWalletClientTest {
         val rows = FynxBuyerWalletClient.parseTransactions(
             """{"transactions":[{"id":"txn-1","type":"FUNDING","status":"SUCCEEDED","amount":10000.0,"fee":0.0,"walletDelta":10000.0,"currency":"NGN","reference":"FYNX-TEST-1","description":"Test funding","createdAt":"2026-10-31T10:00:00Z"},{"id":"txn-2","type":"MARKETPLACE_PAYMENT","status":"SUCCEEDED","amount":2500.0,"fee":0.0,"walletDelta":-2500.0,"currency":"NGN","reference":"FYNX-TEST-2","description":"Test order","createdAt":"2026-10-31T10:01:00Z"}]}"""
         )
-        assertEquals(2, rows.size)
-        assertTrue(rows[0].walletDelta > 0)
-        assertTrue(rows[1].walletDelta < 0)
+        assertEquals(2, rows.transactions.size)
+        assertTrue(rows.transactions[0].walletDelta > 0)
+        assertTrue(rows.transactions[1].walletDelta < 0)
+        assertFalse(rows.hasMore)
+        assertNull(rows.nextCursor)
+    }
+
+    @Test
+    fun activityDirectionIsNormalizedAndAllowlisted() {
+        assertEquals("ALL", FynxBuyerWalletClient.normalizeActivityDirection(" all "))
+        assertEquals("IN", FynxBuyerWalletClient.normalizeActivityDirection("in"))
+        assertEquals("OUT", FynxBuyerWalletClient.normalizeActivityDirection("Out"))
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.normalizeActivityDirection("RECENT")
+        }
+    }
+
+    @Test
+    fun activityPageRequiresCursorWhenMoreRowsExist() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseTransactions(
+                """{"transactions":[],"hasMore":true,"nextCursor":null}"""
+            )
+        }
+        assertTrue(error.message.orEmpty().contains("did not return a cursor"))
+    }
+
+    @Test
+    fun activityPageParsesNextCursor() {
+        val page = FynxBuyerWalletClient.parseTransactions(
+            """{"transactions":[],"hasMore":true,"nextCursor":{"createdAt":"2026-10-31T10:00:00Z","id":"txn-cursor"}}"""
+        )
+        assertTrue(page.hasMore)
+        assertEquals("txn-cursor", page.nextCursor?.id)
+        assertEquals("2026-10-31T10:00:00Z", page.nextCursor?.createdAt)
     }
 
     @Test

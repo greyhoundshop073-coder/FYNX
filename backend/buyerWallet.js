@@ -321,6 +321,43 @@ async function ensureBuyerWalletSchema() {
   return buyerWalletSchemaPromise;
 }
 
+export function parseBuyerWalletActivityCursor(query = {}) {
+  const params = query && typeof query === 'object' ? query : {};
+  const hasCreatedAt = Object.prototype.hasOwnProperty.call(params, 'beforeCreatedAt');
+  const hasId = Object.prototype.hasOwnProperty.call(params, 'beforeId');
+  if (!hasCreatedAt && !hasId) return { cursor: null, error: null };
+  if (!hasCreatedAt || !hasId) return { cursor: null, error: 'both activity cursor fields are required' };
+  const createdAtValue = params.beforeCreatedAt;
+  const idValue = params.beforeId;
+  if (typeof createdAtValue !== 'string' || typeof idValue !== 'string') {
+    return { cursor: null, error: 'activity cursor fields must be single strings' };
+  }
+  const createdAt = createdAtValue.trim();
+  const id = idValue.trim();
+  if (!createdAt || !id) return { cursor: null, error: 'both activity cursor fields are required' };
+  if (createdAt.length > 64 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/i.test(createdAt)) {
+    return { cursor: null, error: 'activity cursor date is invalid' };
+  }
+  const parsedDate = new Date(createdAt);
+  if (!Number.isFinite(parsedDate.getTime())) return { cursor: null, error: 'activity cursor date is invalid' };
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return { cursor: null, error: 'activity cursor id is invalid' };
+  }
+  return { cursor: { createdAt, id: id.toLowerCase() }, error: null };
+}
+
+export function parseBuyerWalletActivityDirection(query = {}) {
+  const hasDirection = query && typeof query === 'object' &&
+    Object.prototype.hasOwnProperty.call(query, 'direction');
+  const value = hasDirection ? query.direction : 'ALL';
+  if (typeof value !== 'string') return { direction: null, error: 'activity direction must be a single string' };
+  const direction = value.trim().toUpperCase();
+  if (!['ALL', 'IN', 'OUT'].includes(direction)) {
+    return { direction: null, error: 'activity direction is invalid' };
+  }
+  return { direction, error: null };
+}
+
 export function registerBuyerWalletRoutes({ app }) {
   // Buyer wallet foundation is intentionally read-only until the production
   // wallet provider, custody terms and withdrawal flow have been approved.
@@ -377,29 +414,51 @@ export function registerBuyerWalletRoutes({ app }) {
 
   app.get('/api/wallet/transactions', auth, async (req, res) => {
     try {
+      const parsedCursor = parseBuyerWalletActivityCursor(req.query || {});
+      if (parsedCursor.error) return res.status(400).json({ error: parsedCursor.error });
+      const parsedDirection = parseBuyerWalletActivityDirection(req.query || {});
+      if (parsedDirection.error) return res.status(400).json({ error: parsedDirection.error });
       await ensureBuyerWalletSchema();
       res.set('Cache-Control', 'no-store, private');
       const wallet = (await pool.query(
         'SELECT id FROM buyer_wallets WHERE user_id=$1 AND currency=$2 LIMIT 1',
         [req.user.sub, 'NGN']
       )).rows[0];
-      if (!wallet) return res.json({ transactions: [] });
+      if (!wallet) return res.json({ transactions: [], hasMore: false, nextCursor: null });
       const requestedLimit = Number(req.query?.limit);
       const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 20, 1), 50);
-      const rows = await pool.query(`
-        SELECT id,transaction_type,status,amount,fee,currency,reference,description,created_at,
-               COALESCE((
-                 SELECT SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END)
-                   FROM buyer_wallet_ledger_entries e
-                  WHERE e.transaction_id=t.id AND e.account_code='AVAILABLE'
-               ),0)::numeric(18,2) AS wallet_delta
+      const cursor = parsedCursor.cursor;
+      const cursorClause = cursor
+        ? 'AND (t.created_at,t.id) < ($4::timestamptz,$5::uuid)'
+        : '';
+      const params = cursor
+        ? [req.user.sub, wallet.id, parsedDirection.direction, cursor.createdAt, cursor.id, limit + 1]
+        : [req.user.sub, wallet.id, parsedDirection.direction, limit + 1];
+      const result = await pool.query(`
+        SELECT t.id,t.transaction_type,t.status,t.amount,t.fee,t.currency,t.reference,t.description,t.created_at,
+               to_char(t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
+               COALESCE(activity_delta.wallet_delta,0)::numeric(18,2) AS wallet_delta
           FROM buyer_wallet_transactions t
-         WHERE user_id=$1 AND wallet_id=$2
-         ORDER BY created_at DESC,id DESC
-         LIMIT $3
-      `, [req.user.sub, wallet.id, limit]);
+          LEFT JOIN LATERAL (
+            SELECT SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END) AS wallet_delta
+              FROM buyer_wallet_ledger_entries e
+             WHERE e.transaction_id=t.id AND e.account_code='AVAILABLE'
+          ) activity_delta ON TRUE
+         WHERE t.user_id=$1 AND t.wallet_id=$2
+           AND (
+             $3::text='ALL'
+             OR ($3::text='IN' AND COALESCE(activity_delta.wallet_delta,0) > 0)
+             OR ($3::text='OUT' AND COALESCE(activity_delta.wallet_delta,0) < 0)
+           )
+           ${cursorClause}
+         ORDER BY t.created_at DESC,t.id DESC
+         LIMIT $${params.length}
+      `, params);
+      const hasMore = result.rows.length > limit;
+      const pageRows = result.rows.slice(0, limit);
+      const lastRow = pageRows[pageRows.length - 1];
       return res.json({
-        transactions: rows.rows.map((row) => ({
+        transactions: pageRows.map((row) => ({
           id: String(row.id),
           type: String(row.transaction_type),
           status: String(row.status),
@@ -409,8 +468,12 @@ export function registerBuyerWalletRoutes({ app }) {
           currency: String(row.currency),
           reference: String(row.reference),
           description: String(row.description || ''),
-          createdAt: row.created_at
-        }))
+          createdAt: row.created_at_iso
+        })),
+        hasMore,
+        nextCursor: hasMore && lastRow
+          ? { createdAt: lastRow.created_at_iso, id: String(lastRow.id) }
+          : null
       });
     } catch (error) {
       console.error('buyer wallet transactions', error);
