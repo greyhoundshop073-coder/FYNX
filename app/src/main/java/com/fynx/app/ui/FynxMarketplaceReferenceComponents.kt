@@ -92,7 +92,7 @@ internal fun MarketplaceReferenceSearchBar(
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
                     if (value.isBlank()) {
-                        Text("Search products, sellers or categories", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        Text("Search products or sellers", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
                     BasicTextField(
                         value = value,
