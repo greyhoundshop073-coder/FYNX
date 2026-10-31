@@ -606,7 +606,7 @@ def verify_camera_controls_fit_safe_area(xml_text: str, labels: list[str], prefi
 def verify_camera_image_signal(filename: str, crop_box: tuple[int, int, int, int], prefix: str) -> bool:
     """Check a broad central preview crop for usable image signal without sampling only the left edge."""
     try:
-        from PIL import Image
+        from PIL import Image, ImageFilter
     except ImportError:
         FAILURES.append(prefix + ": Pillow is unavailable, so the captured camera image could not be checked")
         return False
@@ -629,21 +629,24 @@ def verify_camera_image_signal(filename: str, crop_box: tuple[int, int, int, int
             coloured = sum(1 for red, green, blue in pixels if max(red, green, blue) - min(red, green, blue) > 12)
             non_dark_ratio = non_dark / max(1, len(pixels))
             coloured_ratio = coloured / max(1, len(pixels))
+            edge_pixels = list(sample.convert("L").filter(ImageFilter.FIND_EDGES).getdata())
+            edge_detail_ratio = sum(1 for value in edge_pixels if value > 24) / max(1, len(edge_pixels))
     except Exception as failure:
         FAILURES.append(prefix + ": camera preview image could not be decoded: " + str(failure)[:180])
         return False
-    # The Pixel 7 Pro AVD virtual-scene camera is intentionally synthetic and low-detail.
-    # Sample the central preview region (not the leftmost edge) and reject blank/monochrome
-    # frames while allowing that deterministic fixture's broad colour regions.
-    if unique_colours < 80 or non_dark_ratio < 0.08 or coloured_ratio < 0.25:
+    # The emulator's virtual-scene camera is synthetic, but its preview must still contain
+    # spatial image detail. A few large colour rectangles can satisfy unique-colour checks while
+    # the camera surface is visibly corrupted, so also reject frames with mostly flat blocks.
+    if unique_colours < 80 or non_dark_ratio < 0.08 or coloured_ratio < 0.25 or edge_detail_ratio < 0.15:
         FAILURES.append(
-            prefix + f": preview region is blank or corrupted "
-            f"(unique colours={unique_colours}, non-dark={non_dark_ratio:.2f}, colour-detail={coloured_ratio:.2f})"
+            prefix + f": preview region is blank, block-corrupted, or lacks usable image detail "
+            f"(unique colours={unique_colours}, non-dark={non_dark_ratio:.2f}, "
+            f"colour-detail={coloured_ratio:.2f}, edge-detail={edge_detail_ratio:.2f})"
         )
         return False
     report.append(
-        "- PASS camera preview image contains real visual detail "
-        f"(unique colours={unique_colours}, non-dark={non_dark_ratio:.2f})"
+        "- PASS camera preview image contains usable spatial detail "
+        f"(unique colours={unique_colours}, non-dark={non_dark_ratio:.2f}, edge-detail={edge_detail_ratio:.2f})"
     )
     return True
 
