@@ -152,7 +152,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 item {
                     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            FynxRemoteProfileAvatar(photoId, profileName.ifBlank { username }, Modifier.size(84.dp).clip(CircleShape))
+                            FynxMarketplaceSellerAvatar(photoId, username, profileName.ifBlank { username }, Modifier.size(84.dp).clip(CircleShape))
                             Text(profileName.ifBlank { username.removePrefix("@") }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             if (storeName.isNotBlank()) Text(storeName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                             Text("@${username.removePrefix("@")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
