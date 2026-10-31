@@ -135,6 +135,15 @@ checks.extend([
     ),
 ])
 
+camera_editor_source = camera_source.split("if(previewUri!=null && previewType!=null)", 1)[1].split("// Camera UI", 1)[0]
+checks.append((
+    "captured-photo and video editor share the live camera's dark high-contrast palette",
+    "MaterialTheme(" in camera_editor_source
+    and "darkColorScheme(" in camera_editor_source
+    and "primary = Color(0xFFB8A7FF)" in camera_editor_source
+    and "background = Color(0xFF080A10)" in camera_editor_source,
+))
+
 marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 app_source = Path("app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 hero_source = marketplace_source.split("private fun MarketplaceSmartDealsHero", 1)[1].split("@Composable\nfun FynxMarketplacePanel", 1)[0]
