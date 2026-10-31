@@ -1,21 +1,11 @@
-import pg from 'pg';
+import { pool } from "./databasePool.js";
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
 
-const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYMENT_RESERVATION_TTL_MINUTES = 30;
 const PAYMENT_INITIALIZATION_RECOVERY_MINUTES = 2;
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 2,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+
 
 function amountSubunit(amount, currency) {
   const normalized = String(currency || '').trim().toUpperCase();
@@ -419,7 +409,7 @@ export function registerMarketplacePaymentExpiryWorker({ logger = console } = {}
 }
 
 export async function closeMarketplacePaymentExpiryWorker() {
-  if (pool) await pool.end();
+  // The shared database pool is closed once by the HTTP server shutdown handler.
 }
 
 export const MARKETPLACE_PAYMENT_RESERVATION_TTL_MINUTES = PAYMENT_RESERVATION_TTL_MINUTES;

@@ -1,9 +1,10 @@
 import fs from "node:fs";
 const server=fs.readFileSync(new URL("./server.js",import.meta.url),"utf8");
+const databasePool=fs.readFileSync(new URL("./databasePool.js",import.meta.url),"utf8");
 const scalability=fs.readFileSync(new URL("./scalability.js",import.meta.url),"utf8");
 const checks=[
- ["bounded database pool",server.includes("DB_POOL_MAX") && server.includes("connectionTimeoutMillis: 5_000")],
- ["query timeouts",server.includes("statement_timeout: 15_000") && server.includes("query_timeout: 20_000")],
+ ["bounded shared database pool",databasePool.includes("DB_POOL_MAX") && databasePool.includes("max: maximumConnections") && databasePool.includes("min: 0") && databasePool.includes("connectionTimeoutMillis: 5_000")],
+ ["shared pool query timeouts",databasePool.includes("statement_timeout: 15_000") && databasePool.includes("query_timeout: 20_000")],
  ["readiness endpoint",server.includes('app.get("/ready"')],
  ["graceful shutdown",server.includes('process.once("SIGTERM"')],
  ["http connection controls",scalability.includes("keepAliveTimeout") && scalability.includes("maxConnections")],

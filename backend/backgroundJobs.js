@@ -29,7 +29,7 @@ function idempotencyFingerprint(type, payload) {
     .digest("hex");
 }
 
-export function createBackgroundJobQueue({ connectionString = process.env.DATABASE_URL, logger = console, pollMs = DEFAULT_POLL_MS, leaseMs = DEFAULT_LEASE_MS } = {}) {
+export function createBackgroundJobQueue({ connectionString = process.env.DATABASE_URL, logger = console, pollMs = DEFAULT_POLL_MS, leaseMs = DEFAULT_LEASE_MS, sharedPool = null } = {}) {
   if (!connectionString) {
     return {
       enabled: false,
@@ -41,9 +41,14 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   }
 
   let poolPromise = null;
+  let ownsPool = false;
   async function getPool() {
     if (!poolPromise) {
-      poolPromise = import("pg").then(({ default: pg }) => new pg.Pool({
+      if (sharedPool) {
+        poolPromise = Promise.resolve(sharedPool);
+      } else {
+        ownsPool = true;
+        poolPromise = import("pg").then(({ default: pg }) => new pg.Pool({
         connectionString,
         ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
         max: Number(process.env.JOB_DB_POOL_MAX || 5),
@@ -52,7 +57,8 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
         statement_timeout: 15_000,
         query_timeout: 20_000,
         keepAlive: true
-      }));
+        }));
+      }
     }
     return poolPromise;
   }
@@ -276,7 +282,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
     stopped = true;
     if (timer) clearInterval(timer);
     const pool = poolPromise ? await poolPromise.catch(() => null) : null;
-    if (pool) await pool.end();
+    if (pool && ownsPool) await pool.end();
   }
 
   return { enabled: true, enqueue, start, stop, snapshot };

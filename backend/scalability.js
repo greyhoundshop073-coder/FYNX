@@ -1,3 +1,4 @@
+import { pool } from "./databasePool.js";
 import http from "node:http";
 import { installFailureRecovery, createIdempotencyStore } from "./reliability.js";
 import { createBackgroundJobQueue } from "./backgroundJobs.js";
@@ -110,11 +111,11 @@ http.createServer = function fynxCreateServer(...args) {
   server.on("request",(_req,res)=>{const startedAt=process.hrtime.bigint();requests+=1;res.on("finish",()=>{completed+=1;totalLatencyMs+=Number(process.hrtime.bigint()-startedAt)/1_000_000;if(res.statusCode>=500)errors+=1;});});
   const report=setInterval(()=>{if(!completed)return;const averageLatencyMs=totalLatencyMs/completed;console.log(`[fynx-metrics] requests=${requests} completed=${completed} errors5xx=${errors} avgLatencyMs=${averageLatencyMs.toFixed(1)}`);},60_000);report.unref();
   server.on("error",error=>{console.error("[fynx-http] server error",error);});
-  const recovery=installFailureRecovery({server,pool:globalThis.__fynxPool||null,logger:console});
+  const recovery=installFailureRecovery({server,pool,logger:console});
   globalThis.__fynxRecovery=recovery;
   globalThis.__fynxIdempotency=createIdempotencyStore({maxEntries:10_000,ttlMs:24*60*60*1000});
   globalThis.__fynxJobHandlers=globalThis.__fynxJobHandlers||{};
-  const jobs=createBackgroundJobQueue({logger:console});
+  const jobs=createBackgroundJobQueue({logger:console,sharedPool:pool});
   globalThis.__fynxBackgroundJobs=jobs;
   registerMarketplaceSettlementWorker({ jobs, logger: console });
   registerMarketplacePaymentExpiryWorker({ logger: console });

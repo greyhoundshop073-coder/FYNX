@@ -1,9 +1,9 @@
+import { pool } from "./databasePool.js";
 import express from "express";
 // Profile-photo media follows profile visibility and block state.
 import http from "http";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import pg from "pg";
 import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { WebSocketServer } from "ws";
 import { registerSocialRoutes } from "./socialRoutes.js";
@@ -15,7 +15,6 @@ import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 
-const { Pool } = pg;
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/realtime" });
@@ -45,18 +44,7 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  // Keep the primary pool bounded and release idle clients so Neon can suspend.
-  max: Number(process.env.DB_POOL_MAX || 10),
-  min: 0,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+
 const clientsByUserId = new Map();
 const activeCalls = new Map();
 

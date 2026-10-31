@@ -1,12 +1,13 @@
 import fs from "node:fs";
 
 const server = fs.readFileSync(new URL("./server.js", import.meta.url), "utf8");
+const databasePool = fs.readFileSync(new URL("./databasePool.js", import.meta.url), "utf8");
 const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url), "utf8");
 const checks = [
-  ["database pool is bounded", /max:\s*Number\(process\.env\.DB_POOL_MAX \|\| 20\)/.test(server)],
-  ["database connection timeout", /connectionTimeoutMillis:\s*5_000/.test(server)],
-  ["database statement timeout", /statement_timeout:\s*15_000/.test(server)],
-  ["database query timeout", /query_timeout:\s*20_000/.test(server)],
+  ["database pool is bounded", /DB_POOL_MAX/.test(databasePool) && /max: maximumConnections/.test(databasePool) && /min: 0/.test(databasePool)],
+  ["database connection timeout", /connectionTimeoutMillis:\s*5_000/.test(databasePool)],
+  ["database statement timeout", /statement_timeout:\s*15_000/.test(databasePool)],
+  ["database query timeout", /query_timeout:\s*20_000/.test(databasePool)],
   ["conversation index present", /messages_conversation_idx/.test(server)],
   ["recipient index present", /messages_recipient_idx/.test(server)],
   ["delivery index present", /messages_delivery_idx/.test(server)],

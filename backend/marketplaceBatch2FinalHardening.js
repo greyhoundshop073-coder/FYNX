@@ -1,7 +1,6 @@
-import pg from 'pg';
+import { pool } from "./databasePool.js";
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
 
-const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PAYSTACK_TIMEOUT_MS = Math.max(5_000, Number(process.env.PAYSTACK_REQUEST_TIMEOUT_MS || 15_000));
 const RECOVERY_AGE_MINUTES = 2;
@@ -13,7 +12,7 @@ export function marketplaceRecoveryRetryDelayMs(failureCount) {
   if (retries === 0) return RECOVERY_INTERVAL_MS;
   return Math.min(MAX_RECOVERY_BACKOFF_MS, RECOVERY_INTERVAL_MS * (2 ** Math.min(retries, 4)));
 }
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, max: 2, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000, statement_timeout: 15_000, query_timeout: 20_000, keepAlive: true }) : null;
+
 let fetchInstalled = false;
 
 function timeoutError(url) {

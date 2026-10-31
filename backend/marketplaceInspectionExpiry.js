@@ -1,18 +1,8 @@
-import pg from 'pg';
+import { pool } from "./databasePool.js";
 import { ensureMarketplaceProtectionSchema } from './marketplaceProtection.js';
 
-const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 2,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+
 
 const AUTO_COMPLETE_INTERVAL_MS = 60_000;
 
@@ -91,7 +81,7 @@ export function registerMarketplaceInspectionExpiryWorker({ logger = console } =
 }
 
 export async function closeMarketplaceInspectionExpiryWorker() {
-  if (pool) await pool.end();
+  // The shared database pool is closed once by the HTTP server shutdown handler.
 }
 
 export const MARKETPLACE_INSPECTION_AUTO_COMPLETE_INTERVAL_MS = AUTO_COMPLETE_INTERVAL_MS;

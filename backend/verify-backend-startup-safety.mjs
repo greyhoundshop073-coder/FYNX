@@ -4,6 +4,9 @@ import assert from "node:assert/strict";
 const read = (name) => fs.readFileSync(new URL(name, import.meta.url), "utf8");
 const server = read("./server.js");
 const shop = read("./marketplaceShopProfiles.js");
+const databasePool = read("./databasePool.js");
+const scalability = read("./scalability.js");
+const backgroundJobs = read("./backgroundJobs.js");
 const initStart = server.indexOf("async function initDatabase()");
 const initEnd = server.indexOf("\n}\n\nfunction requireConfig", initStart);
 assert.ok(initStart >= 0 && initEnd > initStart, "database initialization function must remain discoverable");
@@ -17,10 +20,32 @@ assert.ok(init.includes('await pool.query("UPDATE users SET verified = TRUE WHER
   "official-account verification must use its own parameterized query");
 assert.ok(!init.includes("UPDATE users SET verified = FALSE"),
   "startup must never reset every user's verification flag");
-assert.ok(server.includes("max: Number(process.env.DB_POOL_MAX || 10),"),
-  "primary database pool must have a conservative default cap");
-assert.ok(server.includes("min: 0,"),
-  "primary database pool must allow idle connections to be released");
+assert.ok(databasePool.includes("DB_POOL_MAX") && databasePool.includes("max: maximumConnections"),
+  "backend modules must share a centrally bounded PostgreSQL pool");
+assert.ok(databasePool.includes("min: 0,"),
+  "the shared pool must allow idle connections to be released");
+assert.ok(server.includes('import { pool } from "./databasePool.js";'),
+  "the HTTP API must use the shared PostgreSQL pool");
+assert.ok(scalability.includes("installFailureRecovery({server,pool,logger:console})"),
+  "database failure recovery must receive the live shared pool");
+assert.ok(scalability.includes("sharedPool:pool"),
+  "background job workers must reuse the shared PostgreSQL pool");
+assert.ok(backgroundJobs.includes("if (pool && ownsPool) await pool.end();"),
+  "background worker shutdown must not close the shared pool");
+const pooledModules = [
+  "mediaPrivacy.js","followRoutes.js","businessRoutes.js","socialHardening.js","presencePrivacy.js",
+  "monetizationRoutes.js","groupContentRoutes.js","notificationDevices.js","r6gIntegrationRoutes.js",
+  "aiConversationRoutes.js","marketplaceProtection.js","marketplacePayoutRetry.js","statusManagementRoutes.js",
+  "statusInteractionRoutes.js","marketplaceMediaPrivacy.js","peopleResponseHardening.js","groupMembershipRoutes.js",
+  "marketplaceAdvertising.js","marketplaceSettlement.js","marketplaceInspectionExpiry.js",
+  "marketplaceSettlementWorker.js","marketplaceProtectionResolution.js","marketplacePaymentExpiry.js",
+  "marketplaceBatch2FinalHardening.js","fynxAiToolRegistry.js"
+];
+for (const file of pooledModules) {
+  const source = read("./" + file);
+  assert.ok(source.includes('import { pool } from "./databasePool.js";'), `${file} must use the shared pool`);
+  assert.ok(!source.includes("new Pool("), `${file} must not create a private PostgreSQL pool`);
+}
 assert.ok(server.includes('import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";'),
   "My Shop route module must be imported by the deployed server");
 assert.ok(server.includes("if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });"),

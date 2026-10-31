@@ -1,19 +1,7 @@
-import pg from 'pg';
-
-const { Pool } = pg;
-
+import { pool } from "./databasePool.js";
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 4,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+
 
 function providerHeaders() {
   return {
@@ -273,5 +261,5 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
 }
 
 export async function closeMarketplaceSettlementWorker() {
-  if (pool) await pool.end();
+  // The shared database pool is closed once by the HTTP server shutdown handler.
 }
