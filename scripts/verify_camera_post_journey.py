@@ -33,7 +33,7 @@ checks = [
      and "selectedMusic = selectedCatalogueMusic" in home
      and "showMusicPicker = true" in home),
     ("Immersive Status media composer hides the app bottom navigation so caption and Send controls remain reachable",
-     "visible = !statusComposerImmersive && ((selected != \\\"Home\\\" && selected != \\\"Marketplace\\\") || statusCreatorRequested || !homeChromeHidden)" in app_source
+     'visible = !statusComposerImmersive && ((selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden)' in app_source
      and "onComposerVisibilityChange = { statusComposerImmersive = it }" in app_source),
     ("Your Story and Next are separate real destinations from one captured preview",
      "showYourStoryAction: Boolean = false" in camera
