@@ -1,7 +1,7 @@
 import fs from "node:fs";
 const source = fs.readFileSync(new URL("./marketplaceSettlement.js", import.meta.url), "utf8");
 const checks = [
-  ["NGN-only wallet per buyer", source.includes("CREATE TABLE IF NOT EXISTS buyer_wallets") && source.includes("UNIQUE (user_id, currency)") && source.includes("CHECK (currency = 'NGN')"],
+  ["NGN-only wallet per buyer", source.includes("CREATE TABLE IF NOT EXISTS buyer_wallets") && source.includes("UNIQUE (user_id, currency)") && source.includes("CHECK (currency = 'NGN')")],
   ["unique transaction references and idempotency keys", source.includes("idempotency_key TEXT NOT NULL UNIQUE") && source.includes("reference TEXT NOT NULL UNIQUE")],
   ["transaction owner is validated", source.includes("fynx_buyer_wallet_validate_transaction_owner") && source.includes("buyer wallet transaction owner or currency does not match its wallet")],
   ["safe pending and processing state machine", source.includes("buyer_wallet_transaction_insert_guard") && source.includes("buyer_wallet_transaction_update_guard") && source.includes("terminal buyer wallet transactions are immutable")],
