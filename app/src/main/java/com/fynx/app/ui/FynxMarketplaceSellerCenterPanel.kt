@@ -872,7 +872,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     OutlinedTextField(
                         value = editTitle,
-                        onValueChange = { editTitle = it.take(160) },
+                        onValueChange = { editTitle = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) },
                         label = { Text("Product name") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -961,7 +961,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     )
                     OutlinedTextField(
                         value = editQuantity,
-                        onValueChange = { editQuantity = it.filter(Char::isDigit).take(9) },
+                        onValueChange = { editQuantity = it.filter(Char::isDigit).take(7) },
                         label = { Text("Total stock (0 = out of stock)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -974,13 +974,13 @@ fun FynxMarketplaceSellerCenterPanel() {
             confirmButton = {
                 Button(
                     enabled = !editSaving &&
-                        editTitle.trim().length >= 2 &&
+                        editTitle.trim().length in 2..FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH &&
                         editDescription.trim().length >= 5 &&
                         editCategory.trim().isNotBlank() &&
                         editCondition.trim().uppercase(Locale.US) in setOf("NEW", "USED", "REFURBISHED") &&
                         editLocation.trim().isNotBlank() &&
                         editPrice.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true &&
-                        editQuantity.toIntOrNull()?.let { it >= 0 } == true,
+                        editQuantity.toIntOrNull()?.let { it in 0..FynxMarketplaceSellerFlowSupport.MAX_QUANTITY } == true,
                     onClick = {
                         val price = editPrice.toDoubleOrNull() ?: return@Button
                         val quantity = editQuantity.toIntOrNull() ?: return@Button
