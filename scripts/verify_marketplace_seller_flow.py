@@ -545,6 +545,13 @@ checks.extend([
      and "listings = listings.filterNot { it.id == pinnedId }" in marketplace),
 ])
 
+checks.append(
+    ("exact Marketplace listing lookup preserves ordered image/video MIME types for deep links and post-publish product cards",
+     "val mediaTypesJson = o.optJSONArray(\"media_types\")" in deep_link_client
+     and "for (i in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(i))" in deep_link_client
+     and "mediaTypes = mediaTypes" in deep_link_client)
+)
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
