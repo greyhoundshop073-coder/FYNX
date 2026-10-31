@@ -12,6 +12,7 @@ internal data class FynxBuyerWalletSummary(
     val availableBalance: Double?,
     val reservedBalance: Double?,
     val withdrawalPendingBalance: Double?,
+    val withdrawalFee: Double,
     val canFund: Boolean,
     val canSpend: Boolean,
     val canWithdraw: Boolean,
@@ -40,6 +41,45 @@ internal data class FynxBuyerWalletActivityPage(
     val transactions: List<FynxBuyerWalletActivity>,
     val hasMore: Boolean,
     val nextCursor: FynxBuyerWalletActivityCursor?
+)
+
+internal data class FynxWalletBankTransfer(
+    val bankName: String,
+    val accountName: String,
+    val accountNumber: String,
+    val reference: String,
+    val amount: Double,
+    val currency: String,
+    val accountExpiresAt: String
+)
+
+internal data class FynxWalletFundingResult(
+    val reference: String,
+    val status: String,
+    val amount: Double,
+    val currency: String,
+    val bankTransfer: FynxWalletBankTransfer?,
+    val checkoutUrl: String?
+)
+
+internal data class FynxWalletBank(val code: String, val name: String)
+internal data class FynxWalletPayoutAccount(
+    val id: String,
+    val bankName: String,
+    val accountName: String,
+    val accountLast4: String,
+    val verified: Boolean
+)
+internal data class FynxWalletWithdrawal(
+    val id: String,
+    val reference: String,
+    val status: String,
+    val amount: Double,
+    val fee: Double,
+    val currency: String,
+    val bankName: String = "",
+    val accountLast4: String = "",
+    val otpRequired: Boolean = false
 )
 
 internal object FynxBuyerWalletClient {
@@ -75,6 +115,150 @@ internal object FynxBuyerWalletClient {
         ).mapCatching(::parseTransactions)
     }
 
+
+    suspend fun startBankTransfer(context: Context, amount: Double, email: String, idempotencyKey: String): Result<FynxWalletFundingResult> {
+        val body = JSONObject().put("amount", amount).put("email", email.trim())
+        return FynxBackendClient.postJsonWithHeaders(
+            context, "/api/wallet/funding/transfer", body.toString(),
+            mapOf("Idempotency-Key" to idempotencyKey)
+        ).mapCatching(::parseFundingResult)
+    }
+
+    suspend fun startFundingCheckout(context: Context, amount: Double, email: String, method: String, idempotencyKey: String): Result<FynxWalletFundingResult> {
+        val body = JSONObject().put("amount", amount).put("email", email.trim()).put("method", method.lowercase(Locale.US))
+        return FynxBackendClient.postJsonWithHeaders(
+            context, "/api/wallet/funding/checkout", body.toString(),
+            mapOf("Idempotency-Key" to idempotencyKey)
+        ).mapCatching(::parseFundingResult)
+    }
+
+    suspend fun loadFundingStatus(context: Context, reference: String): Result<FynxWalletFundingResult> =
+        FynxBackendClient.get(context, "/api/wallet/funding/" + Uri.encode(reference)).mapCatching(::parseFundingResult)
+
+    suspend fun loadBanks(context: Context): Result<List<FynxWalletBank>> =
+        FynxBackendClient.get(context, "/api/wallet/banks").mapCatching { raw ->
+            val rows = JSONObject(raw).optJSONArray("banks") ?: JSONArray()
+            buildList {
+                for (index in 0 until rows.length()) {
+                    val row = rows.optJSONObject(index) ?: continue
+                    val code = row.optString("code").trim()
+                    val name = row.optString("name").trim()
+                    if (code.isNotBlank() && name.isNotBlank()) add(FynxWalletBank(code, name))
+                }
+            }
+        }
+
+    suspend fun resolveBankAccount(context: Context, accountNumber: String, bankCode: String): Result<String> =
+        FynxBackendClient.postJson(context, "/api/wallet/banks/resolve",
+            JSONObject().put("accountNumber", accountNumber).put("bankCode", bankCode).toString()
+        ).mapCatching { raw ->
+            val json = JSONObject(raw)
+            require(json.optBoolean("verified", false)) { "The bank account could not be verified." }
+            json.optString("accountName").trim().also { require(it.isNotBlank()) { "Bank account name is missing." } }
+        }
+
+    suspend fun savePayoutAccount(context: Context, accountNumber: String, bankCode: String, bankName: String): Result<FynxWalletPayoutAccount> =
+        FynxBackendClient.postJson(context, "/api/wallet/payout-accounts",
+            JSONObject().put("accountNumber", accountNumber).put("bankCode", bankCode).put("bankName", bankName).toString()
+        ).mapCatching { raw ->
+            val row = JSONObject(raw).getJSONObject("payoutAccount")
+            FynxWalletPayoutAccount(
+                id = row.getString("id"),
+                bankName = row.optString("bankName"),
+                accountName = row.optString("accountName"),
+                accountLast4 = row.optString("accountLast4"),
+                verified = row.optBoolean("verified", false)
+            )
+        }
+
+    suspend fun loadPayoutAccounts(context: Context): Result<List<FynxWalletPayoutAccount>> =
+        FynxBackendClient.get(context, "/api/wallet/payout-accounts").mapCatching { raw ->
+            val rows = JSONObject(raw).optJSONArray("payoutAccounts") ?: JSONArray()
+            buildList {
+                for (index in 0 until rows.length()) {
+                    val row = rows.optJSONObject(index) ?: continue
+                    add(FynxWalletPayoutAccount(
+                        id = row.optString("id"),
+                        bankName = row.optString("bankName"),
+                        accountName = row.optString("accountName"),
+                        accountLast4 = row.optString("accountLast4"),
+                        verified = row.optBoolean("verified", false)
+                    ))
+                }
+            }
+        }
+
+    suspend fun walletPinConfigured(context: Context): Result<Boolean> =
+        FynxBackendClient.get(context, "/api/wallet/security").mapCatching {
+            JSONObject(it).optBoolean("pinConfigured", false)
+        }
+
+    suspend fun saveWalletPin(context: Context, pin: String, currentPin: String?): Result<Unit> =
+        FynxBackendClient.postJson(context, "/api/wallet/security/pin",
+            JSONObject().put("pin", pin).put("confirmPin", pin).apply {
+                if (!currentPin.isNullOrBlank()) put("currentPin", currentPin)
+            }.toString()
+        ).mapCatching { raw -> require(JSONObject(raw).optBoolean("pinConfigured", false)) { "Wallet PIN was not saved." }; Unit }
+
+    suspend fun startWithdrawal(context: Context, amount: Double, payoutAccountId: String, pin: String, idempotencyKey: String): Result<FynxWalletWithdrawal> =
+        FynxBackendClient.postJsonWithHeaders(
+            context, "/api/wallet/withdrawals",
+            JSONObject().put("amount", amount).put("payoutAccountId", payoutAccountId).put("pin", pin).toString(),
+            mapOf("Idempotency-Key" to idempotencyKey)
+        ).mapCatching { raw ->
+            val row = JSONObject(raw).getJSONObject("withdrawal")
+            FynxWalletWithdrawal(
+                id = row.optString("id"), reference = row.getString("reference"),
+                status = row.optString("status"), amount = row.optDouble("amount", amount),
+                fee = row.optDouble("fee", 0.0), currency = row.optString("currency", "NGN"),
+                bankName = row.optString("bankName"), accountLast4 = row.optString("accountLast4"),
+                otpRequired = JSONObject(raw).optBoolean("otpRequired", false)
+            )
+        }
+
+    suspend fun finalizeWithdrawal(context: Context, reference: String, otp: String): Result<FynxWalletWithdrawal> =
+        FynxBackendClient.postJson(context, "/api/wallet/withdrawals/" + Uri.encode(reference) + "/finalize",
+            JSONObject().put("otp", otp).toString()
+        ).mapCatching { raw ->
+            val row = JSONObject(raw)
+            FynxWalletWithdrawal(
+                id = "", reference = row.optString("reference", reference), status = row.optString("status"),
+                amount = 0.0, fee = 0.0, currency = "NGN"
+            )
+        }
+
+    suspend fun loadWithdrawalStatus(context: Context, reference: String): Result<FynxWalletWithdrawal> =
+        FynxBackendClient.get(context, "/api/wallet/withdrawals/" + Uri.encode(reference)).mapCatching { raw ->
+            val row = JSONObject(raw).getJSONObject("withdrawal")
+            FynxWalletWithdrawal(
+                id = row.optString("id"), reference = row.getString("reference"), status = row.optString("status"),
+                amount = row.optDouble("amount"), fee = row.optDouble("fee"), currency = row.optString("currency", "NGN"),
+                bankName = row.optString("bankName"), accountLast4 = row.optString("accountLast4")
+            )
+        }
+
+    private fun parseFundingResult(raw: String): FynxWalletFundingResult {
+        val json = JSONObject(raw)
+        val tx = json.optJSONObject("transaction") ?: JSONObject()
+        val transfer = json.optJSONObject("bankTransfer")
+        val bankTransfer = transfer?.let {
+            FynxWalletBankTransfer(
+                bankName = it.optString("bankName"), accountName = it.optString("accountName"),
+                accountNumber = it.optString("accountNumber"), reference = it.optString("reference"),
+                amount = it.optDouble("amount", tx.optDouble("amount")), currency = it.optString("currency", "NGN"),
+                accountExpiresAt = it.optString("accountExpiresAt")
+            )
+        }
+        val reference = tx.optString("reference", json.optString("reference"))
+        require(reference.isNotBlank()) { "Wallet funding response did not include a reference." }
+        return FynxWalletFundingResult(
+            reference = reference, status = tx.optString("status", json.optString("status", "PENDING")),
+            amount = tx.optDouble("amount", json.optDouble("amount", bankTransfer?.amount ?: 0.0)),
+            currency = tx.optString("currency", json.optString("currency", bankTransfer?.currency ?: "NGN")),
+            bankTransfer = bankTransfer, checkoutUrl = json.optString("checkoutUrl").takeIf { it.startsWith("https://checkout.paystack.com/") }
+        )
+    }
+
     internal fun parseSummary(raw: String): FynxBuyerWalletSummary {
         val json = JSONObject(raw)
         val status = json.optString("walletStatus", "NOT_SETUP").trim().uppercase(Locale.US)
@@ -89,6 +273,7 @@ internal object FynxBuyerWalletClient {
             availableBalance = nullableAmount(json, "availableBalance"),
             reservedBalance = nullableAmount(json, "reservedBalance"),
             withdrawalPendingBalance = nullableAmount(json, "withdrawalPendingBalance"),
+            withdrawalFee = json.optDouble("withdrawalFee", 0.0).also { require(it.isFinite() && it >= 0.0) { "Wallet returned an invalid withdrawal fee." } },
             canFund = json.optBoolean("canFund", false),
             canSpend = json.optBoolean("canSpend", false),
             canWithdraw = json.optBoolean("canWithdraw", false),
