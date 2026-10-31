@@ -518,6 +518,10 @@ checks.extend([
      and "media_ids = COALESCE($8::jsonb, media_ids)" in social_routes
      and "Marketplace listing media must be images or videos" in social_routes),
 ])
+shop_profile_ui_start = seller_center.index('if (activeSection == "Shop profile") item {')
+shop_profile_ui_end = seller_center.index('if (activeSection == "Earnings & payouts") item {', shop_profile_ui_start)
+shop_profile_ui = seller_center[shop_profile_ui_start:shop_profile_ui_end]
+
 checks.append(
     ("public seller storefront never retains or displays the private shop contact phone while My Shop keeps its own contact field",
      "contactPhone" not in storefront
@@ -526,10 +530,6 @@ checks.append(
      and 'put("contactPhone", shopContactPhone.trim())' in seller_center
      and 'label = { Text("Private shop contact (optional)") }' in shop_profile_ui)
 )
-
-shop_profile_ui_start = seller_center.index('if (activeSection == "Shop profile") item {')
-shop_profile_ui_end = seller_center.index('if (activeSection == "Earnings & payouts") item {', shop_profile_ui_start)
-shop_profile_ui = seller_center[shop_profile_ui_start:shop_profile_ui_end]
 
 checks.append(
     ("My Shop profile fields remain locked while saved shop details load, preventing an in-progress edit from being overwritten",
