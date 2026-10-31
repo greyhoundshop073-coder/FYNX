@@ -944,7 +944,7 @@ fun FynxCameraCapturePanel(
                                 }
                             },
                             enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
-                            modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 56.dp).semantics { contentDescription = "Share to Status" },
                             shape = RoundedCornerShape(28.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = Color.White,
@@ -979,7 +979,10 @@ fun FynxCameraCapturePanel(
                                         }
                                     }
                                 }
-                                Text("Your Story", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                                Column(verticalArrangement = Arrangement.Center) {
+                                    Text("Status", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                                    Text("Your Story", style = MaterialTheme.typography.labelSmall, color = Color(0xFF596273), maxLines = 1)
+                                }
                             }
                         }
                     }
