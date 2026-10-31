@@ -633,7 +633,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
     # This screen starts on the front lens. Switch to the rear lens, test the torch there,
     # and return to the front lens before the photo flow; the test labels match the real lens.
-    for lens_step in ("front", "back"):
+    for lens_step in ("back", "front"):
         switch = find_control(camera_xml, ["Switch front/back camera"])
         if not switch:
             FAILURES.append(prefix + f": camera switch disappeared while testing the {lens_step} lens")

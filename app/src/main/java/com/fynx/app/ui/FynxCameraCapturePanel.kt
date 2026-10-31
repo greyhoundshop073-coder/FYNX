@@ -204,7 +204,7 @@ fun FynxCameraCapturePanel(
     }
     LaunchedEffect(Unit) { if (!hasCamera) permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) }
 
-    var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
+    var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
     var mode by remember(initialMode, videoNoteMode) { mutableStateOf(if (videoNoteMode) CameraMode.VIDEO else initialMode) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
