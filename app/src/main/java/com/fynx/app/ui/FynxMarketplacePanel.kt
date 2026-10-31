@@ -2402,52 +2402,141 @@ private fun MarketplaceOrders(context: android.content.Context, orders: List<Fyn
 
 @Composable
 private fun OrderActions(context: android.content.Context, order: FynxRemoteSocialClient.MarketplaceOrder, onChanged: () -> Unit, onClose: () -> Unit) {
-    var dispute by remember { mutableStateOf(false) }
-    var details by remember { mutableStateOf("") }
-    var rating by remember { mutableIntStateOf(5) }
-    var comment by remember { mutableStateOf("") }
-    var showLifecycle by remember { mutableStateOf(false) }
+    var rating by remember(order.id) { mutableIntStateOf(5) }
+    var comment by remember(order.id) { mutableStateOf("") }
+    var showLifecycle by remember(order.id) { mutableStateOf(false) }
+    var openDisputeInitially by remember(order.id) { mutableStateOf(false) }
+    var actionBusy by remember(order.id) { mutableStateOf(false) }
+    var actionError by remember(order.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val canReportProblem = marketplaceOrderAllowsProblemReport(order.status)
 
     AlertDialog(
-        onDismissRequest = onClose,
+        onDismissRequest = { if (!actionBusy) onClose() },
         title = { Text("Order ${order.status}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(order.productTitle)
+                Text(order.productTitle.ifBlank { "FYNX order" })
                 Text("Total: ${order.currency} ${String.format(Locale.US, "%,.2f", order.totalAmount)}")
-                Text("Protected order. Complete payment through an approved payment provider before shipment.", style = MaterialTheme.typography.bodySmall)
+                Text("Protected order. FYNX verifies payment before seller fulfillment or payout.", style = MaterialTheme.typography.bodySmall)
                 if (order.status in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED", "DISPUTED", "REFUNDED")) {
                     MarketplaceReceiptAction(context, order.id)
                 }
                 if (order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION") {
                     Text("Next step", style = MaterialTheme.typography.labelLarge)
-                    Text(when (order.status) { "PAID" -> "Choose delivery or pickup so the seller can fulfill the order."; "SHIPPED" -> "Confirm the order when you receive it."; else -> "Inspect the order and complete it when everything is correct." }, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        when (order.status) {
+                            "PAID" -> "Choose delivery or pickup so the seller can fulfill the order."
+                            "SHIPPED" -> "Confirm receipt only after the product reaches you."
+                            else -> "Inspect the product and complete the order only when it matches."
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
-                when {
-                    dispute -> OutlinedTextField(value = details, onValueChange = { details = it }, label = { Text("What happened?") }, minLines = 3, modifier = Modifier.fillMaxWidth())
-                    order.status == "PAYMENT_PENDING" -> Text("You can cancel this unpaid order.")
-                    order.status == "COMPLETED" -> {
-                        Text("Rate seller")
-                        Row(verticalAlignment = Alignment.CenterVertically) { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } } }
-                        OutlinedTextField(value = comment, onValueChange = { comment = it }, label = { Text("Review") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                when (order.status) {
+                    "PAYMENT_PENDING" -> Text("This order has not been paid. You can cancel it; a protection dispute is not available yet.", style = MaterialTheme.typography.bodySmall)
+                    "DISPUTED" -> Text("A protection case is already open or awaiting review. Check the order updates instead of opening another case.", style = MaterialTheme.typography.bodySmall)
+                    "CANCELLED", "REFUNDED" -> Text("This order is closed and is not eligible for a new protection request.", style = MaterialTheme.typography.bodySmall)
+                }
+                if (order.status == "COMPLETED") {
+                    Text("Rate seller", style = MaterialTheme.typography.labelLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        (1..5).forEach { star ->
+                            TextButton(onClick = { rating = star }, enabled = !actionBusy) {
+                                Text(if (star <= rating) "★" else "☆")
+                            }
+                        }
                     }
+                    OutlinedTextField(
+                        value = comment,
+                        onValueChange = { comment = it.take(1000) },
+                        label = { Text("Review (optional)") },
+                        minLines = 2,
+                        enabled = !actionBusy,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
+                actionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
             when {
-                dispute -> Button(onClick = { scope.launch { FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "OTHER", details).onSuccess { onChanged() } } }) { Text("Open dispute") }
-                order.status == "PAYMENT_PENDING" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id).onSuccess { onChanged() } } }) { Text("Cancel order") }
-                order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION" -> Button(onClick = { showLifecycle = true }) { Text(when (order.status) { "PAID" -> "Choose fulfillment"; "SHIPPED" -> "Confirm received"; else -> "Complete order" }) }
-                order.status == "COMPLETED" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment).onSuccess { onChanged() } } }) { Text("Submit review") }
+                order.status == "PAYMENT_PENDING" -> Button(
+                    enabled = !actionBusy,
+                    onClick = {
+                        actionBusy = true
+                        actionError = null
+                        scope.launch {
+                            var succeeded = false
+                            FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id)
+                                .onSuccess { succeeded = true }
+                                .onFailure { actionError = marketplaceSafeError(it, "The unpaid order could not be cancelled. Try again.") }
+                            actionBusy = false
+                            if (succeeded) onChanged()
+                        }
+                    }
+                ) {
+                    if (actionBusy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Cancel unpaid order")
+                }
+                order.status in setOf("PAID", "SHIPPED", "INSPECTION") -> Button(
+                    enabled = !actionBusy,
+                    onClick = {
+                        openDisputeInitially = false
+                        showLifecycle = true
+                    }
+                ) { Text(when (order.status) {
+                    "PAID" -> "Choose fulfillment"
+                    "SHIPPED" -> "Confirm received"
+                    else -> "Complete order"
+                }) }
+                order.status == "COMPLETED" -> Button(
+                    enabled = !actionBusy,
+                    onClick = {
+                        actionBusy = true
+                        actionError = null
+                        scope.launch {
+                            var succeeded = false
+                            FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment.trim())
+                                .onSuccess { succeeded = true }
+                                .onFailure { actionError = marketplaceSafeError(it, "Your seller review could not be submitted. Try again.") }
+                            actionBusy = false
+                            if (succeeded) onChanged()
+                        }
+                    }
+                ) {
+                    if (actionBusy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Submit review")
+                }
                 else -> Spacer(Modifier.size(1.dp))
             }
         },
-        dismissButton = { TextButton(onClick = { if (!dispute && order.status != "COMPLETED") dispute = true else onClose() }) { Text(if (!dispute && order.status != "COMPLETED") "Report problem" else "Close") } }
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (canReportProblem) {
+                    TextButton(
+                        enabled = !actionBusy,
+                        onClick = {
+                            openDisputeInitially = true
+                            showLifecycle = true
+                        }
+                    ) { Text("Report problem") }
+                }
+                TextButton(onClick = onClose, enabled = !actionBusy) { Text("Close") }
+            }
+        }
     )
 
-    if (showLifecycle) FynxMarketplaceOrderLifecycle(context, order, onChanged = { showLifecycle = false; onChanged() }, onClose = { showLifecycle = false })
+    if (showLifecycle) {
+        FynxMarketplaceOrderLifecycle(
+            context = context,
+            order = order,
+            onChanged = {
+                showLifecycle = false
+                onChanged()
+            },
+            onClose = { showLifecycle = false },
+            openDisputeInitially = openDisputeInitially
+        )
+    }
 }
 private data class FynxMarketplaceMultiLine(val listing: FynxRemoteSocialClient.MarketplaceListing, val quantity: Int, val method: String, val address: FynxMarketplaceCheckoutAddress?)
 internal data class FynxMarketplaceExpectedCheckoutLine(
