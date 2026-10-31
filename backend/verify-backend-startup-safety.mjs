@@ -8,21 +8,25 @@ const initStart = server.indexOf("async function initDatabase()");
 const initEnd = server.indexOf("\n}\n\nfunction requireConfig", initStart);
 assert.ok(initStart >= 0 && initEnd > initStart, "database initialization function must remain discoverable");
 const init = server.slice(initStart, initEnd);
-const initialSchemaQuery = init.match(/await pool\\.query\\(\\x60([\\s\\S]*?)\\x60\\s*\\);/);
-assert.ok(initialSchemaQuery, "schema DDL must run as a parameter-free query batch");
-assert.doesNotMatch(initialSchemaQuery[1], /\\$1/, "schema DDL batch must not contain bound placeholders");
-assert.match(init, /await pool\\.query\\("UPDATE users SET verified = TRUE WHERE lower\\(username\\) = \\$1", \\[officialFynxUsername\\]\\);/,
+const queryStart = init.indexOf("await pool.query(`");
+const queryEnd = init.indexOf("\n  `);", queryStart);
+assert.ok(queryStart >= 0 && queryEnd > queryStart, "schema DDL must run as a parameter-free query batch");
+const initialSchemaQuery = init.slice(queryStart, queryEnd);
+assert.ok(!initialSchemaQuery.includes("$1"), "schema DDL batch must not contain bound placeholders");
+assert.ok(init.includes('await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);'),
   "official-account verification must use its own parameterized query");
-assert.doesNotMatch(init, /UPDATE users SET verified = FALSE/,
+assert.ok(!init.includes("UPDATE users SET verified = FALSE"),
   "startup must never reset every user's verification flag");
-assert.match(server, /max: Number\\(process\\.env\\.DB_POOL_MAX \\|\\| 10\\)/,
+assert.ok(server.includes("max: Number(process.env.DB_POOL_MAX || 10),"),
   "primary database pool must have a conservative default cap");
-assert.match(server, /min: 0,/,
+assert.ok(server.includes("min: 0,"),
   "primary database pool must allow idle connections to be released");
-assert.match(server, /import \\{ registerMarketplaceShopProfileRoutes \\} from "\\.\\/marketplaceShopProfiles\\.js";/,
+assert.ok(server.includes('import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";'),
   "My Shop route module must be imported by the deployed server");
-assert.match(server, /if \\(pool\\) registerMarketplaceShopProfileRoutes\\(\\{ app, pool, auth \\}\\);/,
+assert.ok(server.includes("if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });"),
   "My Shop routes must be registered only when the database pool exists");
+assert.ok(server.includes("DO $fnx$ BEGIN") && server.includes("END $fnx$;"),
+  "the idempotent message-media foreign-key guard must retain a valid dollar-quote delimiter");
 
 for (const route of [
   "app.get('/api/marketplace/my-shop', auth",
@@ -33,8 +37,9 @@ assert.ok(shop.includes("seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DE
   "shop identity must remain owned by exactly one seller account");
 assert.ok(shop.includes("ON CONFLICT (seller_id) DO UPDATE SET"),
   "shop updates must upsert against the authenticated seller key");
-assert.ok(!/ON CONFLICT\\s*\\(seller_id\\)[\\s\\S]{0,400}seller_id\\s*=/.test(shop),
-  "shop update must not permit ownership reassignment");
+const conflictUpdate = shop.split("ON CONFLICT (seller_id) DO UPDATE SET")[1]?.split("RETURNING")[0] || "";
+assert.ok(conflictUpdate, "shop upsert update clause must exist");
+assert.ok(!conflictUpdate.includes("seller_id ="), "shop update must not permit ownership reassignment");
 assert.ok(shop.includes("b.blocker_id = $2 AND b.blocked_id = u.id")
   && shop.includes("b.blocker_id = u.id AND b.blocked_id = $2"),
   "public shop details must respect blocks in both directions");
