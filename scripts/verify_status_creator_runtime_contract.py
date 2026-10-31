@@ -40,9 +40,12 @@ checks = [
         and 'FATAL EXCEPTION' in runtime and '## Result:' in runtime,
     ),
     (
-        "runtime check is executed after the existing navigation capture on a green run",
+        "Status runtime certification runs even when Marketplace navigation fails after green instrumentation",
         'python3 scripts/verify_status_creator_runtime.py' in runner
-        and 'STATUS_EXIT=$?' in runner and 'TEST_EXIT="$STATUS_EXIT"' in runner,
+        and 'STATUS_EXIT=$?' in runner
+        and 'if [ "$NAV_EXIT" -ne 0 ]; then' in runner
+        and 'if [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$STATUS_EXIT"; fi' in runner
+        and runner.index('if [ "$NAV_EXIT" -ne 0 ]; then') < runner.index('python3 scripts/verify_status_creator_runtime.py') < runner.index('else\n  # A red instrumentation test must not suppress Marketplace/My Shop screenshot evidence.'),
     ),
     (
         "a red instrumentation run remains red even if the read-only Status check runs afterward",
