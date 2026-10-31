@@ -9,6 +9,7 @@ backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="ut
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 status_hub = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt").read_text(encoding="utf-8")
+status_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt").read_text(encoding="utf-8")
 app_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 draft_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt").read_text(encoding="utf-8")
 
@@ -213,6 +214,14 @@ checks = [
      and "if(previewUri!=null && previewType!=null)" in camera
      and "if (showYourStoryAction && !statusCapture && !liveProofMode)" in camera
      and "showYourStoryAction = true" in home
+     and "onShareToStatus(previewUri" in camera),
+    ("Status CTA checks the existing upload and video limits before opening the Status composer",
+     "validateCameraStatusMedia(previewUri, previewType)" in camera
+     and "MAX_STATUS_PHOTO_UPLOAD_BYTES = 12L * 1024L * 1024L" in camera
+     and "FYNX_STATUS_MAX_VIDEO_BYTES" in camera
+     and "FYNX_STATUS_MAX_VIDEO_DURATION_MS" in camera
+     and "MediaMetadataRetriever.METADATA_KEY_DURATION" in camera
+     and "if (total > 12 * 1024 * 1024)" in status_client
      and "onShareToStatus(previewUri" in camera),
     ("Recorded video opens the existing Status composer and is never sent by the runtime test",
      '["Status"]' in runtime
