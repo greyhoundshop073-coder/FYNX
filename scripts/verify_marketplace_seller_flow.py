@@ -532,7 +532,8 @@ shop_profile_ui = seller_center[shop_profile_ui_start:shop_profile_ui_end]
 
 checks.append(
     ("My Shop profile fields remain locked while saved shop details load, preventing an in-progress edit from being overwritten",
-     shop_profile_ui.count("enabled = !shopLoading && !shopSaving") == 4
+     shop_profile_ui.count("enabled = !shopLoading && !shopSaving") == 5
+     and shop_profile_ui.count("OutlinedTextField(") == 4
      and 'enabled = !shopLoading && !shopSaving, modifier = Modifier.fillMaxWidth(), singleLine = true' in shop_profile_ui)
 )
 
