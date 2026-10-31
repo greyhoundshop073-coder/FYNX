@@ -842,7 +842,7 @@ fun FynxCameraCapturePanel(
             }
         }
         if (timerCountingDown > 0) {
-            Surface(modifier = Modifier.align(Alignment.Center), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)) {
+            Surface(modifier = Modifier.align(Alignment.Center).border(1.dp, Color.White.copy(alpha = 0.26f), MaterialTheme.shapes.extraLarge), shape = MaterialTheme.shapes.extraLarge, color = Color(0xFF25364A).copy(alpha = 0.48f)) {
                 Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge, modifier = Modifier.padding(horizontal = 28.dp, vertical = 18.dp))
             }
         }
@@ -992,8 +992,8 @@ fun FynxCameraCapturePanel(
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).padding(bottom = 6.dp),
                     shape = RoundedCornerShape(20.dp),
-                    color = Color(0xD9232732),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                    color = Color(0xFF25364A).copy(alpha = 0.56f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
                     shadowElevation = 3.dp
                 ) {
                     Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
