@@ -140,7 +140,7 @@ DIAGNOSTIC_MARKERS = (
     "Open FYNX camera", "FYNX", "Chat", "Chats", "Friends", "More", "Stories",
     "Status", "Find People", "Search username or name", "Search chats",
     "Messages and groups in one place", "Your private conversations",
-    "New post", "Add description...", "Photo", "Video/Camera",
+    "New post", "Add description...", "More options", "Add photo or video", "Drafts", "Content disclosure and ads", "Add link", "Share to", "Edit cover",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
@@ -697,11 +697,17 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     if not composer_xml:
         return home_xml
 
-    camera_xml = tap_control_permission_aware(
-        composer_xml, ["Video/Camera"], f"{prefix}-composer-camera",
-        ["Switch front/back camera"]
+    options_xml = tap_control(
+        composer_xml, ["More options"], f"{prefix}-composer-more-options",
+        ["Add photo or video"]
     )
+    camera_xml = tap_control_permission_aware(
+        options_xml, ["Add photo or video"], f"{prefix}-composer-camera",
+        ["Switch front/back camera"]
+    ) if options_xml else ""
     if not camera_xml:
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.8)
         run("adb", "shell", "input", "keyevent", "4")
         time.sleep(0.8)
         return dump_ui(f"{prefix}-camera-return-home.xml") or composer_xml
@@ -1113,23 +1119,57 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 (ROOT / f"{prefix}-camera-create-post-caption.xml").write_text(
                     draft_xml + chr(10), encoding="utf-8"
                 )
-                # Keep the caption entry visible in its own capture, then reveal the attached
-                # photo preview and readiness marker in a separate evidence frame.
-                run("adb", "shell", "input", "swipe", "540", "1600", "540", "850", "450")
+                # The upper layout must match the supplied reference: description left,
+                # attached-media preview/Edit cover right, and hashtag/mention helpers below.
+                required_top = ["Add description...", "# Hashtags", "@ Mention", "Edit cover"]
+                missing_top = [label for label in required_top if not find_control(draft_xml, [label])]
+                if missing_top:
+                    FAILURES.append(prefix + ": post details top layout is missing " + ", ".join(missing_top))
+                # Scroll the same real details page to inspect the TikTok-style settings order.
+                run("adb", "shell", "input", "swipe", "540", "1700", "540", "850", "450")
                 time.sleep(0.6)
-                draft_xml = dump_ui(f"{prefix}-camera-create-post-media.xml") or draft_xml
-                screenshot(f"{prefix}-camera-create-post-media.png")
-                (ROOT / f"{prefix}-camera-create-post-media.xml").write_text(
-                    draft_xml + chr(10), encoding="utf-8"
+                details_xml = dump_ui(f"{prefix}-camera-post-details-options.xml") or draft_xml
+                screenshot(f"{prefix}-camera-post-details-options.png")
+                (ROOT / f"{prefix}-camera-post-details-options.xml").write_text(
+                    details_xml + chr(10), encoding="utf-8"
                 )
-                if (
-                    find_control(draft_xml, ["Remove photo/video"])
-                    or find_control(draft_xml, ["1 item ready"])
-                ):
-                    report.append("- PASS camera Next handed the second photo to the New post caption draft with its attachment retained; draft was dismissed without publishing")
-                else:
-                    FAILURES.append(prefix + ": New post caption draft opened but the captured photo attachment was not confirmed in its media section")
-                home = camera_return_to_home(draft_xml, prefix + "-post-draft-dismiss")
+                required_options = ["Content disclosure and ads", "Location", "Add link", "More options", "Share to", "Post"]
+                missing_options = [label for label in required_options if not find_control(details_xml, [label])]
+                if missing_options:
+                    FAILURES.append(prefix + ": post details options are missing " + ", ".join(missing_options))
+                # Drafts are local-only. Save once, reopen to prove persistence, then delete the
+                # test draft. The workflow never taps Post and never creates a remote social post.
+                drafts_xml = tap_control(
+                    details_xml, ["Drafts"], f"{prefix}-camera-post-drafts",
+                    ["Save current draft"]
+                )
+                if drafts_xml:
+                    saved_xml = tap_control(
+                        drafts_xml, ["Save current draft"], f"{prefix}-camera-post-save-draft",
+                        ["Open", "Draft saved on this device."]
+                    )
+                    if saved_xml and find_control(saved_xml, ["Open"]):
+                        report.append("- PASS local post Drafts saved captured media and exposed an Open action without publishing")
+                        opened_xml = tap_control(
+                            saved_xml, ["Open"], f"{prefix}-camera-post-reopen-draft",
+                            ["New post", "Add description...", "Post"]
+                        )
+                        if opened_xml:
+                            reopened_drafts = tap_control(
+                                opened_xml, ["Drafts"], f"{prefix}-camera-post-delete-draft",
+                                ["Delete"]
+                            )
+                            if reopened_drafts:
+                                deleted_xml = tap_control(
+                                    reopened_drafts, ["Delete"], f"{prefix}-camera-post-draft-deleted",
+                                    ["No saved drafts yet."]
+                                )
+                                if deleted_xml:
+                                    report.append("- PASS saved post draft reopened and its test copy was deleted")
+                    else:
+                        FAILURES.append(prefix + ": Drafts did not persist the unpublished camera media")
+                draft_xml = camera_return_to_home(details_xml, prefix + "-post-draft-dismiss")
+                report.append("- PASS camera Next handed the photo to the reference-style post details page; no post was published")
             else:
                 FAILURES.append(prefix + ": camera Next did not open the New post caption draft")
                 home = camera_return_to_home(second_editor, prefix + "-post-draft-send-failed")
@@ -1191,9 +1231,12 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     )
     if not composer:
         return camera_return_to_home(home_xml, prefix + "-video-composer-missing")
-    camera = tap_control(
-        composer, ["Video/Camera"], f"{prefix}-video-composer-camera", ["Switch front/back camera"]
+    options = tap_control(
+        composer, ["More options"], f"{prefix}-video-composer-more-options", ["Add photo or video"]
     )
+    camera = tap_control(
+        options, ["Add photo or video"], f"{prefix}-video-composer-camera", ["Switch front/back camera"]
+    ) if options else ""
     if not camera:
         return camera_return_to_home(composer, prefix + "-video-camera-missing")
 
