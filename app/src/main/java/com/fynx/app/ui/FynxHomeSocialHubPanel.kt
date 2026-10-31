@@ -128,6 +128,7 @@ fun FynxHomeSocialHubPanel(
     var draftNotice by remember { mutableStateOf<String?>(null) }
     var showPostLinkDialog by remember { mutableStateOf(false) }
     var postLinkInput by remember { mutableStateOf("") }
+    var postLinkError by remember { mutableStateOf<String?>(null) }
     var showDisclosureInfo by remember { mutableStateOf(false) }
     var showCoverInfo by remember { mutableStateOf(false) }
     var showMorePostOptions by remember { mutableStateOf(false) }
@@ -977,6 +978,195 @@ fun FynxHomeSocialHubPanel(
         }
     }
 
+
+    if (showPostLinkDialog) {
+        AlertDialog(
+            onDismissRequest = { showPostLinkDialog = false },
+            title = { Text("Add link") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Add a web address to your caption. It will be published as text in the post description.")
+                    OutlinedTextField(
+                        value = postLinkInput,
+                        onValueChange = { postLinkInput = it.take(500); postLinkError = null },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Website URL") },
+                        placeholder = { Text("https://example.com") },
+                        isError = postLinkError != null
+                    )
+                    postLinkError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val candidate = postLinkInput.trim()
+                    val parsed = runCatching { Uri.parse(candidate) }.getOrNull()
+                    if (parsed == null || parsed.scheme !in listOf("http", "https") || parsed.host.isNullOrBlank()) {
+                        postLinkError = "Enter a valid http or https web address."
+                    } else {
+                        val updated = (text.trimEnd() + if (text.isBlank()) candidate else "\n" + candidate)
+                        if (updated.length > 4000) {
+                            postLinkError = "The caption and link exceed the 4,000 character limit."
+                        } else {
+                            text = updated
+                            showPostLinkDialog = false
+                            postLinkInput = ""
+                            postLinkError = null
+                        }
+                    }
+                }, enabled = !posting) { Text("Add to caption") }
+            },
+            dismissButton = { TextButton(onClick = { showPostLinkDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showDisclosureInfo) {
+        AlertDialog(
+            onDismissRequest = { showDisclosureInfo = false },
+            title = { Text("Content disclosure and ads") },
+            text = {
+                Text("The current FYNX publishing model does not yet support paid-partnership or branded-content disclosure fields. This post will not be marked as sponsored. Do not use this post flow to label a paid promotion until that publishing support is added.")
+            },
+            confirmButton = { Button(onClick = { showDisclosureInfo = false }) { Text("Got it") } }
+        )
+    }
+
+    if (showCoverInfo) {
+        AlertDialog(
+            onDismissRequest = { showCoverInfo = false },
+            title = { Text("Edit cover") },
+            text = {
+                Text("FYNX currently publishes the selected photo or video using its generated media preview. A custom video-cover field is not supported by the current publishing API, so the cover cannot be changed here yet.")
+            },
+            confirmButton = { Button(onClick = { showCoverInfo = false }) { Text("OK") } }
+        )
+    }
+
+    if (showMorePostOptions) {
+        AlertDialog(
+            onDismissRequest = { showMorePostOptions = false },
+            title = { Text("More options") },
+            text = {
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 430.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Add to your post", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(
+                        onClick = { showMorePostOptions = false; showMusicPicker = true; notice = null },
+                        enabled = !posting && postingAllowed,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Icon(Icons.Default.MusicNote, null); Spacer(Modifier.width(10.dp)); Text(if (selectedCatalogueMusic == null) "Add music" else "Change music") }
+                    TextButton(
+                        onClick = { showMorePostOptions = false; showPeoplePicker = true },
+                        enabled = !posting,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Icon(Icons.Default.People, null); Spacer(Modifier.width(10.dp)); Text("Tag people") }
+                    TextButton(
+                        onClick = { showMorePostOptions = false; showFeelingActivityPicker = true },
+                        enabled = !posting && postingAllowed,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Icon(Icons.Default.SentimentSatisfied, null); Spacer(Modifier.width(10.dp)); Text("Feeling / Activity") }
+                    TextButton(
+                        onClick = {
+                            showMorePostOptions = false
+                            gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        },
+                        enabled = !posting && postingAllowed && capturedUris.size < 4,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Icon(Icons.Default.Image, null); Spacer(Modifier.width(10.dp)); Text("Add photo or video") }
+                    TextButton(
+                        onClick = {
+                            showMorePostOptions = false
+                            if (capturedUris.isNotEmpty()) notice = "Voice posts must contain only one audio recording. Remove the current media first."
+                            else { showComposer = false; showVoiceRecorder = true }
+                        },
+                        enabled = !posting && postingAllowed && capturedUris.isEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Icon(Icons.Default.Mic, null); Spacer(Modifier.width(10.dp)); Text("Record voice post") }
+                    TextButton(
+                        onClick = { showMorePostOptions = false; requestComposerLocation() },
+                        enabled = !posting && !locationLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Icon(Icons.Default.LocationOn, null); Spacer(Modifier.width(10.dp)); Text("Add location") }
+                    if (text.isNotBlank()) {
+                        HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                        Text("Text background", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FynxPostTextBackground.entries.forEach { option ->
+                                FilterChip(
+                                    selected = textBackground == option,
+                                    onClick = { textBackground = if (textBackground == option) null else option },
+                                    label = { Text(option.label) },
+                                    enabled = !posting
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showMorePostOptions = false }) { Text("Done") } }
+        )
+    }
+
+    if (showDraftsDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!draftSaving) showDraftsDialog = false },
+            title = { Text("Drafts") },
+            text = {
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    draftNotice?.let { Text(it, color = if (it.startsWith("Draft saved")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
+                    if (savedPostDrafts.isEmpty()) {
+                        Text("No saved drafts yet. Save this post to continue editing it later on this device.")
+                    } else {
+                        savedPostDrafts.forEach { draft ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(draft.title, style = MaterialTheme.typography.titleSmall, maxLines = 2)
+                                    Text(
+                                        listOf(
+                                            draft.mediaTypes.size.takeIf { it > 0 }?.let { "$it media" },
+                                            draft.audience.replace('_', ' ').lowercase()
+                                        ).filterNotNull().joinToString(" • "),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            restoreSavedPostDraft(draft)
+                                            draftNotice = null
+                                        }) { Text("Open") }
+                                        TextButton(onClick = {
+                                            scope.launch {
+                                                val result = withContext(Dispatchers.IO) { runCatching { FynxLocalPostDraftStore.delete(context, draft.id) } }
+                                                result.onSuccess {
+                                                    savedPostDrafts = FynxLocalPostDraftStore.list(context)
+                                                    if (editingDraftId == draft.id) editingDraftId = null
+                                                }.onFailure { draftNotice = it.message ?: "Draft could not be deleted." }
+                                            }
+                                        }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { saveCurrentPostDraft() },
+                    enabled = !draftSaving && !posting && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null)
+                ) { Text(if (draftSaving) "Saving…" else if (editingDraftId == null) "Save current draft" else "Update draft") }
+            },
+            dismissButton = {
+                TextButton(onClick = { if (!draftSaving) showDraftsDialog = false }) { Text("Done") }
+            }
+        )
+    }
 
     if (showPeoplePicker) {
         AlertDialog(
