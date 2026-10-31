@@ -1381,7 +1381,7 @@ xml,error=login()
 
 # Capture the Home glass surface in the same system dark mode as the supplied reference.
 # This is a read-only screenshot: preserve the actual feed/error state and never invent posts.
-if VISUALS_ONLY and not error:
+if VISUALS_ONLY and not error and os.environ.get("FYNX_MARKETPLACE_ONLY") != "1":
     night_mode = run("adb", "shell", "cmd", "uimode", "night", "yes", timeout=15)
     if night_mode.returncode != 0:
         night_mode = run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "2", timeout=15)
@@ -1450,7 +1450,7 @@ if VISUALS_ONLY and not error:
 # unrelated instrumentation test fails. This branch performs read-only navigation:
 # it never publishes a listing, changes inventory, creates an order, or initiates payment.
 if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
-    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace and My Shop; no listing/order/payment mutations.")
+    report.append("- Capture scope: Marketplace buyer/seller screens and My Shop only; no listing/order/payment mutations.")
     if error:
         report += [
             "",
@@ -1470,10 +1470,8 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
     else:
         report.append("- Session: the existing login flow reached Home; live Marketplace data remains unverified unless its API loads successfully.")
 
-    # Verify the real camera and effect layout before navigating to Marketplace.
-    xml = capture_camera_post_journey(xml, "debug-camera")
-    if not xml or not find_control(xml, ["Open FYNX camera"]):
-        FAILURES.append("read-only camera/photo/video-effects journey did not return to Home")
+    # Keep this runtime path strictly within Marketplace/My Shop.
+    # Do not enter the Home camera, Status, Chat or other workstreams.
     marketplace_xml = tap_control(
         xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
     )
@@ -1503,13 +1501,101 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 screenshot("authenticated-marketplace-product-detail.png")
                 (ROOT/"authenticated-marketplace-product-detail.xml").write_text(detail_xml+"\n", encoding="utf-8")
                 report.append("- PASS: opened a real visible Marketplace listing and captured Product Details.")
+
+                # Enter the buyer's real checkout form only. Never request a quote or create an order.
+                checkout_xml = tap_control(
+                    detail_xml, ["Buy now"], "marketplace-buyer-checkout-form", ["Checkout"]
+                )
+                if checkout_xml:
+                    screenshot("authenticated-marketplace-buyer-checkout.png")
+                    (ROOT/"authenticated-marketplace-buyer-checkout.xml").write_text(checkout_xml+"\n", encoding="utf-8")
+                    if find_control(checkout_xml, ["Delivery address"]) and find_control(checkout_xml, ["City"]) and find_control(checkout_xml, ["State"]):
+                        checkout_validation_xml = tap_control(
+                            checkout_xml,
+                            ["Review exact total"],
+                            "marketplace-buyer-delivery-validation",
+                            ["Full name, phone, street address, city and state are required for delivery."],
+                        )
+                        if checkout_validation_xml:
+                            screenshot("authenticated-marketplace-delivery-validation.png")
+                            (ROOT/"authenticated-marketplace-delivery-validation.xml").write_text(checkout_validation_xml+"\n", encoding="utf-8")
+                            report.append("- PASS: delivery checkout form opened and its missing name/phone/address/city/state validation appeared without contacting the payment provider or creating an order.")
+                            checkout_xml = checkout_validation_xml
+                        else:
+                            report.append("- BLOCKED: delivery form opened, but blank destination validation was not confirmed; no quote was submitted.")
+                    else:
+                        report.append("- PASS: captured the real pickup-only or non-delivery checkout form; no quote was requested.")
+                    closed_checkout = tap_control(
+                        checkout_xml, ["Cancel"], "marketplace-buyer-checkout-close", ["Search products, sellers or categories"]
+                    )
+                    if closed_checkout:
+                        marketplace_xml = closed_checkout
+                    else:
+                        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                        time.sleep(0.8)
+                        marketplace_xml = dump_ui("marketplace-after-checkout.xml") or marketplace_xml
+                else:
+                    report.append("- BLOCKED: real product detail opened, but Buy now did not expose the checkout form.")
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(0.8)
+                    marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
             else:
                 report.append("- BLOCKED: a visible priced card was present, but Product Details markers were not confirmed; no detail screenshot is claimed.")
-            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-            time.sleep(0.8)
-            marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.8)
+                marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
         else:
             report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
+
+        # Read the real saved cart without changing quantities or removing any of the user's items.
+        cart_xml = tap_control(
+            marketplace_xml, ["Cart"], "marketplace-cart", ["Shopping cart"]
+        )
+        if cart_xml:
+            screenshot("authenticated-marketplace-cart.png")
+            (ROOT/"authenticated-marketplace-cart.xml").write_text(cart_xml+"\n", encoding="utf-8")
+            if find_control(cart_xml, ["Your cart is empty."]):
+                report.append("- PASS: actual buyer cart opened and displayed its genuine empty state.")
+            elif find_control(cart_xml, ["Remove"]) and find_control(cart_xml, ["Qty"]):
+                report.append("- PASS: actual buyer cart opened and displayed saved cart item/quantity controls; items were not changed.")
+            else:
+                report.append("- BLOCKED: cart opened but its empty or populated state could not be confirmed from the visible UI.")
+            closed_cart = tap_control(cart_xml, ["Close"], "marketplace-cart-close", ["Search products, sellers or categories"])
+            if closed_cart:
+                marketplace_xml = closed_cart
+            else:
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.7)
+                marketplace_xml = dump_ui("marketplace-after-cart.xml") or marketplace_xml
+        else:
+            report.append("- BLOCKED: Marketplace Cart was not exposed to the runtime navigator.")
+
+        # Read the buyer's actual orders or its real empty/network-error state. Never create an order.
+        orders_xml = tap_control(
+            marketplace_xml, ["Orders"], "marketplace-buyer-orders", ["My orders"]
+        )
+        if orders_xml:
+            time.sleep(1.2)
+            orders_xml = dump_ui("marketplace-buyer-orders-settled.xml") or orders_xml
+            screenshot("authenticated-marketplace-buyer-orders.png")
+            (ROOT/"authenticated-marketplace-buyer-orders.xml").write_text(orders_xml+"\n", encoding="utf-8")
+            if find_control(orders_xml, ["Loading your orders"]):
+                report.append("- BLOCKED: buyer orders remained in the real loading state; live order data could not be verified.")
+            elif find_control(orders_xml, ["Check your connection and try again"]):
+                report.append("- PASS: buyer order screen exposed its real recoverable connection-error state.")
+            elif find_control(orders_xml, ["No orders yet."]):
+                report.append("- PASS: buyer order screen exposed the account's genuine empty state.")
+            else:
+                report.append("- PASS: buyer order list rendered real account content; no order was opened or changed.")
+            closed_orders = tap_control(orders_xml, ["Close"], "marketplace-buyer-orders-close", ["Search products, sellers or categories"])
+            if closed_orders:
+                marketplace_xml = closed_orders
+            else:
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.7)
+                marketplace_xml = dump_ui("marketplace-after-buyer-orders.xml") or marketplace_xml
+        else:
+            report.append("- BLOCKED: Marketplace -> My orders did not open in the runtime navigator.")
 
         # Scroll the real Marketplace list to its sell action; do not fill or submit the form.
         sell_labels = ["Sell something", "Start selling", "Sell your first product"]

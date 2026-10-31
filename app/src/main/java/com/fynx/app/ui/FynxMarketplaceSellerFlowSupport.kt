@@ -33,14 +33,23 @@ internal object FynxMarketplaceSellerFlowSupport {
     fun addMedia(context: Context, existing: List<Uri>, uri: Uri): List<Uri> =
         normalizedMedia(context, existing + uri)
 
-    fun validListing(title: String, description: String, price: Double?, quantity: Int?, media: List<Uri>): Boolean =
+    fun validListing(
+        title: String,
+        description: String,
+        price: Double?,
+        quantity: Int?,
+        media: List<Uri>,
+        deliveryAvailable: Boolean = true,
+        pickupAvailable: Boolean = true
+    ): Boolean =
         title.trim().isNotBlank() &&
             title.length <= MAX_TITLE_LENGTH &&
             description.trim().isNotBlank() &&
             description.length <= MAX_DESCRIPTION_LENGTH &&
             price != null && price.isFinite() && price > 0.0 &&
             quantity != null && quantity in 1..MAX_QUANTITY &&
-            media.isNotEmpty() && media.size <= MAX_PRODUCT_MEDIA
+            media.isNotEmpty() && media.size <= MAX_PRODUCT_MEDIA &&
+            (deliveryAvailable || pickupAvailable)
 }
 
 /** Accepts only real JSON numeric values; missing, string, NaN and infinite amounts fail closed. */

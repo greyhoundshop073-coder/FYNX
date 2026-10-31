@@ -14,6 +14,9 @@ internal data class FynxMarketplacePayment(
     val currency: String
 )
 
+internal fun isValidMarketplacePaymentEmail(value: String): Boolean =
+    android.util.Patterns.EMAIL_ADDRESS.matcher(value.trim()).matches()
+
 internal fun marketplacePaymentFailureMessage(error: Throwable): String {
     val details = generateSequence(error) { it.cause }
         .mapNotNull { it.message }
@@ -31,7 +34,7 @@ internal suspend fun initializeMarketplacePayment(
     customerEmail: String
 ): Result<FynxMarketplacePayment> {
     val email = customerEmail.trim()
-    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+    if (!isValidMarketplacePaymentEmail(email)) {
         return Result.failure(IllegalArgumentException("Enter a valid email address."))
     }
     if (orderId.trim().isEmpty()) {

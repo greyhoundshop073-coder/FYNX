@@ -24,7 +24,7 @@ checks = [
     ("seller shipping uses the backend order route", '"/api/marketplace/orders/$id/ship"' in client),
     ("order lifecycle exposes received confirmation", "Confirm received" in lifecycle and "confirmMarketplaceDelivery" in lifecycle),
     ("order lifecycle exposes completion after inspection", "Complete the order" in lifecycle and '"INSPECTION"' in lifecycle),
-    ("order lifecycle exposes dispute reporting", "disputeMarketplaceOrder" in panel and "Open dispute" in lifecycle),
+    ("order lifecycle exposes dispute reporting", "disputeMarketplaceOrder" in lifecycle and "Open dispute" in lifecycle and "marketplaceOrderAllowsProblemReport" in lifecycle),
     ("unpaid protected orders can be cancelled", "cancelMarketplaceOrder" in panel and "PAYMENT_PENDING" in panel),
     ("backend delivery confirmation is authenticated", "app.post('/api/marketplace/orders/:id/confirm-delivery', auth" in completion),
     ("backend shipping requires seller authorization", "only the seller can ship this order" in completion),

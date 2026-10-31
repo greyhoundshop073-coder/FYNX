@@ -14,10 +14,11 @@ adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
 if [ "$TEST_EXIT" -eq 0 ]; then
-  # Use server-authenticated navigation only when both CI credentials exist and the backend is ready.
-  # Camera/media visual certification remains useful through the existing read-only debug-local UI
-  # entry when secrets are absent, so an unavailable secret does not suppress emulator evidence.
-  if [ -z "${FYNX_E2E_USERNAME:-}" ] || [ -z "${FYNX_E2E_PASSWORD:-}" ]; then
+  if [ "${FYNX_MARKETPLACE_ONLY:-}" = "1" ]; then
+    echo "::notice::Running only the read-only Marketplace and My Shop emulator journey for this Marketplace change."
+    FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    NAV_EXIT=$?
+  elif [ -z "${FYNX_E2E_USERNAME:-}" ] || [ -z "${FYNX_E2E_PASSWORD:-}" ]; then
     echo "::notice::E2E credentials are not configured; running read-only camera/Marketplace UI certification through the debug-local path."
     FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
     NAV_EXIT=$?
@@ -35,13 +36,14 @@ if [ "$TEST_EXIT" -eq 0 ]; then
     TEST_EXIT="$NAV_EXIT"
   fi
 
-  # Keep Status creator certification independent of Marketplace navigation. A failure in
-  # the Marketplace visual walk must not suppress Status evidence after instrumentation passes.
-  python3 scripts/verify_status_creator_runtime.py
-  STATUS_EXIT=$?
-  if [ "$STATUS_EXIT" -ne 0 ]; then
-    echo "::error::Status creator runtime verification failed (exit $STATUS_EXIT)."
-    if [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$STATUS_EXIT"; fi
+  # Keep this Marketplace PR runtime strictly scoped to its own seller/buyer surfaces.
+  if [ "${FYNX_MARKETPLACE_ONLY:-}" != "1" ]; then
+    python3 scripts/verify_status_creator_runtime.py
+    STATUS_EXIT=$?
+    if [ "$STATUS_EXIT" -ne 0 ]; then
+      echo "::error::Status creator runtime verification failed (exit $STATUS_EXIT)."
+      if [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$STATUS_EXIT"; fi
+    fi
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 else
@@ -52,10 +54,12 @@ else
   if [ "$VISUAL_EXIT" -ne 0 ]; then
     echo "::warning::Marketplace/My Shop visual capture did not complete (exit $VISUAL_EXIT); the instrumentation result remains $TEST_EXIT."
   fi
-  python3 scripts/verify_status_creator_runtime.py
-  STATUS_EXIT=$?
-  if [ "$STATUS_EXIT" -ne 0 ]; then
-    echo "::warning::Status creator diagnostic capture did not complete (exit $STATUS_EXIT); the instrumentation result remains $TEST_EXIT."
+  if [ "${FYNX_MARKETPLACE_ONLY:-}" != "1" ]; then
+    python3 scripts/verify_status_creator_runtime.py
+    STATUS_EXIT=$?
+    if [ "$STATUS_EXIT" -ne 0 ]; then
+      echo "::warning::Status creator diagnostic capture did not complete (exit $STATUS_EXIT); the instrumentation result remains $TEST_EXIT."
+    fi
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 fi

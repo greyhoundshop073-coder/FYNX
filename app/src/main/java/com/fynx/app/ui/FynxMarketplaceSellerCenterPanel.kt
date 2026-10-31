@@ -467,6 +467,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                         if (shopLoading) CircularProgressIndicator(Modifier.size(18.dp))
                     }
                     Text("Set a shop name and details that stay with your seller account. A Business Account is not required.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Your public shop currently uses your FYNX profile photo as its image. A separate shop logo upload is not available yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     OutlinedTextField(value = shopName, onValueChange = { shopName = it.take(120); shopMessage = null; shopError = null }, label = { Text("Shop name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     OutlinedTextField(value = shopDescription, onValueChange = { shopDescription = it.take(800); shopMessage = null; shopError = null }, label = { Text("About your shop (optional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !shopSaving)
@@ -872,7 +873,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     OutlinedTextField(
                         value = editTitle,
-                        onValueChange = { editTitle = it.take(160) },
+                        onValueChange = { editTitle = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) },
                         label = { Text("Product name") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -961,7 +962,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     )
                     OutlinedTextField(
                         value = editQuantity,
-                        onValueChange = { editQuantity = it.filter(Char::isDigit).take(9) },
+                        onValueChange = { editQuantity = it.filter(Char::isDigit).take(7) },
                         label = { Text("Total stock (0 = out of stock)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -974,13 +975,13 @@ fun FynxMarketplaceSellerCenterPanel() {
             confirmButton = {
                 Button(
                     enabled = !editSaving &&
-                        editTitle.trim().length >= 2 &&
+                        editTitle.trim().length in 2..FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH &&
                         editDescription.trim().length >= 5 &&
                         editCategory.trim().isNotBlank() &&
                         editCondition.trim().uppercase(Locale.US) in setOf("NEW", "USED", "REFURBISHED") &&
                         editLocation.trim().isNotBlank() &&
                         editPrice.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true &&
-                        editQuantity.toIntOrNull()?.let { it >= 0 } == true,
+                        editQuantity.toIntOrNull()?.let { it in 0..FynxMarketplaceSellerFlowSupport.MAX_QUANTITY } == true,
                     onClick = {
                         val price = editPrice.toDoubleOrNull() ?: return@Button
                         val quantity = editQuantity.toIntOrNull() ?: return@Button
