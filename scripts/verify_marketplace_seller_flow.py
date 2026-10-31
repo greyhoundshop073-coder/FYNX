@@ -523,7 +523,8 @@ checks.append(
      "contactPhone" not in storefront
      and "shopContactPhone" not in storefront
      and "Shop contact:" not in storefront
-     and 'put("contactPhone", shopContactPhone.trim())' in seller_center)
+     and 'put("contactPhone", shopContactPhone.trim())' in seller_center
+     and 'label = { Text("Private shop contact (optional)") }' in shop_profile_ui)
 )
 
 shop_profile_ui_start = seller_center.index('if (activeSection == "Shop profile") item {')
