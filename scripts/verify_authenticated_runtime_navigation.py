@@ -421,6 +421,39 @@ def camera_wait_for_control(
     (ROOT / f"{prefix}-timeout.xml").write_text(latest + chr(10), encoding="utf-8")
     return latest
 
+def camera_wait_for_video_export_idle(
+    initial_xml: str, prefix: str, timeout: float = 150.0
+) -> tuple[str, bool]:
+    """Wait for a video export to finish and for its editor actions to stay stable."""
+    deadline = time.monotonic() + timeout
+    latest = initial_xml
+    stable_samples = 0
+    while time.monotonic() < deadline:
+        time.sleep(0.8)
+        latest = dump_ui(f"{prefix}-wait.xml") or latest
+        processing = bool(find_control(latest, [
+            "Processing video…", "Processing video...", "Processing…", "Processing..."
+        ]))
+        visible_error = bool(find_control(latest, [
+            "Video effects could not be applied.", "The video file is unavailable.",
+            "Export failed", "Unable to export", "Video export timed out. Try a shorter clip.",
+            "Video export produced an empty file.", "Video export did not preserve"
+        ]))
+        editor_ready = (
+            not processing
+            and find_control(latest, ["Apply style / captions"])
+            and find_control(latest, ["Retake"])
+            and find_control(latest, ["Send"])
+            and control_is_enabled(latest, ["Apply style / captions"])
+        )
+        if visible_error:
+            return latest, False
+        stable_samples = stable_samples + 1 if editor_ready else 0
+        if stable_samples >= 3:
+            return latest, True
+    return latest, False
+
+
 def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> str:
     """Dismiss camera/editor surfaces using Back until the real Home camera entry returns."""
     latest = current_xml
@@ -526,7 +559,7 @@ def verify_camera_controls_fit_safe_area(xml_text: str, labels: list[str], prefi
     return all_fit
 
 def verify_camera_image_signal(filename: str, crop_box: tuple[int, int, int, int], prefix: str) -> bool:
-    """Check the preview region contains image detail rather than a blank frame or flat test blocks."""
+    """Check a broad central preview crop for usable image signal without sampling only the left edge."""
     try:
         from PIL import Image
     except ImportError:
@@ -554,7 +587,10 @@ def verify_camera_image_signal(filename: str, crop_box: tuple[int, int, int, int
     except Exception as failure:
         FAILURES.append(prefix + ": camera preview image could not be decoded: " + str(failure)[:180])
         return False
-    if unique_colours < 120 or non_dark_ratio < 0.08 or coloured_ratio < 0.05:
+    # The Pixel 7 Pro AVD virtual-scene camera is intentionally synthetic and low-detail.
+    # Sample the central preview region (not the leftmost edge) and reject blank/monochrome
+    # frames while allowing that deterministic fixture's broad colour regions.
+    if unique_colours < 80 or non_dark_ratio < 0.08 or coloured_ratio < 0.25:
         FAILURES.append(
             prefix + f": preview region is blank or corrupted "
             f"(unique colours={unique_colours}, non-dark={non_dark_ratio:.2f}, colour-detail={coloured_ratio:.2f})"
@@ -672,7 +708,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             FAILURES.append(prefix + ": rear virtual-scene camera could not start")
         else:
             screenshot(f"{prefix}-camera-live-preview.png")
-            verify_camera_image_signal(f"{prefix}-camera-live-preview.png", (60, 210, 660, 1480), prefix + " rear live preview")
+            verify_camera_image_signal(f"{prefix}-camera-live-preview.png", (180, 650, 1260, 1900), prefix + " rear live preview")
             verify_camera_controls_fit_safe_area(camera_xml, ["Effects", "Take photo", "Gallery"], prefix + " rear live camera")
             (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + chr(10), encoding="utf-8")
     # TikTok-style flow: effects live in a deliberate tray opened from the shutter row,
@@ -684,7 +720,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     if tray_xml and all(find_control(tray_xml, [label]) for label in ["Looks", "Face FX", "Background", "AI Studio"]):
         report.append("- PASS Effects opens one compact category tray above the separate shutter row")
         screenshot(f"{prefix}-camera-effects-tray.png")
-        verify_camera_image_signal(f"{prefix}-camera-effects-tray.png", (60, 210, 660, 1000), prefix + " effects tray preview")
+        verify_camera_image_signal(f"{prefix}-camera-effects-tray.png", (180, 650, 1260, 1900), prefix + " effects tray preview")
         (ROOT / f"{prefix}-camera-effects-tray.xml").write_text(tray_xml + chr(10), encoding="utf-8")
         camera_xml = tray_xml
     else:
@@ -749,7 +785,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         return camera_return_to_home(camera_xml, prefix + "-photo-capture-failed")
 
     screenshot(f"{prefix}-camera-photo-editor-initial.png")
-    verify_camera_image_signal(f"{prefix}-camera-photo-editor-initial.png", (60, 100, 770, 1080), prefix + " photo editor preview")
+    verify_camera_image_signal(f"{prefix}-camera-photo-editor-initial.png", (180, 650, 1260, 1900), prefix + " photo editor preview")
     verify_camera_controls_fit_safe_area(editor_xml, ["Retake", "Rotate", "Send"], prefix + " photo editor")
     (ROOT / f"{prefix}-camera-photo-editor-initial.xml").write_text(editor_xml + chr(10), encoding="utf-8")
     missing_editor = [
@@ -892,7 +928,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         return camera_return_to_home(camera, prefix + "-video-rear-camera-failed")
     screenshot(f"{prefix}-camera-video-live-preview.png")
     verify_camera_image_signal(
-        f"{prefix}-camera-video-live-preview.png", (60, 210, 660, 1480),
+        f"{prefix}-camera-video-live-preview.png", (180, 650, 1260, 1900),
         prefix + " rear live video preview"
     )
     verify_camera_controls_fit_safe_area(
@@ -974,7 +1010,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     else:
         report.append("- NOTE app cache video could not be copied out for stream-level verification")
     screenshot(f"{prefix}-camera-video-editor-before-effects.png")
-    verify_camera_image_signal(f"{prefix}-camera-video-editor-before-effects.png", (60, 100, 770, 1080), prefix + " video editor preview")
+    verify_camera_image_signal(f"{prefix}-camera-video-editor-before-effects.png", (180, 650, 1260, 1900), prefix + " video editor preview")
     verify_camera_controls_fit_safe_area(editor, ["Retake", "Send"], prefix + " video editor")
     missing = [
         label for label in ["Video styles", "Cinematic", "Retake", "Send"]
