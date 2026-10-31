@@ -61,7 +61,7 @@ Before changing UI code, inspect the current branch (not a stale branch or defau
 
 ### Stage 2 — Capture preview → Next transition
 - Keep the current photo/video capture and editing processors.
-- Establish a clear final preview step with the reference's hierarchy and a prominent Next action.
+- Establish a clear final preview step with a glass top media chip, vertical right-side tool rail (Looks, Face FX, Background, AI Studio and Rotate for photos; captions for video), compact selected-effect panel, and a Retake / Next footer.
 - Preserve selected music/effects/caption/cover metadata through navigation.
 - Back returns to the editor/preview without losing media; retake returns to camera; cancellation releases temporary media safely.
 - Verify no duplicate camera binding or stale URI is created.
@@ -130,5 +130,5 @@ Capture genuine emulator/device screenshots and UI hierarchy for:
 - [ ] Final handover with final commit, screenshots and one canonical APK artifact.
 
 ## 9. Change log
-- 2026-10-31: Meaningful camera UI push: system-bar presentation on the actual Compose camera Dialog Window; translucent camera/editor panels, right control rail, effects tray and self-timer surface; Retake/Rotate/Next hand-off; redesigned existing post-details composer with attached-media preview, caption helpers, audience entry and sticky Post action; runtime selectors updated for Next. CI and genuine emulator proof remain required. The existing composer/API does not yet provide persistent Drafts storage, content-disclosure fields, external-link fields or share-target routing, so those reference controls were not added as nonfunctional UI.
+- 2026-10-31: Captured-media preview now uses a vertical translucent right-side tool rail for photo categories and Rotate, a glass Photo/Video preview chip, a shorter scrollable effect panel and a two-action Retake / Next footer. The Stage 2 verifier asserts the rail controls and safe-area layout; runtime screenshots must still prove the result.\n- 2026-10-31: Meaningful camera UI push: system-bar presentation on the actual Compose camera Dialog Window; translucent camera/editor panels, right control rail, effects tray and self-timer surface; Retake/Rotate/Next hand-off; redesigned existing post-details composer with attached-media preview, caption helpers, audience entry and sticky Post action; runtime selectors updated for Next. CI and genuine emulator proof remain required. The existing composer/API does not yet provide persistent Drafts storage, content-disclosure fields, external-link fields or share-target routing, so those reference controls were not added as nonfunctional UI.
 - 2026-10-31: Initial investigation and handover map created from PR #403 changed-file list, camera source patches, workflow job logs and runtime report. Compared existing Status composer system-bar lifecycle as a camera fix lead. No camera source implementation changes are claimed by this documentation update.
