@@ -30,7 +30,7 @@ A blocked/empty product-details probe is not a pass for live inventory. Record i
 - Changing the main category clears a stale subcategory.
 - Active and archived cards display real uploaded listing media with consistent cropping and an honest no-photo fallback.
 - Photo cleanup is optional, preserves the original, and supports preview / Keep Original / Use Enhanced / Undo where the processor is supported. On Android API 36 and newer, the current beta segmenter is disabled pending safe runtime verification; original photos must remain publishable.
-- Editing a published listing does not offer a false local-only photo replacement. The current update contract does not accept replacement media IDs; that is a separate backend-contract task and must not be hidden as a successful local-only update.
+- Editing a published listing supports authenticated photo/video replacement: the Android edit flow uploads selected media, passes the returned media IDs to the listing update, and only updates the visible listing after the server confirms the update. The backend validates that every replacement media record belongs to the signed-in seller and is an image or video before persisting the IDs. This is source-contract evidence only; runtime verification must still prove upload, persistence, and subsequent media retrieval with the live service.
 
 ## Backend-dependent evidence boundary
 
