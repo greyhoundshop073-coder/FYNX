@@ -54,6 +54,18 @@ object FynxAdminClient {
         val updatedAt: String
     )
 
+    data class RevenueBreakdown(
+        val source: String,
+        val status: String,
+        val currency: String,
+        val transactions: Int,
+        val amount: Double
+    )
+    data class RevenueReport(
+        val role: String,
+        val breakdown: List<RevenueBreakdown>
+    )
+
     suspend fun announcements(context: Context): Result<List<Announcement>> =
         FynxBackendClient.get(context, "/api/announcements").mapCatching { raw ->
             val array = JSONObject(raw).optJSONArray("announcements") ?: return@mapCatching emptyList()
@@ -70,6 +82,27 @@ object FynxAdminClient {
             val value = JSONObject(raw)
             val counts = value.optJSONObject("counts") ?: JSONObject()
             Dashboard(value.optString("role"), counts.optInt("users"), counts.optInt("openReports"), counts.optInt("openAppeals"), counts.optInt("safetyEvents24h"))
+        }
+
+    suspend fun revenue(context: Context): Result<RevenueReport> =
+        FynxBackendClient.get(context, "/api/admin/revenue").mapCatching { raw ->
+            val value = JSONObject(raw)
+            val rows = value.optJSONArray("breakdown")
+            val breakdown = buildList {
+                if (rows != null) for (i in 0 until rows.length()) {
+                    val item = rows.optJSONObject(i) ?: continue
+                    add(
+                        RevenueBreakdown(
+                            source = item.optString("source"),
+                            status = item.optString("status"),
+                            currency = item.optString("currency", "NGN"),
+                            transactions = item.optInt("transactions"),
+                            amount = item.optDouble("amount", 0.0)
+                        )
+                    )
+                }
+            }
+            RevenueReport(value.optString("role"), breakdown)
         }
 
     suspend fun admins(context: Context): Result<List<Admin>> =

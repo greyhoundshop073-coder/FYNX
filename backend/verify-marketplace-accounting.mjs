@@ -13,6 +13,8 @@ const checks = [
   ['buyer and seller fee shares are authoritative', transactions.includes('marketplace_fee_buyer') && transactions.includes('marketplace_fee_seller') && transactions.includes('sellerNetAmount')],
   ['buyer total includes only authoritative server components', transactions.includes('buyerTotal=Math.round((productSubtotal+deliveryFee+marketplaceFeeBuyer)*100)/100')],
   ['seller net subtracts seller-paid marketplace fee', transactions.includes('sellerNetAmount=Math.round((productSubtotal+deliveryFee-marketplaceFeeSeller)*100)/100')],
+  ['default marketplace fee mode is seller-paid when no override is set', transactions.includes("process.env.FYNX_MARKETPLACE_FEE_MODE || 'SELLER'") && transactions.includes('const configuredMode =') && transactions.includes('const mode = configuredMode;')],
+  ['default seller marketplace commission is five percent', transactions.includes("process.env.FYNX_MARKETPLACE_FEE_BPS || '500'")],
   ['legacy orders receive safe zero-fee accounting defaults', transactions.includes("fee_policy=COALESCE(fee_policy,'ZERO')") && transactions.includes("seller_net_amount=COALESCE(seller_net_amount,total_amount)")],
   ['payout is created from seller net, not raw buyer total', settlement.includes('sellerNetAmount = Number(order.seller_net_amount') && settlement.includes('amount,currency,metadata')],
   ['payout operation carries protected amount and fee snapshot', settlement.includes('escrowAmount: protectedAmount') && settlement.includes('marketplaceFee') && settlement.includes('sellerNetAmount')],

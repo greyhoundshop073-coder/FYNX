@@ -98,6 +98,8 @@ private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String =
 @Composable
 fun FynxBuyerWalletPanel() {
     val context = LocalContext.current
+    var activeAction by remember { mutableStateOf("HOME") }
+    var fundingAmount by remember { mutableStateOf("") }
     var summary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
     var activity by remember { mutableStateOf(emptyList<FynxBuyerWalletActivity>()) }
     var summaryLoading by remember { mutableStateOf(true) }
@@ -199,6 +201,20 @@ fun FynxBuyerWalletPanel() {
         }
     }
 
+    if (activeAction != "HOME") {
+        FynxWalletActionPanel(
+            screen = activeAction,
+            amount = fundingAmount,
+            onAmountChange = { fundingAmount = it },
+            availableBalance = wallet?.availableBalance,
+            onBack = {
+                activeAction = if (activeAction == "TRANSFER" || activeAction == "CARD" || activeAction == "USSD") "ADD" else "HOME"
+            },
+            onNavigate = { activeAction = it }
+        )
+        return
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
@@ -275,8 +291,8 @@ fun FynxBuyerWalletPanel() {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         OutlinedButton(
-                            onClick = {},
-                            enabled = isWalletReady && wallet.canFund,
+                            onClick = { activeAction = "ADD" },
+                            enabled = true,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
@@ -290,8 +306,8 @@ fun FynxBuyerWalletPanel() {
                             Text("Add money", fontWeight = FontWeight.SemiBold)
                         }
                         OutlinedButton(
-                            onClick = {},
-                            enabled = isWalletReady && wallet.canWithdraw,
+                            onClick = { activeAction = "WITHDRAW" },
+                            enabled = true,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
