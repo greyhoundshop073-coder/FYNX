@@ -26,9 +26,12 @@ class FynxSmokeTest {
 
         launchIntent!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
         device.pressHome()
-        context.startActivity(launchIntent)
-        device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 45_000)
+        device.waitForIdle(10_000)
+        instrumentation.startActivitySync(launchIntent)
+        val reachedFynx = device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 45_000)
+        device.waitForIdle(10_000)
 
+        assertTrue("FYNX must reach the foreground after its launcher intent", reachedFynx)
         assertEquals(context.packageName, device.currentPackageName)
         assertTrue("FYNX must expose a non-empty application label", context.applicationInfo.loadLabel(context.packageManager).toString().isNotBlank())
     }
