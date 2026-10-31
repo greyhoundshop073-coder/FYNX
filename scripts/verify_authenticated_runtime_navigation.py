@@ -1381,7 +1381,7 @@ xml,error=login()
 
 # Capture the Home glass surface in the same system dark mode as the supplied reference.
 # This is a read-only screenshot: preserve the actual feed/error state and never invent posts.
-if VISUALS_ONLY and not error:
+if VISUALS_ONLY and not error and os.environ.get("FYNX_MARKETPLACE_ONLY") != "1":
     night_mode = run("adb", "shell", "cmd", "uimode", "night", "yes", timeout=15)
     if night_mode.returncode != 0:
         night_mode = run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "2", timeout=15)
@@ -1470,10 +1470,8 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
     else:
         report.append("- Session: the existing login flow reached Home; live Marketplace data remains unverified unless its API loads successfully.")
 
-    # Verify the real camera and effect layout before navigating to Marketplace.
-    xml = capture_camera_post_journey(xml, "debug-camera")
-    if not xml or not find_control(xml, ["Open FYNX camera"]):
-        FAILURES.append("read-only camera/photo/video-effects journey did not return to Home")
+    # Keep this runtime path strictly within Marketplace/My Shop.
+    # Do not enter the Home camera, Status, Chat or other workstreams.
     marketplace_xml = tap_control(
         xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
     )
