@@ -23,6 +23,14 @@ export const pool = DATABASE_URL ? new Pool({
   keepAlive: true
 }) : null;
 
+// Handle idle-client disconnects explicitly. Log only the PostgreSQL error code,
+// never connection details or query parameters that could contain sensitive data.
+if (pool) {
+  pool.on("error", (error) => {
+    console.error("[fynx-db] idle PostgreSQL client error", error?.code || "UNKNOWN");
+  });
+}
+
 // The HTTP server owns the lifecycle and closes this pool once on SIGTERM/SIGINT.
 globalThis.__fynxPool = pool;
 

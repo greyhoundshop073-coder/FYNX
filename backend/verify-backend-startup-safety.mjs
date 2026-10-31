@@ -22,6 +22,8 @@ assert.ok(!init.includes("UPDATE users SET verified = FALSE"),
   "startup must never reset every user's verification flag");
 assert.ok(databasePool.includes("DB_POOL_MAX") && databasePool.includes("max: maximumConnections"),
   "backend modules must share a centrally bounded PostgreSQL pool");
+assert.ok(databasePool.includes('pool.on("error"'),
+  "idle PostgreSQL client errors must be handled explicitly");
 assert.ok(databasePool.includes("min: 0,"),
   "the shared pool must allow idle connections to be released");
 assert.ok(server.includes('import { pool } from "./databasePool.js";'),
