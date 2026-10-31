@@ -34,7 +34,9 @@ checks = [
     ),
     (
         "runtime check records UI hierarchy, screenshots, crash/ANR evidence and an explicit result",
-        'authenticated-status-home.png' in runtime and 'authenticated-status-create.png' in runtime
+        'authenticated-status-home.png' in runtime
+        and 'screenshot(f"authenticated-status-{stage}.png")' in runtime
+        and 'tap("Create your status", "create", ("Voice", "Text"))' in runtime
         and 'FATAL EXCEPTION' in runtime and '## Result:' in runtime,
     ),
     (

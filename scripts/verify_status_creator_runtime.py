@@ -125,10 +125,28 @@ def tap(label: str, stage: str, expected: tuple[str, ...], timeout: float = 12.0
     return latest
 
 
+def has_visible_label(xml_text: str, label: str) -> bool:
+    if not xml_text:
+        return False
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    wanted = label.strip().casefold()
+    return any(
+        node.attrib.get("visible-to-user", "true").lower() != "false"
+        and wanted in (
+            node.attrib.get("text", "").strip().casefold(),
+            node.attrib.get("content-desc", "").strip().casefold(),
+        )
+        for node in root.iter("node")
+    )
+
+
 def is_home(xml_text: str) -> bool:
     return (
         find_click_target(xml_text, "Create your status") is not None
-        and find_click_target(xml_text, "Your feed") is not None
+        and has_visible_label(xml_text, "Your feed")
     )
 
 
