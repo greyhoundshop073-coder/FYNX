@@ -65,6 +65,9 @@ checks = [
      and "# Hashtags" in home and "@ Mention" in home
      and "Who can view this post" in home
      and 'Text(if (posting) "Publishing…" else "Post",' in home),
+    ("New post sticky Drafts/Post footer reserves navigation and keyboard insets separately from the status bar",
+     "Column(Modifier.fillMaxSize().statusBarsPadding())" in home
+     and ".background(MaterialTheme.colorScheme.surface)\n                            .navigationBarsPadding()\n                            .imePadding()" in home),
     ("Camera dialog draws its dark canvas edge-to-edge while controls apply their own safe-area insets",
      "if (showCamera || showFastCamera)" in home
      and "Surface(Modifier.fillMaxSize(), color = Color(0xFF080A10))" in home

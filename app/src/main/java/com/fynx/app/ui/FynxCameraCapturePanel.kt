@@ -826,10 +826,10 @@ fun FynxCameraCapturePanel(
                     .imePadding()
                     .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 76.dp)
+                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 84.dp)
             ) {
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
-                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.12f else 0.26f).verticalScroll(rememberScrollState())) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 if (previewType == "image") {
                     Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
@@ -970,10 +970,16 @@ fun FynxCameraCapturePanel(
                     } else {
                         Text("Captions require Android 12+ and a compatible on-device speech model.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Button(onClick = ::applyVideoEdits, enabled = !applyingVideoEffects && !generatingCaptions && (videoStyle != CameraVideoStyle.NATURAL || videoCaptionText.isNotBlank()), modifier = Modifier.fillMaxWidth()) {
+                }
+                }
+                if (previewType != "image") {
+                    Button(
+                        onClick = ::applyVideoEdits,
+                        enabled = !applyingVideoEffects && !generatingCaptions && (videoStyle != CameraVideoStyle.NATURAL || videoCaptionText.isNotBlank()),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                    ) {
                         Text(if (applyingVideoEffects) "Processing video…" else "Apply style / captions")
                     }
-                }
                 }
                 TextButton(
                     onClick = { if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) retake() },
@@ -1220,7 +1226,7 @@ fun FynxCameraCapturePanel(
                 .imePadding()
                 .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 76.dp),
+                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 84.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))

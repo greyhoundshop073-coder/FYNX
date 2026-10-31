@@ -117,8 +117,10 @@ checks.extend([
         camera_source.count(".navigationBarsPadding()") >= 2
         and ".heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)" in camera_source
         and ".heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.44f)" in camera_source
-        and camera_source.count("bottom = 76.dp") == 2
-        and ".heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.12f else 0.26f)" in camera_source
+        and camera_source.count("bottom = 84.dp") == 2
+        and ".weight(1f).verticalScroll(rememberScrollState())" in camera_source
+        and camera_source.count("onClick = ::applyVideoEdits") == 1
+        and camera_source.index("onClick = ::applyVideoEdits") > camera_source.index("Column(Modifier.weight(1f).verticalScroll(rememberScrollState()))")
         and "WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)" not in camera_source,
     ),
     (

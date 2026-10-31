@@ -637,7 +637,7 @@ fun FynxHomeSocialHubPanel(
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnBackPress = !posting, dismissOnClickOutside = !posting)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                Column(Modifier.fillMaxSize().statusBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting) { Icon(Icons.Default.ArrowBack, "Back") }
                         Text("New post", style = MaterialTheme.typography.titleLarge)
@@ -953,8 +953,9 @@ fun FynxHomeSocialHubPanel(
                     }
                     Row(
                         Modifier.fillMaxWidth()
-                            .imePadding()
                             .background(MaterialTheme.colorScheme.surface)
+                            .navigationBarsPadding()
+                            .imePadding()
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
