@@ -19,6 +19,8 @@ assert.ok(init.includes('await pool.query("UPDATE users SET verified = TRUE WHER
 assert.ok(server.includes('import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";'), "deployed server must import My Shop routes");
 assert.ok(server.includes("if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });"), "deployed server must register My Shop routes only when a pool exists");
 
+assert.ok(init.includes("DO $ BEGIN") && init.includes("END $;"), "foreign-key DO block must retain valid PostgreSQL dollar quoting");
+
 for (const route of [
   "app.get('/api/marketplace/my-shop', auth",
   "app.patch('/api/marketplace/my-shop', auth",
@@ -29,5 +31,12 @@ assert.ok(shop.includes("ON CONFLICT (seller_id) DO UPDATE SET"), "shop profile 
 const updateClause = shop.split("ON CONFLICT (seller_id) DO UPDATE SET")[1]?.split("RETURNING")[0] || "";
 assert.ok(updateClause && !updateClause.includes("seller_id ="), "shop profile update must not reassign ownership");
 assert.ok(shop.includes("b.blocker_id = $2 AND b.blocked_id = u.id") && shop.includes("b.blocker_id = u.id AND b.blocked_id = $2"), "public shop lookup must respect blocks in both directions");
+
+const publicSerializerStart = shop.indexOf("const publicProfile =");
+const privateSerializerStart = shop.indexOf("const privateProfile =");
+assert.ok(publicSerializerStart >= 0 && privateSerializerStart > publicSerializerStart, "public and private shop serializers must be separate");
+assert.ok(!shop.slice(publicSerializerStart, privateSerializerStart).includes("contactPhone"), "public shop profile must not expose seller contact phone");
+assert.ok(shop.includes("contactPhone: row.contact_phone || ''"), "private My Shop profile must retain the seller contact phone");
+assert.ok(shop.includes("return res.json({ shop: publicProfile(result.rows[0]) });"), "public seller lookup must use the public serializer");
 
 console.log("Backend startup safety and Marketplace My Shop verification passed.");

@@ -41,8 +41,12 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
     shopName: row.shop_name || '',
     description: row.description || '',
     location: row.location || '',
-    contactPhone: row.contact_phone || '',
     updatedAt: row.updated_at || null
+  });
+
+  const privateProfile = (row) => ({
+    ...publicProfile(row),
+    contactPhone: row.contact_phone || ''
   });
 
   app.get('/api/marketplace/my-shop', auth, async (req, res) => {
@@ -57,7 +61,7 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
         LIMIT 1
       `, [req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: 'seller account not found' });
-      return res.json({ shop: publicProfile(result.rows[0]) });
+      return res.json({ shop: privateProfile(result.rows[0]) });
     } catch (error) {
       console.error('marketplace shop profile lookup', error);
       return res.status(500).json({ error: 'shop profile could not be loaded' });
@@ -86,7 +90,7 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
       `, [req.user.sub, shopName, description, location, contactPhone]);
       const user = await pool.query('SELECT username, display_name FROM users WHERE id=$1 LIMIT 1', [req.user.sub]);
       if (!user.rows[0]) return res.status(404).json({ error: 'seller account not found' });
-      return res.json({ shop: publicProfile({ ...user.rows[0], ...result.rows[0] }) });
+      return res.json({ shop: privateProfile({ ...user.rows[0], ...result.rows[0] }) });
     } catch (error) {
       console.error('marketplace shop profile save', error);
       return res.status(500).json({ error: 'shop profile could not be saved' });
