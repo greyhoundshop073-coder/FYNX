@@ -636,7 +636,7 @@ fun FynxHomeSocialHubPanel(
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { clearComposer() }, enabled = !posting && !false) { Icon(Icons.Default.Close, "Close") }
+                        IconButton(onClick = { clearComposer() }, enabled = !posting) { Icon(Icons.Default.ArrowBack, "Back") }
                         Text("New post", style = MaterialTheme.typography.titleLarge)
 
                     }
@@ -644,69 +644,7 @@ fun FynxHomeSocialHubPanel(
                     Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         if (!postingAllowed) Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
 
-                        Row(
-                            Modifier.fillMaxWidth().padding(top = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            FynxProfileImage(
-                                currentUsername,
-                                FynxPreferencesStore.loadProfilePhoto(context),
-                                Modifier.size(44.dp).clip(CircleShape)
-                            )
-                            Text(currentUsername, style = MaterialTheme.typography.titleMedium)
-                        }
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = !posting && postingAllowed) { showMusicPicker = true; notice = null }
-                                ComposerQuickChip("People", Icons.Default.People, enabled = !posting && postingAllowed) { showPeoplePicker = true }
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                ComposerQuickChip("Location", Icons.Default.LocationOn, enabled = !posting && postingAllowed) {
-                                    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                                    val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                                    if (fine || coarse) {
-                                        locationLoading = true
-                                        scope.launch {
-                                            FynxPostLocationClient.currentPlace(context).onSuccess { postLocation = it; notice = null }.onFailure { notice = it.message ?: "Could not determine your location." }
-                                            locationLoading = false
-                                        }
-                                    } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-                                }
-                                ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = !posting && postingAllowed) { showFeelingActivityPicker = true }
-                            }
-                        }
-
-                        selectedCatalogueMusic?.let { music ->
-                            Card(Modifier.fillMaxWidth()) {
-                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.MusicNote, contentDescription = "Selected FYNX music", tint = MaterialTheme.colorScheme.primary)
-                                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                                        Text(music.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                                        Text(music.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                                    }
-                                    FynxRemoteAudio(
-                                        mediaUrl = "/api/social/music/catalogue/" + music.id + "/media",
-                                        modifier = Modifier.width(120.dp),
-                                        maxDurationMs = music.durationMs.coerceAtLeast(1_000L)
-                                    )
-                                                                        IconButton(onClick = { selectedCatalogueMusic = null; musicPlaying = false }, enabled = !posting) {
-                                        Icon(Icons.Default.Close, "Remove music")
-                                    }
-                                }
-                            }
-                        }
-
-                        if (postLocation != null || locationLoading) {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Default.LocationOn, contentDescription = "Post location", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                                Text(if (locationLoading) "Getting location…" else postLocation.orEmpty(), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
-                                if (!locationLoading) IconButton(onClick = { postLocation = null }, enabled = !posting) { Icon(Icons.Default.Close, "Remove location") }
-                            }
-                        }
-
-                        val composerVisualItems = capturedUris.mapIndexedNotNull { index, uri ->
+                        val composerVisualItems =                        val composerVisualItems = capturedUris.mapIndexedNotNull { index, uri ->
                             capturedTypes.getOrNull(index)?.takeIf { it == "image" || it == "video" }?.let { type -> Triple(index, uri, type) }
                         }
                         val selectedComposerVisual = composerVisualItems.getOrNull(
@@ -758,7 +696,11 @@ fun FynxHomeSocialHubPanel(
                             }
                         )
                         selectedComposerVisual?.let { media ->
-                            Box(Modifier.width(136.dp).height(190.dp).clip(RoundedCornerShape(14.dp))) {
+                            Box(
+                                Modifier.width(136.dp).height(190.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable(enabled = !posting) { showComposerPreview = true }
+                            ) {
                                 if (media.third == "video") {
                                     AndroidView(
                                         factory = { VideoView(it).apply { setVideoURI(media.second); setOnPreparedListener { player -> player.isLooping = true; start() } } },
@@ -785,7 +727,25 @@ fun FynxHomeSocialHubPanel(
                                 ) {
                                     Text("Preview", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Color.White, style = MaterialTheme.typography.labelMedium)
                                 }
+                                Surface(
+                                    onClick = { showCoverInfo = true },
+                                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(7.dp),
+                                    shape = RoundedCornerShape(9.dp),
+                                    color = Color(0xFF141923).copy(alpha = 0.68f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+                                ) {
+                                    Text(
+                                        "Edit cover",
+                                        Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
                             }
+                        }
+                        }
+                                                    }
                         }
                         }
 
@@ -805,55 +765,7 @@ fun FynxHomeSocialHubPanel(
                             )
                         }
 
-                        if (text.isNotBlank()) {
-                            Text(
-                                "Text background",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Row(
-                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FynxPostTextBackground.entries.forEach { option ->
-                                    FilterChip(
-                                        selected = textBackground == option,
-                                        onClick = { textBackground = if (textBackground == option) null else option },
-                                        label = { Text(option.label) },
-                                        leadingIcon = {
-                                            Box(
-                                                Modifier.size(18.dp).clip(CircleShape).background(Color(option.color))
-                                            )
-                                        }
-                                    )
-                                }
-                            }
-                        }
 
-                        Row(
-                            Modifier.fillMaxWidth().padding(top = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            ComposerAction("Photo", Icons.Default.Image, { gallery.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                            ) }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
-                            ComposerAction("Video/Camera", Icons.Default.VideoLibrary, { cameraOpenedFromComposer = true; showComposer = false; showCamera = true }, !posting && postingAllowed && capturedUris.size < 4, Modifier.weight(1f), compact = true)
-                            ComposerAction("Voice", Icons.Default.Mic, { if (capturedUris.isNotEmpty()) notice = "Voice posts must contain only one audio recording. Remove the current media first." else { showComposer = false; showVoiceRecorder = true } }, !posting && postingAllowed && capturedUris.isEmpty(), Modifier.weight(1f), compact = true)
-                            ComposerAction("Marketplace", Icons.Default.Storefront, { showComposer = false; onOpenMarketplace() }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
-                        }
-
-                        if (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null) {
-                            TextButton(
-                                onClick = { showComposerPreview = true },
-                                enabled = !posting,
-                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
-                            ) {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("View as post")
-                            }
-                        }
 
                         if (capturedUris.isNotEmpty()) {
                             val audioCount = capturedTypes.count { it == "audio" }
@@ -904,13 +816,113 @@ fun FynxHomeSocialHubPanel(
                             }
                         }
 
-                        TextButton(
-                            onClick = { showPeoplePicker = true },
-                            enabled = !posting,
-                            modifier = Modifier.fillMaxWidth()
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
+
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !posting) { showDisclosureInfo = true }.padding(vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text("Who can view this post: ${audience.label}")
+                            Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(25.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Content disclosure and ads", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                Text("Paid partnership labeling is not supported yet", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !posting && !locationLoading) { requestComposerLocation() }.padding(vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(25.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Location", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                Text(
+                                    when {
+                                        locationLoading -> "Getting your location…"
+                                        postLocation != null -> postLocation.orEmpty()
+                                        else -> "Add a location to this post"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+                            if (postLocation != null && !locationLoading) {
+                                TextButton(onClick = { postLocation = null }, enabled = !posting) { Text("Remove") }
+                            } else {
+                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (postLocation != null) {
+                            Row(Modifier.fillMaxWidth().padding(start = 36.dp, bottom = 8.dp)) {
+                                AssistChip(
+                                    onClick = { postLocation = null },
+                                    enabled = !posting,
+                                    label = { Text(postLocation.orEmpty(), maxLines = 1) },
+                                    trailingIcon = { Icon(Icons.Default.Close, contentDescription = "Remove location", modifier = Modifier.size(16.dp)) }
+                                )
+                            }
+                        }
+
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !posting) { postLinkInput = ""; showPostLinkDialog = true }.padding(vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(25.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Add link", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                Text("Include a URL in your caption", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !posting) { showPeoplePicker = true }.padding(vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(25.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (audience == FynxPostAudience.EVERYONE) "Everyone can view this post" else "Who can view this post",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                                )
+                                Text(audience.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !posting) { showMorePostOptions = true }.padding(vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(25.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("More options", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                Text("Music, people, media and post styling", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !posting) { sharePostCaption() }.padding(vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(25.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Share to", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                Text("Share your caption with another app", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        
                         if (networkLevel == FynxNetworkQuality.Level.OFFLINE) Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
                         notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     }
@@ -922,11 +934,20 @@ fun FynxHomeSocialHubPanel(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedButton(
-                            onClick = { showComposerPreview = true },
-                            enabled = !posting && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null),
-                            modifier = Modifier.weight(1f).heightIn(min = 52.dp)
-                        ) { Text("Preview") }
+                        Button(
+                            onClick = {
+                                savedPostDrafts = FynxLocalPostDraftStore.list(context)
+                                draftNotice = null
+                                showDraftsDialog = true
+                            },
+                            enabled = !posting,
+                            modifier = Modifier.weight(1f).heightIn(min = 54.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF292B31),
+                                contentColor = Color.White
+                            )
+                        ) { Text("▣  Drafts", style = MaterialTheme.typography.titleMedium) }
                         Button(
                             enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (audience != FynxPostAudience.SELECTED || selectedAudienceIds.isNotEmpty()) && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null),
                             onClick = {
@@ -945,13 +966,14 @@ fun FynxHomeSocialHubPanel(
                                             withContext(Dispatchers.IO) { runCatching { FynxLocalPostDraftStore.delete(context, savedId) } }
                                         }
                                         finishComposerAfterSuccess()
-                                    }
-                                        .onFailure { notice = it.message ?: "Post could not be published." }
+                                    }.onFailure { notice = it.message ?: "Post could not be published." }
                                     posting = false
                                 }
                             },
-                            modifier = Modifier.weight(1.25f).heightIn(min = 52.dp)
-                        ) { Text(if (posting) "Publishing…" else "Post") }
+                            modifier = Modifier.weight(1f).heightIn(min = 54.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF2457), contentColor = Color.White)
+                        ) { Text(if (posting) "Publishing…" else "Post", style = MaterialTheme.typography.titleMedium) }
                     }
                 }
             }
