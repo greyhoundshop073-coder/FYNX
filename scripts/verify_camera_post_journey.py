@@ -27,6 +27,9 @@ checks = [
      and "Gallery Back returned to the same resumed FYNX activity" in runtime),
     ("Gallery Back proves the same app activity, live preview pixels and controls recover without restart",
      '"topResumedActivity" in line and PACKAGE in line' in runtime
+     and "camera_activity_token" in runtime
+     and "resumed_activity_token != camera_activity_token" in runtime
+     and "FYNX returned from Gallery in a different ActivityRecord" in runtime
      and "camera-after-gallery-back.png" in runtime
      and "camera after Gallery cancellation" in runtime
      and "verify_camera_controls_fit_safe_area(" in runtime
