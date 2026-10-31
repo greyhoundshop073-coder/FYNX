@@ -1451,7 +1451,7 @@ if VISUALS_ONLY and not MARKETPLACE_ONLY and not error:
 # unrelated instrumentation test fails. This branch performs read-only navigation:
 # it never publishes a listing, changes inventory, creates an order, or initiates payment.
 if VISUALS_ONLY or MARKETPLACE_ONLY:
-    report.append("- Capture scope: Marketplace and My Shop only; Home, Avatar/Profile, Chat/Groups, Status/Story and other workstreams are not navigated.")
+    report.append("- Capture scope: Marketplace and My Shop only. Home is used only as the app starting surface to open Marketplace; no Home/Avatar/Profile, Chat/Groups or Status/Story journey or screenshot is run.")
     if error:
         report += [
             "",
