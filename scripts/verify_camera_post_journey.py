@@ -31,7 +31,7 @@ checks = [
      and "camera-photo-editor-portrait-ready.png" in runtime
      and "camera-photo-retake" in runtime
      and ("both front- and back-facing CameraX devices switched to usable previews" in runtime or "this CI AVD exposes only a rear-facing camera" in runtime)
-     and "Gallery opened Android's real photo-picker UI" in runtime
+     and "Gallery opened Android's Photo Picker as the focused foreground surface" in runtime
      and "rear-camera torch toggled on and back off" in runtime
      and "Send must become enabled" in runtime
      and "without publishing a post" in runtime),
