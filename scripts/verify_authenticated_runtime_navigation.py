@@ -794,6 +794,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     # The Android Photo Picker can take several seconds to become the focused window on a
     # cold API-35 emulator. Do not treat a stale ActivityRecord anywhere in the task stack
     # as proof that it is visible, and never press Back while its launch is still pending.
+    gallery_recovered = False
     gallery_control = find_control(camera_xml, ["Gallery"])
     gallery_screenshot = ROOT / f"{prefix}-camera-gallery-picker.png"
     if gallery_control:
@@ -853,6 +854,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     camera_returned = True
                     break
             if camera_returned:
+                gallery_recovered = True
                 # Verify the returned surface is the live camera, not just an old UI hierarchy.
                 screenshot(f"{prefix}-camera-after-gallery-back.png")
                 verify_camera_image_signal(
@@ -882,6 +884,11 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             )
     else:
         FAILURES.append(prefix + ": Gallery control was not available before opening the system picker")
+
+    if not gallery_recovered:
+        # Never reuse stale camera coordinates while the system picker may still own the
+        # foreground window. Abort this camera pass safely and let the next runtime stage run.
+        return camera_return_to_home(camera_xml, prefix + "-gallery-recovery-abort")
 
     editor_xml = tap_control(
         camera_xml, ["Take photo"], f"{prefix}-camera-photo-capture", ["Send"]
