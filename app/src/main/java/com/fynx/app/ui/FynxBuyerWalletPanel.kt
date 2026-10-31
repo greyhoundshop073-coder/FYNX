@@ -48,7 +48,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
 
 private fun fynxWalletMoney(amount: Double): String =
     "₦" + String.format(Locale.US, "%,.2f", amount)
@@ -65,38 +67,58 @@ private fun fynxWalletTransactionTitle(type: String): String = when (type) {
 private fun fynxWalletIsIncoming(transaction: FynxBuyerWalletActivity): Boolean =
     transaction.walletDelta > 0.0
 
+private fun fynxWalletActivityDate(value: String): String {
+    val raw = value.trim()
+    if (raw.isBlank()) return "Date unavailable"
+    val parsed = runCatching {
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }.parse(raw.take(19))
+    }.getOrNull() ?: return "Date unavailable"
+    return SimpleDateFormat("dd MMM yyyy · hh:mm a", Locale.US).format(parsed)
+}
+
+private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String =
+    when (wallet?.walletStatus) {
+        "NOT_SETUP" -> "Wallet setup is not available yet"
+        "PENDING_PROVIDER" -> "Your wallet is being prepared"
+        "RESTRICTED" -> "Wallet access is restricted"
+        "CLOSED" -> "This wallet is closed"
+        "ACTIVE" -> "Some wallet features are not available yet"
+        else -> "Your wallet is being prepared"
+    }
+
 @Composable
 fun FynxBuyerWalletPanel() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var summary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
     var activity by remember { mutableStateOf(emptyList<FynxBuyerWalletActivity>()) }
     var loading by remember { mutableStateOf(true) }
-    var loadError by remember { mutableStateOf<String?>(null) }
+    var summaryError by remember { mutableStateOf<String?>(null) }
+    var activityError by remember { mutableStateOf<String?>(null) }
     var refreshVersion by remember { mutableIntStateOf(0) }
     var balanceVisible by remember { mutableStateOf(true) }
 
     LaunchedEffect(refreshVersion) {
         loading = true
-        loadError = null
+        summaryError = null
+        activityError = null
+        summary = null
+        activity = emptyList()
+
         val walletResult = FynxBuyerWalletClient.loadSummary(context)
         if (walletResult.isFailure) {
-            loadError = walletResult.exceptionOrNull()?.message?.take(180)
-                ?.takeIf { it.isNotBlank() }
-                ?: "Your wallet could not be loaded. Check your connection and try again."
-            loading = false
+            summaryError = "Your wallet could not be loaded. Check your connection and try again."
         } else {
             summary = walletResult.getOrThrow()
             val historyResult = FynxBuyerWalletClient.loadTransactions(context)
             if (historyResult.isSuccess) {
                 activity = historyResult.getOrThrow()
             } else {
-                loadError = historyResult.exceptionOrNull()?.message?.take(180)
-                    ?.takeIf { it.isNotBlank() }
-                    ?: "Wallet activity could not be loaded."
+                activityError = "Your wallet activity could not be loaded. Check your connection and try again."
             }
-            loading = false
         }
+        loading = false
     }
 
     val wallet = summary
@@ -222,7 +244,7 @@ fun FynxBuyerWalletPanel() {
                 }
             }
         }
-        if (loadError != null) {
+        if (summaryError != null) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -230,7 +252,8 @@ fun FynxBuyerWalletPanel() {
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(loadError.orEmpty(), color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("Wallet unavailable", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(summaryError.orEmpty(), color = MaterialTheme.colorScheme.onErrorContainer)
                         TextButton(onClick = { refreshVersion += 1 }) {
                             Icon(Icons.Default.Refresh, contentDescription = null)
                             Text(" Retry")
@@ -239,7 +262,7 @@ fun FynxBuyerWalletPanel() {
                 }
             }
         }
-        if (!isWalletReady) {
+        if (!isWalletReady && summaryError == null) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -254,7 +277,7 @@ fun FynxBuyerWalletPanel() {
                     ) {
                         Icon(Icons.Default.Info, contentDescription = null, tint = FynxDesign.AzureBlue)
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Text("Your wallet is being prepared", fontWeight = FontWeight.SemiBold)
+                            Text(fynxWalletStatusTitle(wallet), fontWeight = FontWeight.SemiBold)
                             Text(
                                 wallet?.notice?.takeIf { it.isNotBlank() }
                                     ?: "Secure deposits, Marketplace wallet payments and withdrawals will open after the financial provider connection and required checks are complete. You can continue using the existing Marketplace checkout in the meantime.",
@@ -290,7 +313,26 @@ fun FynxBuyerWalletPanel() {
                 }
             }
         }
-        if (activity.isEmpty() && !loading) {
+        if (activityError != null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Activity could not load", fontWeight = FontWeight.SemiBold)
+                        Text(activityError.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { refreshVersion += 1 }, enabled = !loading) {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                            Text(" Retry")
+                        }
+                    }
+                }
+            }
+        }
+        if (activity.isEmpty() && !loading && summaryError == null && activityError == null) {
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -380,9 +422,16 @@ private fun FynxWalletActivityRow(transaction: FynxBuyerWalletActivity) {
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(fynxWalletTransactionTitle(transaction.type), fontWeight = FontWeight.SemiBold)
+                if (transaction.description.isNotBlank()) {
+                    Text(
+                        transaction.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    transaction.description.ifBlank { transaction.reference },
-                    style = MaterialTheme.typography.bodySmall,
+                    fynxWalletActivityDate(transaction.createdAt) + " · " + transaction.reference,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(transaction.status.lowercase(Locale.US).replace('_', ' ').replaceFirstChar { it.uppercase() },
