@@ -201,8 +201,6 @@ checks = [
     ("Selected-audience media remains visible to selected friends", "p.visibility = 'SELECTED_PEOPLE'" in backend and "social_post_audience" in backend and "a.user_id = $2" in backend),
     ("Only-me media remains restricted to the author", "p.visibility = 'ONLY_ME' AND p.author_id = $2" in backend),
     ("Normalized media authorization excludes blocked relationships", "NOT EXISTS" in backend and "blocked_id = p.author_id" in backend),
-]
-
     ("Camera media preview labels the Status destination clearly and keeps the familiar story wording",
      'Text("Status", style = MaterialTheme.typography.titleMedium' in camera
      and 'Text("Your Story", style = MaterialTheme.typography.labelSmall' in camera
@@ -221,6 +219,7 @@ checks = [
      and "camera-video-status-composer.png" in runtime
      and "recorded video opened the existing Status composer with Send available; Send was not tapped" in runtime
      and "camera-video-status-close" in runtime),
+]
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
