@@ -1515,7 +1515,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         )
         if cart_xml:
             screenshot("authenticated-marketplace-cart.png")
-            (ROOT/"authenticated-marketplace-cart.xml").write_text(cart_xml+"\\n", encoding="utf-8")
+            (ROOT/"authenticated-marketplace-cart.xml").write_text(cart_xml+"\n", encoding="utf-8")
             if find_control(cart_xml, ["Your cart is empty."]):
                 report.append("- PASS: actual buyer cart opened and displayed its genuine empty state.")
             elif find_control(cart_xml, ["Remove"]) and find_control(cart_xml, ["Qty"]):
@@ -1540,7 +1540,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             time.sleep(1.2)
             orders_xml = dump_ui("marketplace-buyer-orders-settled.xml") or orders_xml
             screenshot("authenticated-marketplace-buyer-orders.png")
-            (ROOT/"authenticated-marketplace-buyer-orders.xml").write_text(orders_xml+"\\n", encoding="utf-8")
+            (ROOT/"authenticated-marketplace-buyer-orders.xml").write_text(orders_xml+"\n", encoding="utf-8")
             if find_control(orders_xml, ["Loading your orders"]):
                 report.append("- BLOCKED: buyer orders remained in the real loading state; live order data could not be verified.")
             elif find_control(orders_xml, ["Check your connection and try again"]):
