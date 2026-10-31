@@ -119,16 +119,32 @@ Capture genuine emulator/device screenshots and UI hierarchy for:
 - [x] Reference target documented: glass preview controls + separate Next/details page.
 - [x] Existing camera-to-unpublished-draft path identified.
 - [x] Latest known runtime failure narrowed to three camera system-bar contrast assertions.
-- [ ] Confirm current live PR head and latest required-check state before the next source edit.
+- [x] Confirm live PR #403 head, base branch, changed files and current Actions runs before the implementation changes.
 - [x] Add camera-scoped Dialog Window system-bar ownership, dark backdrop, white system icons and restoration of the previous Window state; runtime proof pending.
 - [x] Replace near-opaque camera sheets/rails/backplates with translucent blue-grey mirror/glass tint and subtle light borders; runtime legibility proof pending.
 - [x] Reuse the existing New post composer as the Next details step, with side-by-side media preview, description field, hashtag/mention insertion helpers, privacy entry and a keyboard-aware sticky Post action; runtime proof pending.
-- [ ] Audit effect categories and thumbnail coverage/performance.
-- [ ] Add robust end-to-end state-aware runtime assertions and screenshots.
+- [x] Preserve existing effect catalogue/processing; current PR already has twelve portrait preview assets shared by live creator and editor. Runtime still must confirm the visual quality on-device.
+- [x] Extend runtime navigation to enter camera via More options → Add photo/video and verify the reference-style post-detail rows and local Drafts save/open/delete without tapping Post. Fresh emulator evidence is still pending.
 - [ ] Re-run exact-head CI and obtain GREEN camera runtime evidence.
 - [ ] Physical-device verification for front camera/flash and supported speech-caption path.
 - [ ] Final handover with final commit, screenshots and one canonical APK artifact.
 
-## 9. Change log
+## 9. Current implementation state (2026-10-31)
+- Camera live/editor: edge-to-edge Dialog backdrop, scoped Window state restoration, translucent blue-grey overlay surfaces, compact right-side tool rail, existing effect categories/thumbnails, and connected music chip. Existing capture/edit callbacks remain in place.
+- Post details: original post composer is reused. The current order is caption and attached-media preview with Preview/Edit cover overlays, Hashtags/Mention, Content disclosure and ads, Location, Add link, audience/privacy, More options, Share to; Drafts and Post are anchored in the bottom footer.
+- Draft storage: private account-scoped metadata plus copied media files under app-private `filesDir/post_drafts`; list/open/update/delete actions are wired into the composer. This is local device storage, not cloud sync.
+- Add link: only a validated HTTP(S) URL is appended to the caption as text; rich link metadata is not part of the existing publishing API.
+- Share to: uses Android's native text chooser for the caption; it does not imply an in-app Status/Group target or share attached media.
+- Content disclosure and custom cover: informational dialogs explain the existing API cannot persist paid-partnership labels or a custom cover. Do not present these as enabled publish features until model/API support is implemented.
+- Music: live/editor chip opens the existing catalogue; More options retains a catalogue shortcut; selected track displays the actual catalogue preview player and can be removed. No fake tracks.
+- Camera test flow now enters through More options → Add photo/video. The automated path checks upper details labels and the lower options, saves/reopens/deletes its local test draft and never presses Post.
+
+### Failure ledger / prevention work
+- Run 41223581929: source guard failed because Batch 5 Location still expected the old quick-chip after the row was moved into the reference-style list. The guard now checks the actual Location row, permission-aware callback and current-place resolver; the feature was not removed.
+- Run 41223759196: Batch 7 Music guard failed because the selected catalogue preview and original Music shortcut had been removed from the composer’s old quick-action row. Restored the selected-track preview player under the caption helper row and a Music shortcut in More options; the live-camera music chip remains connected to the same catalogue.
+- The last successful/failed runtime outcomes are not evidence for the newest commits. Fresh exact-head CI and emulator screenshots are required before marking the camera flow green.
+
+## 10. Change log
 - 2026-10-31: Captured-media preview now uses a vertical translucent right-side tool rail for photo categories and Rotate, a glass Photo/Video preview chip, a shorter scrollable effect panel and a two-action Retake / Next footer. The Stage 2 verifier asserts the rail controls and safe-area layout; runtime screenshots must still prove the result.\n- 2026-10-31: Meaningful camera UI push: system-bar presentation on the actual Compose camera Dialog Window; translucent camera/editor panels, right control rail, effects tray and self-timer surface; Retake/Rotate/Next hand-off; redesigned existing post-details composer with attached-media preview, caption helpers, audience entry and sticky Post action; runtime selectors updated for Next. Follow-up root-cause correction removes parent-level `safeDrawing` padding from the camera Dialog canvas so its dark backdrop draws behind the status bar; controls keep their individual safe-area insets. Added a regression guard against reintroducing parent padding. CI and genuine emulator proof remain required. The existing composer/API does not yet provide persistent Drafts storage, content-disclosure fields, external-link fields or share-target routing, so those reference controls were not added as nonfunctional UI.
-- 2026-10-31: Initial investigation and handover map created from PR #403 changed-file list, camera source patches, workflow job logs and runtime report. Compared existing Status composer system-bar lifecycle as a camera fix lead. No camera source implementation changes are claimed by this documentation update.
+- 2026-10-31: Initial investigation and handover map created from PR #403 changed-file list, camera source patches, workflow job logs and runtime report. Compared existing Status composer system-bar lifecycle as a camera fix lead.
+- 2026-10-31: Camera reference-style details flow, local account-scoped draft store, caption URL action, native caption sharing, honest unsupported disclosure/cover states, camera music chip and runtime/static guards implemented on PR #403. Source-guard compatibility fixes were added after Batch 5 and Batch 7 checks exposed expectations tied to the previous quick-action row. Do not treat these as green until fresh exact-head Actions and runtime evidence complete.
