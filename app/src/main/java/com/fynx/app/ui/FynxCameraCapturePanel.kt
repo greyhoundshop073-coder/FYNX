@@ -1242,10 +1242,10 @@ fun FynxCameraCapturePanel(
                     onClick = { showEffectTray = !showEffectTray; showCaptureControls = true },
                     modifier = Modifier.size(width = 64.dp, height = 64.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = if (showEffectTray) Color(0xFF3A315A) else Color(0xFF22252E),
+                    color = if (showEffectTray) Color(0xFF7869A6).copy(alpha = 0.70f) else Color(0xFF25364A).copy(alpha = 0.38f),
                     border = androidx.compose.foundation.BorderStroke(
                         if (showEffectTray) 1.5.dp else 1.dp,
-                        if (showEffectTray) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.12f)
+                        if (showEffectTray) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.24f)
                     )
                 ) {
                     Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -1328,8 +1328,8 @@ fun FynxCameraCapturePanel(
                     },
                     modifier = Modifier.size(width = 64.dp, height = 64.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFF22252E),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+                    color = Color(0xFF25364A).copy(alpha = 0.38f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
                 ) {
                     Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
