@@ -644,7 +644,7 @@ fun FynxHomeSocialHubPanel(
                     Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         if (!postingAllowed) Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
 
-                        val composerVisualItems =                        val composerVisualItems = capturedUris.mapIndexedNotNull { index, uri ->
+                        val composerVisualItems = capturedUris.mapIndexedNotNull { index, uri ->
                             capturedTypes.getOrNull(index)?.takeIf { it == "image" || it == "video" }?.let { type -> Triple(index, uri, type) }
                         }
                         val selectedComposerVisual = composerVisualItems.getOrNull(
