@@ -2,9 +2,11 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
+import android.webkit.MimeTypeMap
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -49,6 +51,23 @@ object FynxLocalPostDraftStore {
         val account = FynxAuthStore.accountStorageKey(context) ?: "signed_out"
         val digest = MessageDigest.getInstance("SHA-256").digest(account.toByteArray(Charsets.UTF_8))
         return digest.take(12).joinToString("") { "%02x".format(it) }
+    }
+
+    private fun mediaExtension(context: Context, uri: Uri, type: String): String {
+        val fileExtension = if (uri.scheme == "file") {
+            uri.path?.let(::File)?.extension?.takeIf { it.isNotBlank() }
+        } else null
+        val mimeExtension = runCatching {
+            context.contentResolver.getType(uri)?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+        }.getOrNull()
+        val fallback = when (type) {
+            "video" -> "mp4"
+            "audio" -> "m4a"
+            else -> "jpg"
+        }
+        val extension = (fileExtension ?: mimeExtension ?: fallback).lowercase(Locale.ROOT)
+        require(extension.matches(Regex("[a-z0-9]{1,8}"))) { "This media file has an unsupported extension." }
+        return extension
     }
 
     fun list(context: Context): List<FynxLocalPostDraft> {
@@ -119,12 +138,11 @@ object FynxLocalPostDraftStore {
             val mediaPaths = media.mapIndexed { index, pair ->
                 val uri = pair.first
                 val type = pair.second
-                val extension = when (type) {
-                    "video" -> "mp4"
-                    "audio" -> "m4a"
-                    else -> "jpg"
-                }
+                val extension = mediaExtension(context, uri, type)
                 val target = File(directory, "${draftId}-${index}-${UUID.randomUUID()}.${extension}")
+                // Register before opening/copying so a partial file is also removed if any
+                // subsequent I/O or validation step fails.
+                copied += target
                 val input = if (uri.scheme == "file") {
                     File(uri.path ?: error("Draft media path is missing.")).inputStream()
                 } else {
@@ -132,7 +150,6 @@ object FynxLocalPostDraftStore {
                 }
                 input.use { source -> target.outputStream().use { output -> source.copyTo(output) } }
                 require(target.isFile && target.length() > 0L) { "A selected media item could not be saved to the draft." }
-                copied += target
                 target.absolutePath
             }
 
