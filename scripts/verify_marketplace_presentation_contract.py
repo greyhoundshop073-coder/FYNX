@@ -43,6 +43,11 @@ storefront_avatars = avatar_lines(storefront)
 check("Marketplace seller-card and details avatars consume fetched photo IDs",
       len(panel_avatars) == 2 and all("ownerUsername =" not in line for line in panel_avatars)
       and all("photoId," in line for line in panel_avatars))
+check("Marketplace fetches seller avatars for all currently loaded product sellers",
+      "val sellers = listings.distinctBy" in panel
+      and "val reputationSellers = sellers.take(12)" in panel
+      and "if (!photoMap.containsKey(key))" in panel
+      and "FynxProfileRemoteClient.cachedProfilePhotoId(context, username)" in panel)
 check("Marketplace product-card avatar consumes sellerPhotoId directly",
       len(reference_avatars) == 1 and "FynxRemoteProfileAvatar(sellerPhotoId," in reference_avatars[0]
       and "ownerUsername =" not in reference_avatars[0])
