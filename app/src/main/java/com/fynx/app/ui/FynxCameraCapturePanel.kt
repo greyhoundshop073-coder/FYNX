@@ -21,6 +21,7 @@ import androidx.compose.foundation.Image
 import android.graphics.RectF
 import android.graphics.Matrix
 import android.media.ExifInterface
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
@@ -270,6 +271,53 @@ private fun copyCameraGalleryMediaToCache(context: Context, uri: Uri): Triple<Fi
     }
 }
 
+ 
+private const val MAX_STATUS_PHOTO_UPLOAD_BYTES = 12L * 1024L * 1024L
+
+/**
+ * The regular Home camera is optimized for Feed recording, so validate Status constraints only
+ * when the user chooses the Status destination. Gallery selections and captured media share this
+ * same file-backed preview and validation path.
+ */
+private fun validateCameraStatusMedia(uri: Uri, mediaType: String): String? {
+    val path = uri.path?.takeIf { it.isNotBlank() }
+        ?: return "This media file is no longer available. Choose it again."
+    val file = File(path)
+    if (!file.isFile || file.length() <= 0L) {
+        return "This media file is no longer available. Choose it again."
+    }
+
+    return when (mediaType) {
+        "image" -> {
+            if (file.length() > MAX_STATUS_PHOTO_UPLOAD_BYTES) {
+                "This photo is over FYNX Status's 12 MB upload limit. Choose a smaller photo."
+            } else null
+        }
+        "video", "video_note" -> {
+            if (file.length() > FYNX_STATUS_MAX_VIDEO_BYTES) {
+                return "Status videos must be 10 MB or smaller. Choose a shorter or smaller clip."
+            }
+            val retriever = MediaMetadataRetriever()
+            val durationMs = try {
+                retriever.setDataSource(file.absolutePath)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+            } catch (_: Exception) {
+                null
+            } finally {
+                runCatching { retriever.release() }
+            }
+            when {
+                durationMs == null || durationMs <= 0L ->
+                    "FYNX couldn't verify this video's length. Choose another clip for Status."
+                durationMs > FYNX_STATUS_MAX_VIDEO_DURATION_MS ->
+                    "Status videos can be up to 90 seconds. Choose a shorter clip."
+                else -> null
+            }
+        }
+        else -> "Choose a photo or video for Status."
+    }
+}
+
 @Composable
 fun FynxCameraCapturePanel(
     onCaptured: (Uri, String) -> Unit,
@@ -379,6 +427,7 @@ fun FynxCameraCapturePanel(
     var recordingElapsed by remember { mutableLongStateOf(0L) }
     BackHandler { if (recording == null) onDismiss() }
     var error by remember { mutableStateOf<String?>(null) }
+    var statusShareChecking by remember { mutableStateOf(false) }
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
     var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
     var pendingType by remember { mutableStateOf<String?>(null) }
@@ -939,11 +988,23 @@ fun FynxCameraCapturePanel(
                     if (showYourStoryAction && !statusCapture && !liveProofMode) {
                         OutlinedButton(
                             onClick = {
-                                if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) {
-                                    onShareToStatus(previewUri, if (previewType == "video_note") "video" else previewType)
+                                if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions && !statusShareChecking) {
+                                    statusShareChecking = true
+                                    scope.launch {
+                                        val validationError = withContext(Dispatchers.IO) {
+                                            validateCameraStatusMedia(previewUri, previewType)
+                                        }
+                                        statusShareChecking = false
+                                        if (validationError == null) {
+                                            error = null
+                                            onShareToStatus(previewUri, if (previewType == "video_note") "video" else previewType)
+                                        } else {
+                                            error = validationError
+                                        }
+                                    }
                                 }
                             },
-                            enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
+                            enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions && !statusShareChecking,
                             modifier = Modifier.weight(1f).heightIn(min = 56.dp).semantics { contentDescription = "Share to Status" },
                             shape = RoundedCornerShape(28.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
