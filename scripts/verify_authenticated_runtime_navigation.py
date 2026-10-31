@@ -1395,9 +1395,9 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         report.append("- NOTE app cache video could not be copied out for stream-level verification")
     screenshot(f"{prefix}-camera-video-editor-before-effects.png")
     verify_camera_image_signal(f"{prefix}-camera-video-editor-before-effects.png", (180, 650, 1260, 1900), prefix + " video editor preview")
-    verify_camera_controls_fit_safe_area(editor, ["Retake", "Next"], prefix + " video editor")
+    verify_camera_controls_fit_safe_area(editor, ["Retake", "Status", "Next"], prefix + " video editor")
     missing = [
-        label for label in ["Video styles", "Cinematic", "Retake", "Next"]
+        label for label in ["Video styles", "Cinematic", "Retake", "Status", "Next"]
         if not find_control(editor, [label])
     ]
     if missing:
@@ -1574,8 +1574,39 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         report.append(f"- PASS {style_label} exported a readable MP4; app-side decoded-frame, video-track and source-audio validation passed")
         editor = styled_xml
 
+    # A recorded clip must be shareable to Status through the same preview action as photos.
+    # Open the existing Status composer with the processed video selected, then close it
+    # without pressing Send; publishing remains an explicit user action.
+    current = dump_ui(f"{prefix}-camera-video-before-status.xml") or editor
+    if not find_control(current, ["Status"]):
+        FAILURES.append(prefix + ": recorded-video preview did not expose the Status destination")
+    else:
+        video_status_xml = tap_control(
+            current, ["Status"], f"{prefix}-camera-video-status-handoff",
+            ["Back from Status composer"]
+        )
+        if not video_status_xml:
+            FAILURES.append(prefix + ": Status did not open from the recorded-video preview")
+        else:
+            screenshot(f"{prefix}-camera-video-status-composer.png")
+            (ROOT / f"{prefix}-camera-video-status-composer.xml").write_text(
+                video_status_xml + chr(10), encoding="utf-8"
+            )
+            if find_control(video_status_xml, ["Send"]) and find_control(video_status_xml, ["Back from Status composer"]):
+                report.append("- PASS recorded video opened the existing Status composer with Send available; Send was not tapped")
+            else:
+                FAILURES.append(prefix + ": recorded video Status composer did not expose its expected media composer actions")
+            status_closed_xml = tap_control(
+                video_status_xml, ["Back from Status composer"],
+                f"{prefix}-camera-video-status-close", ["Open FYNX camera"]
+            )
+            if status_closed_xml:
+                current = status_closed_xml
+            else:
+                FAILURES.append(prefix + ": could not close the unpublished video Status composer")
+
     # Dismiss without publishing. The actual server post flow remains untouched.
-    current = dump_ui(f"{prefix}-camera-video-before-return.xml") or editor
+    current = dump_ui(f"{prefix}-camera-video-before-return.xml") or current
     for attempt in range(5):
         if (find_control(current, ["Open FYNX camera"])
                 and find_control(current, ["Chat"])
