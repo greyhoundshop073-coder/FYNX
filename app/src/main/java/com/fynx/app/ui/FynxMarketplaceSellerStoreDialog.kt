@@ -74,7 +74,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var storeName by remember(username) { mutableStateOf("") }
     var profileBio by remember(username) { mutableStateOf("") }
     var shopLocation by remember(username) { mutableStateOf("") }
-    var shopContactPhone by remember(username) { mutableStateOf("") }
     var profileLoading by remember(username) { mutableStateOf(true) }
     var shopProfileError by remember(username) { mutableStateOf<String?>(null) }
     var followedByViewer by remember(username, viewerUsername) { mutableStateOf<Boolean?>(null) }
@@ -124,7 +123,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 storeName = shop.optString("shopName").ifBlank { storeName }
                 profileBio = shop.optString("description").ifBlank { profileBio }
                 shopLocation = shop.optString("location")
-                shopContactPhone = shop.optString("contactPhone")
             }
             .onFailure { failure -> shopProfileError = marketplaceSafeError(failure, "Shop details could not load.") }
         profileLoading = false
@@ -163,7 +161,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             }
                             if (profileBio.isNotBlank()) Text(profileBio, style = MaterialTheme.typography.bodyMedium)
                             if (shopLocation.isNotBlank()) Text("Location: " + shopLocation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (shopContactPhone.isNotBlank()) Text("Shop contact: " + shopContactPhone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(sellerListings.size.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
