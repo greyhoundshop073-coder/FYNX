@@ -116,7 +116,7 @@ checks.extend([
         "live camera shutter and photo-editor controls reserve Android navigation-bar space",
         camera_source.count(".navigationBarsPadding()") >= 2
         and ".heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)" in camera_source
-        and camera_source.count("bottom = 46.dp") == 2
+        and camera_source.count("bottom = 76.dp") == 2
         and ".heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.14f else 0.40f)" in camera_source
         and "WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)" not in camera_source,
     ),
