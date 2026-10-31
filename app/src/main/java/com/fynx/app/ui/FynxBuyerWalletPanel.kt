@@ -1,6 +1,11 @@
 package com.fynx.app.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,11 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -22,10 +27,12 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -47,8 +54,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Locale
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.util.Date
+import kotlinx.coroutines.launch
 
 private fun fynxWalletMoney(amount: Double): String =
     "₦" + String.format(Locale.US, "%,.2f", amount)
@@ -65,45 +76,128 @@ private fun fynxWalletTransactionTitle(type: String): String = when (type) {
 private fun fynxWalletIsIncoming(transaction: FynxBuyerWalletActivity): Boolean =
     transaction.walletDelta > 0.0
 
+private fun fynxWalletActivityDate(value: String): String {
+    val raw = value.trim()
+    if (raw.isBlank()) return "Date unavailable"
+    val instant = runCatching { Instant.parse(raw) }
+        .recoverCatching { OffsetDateTime.parse(raw).toInstant() }
+        .getOrNull() ?: return "Date unavailable"
+    return SimpleDateFormat("dd MMM yyyy · hh:mm a", Locale.US).format(Date.from(instant))
+}
+
+private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String =
+    when (wallet?.walletStatus) {
+        "NOT_SETUP" -> "Wallet setup is not available yet"
+        "PENDING_PROVIDER" -> "Your wallet is being prepared"
+        "RESTRICTED" -> "Wallet access is restricted"
+        "CLOSED" -> "This wallet is closed"
+        "ACTIVE" -> "Some wallet features are not available yet"
+        else -> "Your wallet is being prepared"
+    }
+
 @Composable
 fun FynxBuyerWalletPanel() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var summary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
     var activity by remember { mutableStateOf(emptyList<FynxBuyerWalletActivity>()) }
-    var loading by remember { mutableStateOf(true) }
-    var loadError by remember { mutableStateOf<String?>(null) }
+    var summaryLoading by remember { mutableStateOf(true) }
+    var activityLoading by remember { mutableStateOf(true) }
+    var summaryError by remember { mutableStateOf<String?>(null) }
+    var activityError by remember { mutableStateOf<String?>(null) }
     var refreshVersion by remember { mutableIntStateOf(0) }
     var balanceVisible by remember { mutableStateOf(true) }
+    var activityFilter by remember { mutableStateOf("ALL") }
+    var selectedActivity by remember { mutableStateOf<FynxBuyerWalletActivity?>(null) }
+    var showWithdrawalGuide by remember { mutableStateOf(false) }
+    var hasMoreActivity by remember { mutableStateOf(false) }
+    var loadingMoreActivity by remember { mutableStateOf(false) }
+    var activityMoreError by remember { mutableStateOf<String?>(null) }
+    var nextActivityCursor by remember { mutableStateOf<FynxBuyerWalletActivityCursor?>(null) }
+    var activityRequestGeneration by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(refreshVersion) {
-        loading = true
-        loadError = null
-        val walletResult = FynxBuyerWalletClient.loadSummary(context)
-        if (walletResult.isFailure) {
-            loadError = walletResult.exceptionOrNull()?.message?.take(180)
-                ?.takeIf { it.isNotBlank() }
-                ?: "Your wallet could not be loaded. Check your connection and try again."
-            loading = false
-        } else {
-            summary = walletResult.getOrThrow()
-            val historyResult = FynxBuyerWalletClient.loadTransactions(context)
-            if (historyResult.isSuccess) {
-                activity = historyResult.getOrThrow()
-            } else {
-                loadError = historyResult.exceptionOrNull()?.message?.take(180)
-                    ?.takeIf { it.isNotBlank() }
-                    ?: "Wallet activity could not be loaded."
+    LaunchedEffect(refreshVersion, activityFilter) {
+        activityRequestGeneration += 1
+        val requestGeneration = activityRequestGeneration
+        summaryLoading = true
+        activityLoading = true
+        summaryError = null
+        activityError = null
+        activityMoreError = null
+        loadingMoreActivity = false
+        summary = null
+        activity = emptyList()
+        hasMoreActivity = false
+        nextActivityCursor = null
+
+        try {
+            val walletResult = FynxBuyerWalletClient.loadSummary(context)
+            if (requestGeneration != activityRequestGeneration) return@LaunchedEffect
+            if (walletResult.isFailure) {
+                summaryError = "Your wallet could not be loaded. Check your connection and try again."
+                return@LaunchedEffect
             }
-            loading = false
+
+            summary = walletResult.getOrThrow()
+            summaryLoading = false
+
+            val historyResult = FynxBuyerWalletClient.loadTransactions(context, direction = activityFilter)
+            if (requestGeneration == activityRequestGeneration) {
+                if (historyResult.isSuccess) {
+                    val page = historyResult.getOrThrow()
+                    activity = page.transactions
+                    hasMoreActivity = page.hasMore
+                    nextActivityCursor = page.nextCursor
+                } else {
+                    activityError = "Your wallet activity could not be loaded. Check your connection and try again."
+                }
+            }
+        } finally {
+            if (requestGeneration == activityRequestGeneration) {
+                summaryLoading = false
+                activityLoading = false
+            }
         }
     }
 
+    val loading = summaryLoading || activityLoading
     val wallet = summary
     val isWalletReady = wallet != null && wallet.walletStatus == "ACTIVE" &&
         wallet.canFund && wallet.canSpend && wallet.canWithdraw
     val canShowBalance = wallet != null && wallet.availableBalance != null &&
         wallet.walletStatus == "ACTIVE"
+    // The backend filters the complete history before applying its page cursor.
+    val visibleActivity = activity
+
+    fun loadMoreActivity() {
+        val cursor = nextActivityCursor ?: return
+        if (!hasMoreActivity || loadingMoreActivity || loading) return
+        val requestGeneration = activityRequestGeneration
+        activityMoreError = null
+        scope.launch {
+            loadingMoreActivity = true
+            try {
+                FynxBuyerWalletClient.loadTransactions(context, before = cursor, direction = activityFilter)
+                    .onSuccess { page ->
+                        if (requestGeneration == activityRequestGeneration) {
+                            activity = (activity + page.transactions).distinctBy { it.id }
+                            hasMoreActivity = page.hasMore
+                            nextActivityCursor = page.nextCursor
+                        }
+                    }
+                    .onFailure {
+                        if (requestGeneration == activityRequestGeneration) {
+                            activityMoreError = "More wallet activity could not be loaded. Check your connection and try again."
+                        }
+                    }
+            } finally {
+                // A request from an older filter/refresh must not clear the current request's spinner.
+                if (requestGeneration == activityRequestGeneration) {
+                    loadingMoreActivity = false
+                }
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -158,9 +252,10 @@ fun FynxBuyerWalletPanel() {
                         Text("AVAILABLE BALANCE", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.88f), letterSpacing = 1.sp)
                         Text(
                             when {
-                                loading -> "Loading…"
-                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet?.availableBalance ?: 0.0)
+                                summaryLoading -> "Checking…"
+                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet.availableBalance ?: 0.0)
                                 canShowBalance -> "₦ ••••••"
+                                summaryError != null -> "Unavailable"
                                 else -> "—"
                             },
                             style = MaterialTheme.typography.headlineLarge,
@@ -168,8 +263,12 @@ fun FynxBuyerWalletPanel() {
                             color = Color.White
                         )
                         Text(
-                            if (canShowBalance) "Cleared funds available to use"
-                            else "Your wallet balance will appear here after activation",
+                            when {
+                                summaryLoading -> "Checking your wallet status securely"
+                                canShowBalance -> "Cleared funds available to use"
+                                summaryError != null -> "Balance unavailable until your connection is restored"
+                                else -> "Your wallet balance will appear here after activation"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.88f)
                         )
@@ -177,7 +276,7 @@ fun FynxBuyerWalletPanel() {
                     Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         OutlinedButton(
                             onClick = {},
-                            enabled = isWalletReady && wallet?.canFund == true,
+                            enabled = isWalletReady && wallet.canFund,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
@@ -192,7 +291,7 @@ fun FynxBuyerWalletPanel() {
                         }
                         OutlinedButton(
                             onClick = {},
-                            enabled = isWalletReady && wallet?.canWithdraw == true,
+                            enabled = isWalletReady && wallet.canWithdraw,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
@@ -209,7 +308,7 @@ fun FynxBuyerWalletPanel() {
                 }
             }
         }
-        if (loading) {
+        if (summaryLoading || activityLoading) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -218,11 +317,14 @@ fun FynxBuyerWalletPanel() {
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.size(10.dp))
-                    Text("Loading your wallet…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (summaryLoading) "Checking your wallet…" else "Loading wallet activity…",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
-        if (loadError != null) {
+        if (summaryError != null) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -230,7 +332,8 @@ fun FynxBuyerWalletPanel() {
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(loadError.orEmpty(), color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("Wallet unavailable", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(summaryError.orEmpty(), color = MaterialTheme.colorScheme.onErrorContainer)
                         TextButton(onClick = { refreshVersion += 1 }) {
                             Icon(Icons.Default.Refresh, contentDescription = null)
                             Text(" Retry")
@@ -239,7 +342,7 @@ fun FynxBuyerWalletPanel() {
                 }
             }
         }
-        if (!isWalletReady) {
+        if (!summaryLoading && !isWalletReady && summaryError == null) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -254,7 +357,7 @@ fun FynxBuyerWalletPanel() {
                     ) {
                         Icon(Icons.Default.Info, contentDescription = null, tint = FynxDesign.AzureBlue)
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Text("Your wallet is being prepared", fontWeight = FontWeight.SemiBold)
+                            Text(fynxWalletStatusTitle(wallet), fontWeight = FontWeight.SemiBold)
                             Text(
                                 wallet?.notice?.takeIf { it.isNotBlank() }
                                     ?: "Secure deposits, Marketplace wallet payments and withdrawals will open after the financial provider connection and required checks are complete. You can continue using the existing Marketplace checkout in the meantime.",
@@ -272,13 +375,36 @@ fun FynxBuyerWalletPanel() {
                 FynxWalletMetric(
                     label = "Reserved",
                     amount = wallet?.reservedBalance,
+                    explanation = "Held for an order or an active review.",
+                    visible = balanceVisible,
                     modifier = Modifier.weight(1f)
                 )
                 FynxWalletMetric(
                     label = "Withdrawal pending",
                     amount = wallet?.withdrawalPendingBalance,
+                    explanation = "Sent for withdrawal and awaiting final confirmation.",
+                    visible = balanceVisible,
                     modifier = Modifier.weight(1f)
                 )
+            }
+        }
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("Understand your money", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Available is your cleared wallet balance. Reserved money is tied to an order or review, so it cannot be spent or withdrawn. A pending withdrawal is already being processed and is not part of your available balance.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = { showWithdrawalGuide = true }, contentPadding = PaddingValues(0.dp)) {
+                        Text("How bank withdrawals will work")
+                    }
+                }
             }
         }
         item {
@@ -290,7 +416,36 @@ fun FynxBuyerWalletPanel() {
                 }
             }
         }
-        if (activity.isEmpty() && !loading) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(selected = activityFilter == "ALL", onClick = { activityFilter = "ALL" }, label = { Text("All") })
+                FilterChip(selected = activityFilter == "IN", onClick = { activityFilter = "IN" }, label = { Text("Money in") })
+                FilterChip(selected = activityFilter == "OUT", onClick = { activityFilter = "OUT" }, label = { Text("Money out") })
+            }
+        }
+        if (activityError != null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Activity could not load", fontWeight = FontWeight.SemiBold)
+                        Text(activityError.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { refreshVersion += 1 }, enabled = !loading) {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                            Text(" Retry")
+                        }
+                    }
+                }
+            }
+        }
+        if (visibleActivity.isEmpty() && !loading && summaryError == null && activityError == null) {
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -298,11 +453,26 @@ fun FynxBuyerWalletPanel() {
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = FynxDesign.SlateGrey, modifier = Modifier.size(28.dp))
-                        Text("No wallet activity yet", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "When your wallet is activated, money received, purchases, refunds and withdrawals will appear here.",
+                            when (activityFilter) {
+                                "IN" -> "No money received yet"
+                                "OUT" -> "No money sent yet"
+                                else -> "No wallet activity yet"
+                            },
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            when (activityFilter) {
+                                "IN" -> "Confirmed incoming funds and refunds will appear here when they are recorded."
+                                "OUT" -> "Wallet payments and withdrawals will appear here when those services are enabled."
+                                else -> "When your wallet is activated, money received, purchases, refunds and withdrawals will appear here."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -310,8 +480,31 @@ fun FynxBuyerWalletPanel() {
                 }
             }
         }
-        items(activity, key = { it.id }) { transaction ->
-            FynxWalletActivityRow(transaction)
+        items(visibleActivity, key = { it.id }) { transaction ->
+            FynxWalletActivityRow(transaction, amountsVisible = balanceVisible) { selectedActivity = transaction }
+        }
+        if (activityMoreError != null) {
+            item {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(activityMoreError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { loadMoreActivity() }, enabled = !loadingMoreActivity) { Text("Retry loading more") }
+                }
+            }
+        }
+        if (hasMoreActivity) {
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    TextButton(onClick = { loadMoreActivity() }, enabled = !loadingMoreActivity && !loading) {
+                        if (loadingMoreActivity) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.size(8.dp))
+                            Text("Loading more…")
+                        } else {
+                            Text("Load more activity")
+                        }
+                    }
+                }
+            }
         }
         item {
             Text(
@@ -322,10 +515,73 @@ fun FynxBuyerWalletPanel() {
             )
         }
     }
+
+    selectedActivity?.let { transaction ->
+        val direction = when {
+            transaction.walletDelta > 0.0 -> "+"
+            transaction.walletDelta < 0.0 -> "−"
+            else -> ""
+        }
+        val detailAccent = when {
+            transaction.walletDelta > 0.0 && transaction.status == "SUCCEEDED" -> FynxDesign.ClassicGreen
+            transaction.status == "FAILED" || transaction.status == "BLOCKED" -> FynxDesign.CrimsonRed
+            else -> MaterialTheme.colorScheme.onSurface
+        }
+        AlertDialog(
+            onDismissRequest = { selectedActivity = null },
+            title = { Text(fynxWalletTransactionTitle(transaction.type)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (balanceVisible) direction + fynxWalletMoney(transaction.amount) else "••••••",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = detailAccent
+                    )
+                    Text("Status: " + transaction.status.lowercase(Locale.US).replace('_', ' ').replaceFirstChar { it.uppercase() })
+                    Text("Date: " + fynxWalletActivityDate(transaction.createdAt))
+                    if (transaction.description.isNotBlank()) Text("Details: " + transaction.description)
+                    Text("Fee: " + if (balanceVisible) fynxWalletMoney(transaction.fee) else "••••••")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Reference: " + transaction.reference, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            clipboard?.setPrimaryClip(ClipData.newPlainText("FYNX wallet transaction reference", transaction.reference))
+                            Toast.makeText(context, "Transaction reference copied", Toast.LENGTH_SHORT).show()
+                        }) { Text("Copy") }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedActivity = null }) { Text("Close") }
+            }
+        )
+    }
+
+    if (showWithdrawalGuide) {
+        AlertDialog(
+            onDismissRequest = { showWithdrawalGuide = false },
+            title = { Text("Withdrawing your wallet balance") },
+            text = {
+                Text(
+                    "The planned bank withdrawal flow will let you send eligible, cleared available funds to a verified bank account. Before you confirm, FYNX will show the withdrawal amount, any provider fee and the expected status. Reserved order funds and withdrawals already being processed cannot be withdrawn again. This feature is not live yet; no money moves from this screen today."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showWithdrawalGuide = false }) { Text("Got it") }
+            }
+        )
+    }
 }
 
 @Composable
-private fun FynxWalletMetric(label: String, amount: Double?, modifier: Modifier = Modifier) {
+private fun FynxWalletMetric(
+    label: String,
+    amount: Double?,
+    explanation: String,
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
@@ -335,16 +591,21 @@ private fun FynxWalletMetric(label: String, amount: Double?, modifier: Modifier 
         Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                amount?.let(::fynxWalletMoney) ?: "—",
+                if (visible) amount?.let(::fynxWalletMoney) ?: "—" else "••••••",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
+            Text(explanation, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun FynxWalletActivityRow(transaction: FynxBuyerWalletActivity) {
+private fun FynxWalletActivityRow(
+    transaction: FynxBuyerWalletActivity,
+    amountsVisible: Boolean,
+    onClick: () -> Unit
+) {
     val incoming = fynxWalletIsIncoming(transaction) && transaction.status == "SUCCEEDED"
     val accent = when {
         incoming -> FynxDesign.ClassicGreen
@@ -357,6 +618,7 @@ private fun FynxWalletActivityRow(transaction: FynxBuyerWalletActivity) {
         else -> ""
     }
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -380,9 +642,16 @@ private fun FynxWalletActivityRow(transaction: FynxBuyerWalletActivity) {
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(fynxWalletTransactionTitle(transaction.type), fontWeight = FontWeight.SemiBold)
+                if (transaction.description.isNotBlank()) {
+                    Text(
+                        transaction.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    transaction.description.ifBlank { transaction.reference },
-                    style = MaterialTheme.typography.bodySmall,
+                    fynxWalletActivityDate(transaction.createdAt) + " · " + transaction.reference,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(transaction.status.lowercase(Locale.US).replace('_', ' ').replaceFirstChar { it.uppercase() },
@@ -391,11 +660,11 @@ private fun FynxWalletActivityRow(transaction: FynxBuyerWalletActivity) {
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    sign + fynxWalletMoney(transaction.amount),
+                    if (amountsVisible) sign + fynxWalletMoney(transaction.amount) else "••••••",
                     fontWeight = FontWeight.SemiBold,
                     color = accent
                 )
-                if (transaction.fee > 0.0) {
+                if (transaction.fee > 0.0 && amountsVisible) {
                     Text(
                         "Fee " + fynxWalletMoney(transaction.fee),
                         style = MaterialTheme.typography.labelSmall,

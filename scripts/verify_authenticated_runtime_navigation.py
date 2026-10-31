@@ -143,7 +143,7 @@ DIAGNOSTIC_MARKERS = (
     "New post", "What's on your mind?", "Photo", "Video/Camera",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
-    "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
+    "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
@@ -1446,11 +1446,172 @@ if VISUALS_ONLY and not error:
     if not light_home_ready:
         FAILURES.append("Home was not available for Marketplace navigation after restoring light mode; last visible markers: " + visible_marker_summary(xml))
 
+def find_wallet_feature_entry(xml_text:str):
+    """Return the actual clickable Wallet result card, never its search EditText."""
+    if not xml_text:
+        return None
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+
+    # The query remains visible in the search EditText. Its lower edge is a
+    # screen-relative boundary separating it from the feature result.
+    search_bottom=None
+    screen_top,screen_bottom=0,0
+    first_node=next(iter(root.iter("node")),None)
+    if first_node is not None:
+        bounds=first_node.attrib.get("bounds","")
+        try:
+            left_top,right_bottom=bounds.split("][",1)
+            _,screen_top=map(int,left_top.strip("[]").split(","))
+            _,screen_bottom=map(int,right_bottom.strip("[]").split(","))
+        except (ValueError,IndexError):
+            pass
+
+    for node in root.iter("node"):
+        if node.attrib.get("class") == "android.widget.EditText":
+            try:
+                _,bottom=map(int,node.attrib.get("bounds","").split("][",1)[1].strip("[]").split(","))
+                search_bottom=bottom
+                break
+            except (ValueError,IndexError):
+                pass
+
+    minimum_card_top=(
+        search_bottom
+        if search_bottom is not None
+        else screen_top + int((screen_bottom-screen_top)*0.25)
+    )
+
+    for node in root.iter("node"):
+        label=(node.attrib.get("text") or "").strip().lower()
+        if label != "fynx wallet":
+            continue
+        # A TextField can contain exactly the same query as the result label.
+        if node.attrib.get("class") == "android.widget.EditText":
+            continue
+        if node.attrib.get("clickable","false").lower()=="true":
+            continue
+
+        cur=parents.get(id(node))
+        while cur is not None:
+            if cur.attrib.get("clickable","false").lower()=="true":
+                bounds=cur.attrib.get("bounds","")
+                try:
+                    left_top,right_bottom=bounds.split("][",1)
+                    left,top=map(int,left_top.strip("[]").split(","))
+                    right,bottom=map(int,right_bottom.strip("[]").split(","))
+                    width,height=right-left,bottom-top
+                    center=_center(cur)
+                    if (
+                        center
+                        and width >= 500
+                        and 70 <= height <= 320
+                        and top >= minimum_card_top
+                    ):
+                        return center
+                except (ValueError,IndexError):
+                    pass
+            cur=parents.get(id(cur))
+    return None
+
+
+def capture_wallet_from_features(prefix:str):
+    """Open the real FYNX Wallet destination, capture it, and restore Home."""
+    home_xml=restore_home_after_restart(prefix+"-home")
+    if not home_xml:
+        return False, "Home could not be restored for Wallet navigation."
+
+    feature_xml=tap_control(
+        home_xml, ["More","Features"], prefix+"-features", ["FYNX Features"]
+    )
+    if not feature_xml:
+        restore_home_after_restart(prefix+"-return-home")
+        return False, "FYNX Features could not be opened."
+
+    search=find_control(feature_xml, ["Search FYNX tools"])
+    if not search:
+        restore_home_after_restart(prefix+"-return-home")
+        return False, "The FYNX Features search field was not available."
+
+    _,sx,sy=search
+    run("adb","shell","input","tap",str(sx),str(sy))
+    time.sleep(.3)
+    run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+    run("adb","shell","input","keyevent","KEYCODE_DEL")
+    typed=input_text("FYNX Wallet")
+    if typed.returncode != 0:
+        restore_home_after_restart(prefix+"-return-home")
+        return False, "FYNX Wallet search text could not be entered."
+
+    # Dismiss the IME, then re-read the actual UI hierarchy before tapping.
+    run("adb","shell","input","keyevent","KEYCODE_BACK")
+    time.sleep(.45)
+    feature_xml=dump_ui(prefix+"-wallet-search-keyboard-dismissed.xml")
+    target=find_wallet_feature_entry(feature_xml)
+    if not target:
+        screenshot(prefix+"-wallet-result-not-found.png")
+        restore_home_after_restart(prefix+"-return-home")
+        return False, "The non-editable FYNX Wallet result card was not exposed after dismissing the keyboard."
+
+    wx,wy=target
+    run("adb","logcat","-c")
+    run("adb","shell","input","tap",str(wx),str(wy))
+    wallet_xml=""
+    wallet_shell_opened=False
+    wallet_settled=False
+    wallet_loading_markers=("Checking…", "Checking your wallet…", "Loading wallet activity…", "Loading…")
+    for attempt in range(60):
+        time.sleep(.5)
+        wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
+        wallet_shell_opened=bool(
+            wallet_xml
+            and find_control(wallet_xml, ["FYNX Wallet"])
+            and find_control(wallet_xml, ["Balance details"])
+            and find_control(wallet_xml, ["Understand your money"])
+        )
+        wallet_still_loading=bool(wallet_xml and any(marker in wallet_xml for marker in wallet_loading_markers))
+        if wallet_shell_opened and not wallet_still_loading:
+            wallet_settled=True
+            break
+
+    wallet_opened=wallet_shell_opened and wallet_settled
+    if wallet_opened:
+        screenshot("authenticated-wallet.png")
+        (ROOT/"authenticated-wallet.xml").write_text(wallet_xml+chr(10),encoding="utf-8")
+        result_message="Captured the actual FYNX Wallet after summary and activity loading settled."
+    else:
+        screenshot(prefix+"-wallet-destination-incomplete.png")
+        (ROOT/(prefix+"-wallet-destination-incomplete.xml")).write_text(
+            (wallet_xml or "")+chr(10),encoding="utf-8"
+        )
+        if wallet_shell_opened:
+            result_message="Wallet sections rendered, but summary or activity was still loading after 30 seconds."
+        else:
+            result_message="Wallet result was tapped, but its title, Balance details and money explanation did not appear."
+
+    # The runtime runner starts a separate Status creator check immediately after
+    # this function. Restore Home on both pass and fail so Wallet/keyboard state
+    # cannot contaminate the next journey.
+    home_after=restore_home_after_restart(prefix+"-return-home")
+    if not home_after or find_control(home_after, ["FYNX Features"]):
+        return False, result_message+" Home could not be restored after Wallet capture."
+    if not wallet_opened:
+        return False, result_message
+    return True, result_message
+
+
 # Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an
 # unrelated instrumentation test fails. This branch performs read-only navigation:
 # it never publishes a listing, changes inventory, creates an order, or initiates payment.
 if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
-    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace and My Shop; no listing/order/payment mutations.")
+    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace, My Shop and Wallet; no listing/order/payment mutations.")
     if error:
         report += [
             "",
@@ -1601,6 +1762,13 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             report.append("- BLOCKED: Marketplace -> My Shop did not reach the seller control center.")
     else:
         report.append("- BLOCKED: Home -> Marketplace did not reach the real Marketplace search surface.")
+
+    wallet_captured, wallet_message = capture_wallet_from_features("marketplace-visual-wallet")
+    if wallet_captured:
+        report.append("- PASS: "+wallet_message)
+    else:
+        report.append("- BLOCKED: "+wallet_message)
+        FAILURES.append("Read-only Wallet screen capture: "+wallet_message)
 
     report += [
         "",
@@ -1942,8 +2110,9 @@ if not FAILURES:
         xml=restore_home_after_restart("authenticated-home-reset") or xml
 
 def find_feature_entry(xml_text:str, labels:list[str]):
-    """Find an actual clickable feature card, not the search field or its text."""
-    if not xml_text: return None
+    """Find a real clickable feature card, never the search EditText or its text."""
+    if not xml_text:
+        return None
     try:
         root=ET.fromstring(xml_text)
     except ET.ParseError:
@@ -1953,11 +2122,27 @@ def find_feature_entry(xml_text:str, labels:list[str]):
     for parent in root.iter("node"):
         for child in list(parent):
             parents[id(child)] = parent
+
+    search_bottom=None
+    for node in root.iter("node"):
+        if node.attrib.get("class") == "android.widget.EditText":
+            try:
+                _,bottom=map(int,node.attrib.get("bounds","").split("][",1)[1].strip("[]").split(","))
+                search_bottom=bottom
+                break
+            except (ValueError,IndexError):
+                pass
+
     for node in root.iter("node"):
         text_value=(node.attrib.get("text") or "").strip().lower()
         if not text_value or not any(label == text_value or label in text_value for label in wanted):
             continue
-        cur=node
+        # Search input can contain the exact same Wallet query as the result title.
+        if node.attrib.get("class") == "android.widget.EditText":
+            continue
+        if node.attrib.get("clickable","false").lower()=="true":
+            continue
+        cur=parents.get(id(node))
         while cur is not None:
             if cur.attrib.get("clickable","false").lower()=="true":
                 bounds=cur.attrib.get("bounds","")
@@ -1967,11 +2152,11 @@ def find_feature_entry(xml_text:str, labels:list[str]):
                     right,bottom=map(int,right_bottom.strip("[]").split(","))
                     width,height=right-left,bottom-top
                     center=_center(cur)
-                    if center and 700 <= center[1] <= 1800 and 120 <= height <= 240 and width >= 700:
+                    below_search=search_bottom is None or top >= search_bottom
+                    if center and below_search and width >= 500 and 70 <= height <= 320:
                         return (text_value,center[0],center[1])
                 except (ValueError,IndexError):
                     pass
-                break
             cur=parents.get(id(cur))
     return None
 
@@ -1995,8 +2180,11 @@ def open_features(target_labels:list[str]|None=None):
         search_term = "Money" if any("money" in label.lower() for label in target_labels) else target_labels[0]
         result=input_text(search_term)
         if result.returncode==0:
-            time.sleep(.8)
-            feature_xml=dump_ui("authenticated-features-money-search.xml")
+            time.sleep(.35)
+            run("adb","shell","input","keyevent","KEYCODE_BACK")
+            time.sleep(.35)
+            search_name="wallet" if any("wallet" in label.lower() for label in target_labels) else "money" if any("money" in label.lower() for label in target_labels) else "feature"
+            feature_xml=dump_ui("authenticated-features-"+search_name+"-search.xml")
             if find_feature_entry(feature_xml,target_labels):
                 return feature_xml
 
@@ -2018,6 +2206,7 @@ def open_features(target_labels:list[str]|None=None):
         report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
         journeys=(
             ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
+            ("wallet",["FYNX Wallet"],["FYNX Wallet","Understand your money","Balance details"]),
             ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
         )
         for name,labels,expected in journeys:
@@ -2033,6 +2222,9 @@ def open_features(target_labels:list[str]|None=None):
             screenshot(f"authenticated-{name}.png")
             if not after:
                 FAILURES.append("authenticated Features -> "+name)
+                continue
+            if name == "wallet" and not all(find_control(after,[marker]) for marker in ["FYNX Wallet","Understand your money","Balance details"]):
+                FAILURES.append("authenticated Features -> Wallet did not expose the complete wallet summary surface")
                 continue
             if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
             else: FAILURES.append("authenticated Features -> "+name)
@@ -2056,7 +2248,7 @@ else:
     
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png","",
+           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-wallet.png","- authenticated-ai.png","- authenticated-marketplace.png","",
            f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")

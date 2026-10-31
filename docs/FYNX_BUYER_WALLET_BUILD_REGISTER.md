@@ -6,14 +6,22 @@ This workstream is the buyer's NGN wallet inside the canonical FYNX Android appl
 
 The wallet must not be represented as a real-money product until a suitable provider arrangement, custody model, regulatory review and end-to-end reconciliation have been confirmed.
 
+The buyer wallet is isolated in `backend/buyerWallet.js`; seller settlement remains in `backend/marketplaceSettlement.js`. The two systems share Marketplace order lifecycle rules but not wallet balances or ledger tables.
+
 ## User experience
 
-- One direct Wallet entry in FYNX Features and a second entry from Money Center.
+- Direct Wallet access from the main FYNX Features hub, the Marketplace toolbar and Money Center; all three routes open the same wallet screen.
 - Azure Blue balance card (#007FFF) with white text and a balance-visibility control.
 - Clear labels for available, reserved and withdrawal-pending funds.
 - Add money and Withdraw actions are visible but remain unavailable until the provider-backed flows are implemented and verified.
 - Confirmed incoming funding and refund activity uses Classic Green (#008000).
-- Loading, retry, empty-history and provider-preparation states are explicit; no sample balance is presented as real.
+- Summary and activity have independent loading states; the provider-preparation notice is withheld until the summary request settles, and the emulator waits for both requests to finish (or show a clear error) before accepting a screenshot. No sample balance is presented as real.
+- Wallet summary failures and activity-history failures are displayed separately. A failed history request must never be presented as a successful empty wallet.
+- Activity rows show timezone-aware dates and transaction references; tapping a row opens a transaction detail with a copyable reference.
+- Activity can be filtered across the complete server history into all, money-in and money-out views; Load more keeps the selected filter and uses a stable server-side cursor.
+- Available, reserved and withdrawal-pending funds have plain-language explanations. Balance hiding applies across the summary, buckets and activity amounts.
+- A bank-withdrawal guide explains the intended cash-out safeguards without presenting withdrawals as live.
+- The wallet feature branch runs full Android emulator certification and captures the real Wallet screen and UI hierarchy from the installed exact-commit APK; this is a read-only navigation test and never initiates money movement.
 
 ## Financial invariants
 
@@ -31,12 +39,13 @@ The wallet must not be represented as a real-money product until a suitable prov
 
 | Stage | Scope | Status |
 |---|---|---|
-| Foundation | Buyer wallet screen, authenticated read APIs, NGN wallet/transaction/ledger schema, ledger invariants, static verification | In this change |
+| Foundation | Buyer wallet screen, authenticated read APIs in a dedicated buyer-wallet module, NGN wallet/transaction/ledger schema, ledger invariants, static verification | In this change |
+| UX hardening | Distinct wallet-vs-activity errors, truthful empty state, timezone-aware activity, status guidance, directional filters, cursor pagination, transaction details, reference copying, balance explanations and complete amount masking | Expanded in this follow-up |
 | Provider decision | Written eligibility, licensing/custody confirmation, production API access, fee/limit/KYC/refund/withdrawal terms | Pending |
-| Funding | Provider funding instructions, webhook signature and reference validation, idempotent credit posting, reconciliation | Not started |
-| Withdrawals | Verified beneficiary, fee preview, available-balance reservation, transfer initiation and verification/recovery | Not started |
+| Funding | Provider funding instructions, webhook signature and reference validation, idempotent credit posting, reconciliation | Blocked on provider approval |
+| Withdrawals | Verified beneficiary, fee preview, available-balance reservation, transfer initiation and verification/recovery | Blocked on provider approval |
 | Marketplace checkout | Atomic wallet debit integrated with existing quote/order/escrow lifecycle | Not started |
-| Release hardening | End-to-end provider sandbox tests, concurrency and failure tests, Android device walkthrough, limited rollout | Not started |
+| Release hardening | End-to-end provider sandbox tests, concurrency and failure tests, Android device walkthrough, limited rollout | Wallet UI emulator walkthrough enabled; provider sandbox and money-movement release gates remain blocked |
 
 ## Current implementation boundary
 

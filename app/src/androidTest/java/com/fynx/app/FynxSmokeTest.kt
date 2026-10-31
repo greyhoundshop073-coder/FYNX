@@ -2,6 +2,7 @@ package com.fynx.app
 
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
@@ -26,9 +27,11 @@ class FynxSmokeTest {
 
         launchIntent!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
         device.pressHome()
-        context.startActivity(launchIntent)
-        device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 45_000)
+        device.waitForIdle(10_000)
+        instrumentation.startActivitySync(launchIntent)
+        val reachedFynx = waitForForegroundPackage(device, context.packageName, 45_000)
 
+        assertTrue("FYNX must become the foreground package after its launcher intent; current=" + device.currentPackageName, reachedFynx)
         assertEquals(context.packageName, device.currentPackageName)
         assertTrue("FYNX must expose a non-empty application label", context.applicationInfo.loadLabel(context.packageManager).toString().isNotBlank())
     }
@@ -45,10 +48,18 @@ class FynxSmokeTest {
 
         device.pressHome()
         instrumentation.startActivitySync(intent)
-        val reachedFynx = device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 45_000)
-        device.waitForIdle(10_000)
+        val reachedFynx = waitForForegroundPackage(device, context.packageName, 45_000)
 
-        assertTrue("FYNX must reach the foreground after a profile deep link", reachedFynx)
+        assertTrue("FYNX must become the foreground package after a profile deep link; current=" + device.currentPackageName, reachedFynx)
         assertEquals(context.packageName, device.currentPackageName)
+    }
+
+    private fun waitForForegroundPackage(device: UiDevice, packageName: String, timeoutMs: Long): Boolean {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (device.currentPackageName == packageName) return true
+            SystemClock.sleep(250)
+        }
+        return device.currentPackageName == packageName
     }
 }
