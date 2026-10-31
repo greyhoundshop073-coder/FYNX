@@ -24,6 +24,7 @@ The user supplied two reference screenshots. Match the interaction pattern, not 
 - Existing capture path includes photo/video capture, effect tray, photo Retake/Rotate/Send, video editing/export, and photo Send into the existing unpublished New post draft.
 - The current UI uses CameraX `PreviewView`; current PR changes it to `ImplementationMode.PERFORMANCE`. It also adds fallback when a requested lens is unavailable.
 - The camera dialog currently uses a dark outer Surface, but that alone did not darken the top system-bar strip in the emulator screenshots.
+- A read-only comparison found that the existing `FynxMatureStatusComposerPanel.kt` already has a scoped `DisposableEffect` that saves/restores system-bar state, disables contrast enforcement, sets dark system-icon appearance and keeps edge-to-edge enabled. The camera dialog/panel does not show an equivalent camera-scoped Window treatment in the inspected source. This is a strong implementation lead, not yet a proven root cause: camera uses a Compose Dialog, so the correct Dialog Window (not blindly the Activity Window) must be identified and restored safely. Reuse the established save/restore principles, then verify the actual window with runtime screenshots.
 - Workflow run **41206823912** completed with the overall runtime job failed. Its Android build/unit/lint/instrumentation-related build steps and APK upload succeeded; the runtime report itself was RED.
 - Runtime report recorded three repeated failures: front camera, rear camera and Gallery-return camera all measured status-bar mean luminance 98.9 with dark ratio 0.00, making the backdrop too light for white system icons. This is the immediate known camera certification blocker. Do not claim the precise Window/insets root cause until source + runtime tracing confirms it.
 - Camera-to-post journey source check passed. The runtime artifact showed photo capture → editor → Send → unpublished New post caption draft; the test did not tap Post.
@@ -119,7 +120,7 @@ Capture genuine emulator/device screenshots and UI hierarchy for:
 - [x] Existing camera-to-unpublished-draft path identified.
 - [x] Latest known runtime failure narrowed to three camera system-bar contrast assertions.
 - [ ] Confirm current live PR head and latest required-check state before the next source edit.
-- [ ] Trace and fix the real system-bar/insets root cause.
+- [ ] Trace and fix the real system-bar/insets root cause (candidate pattern: scoped system-bar lifecycle already used by `FynxMatureStatusComposerPanel.kt`; confirm the camera Dialog Window first).
 - [ ] Implement reusable translucent/frosted-glass camera overlay treatment.
 - [ ] Implement/reuse the separate Next → post details step.
 - [ ] Audit effect categories and thumbnail coverage/performance.
@@ -129,4 +130,4 @@ Capture genuine emulator/device screenshots and UI hierarchy for:
 - [ ] Final handover with final commit, screenshots and one canonical APK artifact.
 
 ## 9. Change log
-- 2026-10-31: Initial investigation and handover map created from PR #403 changed-file list, camera source patches, workflow job logs and runtime report. No camera source implementation changes are claimed by this documentation commit.
+- 2026-10-31: Initial investigation and handover map created from PR #403 changed-file list, camera source patches, workflow job logs and runtime report. Compared existing Status composer system-bar lifecycle as a camera fix lead. No camera source implementation changes are claimed by this documentation update.
