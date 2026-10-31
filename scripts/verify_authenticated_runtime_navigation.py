@@ -1002,7 +1002,6 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
     # Capture a second local photo to verify the camera's Send action hands media to the
     # actual New post caption draft. The draft is inspected and then dismissed; Post is never tapped.
-    home = camera_return_to_home(retake_xml or editor_xml, prefix + "-photo-journey-return")
     if retake_ready:
         second_editor = tap_control(
             retake_xml, ["Take photo"], f"{prefix}-camera-photo-before-post-draft",
@@ -1025,10 +1024,9 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 )
                 # Keep the caption entry visible in its own capture, then reveal the attached
                 # photo preview and readiness marker in a separate evidence frame.
-                if not find_control(draft_xml, ["Remove photo/video", "1 item ready"]):
-                    run("adb", "shell", "input", "swipe", "540", "1600", "540", "850", "450")
-                    time.sleep(0.6)
-                    draft_xml = dump_ui(f"{prefix}-camera-create-post-media.xml") or draft_xml
+                run("adb", "shell", "input", "swipe", "540", "1600", "540", "850", "450")
+                time.sleep(0.6)
+                draft_xml = dump_ui(f"{prefix}-camera-create-post-media.xml") or draft_xml
                 screenshot(f"{prefix}-camera-create-post-media.png")
                 (ROOT / f"{prefix}-camera-create-post-media.xml").write_text(
                     draft_xml + chr(10), encoding="utf-8"
@@ -1046,6 +1044,9 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 home = camera_return_to_home(second_editor, prefix + "-post-draft-send-failed")
         else:
             FAILURES.append(prefix + ": second photo capture did not reach the editor for Send-to-draft verification")
+            home = camera_return_to_home(retake_xml or editor_xml, prefix + "-post-draft-capture-failed")
+    else:
+        home = camera_return_to_home(retake_xml or editor_xml, prefix + "-photo-journey-return")
 
     return capture_camera_video_journey(home, prefix)
 
