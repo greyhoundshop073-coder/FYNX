@@ -1,20 +1,14 @@
-import pg from "pg";
+import { pool } from "./databasePool.js";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { runAssistantAgent } from "./fynxAiToolRegistry.js";
 import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 
-const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const JWT_SECRET = process.env.JWT_SECRET || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  max: 4, min: 0, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000, query_timeout: 20_000, keepAlive: true
-}) : null;
+
 
 function authenticate(req) {
   if (!JWT_SECRET) return null;
