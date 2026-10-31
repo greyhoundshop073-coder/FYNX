@@ -475,10 +475,20 @@ def wait_for_photo_picker_foreground(timeout: float = 25.0) -> tuple[bool, str]:
             if "topResumedActivity" in line or "mResumedActivity" in line
         ]
         latest_state = "\\n".join(focused_lines + resumed_lines)
-        focused_picker = any(
+        # API 35 emulator builds may expose the active Photo Picker as topResumedActivity
+        # without returning an mCurrentFocus/mFocusedApp line from dumpsys window windows.
+        # A stable top-resumed picker is authoritative foreground evidence; do not confuse
+        # a stale mResumedActivity entry with the currently top-resumed system surface.
+        window_focus_picker = any(
             any(token in line.casefold() for token in picker_tokens)
             for line in focused_lines
         )
+        top_resumed_picker = any(
+            "topResumedActivity" in line
+            and any(token in line.casefold() for token in picker_tokens)
+            for line in resumed_lines
+        )
+        focused_picker = window_focus_picker or top_resumed_picker
         if focused_picker:
             stable_focus_samples += 1
             if stable_focus_samples >= 2:
