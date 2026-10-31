@@ -281,6 +281,9 @@ fun FynxBuyerWalletPanel() {
             actionError = actionError,
             actionBusy = actionBusy,
             onStartTransfer = {
+                if (fundingResult?.status in setOf("FAILED", "BLOCKED")) {
+                    fundingIdempotencyKey = UUID.randomUUID().toString()
+                }
                 runWalletAction {
                     FynxBuyerWalletClient.startBankTransfer(
                         context, fundingAmount.toDoubleOrNull() ?: 0.0, fundingEmail, fundingIdempotencyKey
@@ -289,6 +292,9 @@ fun FynxBuyerWalletPanel() {
                 }
             },
             onStartCheckout = { method ->
+                if (fundingResult?.status in setOf("FAILED", "BLOCKED")) {
+                    fundingIdempotencyKey = UUID.randomUUID().toString()
+                }
                 runWalletAction {
                     FynxBuyerWalletClient.startFundingCheckout(
                         context, fundingAmount.toDoubleOrNull() ?: 0.0, fundingEmail, method, fundingIdempotencyKey
@@ -380,6 +386,9 @@ fun FynxBuyerWalletPanel() {
             withdrawalOtp = withdrawalOtp,
             onWithdrawalOtpChange = { withdrawalOtp = it.filter(Char::isDigit).take(8) },
             onStartWithdrawal = {
+                if (withdrawalResult?.status in setOf("FAILED", "BLOCKED", "REVERSED")) {
+                    withdrawalIdempotencyKey = UUID.randomUUID().toString()
+                }
                 runWalletAction {
                     FynxBuyerWalletClient.startWithdrawal(
                         context, fundingAmount.toDoubleOrNull() ?: 0.0, selectedPayoutAccountId,
