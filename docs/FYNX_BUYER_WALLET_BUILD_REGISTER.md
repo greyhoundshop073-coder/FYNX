@@ -15,7 +15,7 @@ The buyer wallet is isolated in `backend/buyerWallet.js`; seller settlement rema
 - Clear labels for available, reserved and withdrawal-pending funds.
 - Add money and Withdraw actions are visible but remain unavailable until the provider-backed flows are implemented and verified.
 - Confirmed incoming funding and refund activity uses Classic Green (#008000).
-- Loading, retry, empty-history and provider-preparation states are explicit; no sample balance is presented as real.
+- Summary and activity have independent loading states; the provider-preparation notice is withheld until the summary request settles, and the emulator waits for both requests to finish (or show a clear error) before accepting a screenshot. No sample balance is presented as real.
 - Wallet summary failures and activity-history failures are displayed separately. A failed history request must never be presented as a successful empty wallet.
 - Activity rows show timezone-aware dates and transaction references; tapping a row opens a transaction detail with a copyable reference.
 - Activity can be filtered across the complete server history into all, money-in and money-out views; Load more keeps the selected filter and uses a stable server-side cursor.

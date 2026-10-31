@@ -1564,33 +1564,37 @@ def capture_wallet_from_features(prefix:str):
     run("adb","logcat","-c")
     run("adb","shell","input","tap",str(wx),str(wy))
     wallet_xml=""
-    for attempt in range(20):
+    wallet_shell_opened=False
+    wallet_settled=False
+    wallet_loading_markers=("Checking…", "Checking your wallet…", "Loading wallet activity…", "Loading…")
+    for attempt in range(60):
         time.sleep(.5)
         wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
-        if (
+        wallet_shell_opened=bool(
             wallet_xml
             and find_control(wallet_xml, ["FYNX Wallet"])
             and find_control(wallet_xml, ["Balance details"])
             and find_control(wallet_xml, ["Understand your money"])
-        ):
+        )
+        wallet_still_loading=bool(wallet_xml and any(marker in wallet_xml for marker in wallet_loading_markers))
+        if wallet_shell_opened and not wallet_still_loading:
+            wallet_settled=True
             break
 
-    wallet_opened=bool(
-        wallet_xml
-        and find_control(wallet_xml, ["FYNX Wallet"])
-        and find_control(wallet_xml, ["Balance details"])
-        and find_control(wallet_xml, ["Understand your money"])
-    )
+    wallet_opened=wallet_shell_opened and wallet_settled
     if wallet_opened:
         screenshot("authenticated-wallet.png")
         (ROOT/"authenticated-wallet.xml").write_text(wallet_xml+chr(10),encoding="utf-8")
-        result_message="Captured the actual FYNX Wallet screen from the installed APK."
+        result_message="Captured the actual FYNX Wallet after summary and activity loading settled."
     else:
         screenshot(prefix+"-wallet-destination-incomplete.png")
         (ROOT/(prefix+"-wallet-destination-incomplete.xml")).write_text(
             (wallet_xml or "")+chr(10),encoding="utf-8"
         )
-        result_message="Wallet result was tapped, but its title, Balance details and money explanation did not appear."
+        if wallet_shell_opened:
+            result_message="Wallet sections rendered, but summary or activity was still loading after 30 seconds."
+        else:
+            result_message="Wallet result was tapped, but its title, Balance details and money explanation did not appear."
 
     # The runtime runner starts a separate Status creator check immediately after
     # this function. Restore Home on both pass and fail so Wallet/keyboard state
