@@ -1317,7 +1317,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller ->
                                     val key = seller.sellerUsername.removePrefix("@").trim().lowercase()
                                     val reputation = sellerReputations[key]
-                                    if (reputation != null) MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { sellerStoreUsername = seller.sellerUsername }
+                                    MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { sellerStoreUsername = seller.sellerUsername }
                                 }
                             }
                         }
