@@ -52,6 +52,7 @@ checks = [
      and all(label in runtime for label in ["New post", "What's on your mind?", "Post"])
      and "gallery_recovered = False" in runtime
      and "if not gallery_recovered:" in runtime
+     and "return capture_camera_video_journey(home_after_gallery_abort, prefix)" in runtime
      and "without publishing" in runtime
      and ("both front- and back-facing CameraX devices switched to usable previews" in runtime or "this CI AVD exposes only a rear-facing camera" in runtime)
      and "Gallery opened Android's Photo Picker as the focused foreground surface" in runtime
