@@ -29,7 +29,7 @@ checks = [
      and "showMusicPicker = true" in home),
     ("Your Story and Next are separate real destinations from one captured preview",
      "showYourStoryAction: Boolean = false" in camera
-     and 'Text("Your Story")' in camera
+     and 'Text("Your Story",' in camera
      and "onShareToStatus(previewUri" in camera
      and "onCaptured(previewUri, previewType)" in camera
      and "showYourStoryAction = true" in home
@@ -56,7 +56,7 @@ checks = [
      "selectedComposerVisual" in home and "Add description..." in home
      and "# Hashtags" in home and "@ Mention" in home
      and "Who can view this post" in home
-     and 'Text(if (posting) "Publishing…" else "Post")' in home),
+     and 'Text(if (posting) "Publishing…" else "Post",' in home),
     ("Camera dialog draws its dark canvas edge-to-edge while controls apply their own safe-area insets",
      "if (showCamera || showFastCamera)" in home
      and "Surface(Modifier.fillMaxSize(), color = Color(0xFF080A10))" in home
@@ -109,7 +109,8 @@ checks = [
      and "camera-photo-retake" in runtime
      and "camera-after-retake.png" in runtime
      and "camera-create-post-caption.png" in runtime
-     and "camera-create-post-media.png" in runtime
+     and "camera-post-details-options.png" in runtime
+     and "camera-your-story-composer.png" in runtime
      and all(label in runtime for label in ["New post", "Add description...", "Post"])
      and "# Hashtags" in home and "@ Mention" in home
      and "gallery_recovered = False" in runtime
@@ -140,10 +141,11 @@ checks = [
     ("Home camera starts a fresh session", "capturedUris = emptyList()" in home and "cameraOpenedFromComposer = false" in home),
     ("Post details follow the reference information order with a fixed Drafts/Post footer",
      all(label in home for label in ["Add description...", "# Hashtags", "@ Mention", "Content disclosure and ads", "Location", "Add link", "More options", "Share to", "Edit cover", "Drafts"])
-     and home.index("Add description...") < home.index("# Hashtags") < home.index("Content disclosure and ads")
-     and home.index("Content disclosure and ads") < home.index("Location") < home.index("Add link")
-     and home.index("Add link") < home.index("Who can view this post") < home.index("More options") < home.index("Share to")
-     and 'Text(if (posting) "Publishing…" else "Post"' in home
+     and 'Text("Add description..."' in home
+     and home.index('Text("Add description..."') < home.index('label = { Text("# Hashtags") }') < home.index('Text("Content disclosure and ads", style')
+     and home.index('Text("Content disclosure and ads", style') < home.index('Text("Location", style') < home.index('Text("Add link", style')
+     and home.index('Text("Add link", style') < home.index('"Who can view this post"') < home.index('Text("More options", style') < home.index('Text("Share to", style')
+     and 'Text(if (posting) "Publishing…" else "Post",' in home
      and ".imePadding()" in home),
     ("Drafts are private per account and durable media is copied out of the transient cache",
      "FynxAuthStore.accountStorageKey(context)" in draft_store
