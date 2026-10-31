@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import assert from "node:assert/strict";
+import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";
 
 const read = (name) => fs.readFileSync(new URL(name, import.meta.url), "utf8");
 const server = read("./server.js");
@@ -31,6 +32,15 @@ assert.ok(shop.includes("seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DE
 assert.ok(shop.includes("ON CONFLICT (seller_id) DO UPDATE SET"), "shop profile save must be idempotent per seller");
 const updateClause = shop.split("ON CONFLICT (seller_id) DO UPDATE SET")[1]?.split("RETURNING")[0] || "";
 assert.ok(updateClause && !updateClause.includes("seller_id ="), "shop profile update must not reassign ownership");
+assert.ok(shop.includes("COALESCE($2, marketplace_shop_profiles.shop_name)") &&
+  shop.includes("COALESCE($3, marketplace_shop_profiles.description)") &&
+  shop.includes("COALESCE($4, marketplace_shop_profiles.location)") &&
+  shop.includes("COALESCE($5, marketplace_shop_profiles.contact_phone)"),
+  "partial My Shop updates must preserve fields omitted from the request");
+assert.ok(shop.includes("WHERE $2 IS NOT NULL OR EXISTS ("), "a new shop must supply a shop name before the upsert can create a row");
+assert.ok(shop.includes("at least one shop field must be supplied"), "empty My Shop patches must be rejected");
+assert.ok(shop.includes("shop name is required to create a shop"), "partial updates must not create unnamed shops");
+assert.ok(shop.includes("shop profile fields must be text"), "My Shop fields must reject non-text values");
 assert.ok(shop.includes("b.blocker_id = $2 AND b.blocked_id = u.id") && shop.includes("b.blocker_id = u.id AND b.blocked_id = $2"), "public shop lookup must respect blocks in both directions");
 
 const publicSerializerStart = shop.indexOf("const publicProfile =");
@@ -39,5 +49,57 @@ assert.ok(publicSerializerStart >= 0 && privateSerializerStart > publicSerialize
 assert.ok(!shop.slice(publicSerializerStart, privateSerializerStart).includes("contactPhone"), "public shop profile must not expose seller contact phone");
 assert.ok(shop.includes("contactPhone: row.contact_phone || ''"), "private My Shop profile must retain the seller contact phone");
 assert.ok(shop.includes("return res.json({ shop: publicProfile(result.rows[0]) });"), "public seller lookup must use the public serializer");
+
+// Exercise the partial-update handler with a mocked pool to prove omitted values
+// are passed as NULL for SQL COALESCE rather than being overwritten with empty text.
+const routes = new Map();
+const app = {
+  get(path, ...handlers) { routes.set(`GET ${path}`, handlers.at(-1)); },
+  patch(path, ...handlers) { routes.set(`PATCH ${path}`, handlers.at(-1)); }
+};
+let capturedPatchParameters = null;
+const pool = {
+  async query(sql, parameters = []) {
+    if (sql.includes("CREATE TABLE IF NOT EXISTS marketplace_shop_profiles")) return { rows: [] };
+    if (sql.includes("INSERT INTO marketplace_shop_profiles")) {
+      capturedPatchParameters = parameters;
+      return { rows: [{
+        shop_name: "Original Shop",
+        description: "Updated details",
+        location: "Lagos",
+        contact_phone: "08000000000",
+        updated_at: "2026-10-31T00:00:00.000Z"
+      }] };
+    }
+    if (sql.includes("SELECT username, display_name FROM users")) {
+      return { rows: [{ username: "seller", display_name: "Seller" }] };
+    }
+    throw new Error("Unexpected query in My Shop route verification");
+  }
+};
+registerMarketplaceShopProfileRoutes({ app, pool, auth: (_req, _res, next) => next() });
+const response = {
+  statusCode: 200,
+  body: null,
+  status(code) { this.statusCode = code; return this; },
+  json(body) { this.body = body; return this; }
+};
+const patchHandler = routes.get("PATCH /api/marketplace/my-shop");
+assert.equal(typeof patchHandler, "function", "authenticated My Shop patch handler must be registered");
+await patchHandler({ user: { sub: "42" }, body: { description: "Updated details" } }, response);
+assert.equal(response.statusCode, 200, "a valid partial shop update must succeed");
+assert.deepEqual(capturedPatchParameters, ["42", null, "Updated details", null, null], "omitted shop fields must remain NULL for SQL preservation");
+assert.equal(response.body.shop.shopName, "Original Shop", "partial edit must preserve the existing shop name");
+assert.equal(response.body.shop.location, "Lagos", "partial edit must preserve the existing location");
+assert.equal(response.body.shop.contactPhone, "08000000000", "private response must preserve the seller's contact phone");
+
+const emptyResponse = {
+  statusCode: 200,
+  body: null,
+  status(code) { this.statusCode = code; return this; },
+  json(body) { this.body = body; return this; }
+};
+await patchHandler({ user: { sub: "42" }, body: {} }, emptyResponse);
+assert.equal(emptyResponse.statusCode, 400, "empty My Shop patches must be rejected");
 
 console.log("Backend startup safety and Marketplace My Shop verification passed.");
