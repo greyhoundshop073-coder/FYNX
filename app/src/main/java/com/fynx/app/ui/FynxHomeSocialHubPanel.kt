@@ -71,6 +71,7 @@ fun FynxHomeSocialHubPanel(
     onOpenStories: () -> Unit = {},
     onOpenStatusOwner: (String) -> Unit = {},
     onCreateStatus: () -> Unit = {},
+    onOpenStatusWithMedia: (Uri, String) -> Unit = { _, _ -> },
     onOpenProfile: () -> Unit = {},
     onOpenMarketplace: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
@@ -1370,6 +1371,13 @@ fun FynxHomeSocialHubPanel(
                         selectedMusic = selectedCatalogueMusic,
                         onChooseMusic = { showMusicPicker = true; notice = null },
                         onClearMusic = { selectedCatalogueMusic = null; musicPlaying = false },
+                        showYourStoryAction = true,
+                        onShareToStatus = { uri, type ->
+                            showCamera = false
+                            showFastCamera = false
+                            cameraOpenedFromComposer = false
+                            onOpenStatusWithMedia(uri, type)
+                        },
                         onCaptured = { uri, type ->
                             val nextUris = (capturedUris + uri).distinct().take(4)
                             capturedUris = nextUris
