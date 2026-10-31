@@ -294,6 +294,8 @@ jobs:
           arch: x86_64
           profile: pixel_7_pro # [home-cert]
           script: bash scripts/run_android_runtime_certification.sh
+        env:
+          FYNX_MARKETPLACE_ONLY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'fix/marketplace-buyer-order-dispute-20261031' && '1' || '' }}
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'fix/marketplace-buyer-order-dispute-20261031')))) }}
         uses: actions/upload-artifact@v4
