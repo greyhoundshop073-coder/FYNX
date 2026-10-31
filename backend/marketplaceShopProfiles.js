@@ -41,8 +41,12 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
     shopName: row.shop_name || '',
     description: row.description || '',
     location: row.location || '',
-    contactPhone: row.contact_phone || '',
     updatedAt: row.updated_at || null
+  });
+
+  const privateProfile = (row) => ({
+    ...publicProfile(row),
+    contactPhone: row.contact_phone || ''
   });
 
   app.get('/api/marketplace/my-shop', auth, async (req, res) => {
@@ -57,7 +61,7 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
         LIMIT 1
       `, [req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: 'seller account not found' });
-      return res.json({ shop: publicProfile(result.rows[0]) });
+      return res.json({ shop: privateProfile(result.rows[0]) });
     } catch (error) {
       console.error('marketplace shop profile lookup', error);
       return res.status(500).json({ error: 'shop profile could not be loaded' });
@@ -65,28 +69,53 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
   });
 
   app.patch('/api/marketplace/my-shop', auth, async (req, res) => {
-    const shopName = typeof req.body?.shopName === 'string' ? req.body.shopName.trim().slice(0, 120) : '';
-    const description = typeof req.body?.description === 'string' ? req.body.description.trim().slice(0, 800) : '';
-    const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : '';
-    const contactPhone = typeof req.body?.contactPhone === 'string' ? req.body.contactPhone.trim().slice(0, 40) : '';
-    if (shopName.length < 2) return res.status(400).json({ error: 'shop name must contain at least 2 characters' });
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+    const fields = [
+      ['shopName', 120],
+      ['description', 800],
+      ['location', 160],
+      ['contactPhone', 40]
+    ];
+    const supplied = fields.filter(([field]) => Object.prototype.hasOwnProperty.call(body, field));
+    if (!supplied.length) return res.status(400).json({ error: 'at least one shop field must be supplied' });
+    if (supplied.some(([field]) => typeof body[field] !== 'string')) {
+      return res.status(400).json({ error: 'shop profile fields must be text' });
+    }
+
+    const value = (field, limit) => Object.prototype.hasOwnProperty.call(body, field)
+      ? body[field].trim().slice(0, limit)
+      : null;
+    const shopName = value('shopName', 120);
+    const description = value('description', 800);
+    const location = value('location', 160);
+    const contactPhone = value('contactPhone', 40);
+    if (shopName !== null && shopName.length < 2) {
+      return res.status(400).json({ error: 'shop name must contain at least 2 characters' });
+    }
 
     try {
       await ensureSchema();
       const result = await pool.query(`
         INSERT INTO marketplace_shop_profiles (seller_id, shop_name, description, location, contact_phone)
-        VALUES ($1, $2, $3, $4, $5)
+        SELECT $1, COALESCE($2, ''), COALESCE($3, ''), COALESCE($4, ''), COALESCE($5, '')
+        WHERE $2 IS NOT NULL OR EXISTS (
+          SELECT 1 FROM marketplace_shop_profiles current_profile
+          WHERE current_profile.seller_id = $1 AND current_profile.shop_name <> ''
+        )
         ON CONFLICT (seller_id) DO UPDATE SET
-          shop_name = EXCLUDED.shop_name,
-          description = EXCLUDED.description,
-          location = EXCLUDED.location,
-          contact_phone = EXCLUDED.contact_phone,
+          shop_name = COALESCE($2, marketplace_shop_profiles.shop_name),
+          description = COALESCE($3, marketplace_shop_profiles.description),
+          location = COALESCE($4, marketplace_shop_profiles.location),
+          contact_phone = COALESCE($5, marketplace_shop_profiles.contact_phone),
           updated_at = NOW()
         RETURNING shop_name, description, location, contact_phone, updated_at
       `, [req.user.sub, shopName, description, location, contactPhone]);
+      if (!result.rows[0]) {
+        return res.status(400).json({ error: 'shop name is required to create a shop' });
+      }
       const user = await pool.query('SELECT username, display_name FROM users WHERE id=$1 LIMIT 1', [req.user.sub]);
       if (!user.rows[0]) return res.status(404).json({ error: 'seller account not found' });
-      return res.json({ shop: publicProfile({ ...user.rows[0], ...result.rows[0] }) });
+      return res.json({ shop: privateProfile({ ...user.rows[0], ...result.rows[0] }) });
     } catch (error) {
       console.error('marketplace shop profile save', error);
       return res.status(500).json({ error: 'shop profile could not be saved' });
