@@ -1111,6 +1111,20 @@ fun FynxHomeSocialHubPanel(
                     TextButton(
                         onClick = {
                             showMorePostOptions = false
+                            if (!posting && postingAllowed) {
+                                cameraOpenedFromComposer = true
+                                showComposer = false
+                                showCamera = true
+                                showFastCamera = false
+                                notice = null
+                            }
+                        },
+                        enabled = !posting && postingAllowed && capturedUris.size < 4,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(10.dp)); Text("Take photo or video") }
+                    TextButton(
+                        onClick = {
+                            showMorePostOptions = false
                             if (capturedUris.isNotEmpty()) notice = "Voice posts must contain only one audio recording. Remove the current media first."
                             else { showComposer = false; showVoiceRecorder = true }
                         },
