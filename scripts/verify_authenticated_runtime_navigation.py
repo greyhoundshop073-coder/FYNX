@@ -1470,6 +1470,74 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
     else:
         report.append("- Session: the existing login flow reached Home; live Marketplace data remains unverified unless its API loads successfully.")
 
+    # Exercise the real Home -> Add status overlay and its editable text composer.
+    status_creator_xml = tap_control(
+        xml, ["Create your status"], "status-creator-overlay", ["Add status"]
+    )
+    if status_creator_xml:
+        screenshot("authenticated-status-creator.png")
+        (ROOT/"authenticated-status-creator.xml").write_text(status_creator_xml+"\n", encoding="utf-8")
+        required_creator_actions = ["Take photo", "Record video", "Gallery", "Text", "Voice", "Music"]
+        missing_creator_actions = [label for label in required_creator_actions if not find_control(status_creator_xml, [label])]
+        if missing_creator_actions:
+            report.append("- FAIL: Status creator is missing visible actions: "+", ".join(missing_creator_actions)+".")
+            FAILURES.append("Status creator is missing visible actions: "+", ".join(missing_creator_actions))
+        else:
+            # Use the real UIAutomator text bounds to check that media actions are
+            # on the first row and the text/voice/music tools occupy the next row.
+            try:
+                creator_root = ET.fromstring(status_creator_xml)
+                creator_centres = {}
+                for node in creator_root.iter("node"):
+                    label = (node.attrib.get("text") or "").strip()
+                    if label in required_creator_actions:
+                        centre = _center(node)
+                        if centre:
+                            creator_centres[label] = centre
+                first_row = [creator_centres[label] for label in ["Take photo", "Record video", "Gallery"]]
+                second_row = [creator_centres[label] for label in ["Text", "Voice", "Music"]]
+                ordered_rows = (
+                    all(a[0] < b[0] for a, b in zip(first_row, first_row[1:]))
+                    and all(a[0] < b[0] for a, b in zip(second_row, second_row[1:]))
+                    and max(point[1] for point in first_row) < min(point[1] for point in second_row)
+                )
+            except (ET.ParseError, KeyError, ValueError):
+                ordered_rows = False
+            if ordered_rows:
+                report.append("- PASS: Status creator shows Take photo / Record video / Gallery first, followed by Text / Voice / Music; Layout remains in the horizontally scrollable tools row.")
+            else:
+                report.append("- FAIL: Status creator action rows or their visual order could not be verified.")
+                FAILURES.append("Status creator action rows/order")
+        text_composer_xml = tap_control(
+            status_creator_xml, ["Text"], "status-text-composer", ["Type a Status..."]
+        )
+        if text_composer_xml:
+            screenshot("authenticated-status-text-composer.png")
+            (ROOT/"authenticated-status-text-composer.xml").write_text(text_composer_xml+"\n", encoding="utf-8")
+            report.append("- PASS: opened the real editable Text Status composer without publishing a draft.")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.7)
+            status_home_xml = dump_ui("authenticated-status-creator-return-home.xml")
+            if not status_home_xml or not find_control(status_home_xml, ["Open FYNX camera"]):
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.7)
+                status_home_xml = dump_ui("authenticated-status-creator-return-home-retry.xml")
+            if status_home_xml and find_control(status_home_xml, ["Open FYNX camera"]):
+                xml = status_home_xml
+                report.append("- PASS: Status composer closed cleanly back to Home; no Status was published.")
+            else:
+                FAILURES.append("Status text composer did not return cleanly to Home")
+                report.append("- FAIL: Status text composer did not return cleanly to Home.")
+        else:
+            FAILURES.append("Status Text action did not open the editable composer")
+            report.append("- FAIL: Status Text action did not open the editable composer.")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.5)
+            xml = dump_ui("authenticated-status-creator-return-home.xml") or xml
+    else:
+        FAILURES.append("Home did not open the real Add status creator")
+        report.append("- FAIL: Home did not open the real Add status creator.")
+
     # Verify the real camera and effect layout before navigating to Marketplace.
     xml = capture_camera_post_journey(xml, "debug-camera")
     if not xml or not find_control(xml, ["Open FYNX camera"]):
@@ -1591,6 +1659,73 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                         current_shop_xml = section_xml
                     if section_settled:
                         report.append("- PASS: captured My Shop "+label+" section after its loading indicators settled.")
+                        if slug == "orders":
+                            # The Seller orders button opens a separate read-only dialog.
+                            # Do not create orders or change fulfillment state during capture.
+                            seller_orders_xml = tap_control(
+                                section_xml, ["Seller orders"], "marketplace-seller-orders-dialog"
+                            )
+                            if seller_orders_xml:
+                                terminal_order_markers = [
+                                    "No buyer orders yet.",
+                                    "Check your connection and retry to load buyer orders.",
+                                    "Fulfillment:",
+                                ]
+                                order_deadline = time.monotonic() + 18.0
+                                while time.monotonic() < order_deadline and not any(
+                                    find_control(seller_orders_xml, [marker]) for marker in terminal_order_markers
+                                ):
+                                    time.sleep(0.5)
+                                    seller_orders_xml = dump_ui("marketplace-seller-orders-dialog-settled.xml") or seller_orders_xml
+                                screenshot("authenticated-marketplace-seller-orders-dialog.png")
+                                (ROOT/"authenticated-marketplace-seller-orders-dialog.xml").write_text(seller_orders_xml+"\n", encoding="utf-8")
+                                if find_control(seller_orders_xml, ["No buyer orders yet."]):
+                                    report.append("- PASS: Seller orders opens its explicit empty state; no order was fabricated.")
+                                elif find_control(seller_orders_xml, ["Fulfillment:"]):
+                                    report.append("- PASS: Seller orders opens real order details; no order action was changed.")
+                                elif find_control(seller_orders_xml, ["Check your connection and retry to load buyer orders."]):
+                                    report.append("- PASS: Seller orders opens its recoverable connection-error state; live orders remain unverified.")
+                                else:
+                                    report.append("- BLOCKED: Seller orders dialog opened, but the backend did not return a settled empty, order, or error state.")
+                                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                                time.sleep(0.5)
+                                current_shop_xml = dump_ui("marketplace-seller-orders-dialog-return.xml") or current_shop_xml
+                            else:
+                                report.append("- BLOCKED: Seller orders dialog could not be opened from My Shop.")
+                        elif slug == "delivery-drivers":
+                            # This is the separate FYNX driver-assignment manager.
+                            # Capture it without accepting assignments or uploading evidence.
+                            driver_dialog_xml = tap_control(
+                                section_xml, ["Manage driver deliveries"], "marketplace-driver-assignments-dialog"
+                            )
+                            if driver_dialog_xml:
+                                terminal_driver_markers = [
+                                    "No active deliveries are assigned to this driver account.",
+                                    "Driver deliveries could not load.",
+                                    "Accept delivery",
+                                    "Record delivery evidence",
+                                ]
+                                driver_deadline = time.monotonic() + 18.0
+                                while time.monotonic() < driver_deadline and not any(
+                                    find_control(driver_dialog_xml, [marker]) for marker in terminal_driver_markers
+                                ):
+                                    time.sleep(0.5)
+                                    driver_dialog_xml = dump_ui("marketplace-driver-assignments-dialog-settled.xml") or driver_dialog_xml
+                                screenshot("authenticated-marketplace-driver-assignments-dialog.png")
+                                (ROOT/"authenticated-marketplace-driver-assignments-dialog.xml").write_text(driver_dialog_xml+"\n", encoding="utf-8")
+                                if find_control(driver_dialog_xml, ["No active deliveries are assigned to this driver account."]):
+                                    report.append("- PASS: Driver deliveries opens its explicit no-assignment state; no driver action was fabricated.")
+                                elif find_control(driver_dialog_xml, ["Accept delivery", "Record delivery evidence"]):
+                                    report.append("- PASS: Driver deliveries shows a real assignment and its available next action; no assignment was accepted.")
+                                elif find_control(driver_dialog_xml, ["Driver deliveries could not load."]):
+                                    report.append("- PASS: Driver deliveries opens its recoverable connection/approval error state; live assignments remain unverified.")
+                                else:
+                                    report.append("- BLOCKED: Driver deliveries dialog opened, but the backend did not return a settled assignment, empty, or error state.")
+                                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                                time.sleep(0.5)
+                                current_shop_xml = dump_ui("marketplace-driver-assignments-dialog-return.xml") or current_shop_xml
+                            else:
+                                report.append("- BLOCKED: Driver deliveries dialog could not be opened from My Shop.")
                     else:
                         report.append("- FAIL: My Shop "+label+" remained in a loading state after 20 seconds; the screenshot is retained for diagnosis.")
                         FAILURES.append("My Shop "+label+" remained loading after 20 seconds")

@@ -110,6 +110,40 @@ checks = [
     ),
 ]
 
+camera_source = Path("app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
+checks.extend([
+    (
+        "live camera shutter and photo-editor controls reserve Android navigation-bar space",
+        camera_source.count(".navigationBarsPadding()") >= 2
+        and "WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)" not in camera_source,
+    ),
+    (
+        "Home Status creator receives runtime coverage for its visible actions and text composer",
+        '["Create your status"]' in navigation
+        and 'authenticated-status-creator.png' in navigation
+        and 'authenticated-status-text-composer.png' in navigation
+        and all(label in navigation for label in ("Take photo", "Record video", "Gallery", "Text", "Voice", "Music")),
+    ),
+    (
+        "Seller orders and Driver deliveries dialogs are captured without mutations",
+        'marketplace-seller-orders-dialog' in navigation
+        and 'authenticated-marketplace-seller-orders-dialog.png' in navigation
+        and 'marketplace-driver-assignments-dialog' in navigation
+        and 'authenticated-marketplace-driver-assignments-dialog.png' in navigation
+        and 'no order action was changed' in navigation
+        and 'no assignment was accepted' in navigation,
+    ),
+])
+
+camera_editor_source = camera_source.split("if(previewUri!=null && previewType!=null)", 1)[1].split("// Camera UI", 1)[0]
+checks.append((
+    "captured-photo and video editor share the live camera's dark high-contrast palette",
+    "MaterialTheme(" in camera_editor_source
+    and "darkColorScheme(" in camera_editor_source
+    and "primary = Color(0xFFB8A7FF)" in camera_editor_source
+    and "background = Color(0xFF080A10)" in camera_editor_source,
+))
+
 marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 app_source = Path("app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 hero_source = marketplace_source.split("private fun MarketplaceSmartDealsHero", 1)[1].split("@Composable\nfun FynxMarketplacePanel", 1)[0]
