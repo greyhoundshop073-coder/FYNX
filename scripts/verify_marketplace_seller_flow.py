@@ -38,6 +38,10 @@ marketplace_checkout_route = (ROOT / "backend/marketplaceCheckout.js").read_text
 settlement_routes = (ROOT / "backend/marketplaceSettlement.js").read_text()
 shop_profile_routes = (ROOT / "backend/marketplaceShopProfiles.js").read_text()
 
+runtime_visual = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text()
+runtime_runner = (ROOT / "scripts/run_android_runtime_certification.sh").read_text()
+android_workflow = (ROOT / ".github/workflows/android-build.yml").read_text()
+
 import re
 
 EXPECTED_DISCOVERY_CATEGORIES = ["All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other"]
@@ -184,6 +188,9 @@ checks = [
     ("completed protected orders support seller reviews", "reviewMarketplaceOrder" in marketplace and "Submit review" in marketplace),
     ("seller publish requires a real listing area and at least one fulfillment option", "location.trim().isNotBlank()" in marketplace and "validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media, delivery, pickup)" in marketplace and "(deliveryAvailable || pickupAvailable)" in support and "require(deliveryAvailable || pickupAvailable)" in remote_client and "Choose at least one option: delivery or buyer pickup." in marketplace),
     ("new Marketplace listings inherit the saved My Shop name when the create form leaves store name blank", 'FynxBackendClient.get(context, "/api/marketplace/my-shop")' in remote_client and 'optJSONObject("shop")?.optString("shopName")' in remote_client and '"storeName", persistedShopName' in remote_client),
+    ("Marketplace pull requests run Android instrumentation and upload genuine emulator screenshots", android_workflow.count("github.event.pull_request.head.ref == 'fix/marketplace-buyer-order-dispute-20261031'") == 4 and "connectedDebugAndroidTest" in android_workflow and "fynx-runtime-screenshots/" in android_workflow),
+    ("Marketplace emulator flow navigates through the real My Shop seller sections without creating records", all(token in runtime_visual for token in ('["My Shop"]', '"overview"', '"profile"', '"listings"', '"orders"', '"delivery-drivers"', '"earnings-payouts"', "never publishes a listing")) and "authenticated-marketplace-my-shop-" in runtime_visual),
+    ("Marketplace-only runtime bypasses unrelated Home camera and Status journeys", 'os.environ.get("FYNX_MARKETPLACE_ONLY") != "1"' in runtime_visual and 'if [ "${FYNX_MARKETPLACE_ONLY:-}" != "1" ]; then' in runtime_runner and "FYNX_MARKETPLACE_ONLY" in android_workflow),
     ("seller publishing presents the approved category choices once, with subcategories in a separate selector", sell_dialog.count('Text("Category", style = MaterialTheme.typography.labelLarge)') == 1 and 'Text("Subcategory (optional)"' in sell_dialog),
     ("expanded Marketplace categories expose specific details for appliances, auto parts, and building materials", all(token in marketplace for token in ('"Electronics", "Phones & Computers", "Appliances" ->', '"Personal Accessories" ->', '"Home", "Furniture" ->', '"Beauty", "Health" ->', '"Baby & Kids" ->', '"Books" ->', '"Property" ->', '"Auto Parts" ->', '"Building Materials" ->', '"Part number / compatible vehicle"', '"Material / grade"'))),
     ("saved-product IDs hydrate from the authenticated endpoint and reset per account", "var savedProductIds by remember(cartOwnerKey)" in marketplace and "var savedProductBusyIds by remember(cartOwnerKey)" in marketplace and "LaunchedEffect(cartOwnerKey)" in marketplace and "FynxRemoteSocialClient.savedMarketplaceProducts(context)" in marketplace and "savedProductStateLoaded = true" in marketplace),
