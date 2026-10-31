@@ -514,6 +514,8 @@ app.get("/api/media/:id", auth, async (req, res) => {
             SELECT 1
             FROM marketplace_listings ml
             WHERE ml.active = TRUE
+              AND ml.quantity > 0
+              AND UPPER(COALESCE(ml.currency, '')) IN ('NGN', 'USD')
               AND mm.owner_id = ml.seller_id
               AND EXISTS (
                 SELECT 1
