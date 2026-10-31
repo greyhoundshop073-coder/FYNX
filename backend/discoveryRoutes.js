@@ -126,14 +126,18 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const category = cleanText(req.query?.category, 40);
       const location = cleanText(req.query?.location, 160);
       const params = [req.user.sub];
-      const where = ["l.active=TRUE", "l.quantity>0", "l.seller_id<>$1", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
+      const where = ["l.active=TRUE", "l.quantity - COALESCE(l.reserved_quantity, 0) > 0", "l.seller_id<>$1", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$1))", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
       if (q) { params.push(`%${q}%`); const n=params.length; where.push(`(l.title ILIKE $${n} OR l.description ILIKE $${n} OR COALESCE(l.category,'') ILIKE $${n} OR COALESCE(l.store_name,'') ILIKE $${n} OR u.username ILIKE $${n} OR u.display_name ILIKE $${n})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=$${params.length}`); }
       if (location) { params.push(`%${location}%`); where.push(`l.location ILIKE $${params.length}`); }
+      const orderTableReady = Boolean((await pool.query("SELECT to_regclass('marketplace_orders') IS NOT NULL AS ready")).rows[0]?.ready);
+      const orderScoreSql = orderTableReady
+        ? "COALESCE((SELECT COUNT(*) FROM marketplace_orders o WHERE o.listing_id=l.id AND o.status IN ('PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED')),0)*8"
+        : "0";
       params.push(limit + 1, offset);
       const result = await pool.query(`
-        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.created_at,
-          (COALESCE((SELECT COUNT(*) FROM marketplace_orders o WHERE o.listing_id=l.id AND o.status IN ('PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED')),0)*8
+        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.created_at,
+          (${orderScoreSql}
            + COALESCE((SELECT COUNT(*) FROM fynx_discovery_events e WHERE e.listing_id=l.id AND e.event_type='PRODUCT_CLICK' AND e.created_at>NOW()-INTERVAL '14 days'),0)*2
            + GREATEST(0, 72-EXTRACT(EPOCH FROM (NOW()-l.created_at))/3600.0)) AS discovery_score
         FROM marketplace_listings l JOIN users u ON u.id=l.seller_id
@@ -151,23 +155,24 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
 
   app.get("/api/marketplace/listing/:id", auth, async (req, res) => {
     try {
+      await ensureSchema();
       const listingId = validListingId(req.params?.id);
       if (!listingId) return res.status(400).json({ error: "invalid listing id" });
       const result = await pool.query(`
-        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.active,l.created_at
+        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.active,l.created_at
         FROM marketplace_listings l
         JOIN users u ON u.id=l.seller_id
-        WHERE l.id=$1 AND UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')
+        WHERE l.id=$1 AND UPPER(COALESCE(l.currency,'')) IN ('NGN','USD') AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$2))
         LIMIT 1
-      `, [listingId]);
+      `, [listingId, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: "listing not found" });
       const row = result.rows[0];
-      if (!row.active || Number(row.quantity) <= 0) return res.status(404).json({ error: "listing unavailable" });
+      if (!row.active || Number(row.available_quantity) <= 0) return res.status(404).json({ error: "listing unavailable" });
       return res.json({ listing: {
         id:String(row.id), seller_id:String(row.seller_id), seller_username:row.seller_username,
         seller_display_name:row.seller_display_name, store_name:row.store_name, title:row.title,
         description:row.description, price:Number(row.price), currency:row.currency, category:row.category,
-        condition:row.condition, quantity:Number(row.quantity), location:row.location,
+        condition:row.condition, quantity:Number(row.quantity), available_quantity:Number(row.available_quantity), location:row.location,
         delivery_available:Boolean(row.delivery_available), pickup_available:Boolean(row.pickup_available),
         delivery_fee:row.delivery_fee == null ? null : Number(row.delivery_fee),
         media_ids:Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], active:Boolean(row.active)

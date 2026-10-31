@@ -175,14 +175,14 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const category = typeof req.query?.category === "string" ? req.query.category.trim().slice(0, 40) : "";
       const seller = typeof req.query?.seller === "string" ? req.query.seller.trim().toLowerCase().replace(/^@+/, "") : "";
       const params = [req.user.sub];
-      const where = ["l.active = TRUE", "l.quantity > 0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
+      const where = ["l.active = TRUE", "l.quantity - COALESCE(l.reserved_quantity, 0) > 0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
       // Seller-store lookups must be able to show that seller’s own active listings.
       // General discovery still hides the current user’s listings from their buyer feed.
       if (!seller) where.push("l.seller_id <> $1");
       if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, l.store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 100`, params);
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, l.store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 100`, params);
       return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [] })) });
     } catch (error) { console.error("marketplace listings", error); return res.status(500).json({ error: "marketplace lookup failed" }); }
   });
@@ -190,7 +190,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.get("/api/marketplace/my-listings", auth, async (req, res) => {
     try {
       await ensureMarketplaceSchema();
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, l.store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.active, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id WHERE l.seller_id = $1 ORDER BY l.created_at DESC`, [req.user.sub]);
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, l.store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.active, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id WHERE l.seller_id = $1 ORDER BY l.created_at DESC`, [req.user.sub]);
       return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [] })) });
     } catch (error) { console.error("my marketplace listings", error); return res.status(500).json({ error: "seller listings lookup failed" }); }
   });
@@ -211,7 +211,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const pickupAvailable = req.body?.pickupAvailable == null ? true : Boolean(req.body.pickupAvailable);
       const deliveryFee = req.body?.deliveryFee == null || req.body.deliveryFee === "" ? null : Number(req.body.deliveryFee);
       const mediaIds = Array.isArray(req.body?.mediaIds) ? req.body.mediaIds.map(Number).filter((id) => Number.isInteger(id) && id > 0).slice(0, 12) : [];
-      if (title.length < 2 || description.length < 5 || !category || !["NGN","USD"].includes(currency) || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0 || !["NEW","USED","REFURBISHED"].includes(condition) || (deliveryFee != null && (!Number.isFinite(deliveryFee) || deliveryFee < 0)) || !mediaIds.length) return res.status(400).json({ error: "complete listing details and at least one product photo or video are required" });
+      if (title.length < 2 || description.length < 5 || !category || !["NGN","USD"].includes(currency) || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity <= 0 || !["NEW","USED","REFURBISHED"].includes(condition) || (deliveryFee != null && (!Number.isFinite(deliveryFee) || deliveryFee < 0)) || !mediaIds.length) return res.status(400).json({ error: "complete listing details, positive stock and at least one product photo or video are required" });
       const media = await pool.query("SELECT id FROM message_media WHERE id = ANY($1::bigint[]) AND owner_id = $2", [mediaIds, req.user.sub]);
       if (media.rowCount !== mediaIds.length) return res.status(403).json({ error: "one or more media files are not owned by this account" });
       const result = await pool.query(`INSERT INTO marketplace_listings (seller_id, store_name, title, description, price, currency, category, condition, quantity, location, delivery_available, pickup_available, delivery_fee, media_ids) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb) RETURNING id, created_at`, [req.user.sub, storeName, title, description, price, currency, category, condition, quantity, location, deliveryAvailable, pickupAvailable, deliveryFee, JSON.stringify(mediaIds)]);
@@ -224,7 +224,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await ensureMarketplaceSchema();
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
-      const result = await pool.query("SELECT EXISTS (SELECT 1 FROM marketplace_price_watches WHERE user_id = $1 AND listing_id = $2) AS watched", [req.user.sub, id]);
+      const result = await pool.query("SELECT EXISTS (SELECT 1 FROM marketplace_price_watches w JOIN marketplace_listings l ON l.id = w.listing_id WHERE w.user_id = $1 AND w.listing_id = $2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $1 AND b.blocked_id = l.seller_id) OR (b.blocker_id = l.seller_id AND b.blocked_id = $1))) AS watched", [req.user.sub, id]);
       return res.json({ watched: Boolean(result.rows[0]?.watched) });
     } catch (error) { console.error("marketplace price watch state", error); return res.status(500).json({ error: "price watch state unavailable" }); }
   });
@@ -234,7 +234,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await ensureMarketplaceSchema();
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
-      const listing = (await pool.query("SELECT id, seller_id, price FROM marketplace_listings WHERE id = $1 AND active = TRUE", [id])).rows[0];
+      const listing = (await pool.query("SELECT l.id, l.seller_id, l.price FROM marketplace_listings l WHERE l.id = $1 AND l.active = TRUE AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = l.seller_id) OR (b.blocker_id = l.seller_id AND b.blocked_id = $2))", [id, req.user.sub])).rows[0];
       if (!listing) return res.status(404).json({ error: "listing not found" });
       if (String(listing.seller_id) === String(req.user.sub)) return res.status(400).json({ error: "you cannot price-watch your own listing" });
       await pool.query("INSERT INTO marketplace_price_watches(user_id, listing_id) VALUES ($1,$2) ON CONFLICT(user_id,listing_id) DO NOTHING", [req.user.sub, id]);
@@ -264,9 +264,14 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (title.length < 2 || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0) return res.status(400).json({ error: "valid product name, price and quantity are required" });
 
       await client.query("BEGIN");
-      const existing = (await client.query("SELECT id, seller_id, price FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
+      const existing = (await client.query("SELECT id, seller_id, price, reserved_quantity FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
       if (!existing) { await client.query("ROLLBACK"); return res.status(404).json({ error: "listing not found" }); }
       const oldPrice = Number(existing.price);
+      const reservedQuantity = Math.max(0, Number(existing.reserved_quantity) || 0);
+      if (quantity < reservedQuantity) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "stock cannot be lower than units already reserved by pending or protected orders", reservedQuantity });
+      }
       const updated = (await client.query("UPDATE marketplace_listings SET title = $1, price = $2, quantity = $3, updated_at = NOW() WHERE id = $4 AND seller_id = $5 RETURNING id, title, price, quantity", [title, price, quantity, id, req.user.sub])).rows[0];
       const priceChanged = oldPrice !== Number(updated.price);
       const watchers = priceChanged ? (await client.query("SELECT w.user_id FROM marketplace_price_watches w WHERE w.listing_id = $1 AND w.user_id <> $2", [id, req.user.sub])).rows : [];

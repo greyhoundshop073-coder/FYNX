@@ -249,6 +249,18 @@ app.get("/health", async (_req, res) => {
 
 // Authenticated snapshot used by the Android Home status row. Presence is
 // ephemeral: a user is online only while at least one authenticated socket lives.
+app.get("/version", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  return res.json({
+    service: "fynx-backend",
+    version: process.env.npm_package_version || "1.1.1",
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+    branch: process.env.RAILWAY_GIT_BRANCH || null,
+    environment: process.env.RAILWAY_ENVIRONMENT_NAME || null,
+    deploymentId: process.env.RAILWAY_DEPLOYMENT_ID || null
+  });
+});
+
 app.get("/api/presence", auth, (_req, res) => {
   return res.json({ onlineUserIds: [...clientsByUserId.entries()]
     .filter(([, sockets]) => sockets && sockets.size > 0)
