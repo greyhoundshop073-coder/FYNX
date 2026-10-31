@@ -54,6 +54,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
@@ -116,6 +120,39 @@ private fun resolveFynxCameraWindow(view: View): Window? {
         currentContext = currentContext.baseContext
     }
     return (currentContext as? Activity)?.window
+}
+
+@Composable
+private fun CameraEditorRailAction(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.width(58.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) Color(0xFF7869A6).copy(alpha = 0.78f) else Color(0xFF25364A).copy(alpha = 0.38f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 7.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Text(
+                label,
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 9.sp,
+                maxLines = 1
+            )
+        }
+    }
 }
 
 private const val MAX_CAMERA_GALLERY_IMAGE_BYTES = 96L * 1024 * 1024
@@ -632,10 +669,58 @@ fun FynxCameraCapturePanel(
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 8.dp, top = 4.dp)
+            ) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+            }
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFF25364A).copy(alpha = 0.42f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
+            ) {
+                Text(
+                    if (previewType == "image") "Photo preview" else "Video preview",
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+            if (previewType == "image") {
+                Column(
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                        .offset(y = (-124).dp)
+                        .padding(end = 8.dp)
+                        .background(Color(0xFF172438).copy(alpha = 0.42f), RoundedCornerShape(24.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(24.dp))
+                        .padding(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    CameraEditorRailAction("Looks", Icons.Default.Tune, selectedCameraTool == "Looks") { selectedCameraTool = "Looks" }
+                    CameraEditorRailAction("Face FX", Icons.Default.Face, selectedCameraTool == "Face FX") { selectedCameraTool = "Face FX" }
+                    CameraEditorRailAction("Background", Icons.Default.Layers, selectedCameraTool == "Background") { selectedCameraTool = "Background" }
+                    CameraEditorRailAction("AI Studio", Icons.Default.AutoAwesome, selectedCameraTool == "AI Studio") { selectedCameraTool = "AI Studio" }
+                    CameraEditorRailAction("Rotate", Icons.Default.RotateRight, selected = false, enabled = !enhancing && !applyingFilter) { rotatePhoto() }
+                }
+            } else {
+                Column(
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                        .offset(y = (-70).dp)
+                        .padding(end = 8.dp)
+                        .background(Color(0xFF172438).copy(alpha = 0.42f), RoundedCornerShape(24.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(24.dp))
+                        .padding(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    CameraEditorRailAction("Captions", Icons.Default.AutoAwesome, selected = generatingCaptions, enabled = !generatingCaptions && !applyingVideoEffects) { generateCaptionsForVideo() }
+                }
+            }
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)
+                    .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.44f)
                     .navigationBarsPadding()
                     .imePadding()
                     .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
@@ -643,22 +728,14 @@ fun FynxCameraCapturePanel(
                     .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 76.dp)
             ) {
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
-                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.14f else 0.40f).verticalScroll(rememberScrollState())) {
+                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.12f else 0.26f).verticalScroll(rememberScrollState())) {
                 if (previewType == "image") {
                     Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        listOf("Looks", "Face FX", "Background", "AI Studio").forEach { category ->
-                            FilterChip(
-                                selected = selectedCameraTool == category,
-                                onClick = { selectedCameraTool = category },
-                                label = { Text(category) }
-                            )
-                        }
-                    }
+                    Text(
+                        selectedCameraTool,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
                     when (selectedCameraTool) {
                         "Face FX" -> {
                             Text("Face FX", style = MaterialTheme.typography.labelLarge)
@@ -797,7 +874,25 @@ fun FynxCameraCapturePanel(
                     }
                 }
                 }
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)retake()},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing && !applyingFilter)rotatePhoto()},enabled=!enhancing && !applyingFilter,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)onCaptured(previewUri,previewType)},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.ArrowForward,null);Spacer(Modifier.width(4.dp));Text("Next")}}
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) retake() },
+                        enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
+                        modifier = Modifier.weight(1f).heightIn(min = 52.dp)
+                    ) { Text("Retake") }
+                    Button(
+                        onClick = { if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) onCaptured(previewUri, previewType) },
+                        enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
+                        modifier = Modifier.weight(1.2f).heightIn(min = 52.dp)
+                    ) {
+                        Icon(Icons.Default.ArrowForward, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Next")
+                    }
+                }
             }
         }
         }
