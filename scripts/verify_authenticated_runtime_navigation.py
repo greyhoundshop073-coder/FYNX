@@ -1128,6 +1128,9 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                     report.append("- NOTE ffprobe is not available; output file was produced but audio-track preservation could not be independently checked")
 
 
+    if not export_completed:
+        return camera_return_to_home(processed_xml or editor, prefix + "-video-export-failed")
+
     # Re-run the original source through every remaining video treatment. The app verifies each
     # decoded output frame and preserves the source audio track before accepting the export.
     for style_label, slug in [
