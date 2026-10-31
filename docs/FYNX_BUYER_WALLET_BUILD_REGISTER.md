@@ -52,3 +52,13 @@ The buyer wallet is isolated in `backend/buyerWallet.js`; seller settlement rema
 This foundation intentionally exposes read-only summary and activity endpoints. It does not create provider accounts, accept deposits, initiate transfers, debit checkout or claim a wallet balance is active. Funding, spending and withdrawal capabilities return false until the corresponding provider-backed implementation and tests are delivered.
 
 Google Merchant Center and virtual cards are outside this release.
+
+
+## Wallet action screens and commission presentation — 31 October 2026
+
+- Add Money now opens dedicated funding-method choices for virtual-account transfer, card and USSD; all routes remain informational until an approved provider is connected.
+- The bank-transfer screen explicitly shows that a personal account has not yet been assigned. It never renders a placeholder account number or invites users to transfer to an unverified account.
+- Withdraw now opens a dedicated payout-preparation screen with available-balance context, account-verification steps and fee transparency expectations. It does not collect sensitive bank details or submit a payout while the provider flow is unavailable.
+- Seller Center earnings now labels each recorded order fee as **FYNX commission** and explains the default 5% seller-paid policy. The buyer wallet remains separate from seller proceeds and FYNX platform revenue.
+- Fixed the marketplace fee-mode code fallback so an unset mode defaults to SELLER (with the existing 500-basis-point / 5% default); an explicitly configured ZERO, BUYER or SPLIT policy remains respected. Invalid explicit modes now fail closed instead of silently turning commission off.
+- Provider-generated dedicated account numbers, signed payment webhooks, withdrawals, KYC/custody approval and live-money end-to-end tests remain provider/backend release dependencies.

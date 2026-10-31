@@ -8,6 +8,9 @@ market = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").re
 payments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt").read_text()
 settlement = (ROOT / "backend/marketplaceSettlement.js").read_text()
 wallet_backend = (ROOT / "backend/buyerWallet.js").read_text()
+actions = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text()
+seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
+transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text()
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text()
 checks = [
@@ -46,7 +49,16 @@ checks = [
  ("wallet status has user-readable state labels", "Wallet access is restricted" in panel and "This wallet is closed" in panel),
  ("funding and withdrawals remain disabled until provider integration", "isWalletReady" in panel and "canFund: false" in wallet_backend and "canWithdraw: false" in wallet_backend),
  ("existing Marketplace Paystack checkout retained", "initializeMarketplacePayment" in payments and "verifyMarketplacePayment" in payments),
- ("NGN-only launch foundation", 'currency == "NGN"' in client and "currently supports the NGN foundation only" in panel)
+ ("NGN-only launch foundation", 'currency == "NGN"' in client and "currently supports the NGN foundation only" in panel),
+ ("Add Money opens a dedicated funding-method screen", 'onClick = { activeAction = "ADD" }' in panel and 'screen = activeAction' in panel and 'FynxWalletActionPanel' in panel and '"ADD" ->' in actions),
+ ("dedicated bank transfer never invents account details", '"Account number not assigned yet"' in actions and '"Do not transfer money to an account number supplied outside this FYNX screen."' in actions and "0000000000" not in actions),
+ ("bank transfer explains automatic verified wallet credit", '"The provider confirms the payment to FYNX."' in actions and '"FYNX verifies the confirmation and credits your wallet."' in actions),
+ ("card and USSD methods have explicit provider-not-ready states", '"CARD" ->' in actions and '"USSD" ->' in actions and '"Card funding is not active yet"' in actions and '"USSD payments are not active yet"' in actions),
+ ("withdraw screen previews cleared balance and explains secure bank verification", 'onClick = { activeAction = "WITHDRAW" }' in panel and '"AVAILABLE BALANCE"' in actions and '"FYNX verifies the account name with the provider."' in actions),
+ ("withdrawal submission remains disabled without provider integration", '"Withdrawals not available yet"' in actions and 'enabled = false' in actions),
+ ("seller earnings explicitly disclose default five-percent Marketplace commission", '"FYNX Marketplace commission · default 5%"' in seller_center and 'record.marketplaceFee' in seller_center),
+ ("Marketplace commission is not charged on wallet top-ups or withdrawals", '"wallet top-ups and bank withdrawals are not charged this fee"' in seller_center),
+ ("default Marketplace fee policy is seller-paid at five percent", "process.env.FYNX_MARKETPLACE_FEE_MODE || 'SELLER'" in transactions and "process.env.FYNX_MARKETPLACE_FEE_BPS || '500'" in transactions and 'const mode = configuredMode;' in transactions)
 ]
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
