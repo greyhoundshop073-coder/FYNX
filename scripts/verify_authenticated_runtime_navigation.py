@@ -830,12 +830,45 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     break
                 if (find_control(latest_camera_xml, ["Switch front/back camera"])
                         and find_control(latest_camera_xml, ["Take photo"])):
+                    # The same activity must resume; merely seeing stale Compose text is not
+                    # sufficient proof that the Photo Picker was dismissed successfully.
+                    activity_state = ""
+                    for resume_attempt in range(8):
+                        activity_state = run(
+                            "adb", "shell", "dumpsys", "activity", "activities"
+                        ).stdout or ""
+                        if any(
+                            "topResumedActivity" in line and PACKAGE in line
+                            for line in activity_state.splitlines()
+                        ):
+                            break
+                        time.sleep(0.5)
+                    app_activity_resumed = any(
+                        "topResumedActivity" in line and PACKAGE in line
+                        for line in activity_state.splitlines()
+                    )
+                    if not app_activity_resumed:
+                        continue
                     camera_xml = latest_camera_xml
                     camera_returned = True
                     break
             if camera_returned:
-                report.append("- PASS Gallery cancellation returned to the live camera without loading/publishing media")
+                # Verify the returned surface is the live camera, not just an old UI hierarchy.
+                screenshot(f"{prefix}-camera-after-gallery-back.png")
+                verify_camera_image_signal(
+                    f"{prefix}-camera-after-gallery-back.png",
+                    (180, 650, 1260, 1900),
+                    prefix + " camera after Gallery cancellation"
+                )
+                verify_camera_controls_fit_safe_area(
+                    camera_xml, ["Effects", "Take photo", "Gallery"],
+                    prefix + " camera after Gallery cancellation"
+                )
                 (ROOT / f"{prefix}-camera-after-gallery-back.xml").write_text(camera_xml + chr(10), encoding="utf-8")
+                (ROOT / f"{prefix}-camera-after-gallery-back-activity.txt").write_text(
+                    activity_state + chr(10), encoding="utf-8"
+                )
+                report.append("- PASS Gallery Back returned to the same resumed FYNX activity; live preview and camera controls recovered without restarting or publishing")
             else:
                 if system_anr_seen:
                     FAILURES.append(prefix + ": Android system process stopped responding while closing the Photo Picker; no FYNX crash was observed")
