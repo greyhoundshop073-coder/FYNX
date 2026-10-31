@@ -16,20 +16,35 @@ checks = [
      and "camera-live-preview.xml" in runtime
      and "camera-photo-editor-initial.xml" in runtime
      and "camera-video-editor-before-effects.xml" in runtime),
-    ("Gallery picker is confirmed by focused-window state before cancellation and camera recovery",
+    ("Gallery picker foreground detection accepts stable API-35 top-resumed system picker state",
      'def wait_for_photo_picker_foreground(' in runtime
      and '"mCurrentFocus" in line' in runtime
+     and '"topResumedActivity" in line' in runtime
+     and "top_resumed_picker = any(" in runtime
      and 'wait_for_photo_picker_foreground(timeout=25.0)' in runtime
      and 'for attempt in range(24)' in runtime
      and "Android system process stopped responding while closing the Photo Picker" in runtime
-     and "Gallery cancellation returned to the live camera" in runtime),
+     and "Gallery Back returned to the same resumed FYNX activity" in runtime),
+    ("Gallery Back proves the same app activity, live preview pixels and controls recover without restart",
+     '"topResumedActivity" in line and PACKAGE in line' in runtime
+     and "camera-after-gallery-back.png" in runtime
+     and "camera after Gallery cancellation" in runtime
+     and "verify_camera_controls_fit_safe_area(" in runtime
+     and "camera-after-gallery-back-activity.txt" in runtime),
     ("Runtime camera journey verifies switch, flash capability, Gallery, capture, effects and Retake without publishing",
      "def capture_camera_post_journey(" in runtime
      and '["Take photo"]' in runtime
      and all(f'"{label}"' in runtime for label in ["Face FX", "Cute Ears", "AI Studio", "Portrait Blur", "Retake", "Send"])
      and "camera-photo-editor-initial.png" in runtime
+     and "camera-photo-editor-after-rotate.png" in runtime
+     and '["Rotate"]' in runtime
      and "camera-photo-editor-portrait-ready.png" in runtime
      and "camera-photo-retake" in runtime
+     and "camera-after-retake.png" in runtime
+     and "camera-create-post-caption.png" in runtime
+     and "camera-create-post-media.png" in runtime
+     and '["New post", "What\'s on your mind?", "Post"]' in runtime
+     and "without publishing" in runtime
      and ("both front- and back-facing CameraX devices switched to usable previews" in runtime or "this CI AVD exposes only a rear-facing camera" in runtime)
      and "Gallery opened Android's Photo Picker as the focused foreground surface" in runtime
      and "rear-camera torch toggled on and back off" in runtime
