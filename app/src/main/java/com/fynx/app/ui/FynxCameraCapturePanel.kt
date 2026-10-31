@@ -553,6 +553,7 @@ fun FynxCameraCapturePanel(
                 surfaceVariant = Color(0xFF292D38)
             )
         ) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
             Column(
@@ -723,6 +724,7 @@ fun FynxCameraCapturePanel(
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)retake()},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing && !applyingFilter)rotatePhoto()},enabled=!enhancing && !applyingFilter,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)onCaptured(previewUri,previewType)},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
             }
         }
+        }
         };return
     }
     // Camera UI is deliberately dark so preview controls remain legible on bright or dark
@@ -736,6 +738,7 @@ fun FynxCameraCapturePanel(
             surfaceVariant = Color(0xFF292D38)
         )
     ) {
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).clickable { if (recording == null) showCaptureControls = true }){
         AndroidView(
             factory = { previewView },
@@ -1165,6 +1168,7 @@ fun FynxCameraCapturePanel(
         }
     }
     }
+    }
 }
 
 /** Portrait effect tiles shared by the camera creator tray and captured-photo editor. */
@@ -1178,8 +1182,8 @@ private data class CameraEffectOption(
 )
 
 /**
- * Nine bundled portrait references rotate through the camera and captured-photo effect
- * carousels. Six original portrait illustrations extend the three existing photo references.
+ * Twelve bundled portrait references rotate through the camera and captured-photo effect
+ * carousels. Nine original references are preserved and three additional portrait previews extend the set.
  */
 private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (Math.floorMod(previewStyle, 12)) {
     0 -> R.drawable.camera_effect_portrait_1

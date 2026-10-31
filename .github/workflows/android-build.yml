@@ -298,7 +298,7 @@ jobs:
             avd_config="$(find "${ANDROID_AVD_HOME:-$HOME/.android/avd}" -maxdepth 3 -type f -name config.ini -print -quit)"
             if [ -z "$avd_config" ]; then echo "ERROR: Android emulator AVD config was not found"; exit 1; fi
             sed -i "/^hw.camera.back=/d; /^hw.camera.front=/d" "$avd_config"
-            printf "\nhw.camera.back=virtualscene\nhw.camera.front=emulated\n" >> "$avd_config"
+            printf "\\nhw.camera.back=virtualscene\\nhw.camera.front=emulated\\n" >> "$avd_config"
             grep "^hw.camera." "$avd_config"
           script: bash scripts/run_android_runtime_certification.sh
       - name: Upload FYNX runtime screenshots and UI hierarchies
