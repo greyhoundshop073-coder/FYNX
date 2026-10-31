@@ -454,6 +454,41 @@ def camera_wait_for_video_export_idle(
     return latest, False
 
 
+def wait_for_photo_picker_foreground(timeout: float = 25.0) -> tuple[bool, str]:
+    """Wait for the Android Photo Picker to own the focused window, not merely exist in a task stack."""
+    deadline = time.monotonic() + timeout
+    stable_focus_samples = 0
+    latest_state = ""
+    picker_tokens = (
+        "photopicker", "photo picker", "com.google.android.providers.media",
+        "com.android.providers.media"
+    )
+    while time.monotonic() < deadline:
+        windows = run("adb", "shell", "dumpsys", "window", "windows").stdout or ""
+        activities = run("adb", "shell", "dumpsys", "activity", "activities").stdout or ""
+        focused_lines = [
+            line.strip() for line in windows.splitlines()
+            if "mCurrentFocus" in line or "mFocusedApp" in line
+        ]
+        resumed_lines = [
+            line.strip() for line in activities.splitlines()
+            if "topResumedActivity" in line or "mResumedActivity" in line
+        ]
+        latest_state = "\\n".join(focused_lines + resumed_lines)
+        focused_picker = any(
+            any(token in line.casefold() for token in picker_tokens)
+            for line in focused_lines
+        )
+        if focused_picker:
+            stable_focus_samples += 1
+            if stable_focus_samples >= 2:
+                return True, latest_state
+        else:
+            stable_focus_samples = 0
+        time.sleep(0.65)
+    return False, latest_state
+
+
 def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> str:
     """Dismiss camera/editor surfaces using Back until the real Home camera entry returns."""
     latest = current_xml
@@ -746,44 +781,62 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     else:
         FAILURES.append(prefix + ": opening the Face FX category did not expose the Cute Ears effect")
 
-    # Open the Android Photo Picker and cancel promptly. Repeated UIAutomator dumps while
-    # the external Photo Picker is foregrounded can stall the emulator's MediaProvider service.
+    # The Android Photo Picker can take several seconds to become the focused window on a
+    # cold API-35 emulator. Do not treat a stale ActivityRecord anywhere in the task stack
+    # as proof that it is visible, and never press Back while its launch is still pending.
     gallery_control = find_control(camera_xml, ["Gallery"])
     gallery_screenshot = ROOT / f"{prefix}-camera-gallery-picker.png"
     if gallery_control:
         _, gallery_x, gallery_y = gallery_control
         run("adb", "shell", "input", "tap", str(gallery_x), str(gallery_y))
-        time.sleep(1.2)
-        screenshot(f"{prefix}-camera-gallery-picker.png")
-        gallery_windows = run("adb", "shell", "dumpsys", "window", "windows").stdout or ""
-        gallery_activities = run("adb", "shell", "dumpsys", "activity", "activities").stdout or ""
-        gallery_system_state = (gallery_windows + chr(10) + gallery_activities).casefold()
-        picker_runtime_visible = any(token in gallery_system_state for token in [
-            "photopicker", "photo picker", "com.google.android.providers.media",
-            "com.android.providers.media"
-        ])
-        (ROOT / f"{prefix}-camera-gallery-picker.xml").write_text(camera_xml + chr(10), encoding="utf-8")
-        if picker_runtime_visible:
-            report.append("- PASS Gallery opened Android's real photo-picker UI")
+        picker_ready, gallery_focus_state = wait_for_photo_picker_foreground(timeout=25.0)
+        (ROOT / f"{prefix}-camera-gallery-focus.txt").write_text(
+            gallery_focus_state + chr(10), encoding="utf-8"
+        )
+        if picker_ready:
+            # Give the focused picker one additional settle interval, but avoid UIAutomator
+            # while the system surface is active (it can stall MediaProvider on this AVD).
+            time.sleep(1.5)
+            screenshot(f"{prefix}-camera-gallery-picker.png")
+            report.append("- PASS Gallery opened Android's Photo Picker as the focused foreground surface")
+            # Cancel only after window focus confirms the picker, then wait for the app to resume.
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            camera_returned = False
+            system_anr_seen = False
+            for attempt in range(24):
+                time.sleep(0.75)
+                latest_camera_xml = dump_ui(f"{prefix}-camera-after-gallery-back-{attempt}.xml")
+                if not latest_camera_xml:
+                    continue
+                if find_control(latest_camera_xml, ["Process system isn't responding"]):
+                    system_anr_seen = True
+                    screenshot(f"{prefix}-camera-gallery-system-anr.png")
+                    wait_button = find_control(latest_camera_xml, ["Wait"])
+                    if wait_button:
+                        _, wait_x, wait_y = wait_button
+                        run("adb", "shell", "input", "tap", str(wait_x), str(wait_y))
+                        time.sleep(2.0)
+                        continue
+                    break
+                if (find_control(latest_camera_xml, ["Switch front/back camera"])
+                        and find_control(latest_camera_xml, ["Take photo"])):
+                    camera_xml = latest_camera_xml
+                    camera_returned = True
+                    break
+            if camera_returned:
+                report.append("- PASS Gallery cancellation returned to the live camera without loading/publishing media")
+                (ROOT / f"{prefix}-camera-after-gallery-back.xml").write_text(camera_xml + chr(10), encoding="utf-8")
+            else:
+                if system_anr_seen:
+                    FAILURES.append(prefix + ": Android system process stopped responding while closing the Photo Picker; no FYNX crash was observed")
+                else:
+                    FAILURES.append(prefix + ": Photo Picker did not return to the live camera after cancellation")
+                screenshot(f"{prefix}-camera-after-gallery-back-failed.png")
         else:
-            FAILURES.append(prefix + ": Gallery did not place Android's system photo picker in the foreground")
-        # Cancel immediately after proving the system picker became the foreground activity.
-        run("adb", "shell", "input", "keyevent", "4")
-        camera_returned = False
-        for attempt in range(8):
-            time.sleep(0.35)
-            latest_camera_xml = dump_ui(f"{prefix}-camera-after-gallery-back-{attempt}.xml")
-            if (find_control(latest_camera_xml, ["Switch front/back camera"])
-                    and find_control(latest_camera_xml, ["Take photo"])):
-                camera_xml = latest_camera_xml
-                camera_returned = True
-                break
-        if camera_returned:
-            report.append("- PASS Gallery cancellation returned to the live camera without loading/publishing media")
-            (ROOT / f"{prefix}-camera-after-gallery-back.xml").write_text(camera_xml + chr(10), encoding="utf-8")
-        else:
-            FAILURES.append(prefix + ": backing out of Gallery did not return to the camera preview")
-            screenshot(f"{prefix}-camera-after-gallery-back-failed.png")
+            screenshot(f"{prefix}-camera-gallery-picker-not-focused.png")
+            FAILURES.append(
+                prefix + ": Gallery tap did not place the Android Photo Picker in the focused foreground window within 25 seconds"
+            )
     else:
         FAILURES.append(prefix + ": Gallery control was not available before opening the system picker")
 
