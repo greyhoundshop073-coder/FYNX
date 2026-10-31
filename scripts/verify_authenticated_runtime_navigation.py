@@ -1596,6 +1596,39 @@ def capture_wallet_from_features(prefix:str):
         else:
             result_message="Wallet result was tapped, but its title, Balance details and money explanation did not appear."
 
+    action_screens_captured = False
+    if wallet_opened:
+        # Capture the real Add Money screen and provider-generated account state.
+        add_money_xml = tap_control(
+            wallet_xml, ["Add money"], "wallet-add-money",
+            ["Dedicated bank transfer", "Debit card", "USSD and other methods"]
+        )
+        if add_money_xml:
+            (ROOT/"authenticated-wallet-add-money.xml").write_text(add_money_xml+chr(10),encoding="utf-8")
+            transfer_xml = tap_control(
+                add_money_xml, ["Dedicated bank transfer"], "wallet-bank-transfer",
+                ["Account number not assigned yet"]
+            )
+            if transfer_xml:
+                (ROOT/"authenticated-wallet-bank-transfer.xml").write_text(transfer_xml+chr(10),encoding="utf-8")
+                add_money_return = tap_control(
+                    transfer_xml, ["Back to Wallet"], "wallet-transfer-back",
+                    ["Dedicated bank transfer"]
+                )
+                if add_money_return:
+                    home_after_add = tap_control(
+                        add_money_return, ["Back to Wallet"], "wallet-add-back-home",
+                        ["Balance details", "Understand your money"]
+                    )
+                    if home_after_add:
+                        withdraw_xml = tap_control(
+                            home_after_add, ["Withdraw"], "wallet-withdraw",
+                            ["Withdraw Money", "AVAILABLE BALANCE"]
+                        )
+                        if withdraw_xml:
+                            (ROOT/"authenticated-wallet-withdraw.xml").write_text(withdraw_xml+chr(10),encoding="utf-8")
+                            action_screens_captured = True
+
     # The runtime runner starts a separate Status creator check immediately after
     # this function. Restore Home on both pass and fail so Wallet/keyboard state
     # cannot contaminate the next journey.
@@ -1604,7 +1637,9 @@ def capture_wallet_from_features(prefix:str):
         return False, result_message+" Home could not be restored after Wallet capture."
     if not wallet_opened:
         return False, result_message
-    return True, result_message
+    if not action_screens_captured:
+        return False, result_message+" Add Money, bank-transfer and Withdraw screenshots were not all captured."
+    return True, result_message+" Also captured the real Add Money, bank-transfer readiness and Withdraw screens."
 
 
 # Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an
