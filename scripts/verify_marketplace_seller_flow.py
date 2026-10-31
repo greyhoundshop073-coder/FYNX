@@ -534,7 +534,8 @@ checks.append(
     ("My Shop profile fields remain locked while saved shop details load, preventing an in-progress edit from being overwritten",
      shop_profile_ui.count("enabled = !shopLoading && !shopSaving") == 5
      and shop_profile_ui.count("OutlinedTextField(") == 4
-     and 'enabled = !shopLoading && !shopSaving, modifier = Modifier.fillMaxWidth(), singleLine = true' in shop_profile_ui)
+     and all("enabled = !shopLoading && !shopSaving)" in line for line in shop_profile_ui.splitlines() if "OutlinedTextField(" in line)
+     and "enabled = !shopLoading && !shopSaving && shopName.trim().length >= 2" in shop_profile_ui)
 )
 
 failed = [name for name, ok in checks if not ok]
