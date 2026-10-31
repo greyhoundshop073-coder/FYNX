@@ -15,6 +15,7 @@ def check(name, ok):
     checks.append((name, bool(ok)))
 
 server = read("backend/server.js")
+database_pool = read("backend/databasePool.js")
 client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
 token = read("app/src/main/java/com/fynx/app/ui/FynxSecureTokenStore.kt")
 auth = read("app/src/main/java/com/fynx/app/ui/FynxAuthStore.kt")
@@ -50,7 +51,7 @@ check("request bodies are bounded",
 check("endpoint rate limits remain active",
       all(x in server for x in ['rateLimit("auth"', 'rateLimit("assistant"', 'rateLimit("media"', 'rateLimit("messages"']))
 check("database timeouts remain bounded",
-      all(x in server for x in ["connectionTimeoutMillis", "statement_timeout", "query_timeout"]))
+      all(x in database_pool for x in ["DB_POOL_MAX", "maximumConnections", "min: 0", "connectionTimeoutMillis", "statement_timeout", "query_timeout"]))
 check("security headers remain enabled",
       all(x in server for x in ["X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options", "Strict-Transport-Security"]))
 check("secure token storage uses Android Keystore",
