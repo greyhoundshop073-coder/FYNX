@@ -585,17 +585,17 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         time.sleep(0.8)
         return dump_ui(f"{prefix}-camera-return-home.xml") or composer_xml
 
-    # Wait for CameraX to deliver frames before evaluating the preview.
+    # The app opens on the front lens, which is software-emulated in CI. Capture its
+    # real UI state and controls, then switch to the rear virtual-scene camera for image checks.
     time.sleep(2.5)
-    camera_xml = dump_ui(f"{prefix}-camera-live-preview.xml") or camera_xml
-    screenshot(f"{prefix}-camera-live-preview.png")
+    camera_xml = dump_ui(f"{prefix}-camera-live-preview-front.xml") or camera_xml
+    screenshot(f"{prefix}-camera-live-preview-front.png")
     (ROOT / f"{prefix}-camera-runtime-device-camera.txt").write_text(
         (run("adb", "shell", "dumpsys", "media.camera", timeout=15).stdout or "Camera service dump unavailable") + chr(10),
         encoding="utf-8"
     )
-    verify_camera_image_signal(f"{prefix}-camera-live-preview.png", (60, 210, 660, 1480), prefix + " live preview")
-    verify_camera_controls_fit_safe_area(camera_xml, ["Effects", "Take photo", "Gallery"], prefix + " live camera")
-    (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + chr(10), encoding="utf-8")
+    verify_camera_controls_fit_safe_area(camera_xml, ["Effects", "Take photo", "Gallery"], prefix + " front live camera")
+    (ROOT / f"{prefix}-camera-live-preview-front.xml").write_text(camera_xml + chr(10), encoding="utf-8")
     missing_live = [
         label for label in ["Switch front/back camera", "Effects", "Gallery", "Take photo"]
         if not find_control(camera_xml, [label])
@@ -604,32 +604,6 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         FAILURES.append(prefix + ": live camera missing visible controls: " + ", ".join(missing_live))
     else:
         report.append("- PASS clean live camera shows the compact toolbar, Effects shortcut, shutter and Gallery shortcut")
-
-    # TikTok-style flow: effects live in a deliberate tray opened from the shutter row,
-    # not four permanently stacked lists that reduce the preview area.
-    tray_xml = tap_control(
-        camera_xml, ["Effects"], f"{prefix}-camera-effects-tray",
-        ["Looks", "Face FX", "Background", "AI Studio"]
-    )
-    if tray_xml and all(find_control(tray_xml, [label]) for label in ["Looks", "Face FX", "Background", "AI Studio"]):
-        report.append("- PASS Effects opens one compact category tray above the separate shutter row")
-        screenshot(f"{prefix}-camera-effects-tray.png")
-        verify_camera_image_signal(f"{prefix}-camera-effects-tray.png", (60, 210, 660, 1000), prefix + " effects tray preview")
-        (ROOT / f"{prefix}-camera-effects-tray.xml").write_text(tray_xml + chr(10), encoding="utf-8")
-        camera_xml = tray_xml
-    else:
-        FAILURES.append(prefix + ": Effects shortcut did not open the four-tab effects tray")
-
-    # Face FX stays inside the single tray; open it to prove the actual tracked effects remain reachable.
-    face_fx_xml = tap_control(
-        camera_xml, ["Face FX"], f"{prefix}-camera-face-fx-category", ["Cute Ears"]
-    )
-    if face_fx_xml and find_control(face_fx_xml, ["Cute Ears"]):
-        report.append("- PASS Face FX category exposes its tracked effects without stacking every tool row on the camera")
-        screenshot(f"{prefix}-camera-face-fx-category.png")
-        camera_xml = face_fx_xml
-    else:
-        FAILURES.append(prefix + ": opening the Face FX category did not expose the Cute Ears effect")
 
     # This screen starts on the front lens. Switch to the rear lens, test the torch there,
     # and return to the front lens before the photo flow; the test labels match the real lens.
@@ -683,6 +657,49 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
     else:
         report.append("- PASS front/back camera switching returned to a usable preview; flash was checked on the rear lens")
+
+    # Return to the rear camera after proving both lenses. The Pixel emulator's
+    # rear virtual-scene source is the visual fixture used for photo/video pixel checks.
+    rear_switch = find_control(camera_xml, ["Switch front/back camera"])
+    if not rear_switch:
+        FAILURES.append(prefix + ": rear-camera control was unavailable after switching both lenses")
+    else:
+        _, rear_x, rear_y = rear_switch
+        run("adb", "shell", "input", "tap", str(rear_x), str(rear_y))
+        time.sleep(1.6)
+        camera_xml = dump_ui(f"{prefix}-camera-live-preview.xml") or camera_xml
+        if find_control(camera_xml, ["Camera could not start", "No camera is available"]):
+            FAILURES.append(prefix + ": rear virtual-scene camera could not start")
+        else:
+            screenshot(f"{prefix}-camera-live-preview.png")
+            verify_camera_image_signal(f"{prefix}-camera-live-preview.png", (60, 210, 660, 1480), prefix + " rear live preview")
+            verify_camera_controls_fit_safe_area(camera_xml, ["Effects", "Take photo", "Gallery"], prefix + " rear live camera")
+            (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + chr(10), encoding="utf-8")
+    # TikTok-style flow: effects live in a deliberate tray opened from the shutter row,
+    # not four permanently stacked lists that reduce the preview area.
+    tray_xml = tap_control(
+        camera_xml, ["Effects"], f"{prefix}-camera-effects-tray",
+        ["Looks", "Face FX", "Background", "AI Studio"]
+    )
+    if tray_xml and all(find_control(tray_xml, [label]) for label in ["Looks", "Face FX", "Background", "AI Studio"]):
+        report.append("- PASS Effects opens one compact category tray above the separate shutter row")
+        screenshot(f"{prefix}-camera-effects-tray.png")
+        verify_camera_image_signal(f"{prefix}-camera-effects-tray.png", (60, 210, 660, 1000), prefix + " effects tray preview")
+        (ROOT / f"{prefix}-camera-effects-tray.xml").write_text(tray_xml + chr(10), encoding="utf-8")
+        camera_xml = tray_xml
+    else:
+        FAILURES.append(prefix + ": Effects shortcut did not open the four-tab effects tray")
+
+    # Face FX stays inside the single tray; open it to prove the actual tracked effects remain reachable.
+    face_fx_xml = tap_control(
+        camera_xml, ["Face FX"], f"{prefix}-camera-face-fx-category", ["Cute Ears"]
+    )
+    if face_fx_xml and find_control(face_fx_xml, ["Cute Ears"]):
+        report.append("- PASS Face FX category exposes its tracked effects without stacking every tool row on the camera")
+        screenshot(f"{prefix}-camera-face-fx-category.png")
+        camera_xml = face_fx_xml
+    else:
+        FAILURES.append(prefix + ": opening the Face FX category did not expose the Cute Ears effect")
 
     # Open the Android system photo picker, verify that picker UI actually appeared, then back out.
     gallery_xml = tap_control(camera_xml, ["Gallery"], f"{prefix}-camera-gallery", None)
