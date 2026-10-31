@@ -1501,11 +1501,49 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 screenshot("authenticated-marketplace-product-detail.png")
                 (ROOT/"authenticated-marketplace-product-detail.xml").write_text(detail_xml+"\n", encoding="utf-8")
                 report.append("- PASS: opened a real visible Marketplace listing and captured Product Details.")
+
+                # Enter the buyer's real checkout form only. Never request a quote or create an order.
+                checkout_xml = tap_control(
+                    detail_xml, ["Buy now"], "marketplace-buyer-checkout-form", ["Checkout"]
+                )
+                if checkout_xml:
+                    screenshot("authenticated-marketplace-buyer-checkout.png")
+                    (ROOT/"authenticated-marketplace-buyer-checkout.xml").write_text(checkout_xml+"\n", encoding="utf-8")
+                    if find_control(checkout_xml, ["Delivery address"]) and find_control(checkout_xml, ["City"]) and find_control(checkout_xml, ["State"]):
+                        checkout_validation_xml = tap_control(
+                            checkout_xml,
+                            ["Review exact total"],
+                            "marketplace-buyer-delivery-validation",
+                            ["Full name, phone, street address, city and state are required for delivery."],
+                        )
+                        if checkout_validation_xml:
+                            screenshot("authenticated-marketplace-delivery-validation.png")
+                            (ROOT/"authenticated-marketplace-delivery-validation.xml").write_text(checkout_validation_xml+"\n", encoding="utf-8")
+                            report.append("- PASS: delivery checkout form opened and its missing name/phone/address/city/state validation appeared without contacting the payment provider or creating an order.")
+                            checkout_xml = checkout_validation_xml
+                        else:
+                            report.append("- BLOCKED: delivery form opened, but blank destination validation was not confirmed; no quote was submitted.")
+                    else:
+                        report.append("- PASS: captured the real pickup-only or non-delivery checkout form; no quote was requested.")
+                    closed_checkout = tap_control(
+                        checkout_xml, ["Cancel"], "marketplace-buyer-checkout-close", ["Search products, sellers or categories"]
+                    )
+                    if closed_checkout:
+                        marketplace_xml = closed_checkout
+                    else:
+                        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                        time.sleep(0.8)
+                        marketplace_xml = dump_ui("marketplace-after-checkout.xml") or marketplace_xml
+                else:
+                    report.append("- BLOCKED: real product detail opened, but Buy now did not expose the checkout form.")
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(0.8)
+                    marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
             else:
                 report.append("- BLOCKED: a visible priced card was present, but Product Details markers were not confirmed; no detail screenshot is claimed.")
-            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-            time.sleep(0.8)
-            marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.8)
+                marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
         else:
             report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
 
