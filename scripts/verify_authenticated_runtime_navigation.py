@@ -798,6 +798,25 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     # cold API-35 emulator. Do not treat a stale ActivityRecord anywhere in the task stack
     # as proof that it is visible, and never press Back while its launch is still pending.
     gallery_recovered = False
+    camera_activity_state = run(
+        "adb", "shell", "dumpsys", "activity", "activities"
+    ).stdout or ""
+    camera_activity_line = next(
+        (
+            line.strip() for line in camera_activity_state.splitlines()
+            if "topResumedActivity" in line and PACKAGE in line
+        ),
+        ""
+    )
+    camera_activity_token = (
+        camera_activity_line.split("ActivityRecord{", 1)[1].split(" ", 1)[0]
+        if "ActivityRecord{" in camera_activity_line else ""
+    )
+    (ROOT / f"{prefix}-camera-before-gallery-activity.txt").write_text(
+        camera_activity_state + chr(10), encoding="utf-8"
+    )
+    if not camera_activity_token:
+        FAILURES.append(prefix + ": could not identify the active FYNX ActivityRecord before Gallery")
     gallery_control = find_control(camera_xml, ["Gallery"])
     gallery_screenshot = ROOT / f"{prefix}-camera-gallery-picker.png"
     if gallery_control:
@@ -817,6 +836,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
             camera_returned = False
             system_anr_seen = False
+            activity_replaced_seen = False
             for attempt in range(24):
                 time.sleep(0.75)
                 latest_camera_xml = dump_ui(f"{prefix}-camera-after-gallery-back-{attempt}.xml")
@@ -847,11 +867,24 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                         ):
                             break
                         time.sleep(0.5)
-                    app_activity_resumed = any(
-                        "topResumedActivity" in line and PACKAGE in line
-                        for line in activity_state.splitlines()
+                    resumed_activity_line = next(
+                        (
+                            line.strip() for line in activity_state.splitlines()
+                            if "topResumedActivity" in line and PACKAGE in line
+                        ),
+                        ""
+                    )
+                    app_activity_resumed = bool(resumed_activity_line)
+                    resumed_activity_token = (
+                        resumed_activity_line.split("ActivityRecord{", 1)[1].split(" ", 1)[0]
+                        if "ActivityRecord{" in resumed_activity_line else ""
                     )
                     if not app_activity_resumed:
+                        continue
+                    if not camera_activity_token or not resumed_activity_token:
+                        continue
+                    if resumed_activity_token != camera_activity_token:
+                        activity_replaced_seen = True
                         continue
                     camera_xml = latest_camera_xml
                     camera_returned = True
@@ -877,6 +910,10 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             else:
                 if system_anr_seen:
                     FAILURES.append(prefix + ": Android system process stopped responding while closing the Photo Picker; no FYNX crash was observed")
+                elif activity_replaced_seen:
+                    FAILURES.append(prefix + ": FYNX returned from Gallery in a different ActivityRecord; the original camera activity was not retained")
+                elif not camera_activity_token:
+                    FAILURES.append(prefix + ": Gallery return could not be certified against the original FYNX ActivityRecord")
                 else:
                     FAILURES.append(prefix + ": Photo Picker did not return to the live camera after cancellation")
                 screenshot(f"{prefix}-camera-after-gallery-back-failed.png")
