@@ -471,7 +471,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     OutlinedTextField(value = shopName, onValueChange = { shopName = it.take(120); shopMessage = null; shopError = null }, label = { Text("Shop name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopLoading && !shopSaving)
                     OutlinedTextField(value = shopDescription, onValueChange = { shopDescription = it.take(800); shopMessage = null; shopError = null }, label = { Text("About your shop (optional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !shopLoading && !shopSaving)
                     OutlinedTextField(value = shopLocation, onValueChange = { shopLocation = it.take(160); shopMessage = null; shopError = null }, label = { Text("Shop location (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopLoading && !shopSaving)
-                    OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null; shopError = null }, label = { Text("Public shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopLoading && !shopSaving)
+                    OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null; shopError = null }, label = { Text("Private shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopLoading && !shopSaving)
                     shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
                     Button(
                         onClick = {
