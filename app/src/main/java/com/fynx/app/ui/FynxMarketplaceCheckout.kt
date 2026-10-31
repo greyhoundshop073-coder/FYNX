@@ -504,8 +504,8 @@ internal fun FynxMarketplaceCheckoutDialog(
             message = quantityError
             return
         }
-        if (fulfillment == "DELIVERY" && (name.isBlank() || phone.isBlank() || address.isBlank())) {
-            message = "Name, phone and delivery address are required."
+        if (fulfillment == "DELIVERY" && (name.isBlank() || phone.isBlank() || address.isBlank() || city.isBlank() || state.isBlank())) {
+            message = "Full name, phone, street address, city and state are required for delivery."
             return
         }
         busy = true
