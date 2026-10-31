@@ -141,6 +141,97 @@ internal suspend fun applyFynxVideoEdits(context: Context, sourceUri: Uri, style
         }
     }
 
+
+/**
+ * Verify the finished MP4 before the editor accepts the export. The check decodes frames, keeps
+ * the source video track and any source audio track, and confirms a non-Natural look changed pixels.
+ */
+internal fun verifyFynxVideoEditOutput(sourceUri: Uri, outputUri: Uri, style: CameraVideoStyle) {
+    val sourceFile = sourceUri.path?.let(::File) ?: error("The original video file is unavailable.")
+    val outputFile = outputUri.path?.let(::File) ?: error("The edited video file is unavailable.")
+    require(sourceFile.isFile && sourceFile.length() > 1024L) { "The original video file is unavailable." }
+    require(outputFile.isFile && outputFile.length() > 1024L) { "Video export produced an empty file." }
+
+    fun trackTypes(file: File): Set<String> {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            val types = mutableSetOf<String>()
+            for (index in 0 until extractor.trackCount) {
+                val mime = extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME).orEmpty()
+                when {
+                    mime.startsWith("video/") -> types += "video"
+                    mime.startsWith("audio/") -> types += "audio"
+                }
+            }
+            types
+        } finally {
+            extractor.release()
+        }
+    }
+
+    val sourceTracks = trackTypes(sourceFile)
+    val outputTracks = trackTypes(outputFile)
+    require("video" in sourceTracks && "video" in outputTracks) {
+        "Video export did not produce a readable video track."
+    }
+    require("audio" !in sourceTracks || "audio" in outputTracks) {
+        "Video export did not preserve the original audio track."
+    }
+
+    fun firstUsableFrame(file: File): android.graphics.Bitmap {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+            val atUs = durationMs.coerceAtMost(2_000L) * 500L
+            retriever.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: error("Video export could not decode a preview frame.")
+        } finally {
+            retriever.release()
+        }
+    }
+
+    val sourceFrame = firstUsableFrame(sourceFile)
+    val outputFrame = firstUsableFrame(outputFile)
+    try {
+        require(outputFrame.width > 0 && outputFrame.height > 0) {
+            "Video export produced an invalid preview frame."
+        }
+        if (style != CameraVideoStyle.NATURAL) {
+            val width = minOf(sourceFrame.width, outputFrame.width)
+            val height = minOf(sourceFrame.height, outputFrame.height)
+            val stepX = max(1, width / 32)
+            val stepY = max(1, height / 32)
+            var totalDifference = 0L
+            var samples = 0
+            var y = 0
+            while (y < height) {
+                var x = 0
+                while (x < width) {
+                    val before = sourceFrame.getPixel(x, y)
+                    val after = outputFrame.getPixel(x, y)
+                    totalDifference += kotlin.math.abs(android.graphics.Color.red(before) - android.graphics.Color.red(after))
+                    totalDifference += kotlin.math.abs(android.graphics.Color.green(before) - android.graphics.Color.green(after))
+                    totalDifference += kotlin.math.abs(android.graphics.Color.blue(before) - android.graphics.Color.blue(after))
+                    samples++
+                    x += stepX
+                }
+                y += stepY
+            }
+            val meanDifference = if (samples == 0) 0.0 else totalDifference.toDouble() / (samples * 3.0)
+            require(meanDifference > 0.5) {
+                "The selected ${style.label} style did not visibly change the exported video."
+            }
+        }
+    } finally {
+        sourceFrame.recycle()
+        outputFrame.recycle()
+    }
+}
+
 internal suspend fun generateFynxVideoTranscript(context: Context, videoUri: Uri): String {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) error("Automatic captions need Android 12 or newer on this device.")
     val video = videoUri.path?.let(::File) ?: error("The video file is unavailable.")

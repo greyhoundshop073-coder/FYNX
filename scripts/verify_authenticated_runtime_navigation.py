@@ -482,6 +482,91 @@ def tap_control_permission_aware(
     (ROOT / (name + "-timeout.xml")).write_text(latest + chr(10), encoding="utf-8")
     return ""
 
+
+def _node_bounds(node):
+    try:
+        left_top, right_bottom = node.attrib.get("bounds", "").split("][", 1)
+        left, top = map(int, left_top.strip("[]").split(","))
+        right, bottom = map(int, right_bottom.strip("[]").split(","))
+        return left, top, right, bottom
+    except (ValueError, IndexError):
+        return None
+
+def verify_camera_controls_fit_safe_area(xml_text: str, labels: list[str], prefix: str) -> bool:
+    """Reject camera/editor actions that sit under the Android navigation gesture area."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        FAILURES.append(prefix + ": camera action bounds could not be parsed")
+        return False
+    root_node = next(root.iter("node"), None)
+    root_bounds = _node_bounds(root_node) if root_node is not None else None
+    if not root_bounds:
+        FAILURES.append(prefix + ": camera screen bounds were missing from UIAutomator")
+        return False
+    density_text = run("adb", "shell", "wm", "density").stdout or ""
+    density_match = re.search(r"(?:Override|Physical) density:\s*(\d+)", density_text)
+    density = int(density_match.group(1)) / 160.0 if density_match else 1.0
+    safe_bottom = root_bounds[3] - max(48, int(round(28 * density)))
+    all_fit = True
+    for label in labels:
+        target = _find_control_node(root, [label.casefold()])
+        bounds = _node_bounds(target) if target is not None else None
+        if not bounds:
+            FAILURES.append(prefix + f": {label} action had no visible bounds")
+            all_fit = False
+        elif bounds[1] < root_bounds[1] or bounds[3] > safe_bottom:
+            FAILURES.append(
+                prefix + f": {label} action extends into the Android navigation safe area "
+                f"(bottom={bounds[3]}, safe-bottom={safe_bottom})"
+            )
+            all_fit = False
+    if all_fit:
+        report.append("- PASS camera/editor actions remain fully above the navigation safe area: " + ", ".join(labels))
+    return all_fit
+
+def verify_camera_image_signal(filename: str, crop_box: tuple[int, int, int, int], prefix: str) -> bool:
+    """Check the preview region contains image detail rather than a blank frame or flat test blocks."""
+    try:
+        from PIL import Image
+    except ImportError:
+        FAILURES.append(prefix + ": Pillow is unavailable, so the captured camera image could not be checked")
+        return False
+    image_path = ROOT / filename
+    if not image_path.is_file():
+        FAILURES.append(prefix + ": camera preview screenshot was not saved")
+        return False
+    try:
+        with Image.open(image_path) as screenshot_image:
+            image = screenshot_image.convert("RGB")
+            left, top, right, bottom = crop_box
+            left = max(0, min(image.width - 1, left))
+            top = max(0, min(image.height - 1, top))
+            right = max(left + 1, min(image.width, right))
+            bottom = max(top + 1, min(image.height, bottom))
+            sample = image.crop((left, top, right, bottom)).resize((64, 64))
+            pixels = list(sample.getdata())
+            unique_colours = len(set(pixels))
+            non_dark = sum(1 for red, green, blue in pixels if red + green + blue > 48)
+            coloured = sum(1 for red, green, blue in pixels if max(red, green, blue) - min(red, green, blue) > 12)
+            non_dark_ratio = non_dark / max(1, len(pixels))
+            coloured_ratio = coloured / max(1, len(pixels))
+    except Exception as failure:
+        FAILURES.append(prefix + ": camera preview image could not be decoded: " + str(failure)[:180])
+        return False
+    if unique_colours < 120 or non_dark_ratio < 0.08 or coloured_ratio < 0.05:
+        FAILURES.append(
+            prefix + f": preview region is blank or corrupted "
+            f"(unique colours={unique_colours}, non-dark={non_dark_ratio:.2f}, colour-detail={coloured_ratio:.2f})"
+        )
+        return False
+    report.append(
+        "- PASS camera preview image contains real visual detail "
+        f"(unique colours={unique_colours}, non-dark={non_dark_ratio:.2f})"
+    )
+    return True
+
+
 def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     """Exercise the real camera preview/photo editor and safe controls without publishing a post."""
     composer_xml = tap_control(
@@ -500,7 +585,16 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         time.sleep(0.8)
         return dump_ui(f"{prefix}-camera-return-home.xml") or composer_xml
 
+    # Wait for CameraX to deliver frames before evaluating the preview.
+    time.sleep(2.5)
+    camera_xml = dump_ui(f"{prefix}-camera-live-preview.xml") or camera_xml
     screenshot(f"{prefix}-camera-live-preview.png")
+    (ROOT / f"{prefix}-camera-runtime-device-camera.txt").write_text(
+        (run("adb", "shell", "dumpsys", "media.camera", timeout=15).stdout or "Camera service dump unavailable") + chr(10),
+        encoding="utf-8"
+    )
+    verify_camera_image_signal(f"{prefix}-camera-live-preview.png", (60, 210, 660, 1480), prefix + " live preview")
+    verify_camera_controls_fit_safe_area(camera_xml, ["Effects", "Take photo", "Gallery"], prefix + " live camera")
     (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + chr(10), encoding="utf-8")
     missing_live = [
         label for label in ["Switch front/back camera", "Effects", "Gallery", "Take photo"]
@@ -520,6 +614,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     if tray_xml and all(find_control(tray_xml, [label]) for label in ["Looks", "Face FX", "Background", "AI Studio"]):
         report.append("- PASS Effects opens one compact category tray above the separate shutter row")
         screenshot(f"{prefix}-camera-effects-tray.png")
+        verify_camera_image_signal(f"{prefix}-camera-effects-tray.png", (60, 210, 660, 1000), prefix + " effects tray preview")
         (ROOT / f"{prefix}-camera-effects-tray.xml").write_text(tray_xml + chr(10), encoding="utf-8")
         camera_xml = tray_xml
     else:
@@ -538,7 +633,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
     # This screen starts on the front lens. Switch to the rear lens, test the torch there,
     # and return to the front lens before the photo flow; the test labels match the real lens.
-    for lens_step in ("back", "front"):
+    for lens_step in ("front", "back"):
         switch = find_control(camera_xml, ["Switch front/back camera"])
         if not switch:
             FAILURES.append(prefix + f": camera switch disappeared while testing the {lens_step} lens")
@@ -640,6 +735,8 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         return camera_return_to_home(camera_xml, prefix + "-photo-capture-failed")
 
     screenshot(f"{prefix}-camera-photo-editor-initial.png")
+    verify_camera_image_signal(f"{prefix}-camera-photo-editor-initial.png", (60, 100, 770, 1080), prefix + " photo editor preview")
+    verify_camera_controls_fit_safe_area(editor_xml, ["Retake", "Rotate", "Send"], prefix + " photo editor")
     (ROOT / f"{prefix}-camera-photo-editor-initial.xml").write_text(editor_xml + chr(10), encoding="utf-8")
     missing_editor = [
         label for label in ["Looks", "Face FX", "Background", "AI Studio", "Retake", "Send"]
@@ -840,6 +937,8 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     else:
         report.append("- NOTE app cache video could not be copied out for stream-level verification")
     screenshot(f"{prefix}-camera-video-editor-before-effects.png")
+    verify_camera_image_signal(f"{prefix}-camera-video-editor-before-effects.png", (60, 100, 770, 1080), prefix + " video editor preview")
+    verify_camera_controls_fit_safe_area(editor, ["Retake", "Send"], prefix + " video editor")
     missing = [
         label for label in ["Video styles", "Cinematic", "Retake", "Send"]
         if not find_control(editor, [label])
@@ -903,6 +1002,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         editor = dump_ui(f"{prefix}-camera-video-style-selected.xml") or editor
 
     apply_button = find_control(editor, ["Apply style / captions"])
+    processed_xml = ""
     if not apply_button:
         FAILURES.append(prefix + ": video style apply action was not reachable")
     else:
@@ -911,7 +1011,6 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         run("adb", "shell", "input", "tap", str(ax), str(ay))
         apply_deadline = time.monotonic() + 135.0
         applying_seen = False
-        processed_xml = ""
         while time.monotonic() < apply_deadline:
             time.sleep(0.8)
             processed_xml = dump_ui(f"{prefix}-camera-video-effect-processing.xml") or processed_xml
@@ -973,6 +1072,70 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                         report.append("- PASS processed MP4 contains a readable video stream; audio track comparison was inconclusive")
                 else:
                     report.append("- NOTE ffprobe is not available; output file was produced but audio-track preservation could not be independently checked")
+
+
+    # Re-run the original source through every remaining video treatment. The app verifies each
+    # decoded output frame and preserves the source audio track before accepting the export.
+    for style_label, slug in [
+        ("Warm Film", "warm-film"),
+        ("Vintage", "vintage"),
+        ("B&W", "black-and-white"),
+        ("Vivid", "vivid"),
+    ]:
+        current_editor = dump_ui(f"{prefix}-camera-video-{slug}-editor.xml") or processed_xml
+        style_node = find_control(current_editor, [style_label])
+        if not style_node:
+            run("adb", "shell", "input", "swipe", "1220", "2360", "300", "2360", "420")
+            time.sleep(0.5)
+            current_editor = dump_ui(f"{prefix}-camera-video-{slug}-styles-scroll.xml") or current_editor
+            style_node = find_control(current_editor, [style_label])
+        if not style_node:
+            FAILURES.append(prefix + f": video style {style_label} was not reachable in the style carousel")
+            continue
+        _, style_x, style_y = style_node
+        run("adb", "shell", "input", "tap", str(style_x), str(style_y))
+        time.sleep(0.35)
+        current_editor = dump_ui(f"{prefix}-camera-video-{slug}-selected.xml") or current_editor
+        apply_node = find_control(current_editor, ["Apply style / captions"])
+        if not apply_node:
+            FAILURES.append(prefix + f": video style {style_label} had no reachable Apply action")
+            continue
+        _, apply_x, apply_y = apply_node
+        run("adb", "logcat", "-c")
+        run("adb", "shell", "input", "tap", str(apply_x), str(apply_y))
+        deadline = time.monotonic() + 100.0
+        styled_xml = ""
+        while time.monotonic() < deadline:
+            time.sleep(0.7)
+            styled_xml = dump_ui(f"{prefix}-camera-video-{slug}-processing.xml") or styled_xml
+            if find_control(styled_xml, ["Processing video…"]):
+                continue
+            if find_control(styled_xml, ["Apply style / captions"]) and find_control(styled_xml, ["Retake"]) and find_control(styled_xml, ["Send"]):
+                time.sleep(0.6)
+                styled_xml = dump_ui(f"{prefix}-camera-video-{slug}-complete.xml") or styled_xml
+                break
+            if find_control(styled_xml, ["The selected", "Video export produced", "Video export did not", "did not preserve", "could not decode"]):
+                break
+        if not styled_xml or find_control(styled_xml, ["Processing video…"]):
+            FAILURES.append(prefix + f": {style_label} export did not finish within 100 seconds")
+            continue
+        if not (find_control(styled_xml, ["Retake"]) and find_control(styled_xml, ["Send"])):
+            FAILURES.append(prefix + f": {style_label} export did not return to the playable editor: " + visible_marker_summary(styled_xml))
+            continue
+        edited_candidates = [
+            path for path in list_app_cache_videos()
+            if Path(path).name.startswith("fynx_video_edit_")
+        ]
+        output_path = sorted(edited_candidates)[-1] if edited_candidates else ""
+        local_output = ROOT / f"{prefix}-video-style-{slug}.mp4"
+        if not output_path or not pull_app_cache_file(output_path, local_output) or not local_output.is_file() or local_output.stat().st_size <= 1024:
+            FAILURES.append(prefix + f": {style_label} export did not leave a readable MP4 in the app cache")
+            continue
+        verify_camera_controls_fit_safe_area(styled_xml, ["Retake", "Send"], prefix + f" {style_label} video editor")
+        screenshot(f"{prefix}-camera-video-style-{slug}-output.png")
+        (ROOT / f"{prefix}-camera-video-style-{slug}-output.xml").write_text(styled_xml + chr(10), encoding="utf-8")
+        report.append(f"- PASS {style_label} exported a readable MP4; app-side decoded-frame, video-track and source-audio validation passed")
+        editor = styled_xml
 
     # Dismiss without publishing. The actual server post flow remains untouched.
     current = dump_ui(f"{prefix}-camera-video-before-return.xml") or editor

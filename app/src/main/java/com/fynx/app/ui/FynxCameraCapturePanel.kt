@@ -179,7 +179,7 @@ fun FynxCameraCapturePanel(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE; scaleType = PreviewView.ScaleType.FILL_CENTER } }
+    val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.PERFORMANCE; scaleType = PreviewView.ScaleType.FILL_CENTER } }
     val scope = rememberCoroutineScope()
     var profilePhotoId by remember { mutableStateOf<String?>(null) }
     var profileDisplayName by remember { mutableStateOf("") }
@@ -204,7 +204,7 @@ fun FynxCameraCapturePanel(
     }
     LaunchedEffect(Unit) { if (!hasCamera) permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) }
 
-    var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
+    var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
     var mode by remember(initialMode, videoNoteMode) { mutableStateOf(if (videoNoteMode) CameraMode.VIDEO else initialMode) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
@@ -331,7 +331,16 @@ fun FynxCameraCapturePanel(
             if (generation != bindGeneration || !hasCamera || pendingUri != null) return@addListener
             runCatching {
                 val provider = future.get(); val selector = CameraSelector.Builder().requireLensFacing(lens).build()
-                if (!provider.hasCamera(selector)) { error = if (lens == CameraSelector.LENS_FACING_FRONT) "Front camera is not available on this device." else "Back camera is not available on this device."; if (lens == CameraSelector.LENS_FACING_FRONT) lens = CameraSelector.LENS_FACING_BACK; return@runCatching }
+                if (!provider.hasCamera(selector)) {
+                    val fallbackLens = if (lens == CameraSelector.LENS_FACING_FRONT) CameraSelector.LENS_FACING_BACK else CameraSelector.LENS_FACING_FRONT
+                    val fallbackSelector = CameraSelector.Builder().requireLensFacing(fallbackLens).build()
+                    if (provider.hasCamera(fallbackSelector)) {
+                        lens = fallbackLens
+                        return@runCatching
+                    }
+                    error = "No camera is available on this device."
+                    return@runCatching
+                }
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
                 val targetRotation = previewView.display?.rotation ?: android.view.Surface.ROTATION_0
                 val capture = ImageCapture.Builder()
@@ -491,7 +500,13 @@ fun FynxCameraCapturePanel(
         scope.launch {
             // Media3 Transformer is main-thread confined for construction/start/callback wiring.
             // It performs export work asynchronously itself; do not invoke it from Dispatchers.IO.
-            val result = runCatching { withTimeout(120_000L) { applyFynxVideoEdits(context, source, videoStyle, videoCaptionText) } }
+            val result = runCatching {
+                withTimeout(120_000L) {
+                    val output = applyFynxVideoEdits(context, source, videoStyle, videoCaptionText)
+                    withContext(Dispatchers.IO) { verifyFynxVideoEditOutput(source, output, videoStyle) }
+                    output
+                }
+            }
             result.onSuccess { output ->
                 if (current != source) deleteUri(current)
                 pendingUri = output
@@ -548,10 +563,10 @@ fun FynxCameraCapturePanel(
                     .imePadding()
                     .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 14.dp)
+                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 46.dp)
             ) {
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
-                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.16f else 0.46f).verticalScroll(rememberScrollState())) {
+                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.14f else 0.40f).verticalScroll(rememberScrollState())) {
                 if (previewType == "image") {
                     Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Row(
@@ -855,7 +870,7 @@ fun FynxCameraCapturePanel(
                 .imePadding()
                 .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 14.dp),
+                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 46.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))
@@ -1166,7 +1181,7 @@ private data class CameraEffectOption(
  * Nine bundled portrait references rotate through the camera and captured-photo effect
  * carousels. Six original portrait illustrations extend the three existing photo references.
  */
-private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (Math.floorMod(previewStyle, 9)) {
+private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (Math.floorMod(previewStyle, 12)) {
     0 -> R.drawable.camera_effect_portrait_1
     1 -> R.drawable.camera_effect_portrait_2
     2 -> R.drawable.camera_effect_portrait_3
@@ -1175,7 +1190,10 @@ private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (Math.
     5 -> R.drawable.camera_effect_portrait_6
     6 -> R.drawable.camera_effect_portrait_7
     7 -> R.drawable.camera_effect_portrait_8
-    else -> R.drawable.camera_effect_portrait_9
+    8 -> R.drawable.camera_effect_portrait_9
+    9 -> R.drawable.camera_effect_portrait_10
+    10 -> R.drawable.camera_effect_portrait_11
+    else -> R.drawable.camera_effect_portrait_12
 }
 
 @Composable

@@ -291,6 +291,13 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_7_pro # [home-cert]
+          pre-emulator-launch-script: |
+            set -euo pipefail
+            avd_config="$(find "${ANDROID_AVD_HOME:-$HOME/.android/avd}" -maxdepth 3 -type f -name config.ini -print -quit)"
+            if [ -z "$avd_config" ]; then echo "ERROR: Android emulator AVD config was not found"; exit 1; fi
+            sed -i "/^hw.camera.back=/d; /^hw.camera.front=/d" "$avd_config"
+            printf "\nhw.camera.back=virtualscene\nhw.camera.front=emulated\n" >> "$avd_config"
+            grep "^hw.camera." "$avd_config"
           script: bash scripts/run_android_runtime_certification.sh
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'fix/camera-contrast-and-expanded-runtime-cert-20261031')) || (github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015'))))) }}

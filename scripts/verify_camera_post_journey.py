@@ -32,6 +32,11 @@ checks = [
      "def capture_camera_video_journey(" in runtime
      and '["Video"]' in runtime
      and "Cinematic" in runtime
+     and all(f'"{style}"' in runtime for style in ["Warm Film", "Vintage", "B&W", "Vivid"])
+     and "verify_camera_image_signal" in runtime
+     and "verify_camera_controls_fit_safe_area" in runtime
+     and "verifyFynxVideoEditOutput" in camera
+     and "camera-video-style-" in runtime
      and 'video_mode, ["Video FX"]' in runtime
      and "compact video style tray" in runtime
      and "list_app_cache_videos" in runtime
