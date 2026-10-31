@@ -1014,17 +1014,38 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     LaunchedEffect(listings) {
-        val sellers = listings.distinctBy { it.sellerUsername.removePrefix("@").trim().lowercase() }.take(12)
-        val reputationMap = linkedMapOf<String, FynxMarketplaceClient.SellerReputation>()
-        val photoMap = linkedMapOf<String, String?>()
+        // Product cards can show more than twelve different sellers across paged results.
+        // Load an avatar for every seller represented in the current catalogue, but keep the
+        // smaller reputation ranking request bounded to the first twelve sellers.
+        val sellers = listings.distinctBy { it.sellerUsername.removePrefix("@").trim().lowercase(Locale.US) }
+        val reputationSellers = sellers.take(12)
+        val reputationMap = sellerReputations.toMutableMap()
+        val photoMap = sellerPhotoIds.toMutableMap()
         sellers.forEach { listing ->
             val username = listing.sellerUsername.removePrefix("@").trim()
             if (username.isBlank()) return@forEach
-            FynxMarketplaceClient.sellerReputation(context, username).onSuccess { reputationMap[username.lowercase()] = it }
-            FynxProfileRemoteClient.get(context, username).onSuccess { photoMap[username.lowercase()] = it.profilePhotoMediaId }
+            val key = username.lowercase(Locale.US)
+            if (!photoMap.containsKey(key)) {
+                FynxProfileRemoteClient.cachedProfilePhotoId(context, username)?.let { cachedPhotoId ->
+                    photoMap[key] = cachedPhotoId
+                    sellerPhotoIds = photoMap.toMap()
+                }
+                FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
+                    photoMap[key] = profile.profilePhotoMediaId
+                    sellerPhotoIds = photoMap.toMap()
+                }
+            }
         }
-        sellerReputations = reputationMap
-        sellerPhotoIds = photoMap
+        reputationSellers.forEach { listing ->
+            val username = listing.sellerUsername.removePrefix("@").trim()
+            val key = username.lowercase(Locale.US)
+            if (username.isNotBlank() && !reputationMap.containsKey(key)) {
+                FynxMarketplaceClient.sellerReputation(context, username).onSuccess { reputation ->
+                    reputationMap[key] = reputation
+                    sellerReputations = reputationMap.toMap()
+                }
+            }
+        }
     }
 
     val visibleSellerListings = remember(listings, sellerReputations) {
