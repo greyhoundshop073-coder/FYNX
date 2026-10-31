@@ -701,49 +701,46 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     else:
         FAILURES.append(prefix + ": opening the Face FX category did not expose the Cute Ears effect")
 
-    # Open the Android system photo picker, verify that picker UI actually appeared, then back out.
-    gallery_xml = tap_control(camera_xml, ["Gallery"], f"{prefix}-camera-gallery", None)
-    picker_labels = ["Photos", "Albums", "Browse", "Recent", "Select photos", "Select a photo", "Photo picker"]
-    picker_text = " ".join(
-        (node.attrib.get("text") or "") + " " + (node.attrib.get("content-desc") or "")
-        for node in nodes(gallery_xml)
-    ).casefold()
-    package_names = " ".join(node.attrib.get("package", "") for node in nodes(gallery_xml)).casefold()
-    gallery_windows = run("adb", "shell", "dumpsys", "window", "windows").stdout or ""
-    gallery_activities = run("adb", "shell", "dumpsys", "activity", "activities").stdout or ""
-    gallery_system_state = (gallery_windows + chr(10) + gallery_activities).casefold()
-    picker_runtime_visible = any(token in gallery_system_state for token in [
-        "photopicker", "photo picker", "com.google.android.providers.media",
-        "com.android.providers.media"
-    ])
-    picker_accessibility_visible = (
-        any(find_control(gallery_xml, [label]) for label in picker_labels)
-        or "photo picker" in package_names
-        or "providers.media" in package_names
-    )
+    # Open the Android Photo Picker and cancel promptly. Repeated UIAutomator dumps while
+    # the external Photo Picker is foregrounded can stall the emulator's MediaProvider service.
+    gallery_control = find_control(camera_xml, ["Gallery"])
     gallery_screenshot = ROOT / f"{prefix}-camera-gallery-picker.png"
-    screenshot(f"{prefix}-camera-gallery-picker.png")
-    (ROOT / f"{prefix}-camera-gallery-picker.xml").write_text(gallery_xml + chr(10), encoding="utf-8")
-    underlying_camera_still_alive = (
-        find_control(gallery_xml, ["Gallery"]) is not None
-        and find_control(gallery_xml, ["Switch front/back camera"]) is not None
-    )
-    if picker_accessibility_visible or picker_runtime_visible:
-        report.append("- PASS Gallery opened Android's real photo-picker UI")
-    elif underlying_camera_still_alive and gallery_screenshot.is_file() and gallery_screenshot.stat().st_size > 30000:
-        report.append("- PASS Gallery launch captured the Android picker surface; API 35 UIAutomator retained the underlying FYNX Compose tree")
-        report.append("- NOTE Gallery proof uses the actual screencap because this emulator's picker overlay is not exported in its accessibility hierarchy")
+    if gallery_control:
+        _, gallery_x, gallery_y = gallery_control
+        run("adb", "shell", "input", "tap", str(gallery_x), str(gallery_y))
+        time.sleep(1.2)
+        screenshot(f"{prefix}-camera-gallery-picker.png")
+        gallery_windows = run("adb", "shell", "dumpsys", "window", "windows").stdout or ""
+        gallery_activities = run("adb", "shell", "dumpsys", "activity", "activities").stdout or ""
+        gallery_system_state = (gallery_windows + chr(10) + gallery_activities).casefold()
+        picker_runtime_visible = any(token in gallery_system_state for token in [
+            "photopicker", "photo picker", "com.google.android.providers.media",
+            "com.android.providers.media"
+        ])
+        (ROOT / f"{prefix}-camera-gallery-picker.xml").write_text(camera_xml + chr(10), encoding="utf-8")
+        if picker_runtime_visible:
+            report.append("- PASS Gallery opened Android's real photo-picker UI")
+        else:
+            FAILURES.append(prefix + ": Gallery did not place Android's system photo picker in the foreground")
+        # Cancel immediately after proving the system picker became the foreground activity.
+        run("adb", "shell", "input", "keyevent", "4")
+        camera_returned = False
+        for attempt in range(8):
+            time.sleep(0.35)
+            latest_camera_xml = dump_ui(f"{prefix}-camera-after-gallery-back-{attempt}.xml")
+            if (find_control(latest_camera_xml, ["Switch front/back camera"])
+                    and find_control(latest_camera_xml, ["Take photo"])):
+                camera_xml = latest_camera_xml
+                camera_returned = True
+                break
+        if camera_returned:
+            report.append("- PASS Gallery cancellation returned to the live camera without loading/publishing media")
+            (ROOT / f"{prefix}-camera-after-gallery-back.xml").write_text(camera_xml + chr(10), encoding="utf-8")
+        else:
+            FAILURES.append(prefix + ": backing out of Gallery did not return to the camera preview")
+            screenshot(f"{prefix}-camera-after-gallery-back-failed.png")
     else:
-        FAILURES.append(prefix + ": Gallery did not expose the system picker in window/activity state or a valid overlay screencap: " + visible_marker_summary(gallery_xml))
-        screenshot(f"{prefix}-camera-gallery-picker-missing.png")
-        (ROOT / f"{prefix}-camera-gallery-picker-missing.xml").write_text(gallery_xml + chr(10), encoding="utf-8")
-    run("adb", "shell", "input", "keyevent", "4")
-    time.sleep(0.9)
-    camera_xml = dump_ui(f"{prefix}-camera-after-gallery-back.xml") or gallery_xml
-    if find_control(camera_xml, ["Switch front/back camera"]) and find_control(camera_xml, ["Take photo"]):
-        report.append("- PASS Gallery cancellation returned to the live camera without loading/publishing media")
-    else:
-        FAILURES.append(prefix + ": backing out of Gallery did not return to the camera preview")
+        FAILURES.append(prefix + ": Gallery control was not available before opening the system picker")
 
     editor_xml = tap_control(
         camera_xml, ["Take photo"], f"{prefix}-camera-photo-capture", ["Send"]

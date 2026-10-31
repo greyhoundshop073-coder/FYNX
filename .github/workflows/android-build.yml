@@ -292,7 +292,7 @@ jobs:
           arch: x86_64
           profile: pixel_7_pro # [home-cert]
           pre-emulator-launch-script: |
-            set -euo pipefail
+            set -eu
             avd_config="$(find "${ANDROID_AVD_HOME:-$HOME/.android/avd}" -maxdepth 3 -type f -name config.ini -print -quit)"
             if [ -z "$avd_config" ]; then echo "ERROR: Android emulator AVD config was not found"; exit 1; fi
             sed -i "/^hw.camera.back=/d; /^hw.camera.front=/d" "$avd_config"

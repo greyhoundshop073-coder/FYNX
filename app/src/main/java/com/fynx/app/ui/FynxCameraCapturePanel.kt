@@ -563,7 +563,7 @@ fun FynxCameraCapturePanel(
                     .imePadding()
                     .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 46.dp)
+                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 76.dp)
             ) {
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
                 Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.14f else 0.40f).verticalScroll(rememberScrollState())) {
@@ -870,7 +870,7 @@ fun FynxCameraCapturePanel(
                 .imePadding()
                 .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 46.dp),
+                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 76.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))

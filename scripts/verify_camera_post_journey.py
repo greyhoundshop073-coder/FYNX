@@ -16,6 +16,12 @@ checks = [
      and "camera-live-preview.xml" in runtime
      and "camera-photo-editor-initial.xml" in runtime
      and "camera-video-editor-before-effects.xml" in runtime),
+    ("Gallery picker is foreground-verified and cancelled promptly before checking camera recovery",
+     'gallery_control = find_control(camera_xml, ["Gallery"])' in runtime
+     and 'gallery_system_state' in runtime
+     and 'time.sleep(1.2)' in runtime
+     and 'for attempt in range(8)' in runtime
+     and "Gallery cancellation returned to the live camera" in runtime),
     ("Runtime camera journey verifies switch, flash capability, Gallery, capture, effects and Retake without publishing",
      "def capture_camera_post_journey(" in runtime
      and '["Take photo"]' in runtime
