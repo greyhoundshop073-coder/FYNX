@@ -197,6 +197,8 @@ jobs:
         run: python3 scripts/verify_marketplace_runtime_visual_capture.py
       - name: Verify Marketplace seller flow integrity
         run: python3 scripts/verify_marketplace_seller_flow.py
+      - name: Verify Marketplace seller presentation and first-listing entry point
+        run: python3 scripts/verify_marketplace_presentation_contract.py
       - name: Verify Marketplace integration and security audit
         run: python3 scripts/verify_marketplace_integration_security.py
       - name: Verify Smart Marketplace Batch 2 integration
