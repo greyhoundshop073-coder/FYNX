@@ -20,7 +20,7 @@ checks = [
      and "Color(0xFF25364A).copy(alpha = 0.32f)" in camera
      and "Color.White.copy(alpha = 0.25f)" in camera),
     ("Camera editor exposes Next and preserves the existing captured-media callback",
-     'Text("Next")' in camera and "onCaptured(previewUri,previewType)" in camera),
+     'Text("Next")' in camera and "onCaptured(previewUri, previewType)" in camera),
     ("Next details composer shows media preview, description, tag helpers and privacy entry",
      "selectedComposerVisual" in home and "Add description..." in home
      and "# Hashtags" in home and "@ Mention" in home
@@ -107,7 +107,7 @@ checks = [
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
     ("Camera dismiss returns to an existing composer draft", "cameraOpenedFromComposer && !posting" in home),
     ("Camera preview supports retake before handoff", 'Text("Retake")' in camera and "retake()" in camera),
-    ("Camera preview sends the captured asset to the composer", 'Text("Next")' in camera and "onCaptured(previewUri,previewType)" in camera),
+    ("Camera preview sends the captured asset to the composer", 'Text("Next")' in camera and "onCaptured(previewUri, previewType)" in camera),
     ("Captured media uses the authoritative media type resolver", "FynxMultiMediaPostClient.mediaKind(context, it)" in home),
     ("Gallery media is deduplicated and capped at four", "uris.distinct().take(4)" in home and ".take(4)" in home),
     ("Combined camera and gallery media remains capped at four", "(capturedUris + uri).distinct().take(4)" in home),
