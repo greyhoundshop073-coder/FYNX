@@ -124,6 +124,7 @@ fun FynxBuyerWalletPanel() {
         summaryError = null
         activityError = null
         activityMoreError = null
+        loadingMoreActivity = false
         summary = null
         activity = emptyList()
         hasMoreActivity = false
@@ -175,20 +176,26 @@ fun FynxBuyerWalletPanel() {
         activityMoreError = null
         scope.launch {
             loadingMoreActivity = true
-            FynxBuyerWalletClient.loadTransactions(context, before = cursor, direction = activityFilter)
-                .onSuccess { page ->
-                    if (requestGeneration == activityRequestGeneration) {
-                        activity = (activity + page.transactions).distinctBy { it.id }
-                        hasMoreActivity = page.hasMore
-                        nextActivityCursor = page.nextCursor
+            try {
+                FynxBuyerWalletClient.loadTransactions(context, before = cursor, direction = activityFilter)
+                    .onSuccess { page ->
+                        if (requestGeneration == activityRequestGeneration) {
+                            activity = (activity + page.transactions).distinctBy { it.id }
+                            hasMoreActivity = page.hasMore
+                            nextActivityCursor = page.nextCursor
+                        }
                     }
-                }
-                .onFailure {
-                    if (requestGeneration == activityRequestGeneration) {
-                        activityMoreError = "More wallet activity could not be loaded. Check your connection and try again."
+                    .onFailure {
+                        if (requestGeneration == activityRequestGeneration) {
+                            activityMoreError = "More wallet activity could not be loaded. Check your connection and try again."
+                        }
                     }
+            } finally {
+                // A request from an older filter/refresh must not clear the current request's spinner.
+                if (requestGeneration == activityRequestGeneration) {
+                    loadingMoreActivity = false
                 }
-            loadingMoreActivity = false
+            }
         }
     }
 
