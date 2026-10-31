@@ -10,6 +10,7 @@ import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
 import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
+import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
@@ -47,8 +48,9 @@ const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 const pool = DATABASE_URL ? new Pool({
   connectionString: DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  max: Number(process.env.DB_POOL_MAX || 20),
-  min: Number(process.env.DB_POOL_MIN || 2),
+  // Keep the primary pool bounded and release idle clients so Neon can suspend.
+  max: Number(process.env.DB_POOL_MAX || 10),
+  min: 0,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
   statement_timeout: 15_000,
@@ -108,8 +110,6 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
-    UPDATE users SET verified = FALSE;
-    UPDATE users SET verified = TRUE WHERE lower(username) = $1;
     CREATE TABLE IF NOT EXISTS messages (
       id BIGSERIAL PRIMARY KEY,
       sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -165,8 +165,9 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS ai_pending_message_actions (id UUID PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, message_text TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending','sent','cancelled','expired')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'), sent_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL);
     CREATE INDEX IF NOT EXISTS ai_pending_message_actions_user_idx ON ai_pending_message_actions(user_id,status,created_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS ai_pending_message_actions_one_pending_idx ON ai_pending_message_actions(user_id) WHERE status='pending';
-  `, [officialFynxUsername]);
-  await pool.query(`DO $$ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
+  `);
+  await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);
+  await pool.query(`DO $ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
 }
 
 function requireConfig(name, value) { if (!value) throw new Error(`${name} is not configured.`); }
@@ -869,6 +870,7 @@ if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
 registerMarketplaceReputationRoutes({ app, pool, auth });
 registerMarketplaceCompletionRoutes({ app, pool, auth });
+if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });
 if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
 if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
