@@ -745,9 +745,6 @@ fun FynxHomeSocialHubPanel(
                             }
                         }
                         }
-                                                    }
-                        }
-                        }
 
                         Row(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
