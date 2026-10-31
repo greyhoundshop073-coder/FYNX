@@ -83,6 +83,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import java.io.File
 import java.io.FileOutputStream
 
@@ -489,12 +491,14 @@ fun FynxCameraCapturePanel(
         scope.launch {
             // Media3 Transformer is main-thread confined for construction/start/callback wiring.
             // It performs export work asynchronously itself; do not invoke it from Dispatchers.IO.
-            val result = runCatching { applyFynxVideoEdits(context, source, videoStyle, videoCaptionText) }
+            val result = runCatching { withTimeout(120_000L) { applyFynxVideoEdits(context, source, videoStyle, videoCaptionText) } }
             result.onSuccess { output ->
                 if (current != source) deleteUri(current)
                 pendingUri = output
                 error = null
-            }.onFailure { error = it.message ?: "Video effects could not be applied." }
+            }.onFailure { failure ->
+                error = if (failure is TimeoutCancellationException) "Video export timed out. Try a shorter clip." else failure.message ?: "Video effects could not be applied."
+            }
             applyingVideoEffects = false
         }
     }
@@ -530,14 +534,15 @@ fun FynxCameraCapturePanel(
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)
+                    .navigationBarsPadding()
                     .imePadding()
                     .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 30.dp)
+                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 14.dp)
             ) {
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
-                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.18f else 0.30f).verticalScroll(rememberScrollState())) {
+                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.16f else 0.46f).verticalScroll(rememberScrollState())) {
                 if (previewType == "image") {
                     Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Row(
@@ -835,11 +840,12 @@ fun FynxCameraCapturePanel(
         if (showCaptureControls || recording != null) Column(
             Modifier.align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)
+                    .navigationBarsPadding()
                 .imePadding()
                 .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 30.dp),
+                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))
@@ -1136,7 +1142,7 @@ fun FynxCameraCapturePanel(
     }
 }
 
-/** Portrait effect tiles styled for quick browsing in the camera creator tray. */
+/** Portrait effect tiles shared by the camera creator tray and captured-photo editor. */
 private data class CameraEffectOption(
     val label: String,
     val category: String,
@@ -1147,13 +1153,19 @@ private data class CameraEffectOption(
 )
 
 /**
- * Each effect tile uses a bundled female portrait, graded locally to illustrate the selected look.
- * Three portraits rotate through the carousel so adjacent effects do not repeat one face.
+ * Nine bundled portrait references rotate through the camera and captured-photo effect
+ * carousels. Six original portrait illustrations extend the three existing photo references.
  */
-private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (previewStyle % 3) {
+private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (Math.floorMod(previewStyle, 9)) {
     0 -> R.drawable.camera_effect_portrait_1
     1 -> R.drawable.camera_effect_portrait_2
-    else -> R.drawable.camera_effect_portrait_3
+    2 -> R.drawable.camera_effect_portrait_3
+    3 -> R.drawable.camera_effect_portrait_4
+    4 -> R.drawable.camera_effect_portrait_5
+    5 -> R.drawable.camera_effect_portrait_6
+    6 -> R.drawable.camera_effect_portrait_7
+    7 -> R.drawable.camera_effect_portrait_8
+    else -> R.drawable.camera_effect_portrait_9
 }
 
 @Composable

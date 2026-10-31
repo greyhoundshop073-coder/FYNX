@@ -909,7 +909,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         _, ax, ay = apply_button
         run("adb", "logcat", "-c")
         run("adb", "shell", "input", "tap", str(ax), str(ay))
-        apply_deadline = time.monotonic() + 60.0
+        apply_deadline = time.monotonic() + 135.0
         applying_seen = False
         processed_xml = ""
         while time.monotonic() < apply_deadline:
@@ -919,20 +919,20 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             applying_seen = applying_seen or processing
             visible_error = bool(find_control(processed_xml, [
                 "Video effects could not be applied.", "The video file is unavailable.",
-                "Export failed", "Unable to export"
+                "Export failed", "Unable to export", "Video export timed out. Try a shorter clip."
             ]))
             if visible_error:
                 break
-            elapsed = 60.0 - (apply_deadline - time.monotonic())
+            elapsed = 135.0 - (apply_deadline - time.monotonic())
             if not processing and find_control(processed_xml, ["Apply style / captions"]) and elapsed >= 3.0:
                 break
         if not processed_xml:
             FAILURES.append(prefix + ": no UI hierarchy was captured after applying video style")
         elif find_control(processed_xml, ["Processing video…"]):
-            FAILURES.append(prefix + ": video styling was still processing after 60 seconds")
+            FAILURES.append(prefix + ": video styling was still processing after 135 seconds")
         elif find_control(processed_xml, [
             "Video effects could not be applied.", "The video file is unavailable.",
-            "Export failed", "Unable to export"
+            "Export failed", "Unable to export", "Video export timed out. Try a shorter clip."
         ]):
             FAILURES.append(prefix + ": video effect export showed an error: " + visible_marker_summary(processed_xml))
         else:

@@ -1,17 +1,10 @@
 # FYNX camera effect thumbnail assets
 
-The camera creator and captured-photo editor use three bundled female portrait previews:
+The camera creator tray and captured-photo editor share one offline portrait-preview set:
 
-| Resource | Upstream Unsplash photo |
-| --- | --- |
-| \`camera_effect_portrait_1.webp\` | https://unsplash.com/photos/1534528741775-53994a69daeb |
-| \`camera_effect_portrait_2.webp\` | https://unsplash.com/photos/1517841905240-472988babdf9 |
-| \`camera_effect_portrait_3.webp\` | https://unsplash.com/photos/1573496359142-b8d87734a5a2 |
+- `camera_effect_portrait_1.webp` through `camera_effect_portrait_3.webp`: the three existing portrait photographs, retained unchanged.
+- `camera_effect_portrait_4.xml` through `camera_effect_portrait_9.xml`: six original FYNX VectorDrawable portrait illustrations, added to give long effect carousels more variety without network downloads.
 
-The photographs are credited in the upstream asset repository and are distributed under the
-Unsplash License. The photo assets are bundled in \`app/src/main/res/drawable-nodpi/\`, so the tray
-remains available offline. The thumbnail selector rotates through all three portraits and applies
-each effect's own local colour matrix. Face FX also draws its real sticker overlay over the portrait.
+The selector rotates through all nine portraits in Looks, Face FX, Background, AI Studio, and Video FX. The same tile component is used in the live creator tray and captured-photo editor. Each tile applies the effect's local preview grade; Face FX also draws its actual sticker overlay over the portrait.
 
-These images are illustrative previews only. Live face tracking, background segmentation, and
-saved-photo/video processing continue to use their existing on-device processing paths.
+These thumbnails are illustrative previews only. Live face tracking, background segmentation, and saved-photo/video processing continue to use their separate on-device processing paths.
