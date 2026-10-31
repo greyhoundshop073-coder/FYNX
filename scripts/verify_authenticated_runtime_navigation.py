@@ -621,15 +621,19 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         time.sleep(0.8)
         return dump_ui(f"{prefix}-camera-return-home.xml") or composer_xml
 
-    # The app opens on the front lens, which is software-emulated in CI. Capture its
-    # real UI state and controls, then switch to the rear virtual-scene camera for image checks.
+    # Record the emulator's actual camera inventory. The legacy "emulated" front source
+    # may not enumerate a CameraX device, so do not claim a front-lens pass unless the
+    # camera service exposes a front-facing device.
     time.sleep(2.5)
     camera_xml = dump_ui(f"{prefix}-camera-live-preview-front.xml") or camera_xml
     screenshot(f"{prefix}-camera-live-preview-front.png")
+    camera_service_dump = run("adb", "shell", "dumpsys", "media.camera", timeout=15).stdout or ""
     (ROOT / f"{prefix}-camera-runtime-device-camera.txt").write_text(
-        (run("adb", "shell", "dumpsys", "media.camera", timeout=15).stdout or "Camera service dump unavailable") + chr(10),
+        (camera_service_dump or "Camera service dump unavailable") + chr(10),
         encoding="utf-8"
     )
+    front_camera_available = "Facing: Front" in camera_service_dump
+    back_camera_available = "Facing: Back" in camera_service_dump
     verify_camera_controls_fit_safe_area(camera_xml, ["Effects", "Take photo", "Gallery"], prefix + " front live camera")
     (ROOT / f"{prefix}-camera-live-preview-front.xml").write_text(camera_xml + chr(10), encoding="utf-8")
     missing_live = [
@@ -692,7 +696,12 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 report.append("- NOTE rear camera exposes no flash-on control on this emulator")
 
     else:
-        report.append("- PASS front/back camera switching returned to a usable preview; flash was checked on the rear lens")
+        if front_camera_available and back_camera_available:
+            report.append("- PASS both front- and back-facing CameraX devices switched to usable previews; flash was checked on the rear lens")
+        elif back_camera_available:
+            report.append("- NOTE this CI AVD exposes only a rear-facing camera; the app stayed usable when the front lens was requested, but front-camera capture must be checked on a phone with a front camera")
+        else:
+            FAILURES.append(prefix + ": the emulator did not expose a usable back-facing camera device")
 
     # Return to the rear camera after proving both lenses. The Pixel emulator's
     # rear virtual-scene source is the visual fixture used for photo/video pixel checks.
