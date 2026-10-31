@@ -107,7 +107,9 @@ fun FynxBuyerWalletPanel() {
     var withdrawalResult by remember { mutableStateOf<FynxWalletWithdrawal?>(null) }
     var actionBusy by remember { mutableStateOf(false) }
     var actionError by remember { mutableStateOf<String?>(null) }
-    var fundingIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
+    var bankTransferIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
+    var cardFundingIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
+    var ussdFundingIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
     var withdrawalIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
     var banks by remember { mutableStateOf(emptyList<FynxWalletBank>()) }
     var payoutAccounts by remember { mutableStateOf(emptyList<FynxWalletPayoutAccount>()) }
@@ -261,7 +263,9 @@ fun FynxBuyerWalletPanel() {
             onAmountChange = {
                 if (fundingAmount != it) {
                     fundingAmount = it
-                    fundingIdempotencyKey = UUID.randomUUID().toString()
+                    bankTransferIdempotencyKey = UUID.randomUUID().toString()
+                    cardFundingIdempotencyKey = UUID.randomUUID().toString()
+                    ussdFundingIdempotencyKey = UUID.randomUUID().toString()
                     withdrawalIdempotencyKey = UUID.randomUUID().toString()
                     if (fundingResult?.status != "SUCCEEDED") fundingResult = null
                     withdrawalResult = null
@@ -271,7 +275,9 @@ fun FynxBuyerWalletPanel() {
             onEmailChange = {
                 if (fundingEmail != it) {
                     fundingEmail = it
-                    fundingIdempotencyKey = UUID.randomUUID().toString()
+                    bankTransferIdempotencyKey = UUID.randomUUID().toString()
+                    cardFundingIdempotencyKey = UUID.randomUUID().toString()
+                    ussdFundingIdempotencyKey = UUID.randomUUID().toString()
                 }
             },
             availableBalance = wallet?.availableBalance,
@@ -282,22 +288,24 @@ fun FynxBuyerWalletPanel() {
             actionBusy = actionBusy,
             onStartTransfer = {
                 if (fundingResult?.status in setOf("FAILED", "BLOCKED")) {
-                    fundingIdempotencyKey = UUID.randomUUID().toString()
+                    bankTransferIdempotencyKey = UUID.randomUUID().toString()
                 }
                 runWalletAction {
                     FynxBuyerWalletClient.startBankTransfer(
-                        context, fundingAmount.toDoubleOrNull() ?: 0.0, fundingEmail, fundingIdempotencyKey
+                        context, fundingAmount.toDoubleOrNull() ?: 0.0, fundingEmail, bankTransferIdempotencyKey
                     ).onSuccess { fundingResult = it }
                      .onFailure { actionError = it.message ?: "Bank transfer details could not be generated." }
                 }
             },
             onStartCheckout = { method ->
                 if (fundingResult?.status in setOf("FAILED", "BLOCKED")) {
-                    fundingIdempotencyKey = UUID.randomUUID().toString()
+                    if (method == "card") cardFundingIdempotencyKey = UUID.randomUUID().toString()
+                    else ussdFundingIdempotencyKey = UUID.randomUUID().toString()
                 }
+                val requestKey = if (method == "card") cardFundingIdempotencyKey else ussdFundingIdempotencyKey
                 runWalletAction {
                     FynxBuyerWalletClient.startFundingCheckout(
-                        context, fundingAmount.toDoubleOrNull() ?: 0.0, fundingEmail, method, fundingIdempotencyKey
+                        context, fundingAmount.toDoubleOrNull() ?: 0.0, fundingEmail, method, requestKey
                     ).onSuccess { result ->
                         fundingResult = result
                         result.checkoutUrl?.let { uri ->
