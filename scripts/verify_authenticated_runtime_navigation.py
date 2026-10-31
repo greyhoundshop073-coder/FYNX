@@ -1450,7 +1450,7 @@ if VISUALS_ONLY and not error and os.environ.get("FYNX_MARKETPLACE_ONLY") != "1"
 # unrelated instrumentation test fails. This branch performs read-only navigation:
 # it never publishes a listing, changes inventory, creates an order, or initiates payment.
 if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
-    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace and My Shop; no listing/order/payment mutations.")
+    report.append("- Capture scope: Marketplace buyer/seller screens and My Shop only; no listing/order/payment mutations.")
     if error:
         report += [
             "",
@@ -1508,6 +1508,56 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
         else:
             report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
+
+        # Read the real saved cart without changing quantities or removing any of the user's items.
+        cart_xml = tap_control(
+            marketplace_xml, ["Cart"], "marketplace-cart", ["Shopping cart"]
+        )
+        if cart_xml:
+            screenshot("authenticated-marketplace-cart.png")
+            (ROOT/"authenticated-marketplace-cart.xml").write_text(cart_xml+"\\n", encoding="utf-8")
+            if find_control(cart_xml, ["Your cart is empty."]):
+                report.append("- PASS: actual buyer cart opened and displayed its genuine empty state.")
+            elif find_control(cart_xml, ["Remove"]) and find_control(cart_xml, ["Qty"]):
+                report.append("- PASS: actual buyer cart opened and displayed saved cart item/quantity controls; items were not changed.")
+            else:
+                report.append("- BLOCKED: cart opened but its empty or populated state could not be confirmed from the visible UI.")
+            closed_cart = tap_control(cart_xml, ["Close"], "marketplace-cart-close", ["Search products, sellers or categories"])
+            if closed_cart:
+                marketplace_xml = closed_cart
+            else:
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.7)
+                marketplace_xml = dump_ui("marketplace-after-cart.xml") or marketplace_xml
+        else:
+            report.append("- BLOCKED: Marketplace Cart was not exposed to the runtime navigator.")
+
+        # Read the buyer's actual orders or its real empty/network-error state. Never create an order.
+        orders_xml = tap_control(
+            marketplace_xml, ["Orders"], "marketplace-buyer-orders", ["My orders"]
+        )
+        if orders_xml:
+            time.sleep(1.2)
+            orders_xml = dump_ui("marketplace-buyer-orders-settled.xml") or orders_xml
+            screenshot("authenticated-marketplace-buyer-orders.png")
+            (ROOT/"authenticated-marketplace-buyer-orders.xml").write_text(orders_xml+"\\n", encoding="utf-8")
+            if find_control(orders_xml, ["Loading your orders"]):
+                report.append("- BLOCKED: buyer orders remained in the real loading state; live order data could not be verified.")
+            elif find_control(orders_xml, ["Check your connection and try again"]):
+                report.append("- PASS: buyer order screen exposed its real recoverable connection-error state.")
+            elif find_control(orders_xml, ["No orders yet."]):
+                report.append("- PASS: buyer order screen exposed the account's genuine empty state.")
+            else:
+                report.append("- PASS: buyer order list rendered real account content; no order was opened or changed.")
+            closed_orders = tap_control(orders_xml, ["Close"], "marketplace-buyer-orders-close", ["Search products, sellers or categories"])
+            if closed_orders:
+                marketplace_xml = closed_orders
+            else:
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.7)
+                marketplace_xml = dump_ui("marketplace-after-buyer-orders.xml") or marketplace_xml
+        else:
+            report.append("- BLOCKED: Marketplace -> My orders did not open in the runtime navigator.")
 
         # Scroll the real Marketplace list to its sell action; do not fill or submit the form.
         sell_labels = ["Sell something", "Start selling", "Sell your first product"]
