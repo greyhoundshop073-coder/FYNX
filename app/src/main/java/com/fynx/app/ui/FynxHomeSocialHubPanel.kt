@@ -450,6 +450,7 @@ fun FynxHomeSocialHubPanel(
             audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
             visibility = defaultPostVisibility
             notice = null
+            editingDraftId = null
         }
     }
 
