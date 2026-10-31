@@ -21,6 +21,7 @@ app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 saved_products_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSavedMarketplaceProductsPanel.kt").read_text()
 storefront = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt").read_text()
 remote_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()
+deep_link_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceDeepLinkClient.kt").read_text()
 marketplace_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt").read_text()
 discovery_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDiscoveryClient.kt").read_text()
 order_lifecycle = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text()
@@ -284,7 +285,7 @@ checks = [
     ("Saved Products can open the canonical listing in Marketplace", 'Text("View product")' in saved_products_panel and "onOpenListing(product.id)" in saved_products_panel and 'FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" })' in app_shell and "loadExactMarketplaceListing(context, listingId)" in marketplace),
     ("Marketplace Orders shortcut fetches independently and shows loading/error states", "fun reloadOrders()" in marketplace and "ordersLoading" in marketplace and "ordersError" in marketplace and "Loading your orders…" in marketplace and "Orders could not load." in marketplace and "onOrders = { showOrders = true; reloadOrders() }" in marketplace),
     ("successful Marketplace publish returns its confirmed listing ID without a second inventory request", "): Result<String> = runCatching {" in remote_client and "val id = JSONObject(raw).getJSONObject(\"listing\").optString(\"id\").trim()" in remote_client and "myListings(context).getOrNull()?.firstOrNull { it.id == id }" not in remote_client and "Check My Shop before trying again." in remote_client),
-    ("accepted listing ID is shown with explicit My Shop and Marketplace recovery actions", "onPublished = { listingId -> showSell = false; publishSuccessListingId = listingId; reload() }" in marketplace and "var publishSuccessListingId by remember { mutableStateOf<String?>(null) }" in marketplace and 'Text("Product published")' in marketplace and 'Text("Product ID: $listingId", style = MaterialTheme.typography.labelLarge)' in marketplace and 'Text("Open My Shop")' in marketplace and 'Text("Refresh Marketplace")' in marketplace and "onPublished: (String) -> Unit" in marketplace and "createMarketplaceListing" in marketplace and "l.seller_id<>$1" not in discovery_routes and "enabled = canPurchase && l.quantity > 0" in marketplace),
+    ("accepted listing ID is shown with explicit My Shop and Marketplace recovery actions", "onPublished = { listingId ->" in marketplace and "publishSuccessListingId = listingId" in marketplace and "loadExactMarketplaceListing(context, listingId)" in marketplace and "var publishSuccessListingId by remember { mutableStateOf<String?>(null) }" in marketplace and 'Text("Product published")' in marketplace and 'Text("Product ID: $listingId", style = MaterialTheme.typography.labelLarge)' in marketplace and 'Text("Open My Shop")' in marketplace and 'Text("Refresh Marketplace")' in marketplace and "onPublished: (String) -> Unit" in marketplace and "createMarketplaceListing" in marketplace and "l.seller_id<>$1" not in discovery_routes and "enabled = canPurchase && l.quantity > 0" in marketplace),
     ("My Shop separates active inventory from an explicit archived-listings recovery section", 'FynxMarketplaceClient.myListings(context)' in seller_center and 'listings = inventory.filter { listing -> listing.active }' in seller_center and 'archivedListings = inventory.filterNot { listing -> listing.active }' in seller_center and 'Text("Archived listings"' in seller_center),
     ("archived Marketplace products can only be republished by their seller when unreserved stock is available", 'app.post("/api/marketplace/listings/:id/reactivate", auth' in social_routes and 'WHERE id = $1 AND seller_id = $2 FOR UPDATE' in social_routes and 'availableQuantity < 1' in social_routes and 'SET active = TRUE' in social_routes),
     ("My Shop exposes explicit republish with success/error feedback and returns the restored row to active inventory", 'FynxMarketplaceClient.reactivateListing(context, listing.id)' in seller_center and 'Text("Republish listing")' in seller_center and 'archivedListings = archivedListings.filterNot { it.id == listing.id }' in seller_center and 'listingActionError = marketplaceSafeError(it, "Listing could not be republished.")' in seller_center),
@@ -518,6 +519,40 @@ checks.extend([
      and "media_ids = COALESCE($8::jsonb, media_ids)" in social_routes
      and "Marketplace listing media must be images or videos" in social_routes),
 ])
+publish_flow_start = marketplace.index("if (showSell) MarketplaceSellDialog")
+publish_flow_end = marketplace.index("publishSuccessListingId?.let", publish_flow_start)
+publish_flow = marketplace[publish_flow_start:publish_flow_end]
+
+checks.extend([
+    ("publishing clears discovery filters and forces a fresh unfiltered Marketplace read",
+     'query = ""' in publish_flow
+     and 'category = "All"' in publish_flow
+     and "nearbyMode = false" in publish_flow
+     and "nearbyLabel = \"\"" in publish_flow
+     and "showAllProducts = true" in publish_flow
+     and "publishRefreshKey += 1" in publish_flow
+     and "LaunchedEffect(query, category, nearbyMode, nearbyLabel, publishRefreshKey)" in marketplace),
+    ("published product is re-read from the server and never fabricated before it is shown",
+     "loadExactMarketplaceListing(context, listingId)" in publish_flow
+     and "FynxRemoteSocialClient.myListings(context).getOrThrow()" in publish_flow
+     and "pinnedPublishedListing = confirmed" in publish_flow
+     and "The product was accepted, but its saved listing could not be read yet." in publish_flow),
+    ("server-confirmed published product stays at the top only in the unfiltered discovery feed and pin state is account-scoped",
+     "requestQuery.isBlank() && requestCategory.equals(\"All\", ignoreCase = true) && !requestNearbyMode" in marketplace
+     and "listOfNotNull(pinned) + items).distinctBy { it.id }" in marketplace
+     and "listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }" in publish_flow
+     and "remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }" in marketplace
+     and "remember(currentUsername) { mutableIntStateOf(0) }" in marketplace
+     and "listings = listings.filterNot { it.id == pinnedId }" in marketplace),
+])
+
+checks.append(
+    ("exact Marketplace listing lookup preserves ordered image/video MIME types for deep links and post-publish product cards",
+     "val mediaTypesJson = o.optJSONArray(\"media_types\")" in deep_link_client
+     and "for (i in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(i))" in deep_link_client
+     and "mediaTypes = mediaTypes" in deep_link_client)
+)
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
