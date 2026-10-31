@@ -171,7 +171,18 @@ object FynxRemoteSocialClient {
     suspend fun createMarketplaceListing(context: Context, title: String, description: String, storeName: String, price: Double, currency: String, category: String, condition: String, quantity: Int, location: String, deliveryAvailable: Boolean, pickupAvailable: Boolean, deliveryFee: Double?, mediaUris: List<Uri>): Result<String> = runCatching {
         require(title.trim().length >= 2) { "Product name is required." }; require(description.trim().length >= 5) { "Add a product description." }; require(price.isFinite() && price > 0) { "Enter a valid product price." }; require(FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency)) { "Marketplace currently supports NGN and USD." }; require(quantity > 0) { "Product quantity must be at least 1." }; require(deliveryAvailable || pickupAvailable) { "Choose delivery or buyer pickup so customers can fulfil an order." }; require(mediaUris.isNotEmpty()) { "Add at least one product photo or video." }
         val mediaIds = mediaUris.distinct().take(12).map { u -> val mime = mediaMimeType(context, u); require(mime.startsWith("image/") || mime.startsWith("video/")) { "Marketplace media must be an image or video." }; FynxProductionMessaging.uploadMedia(context, u, mime).getOrThrow().id }
-        val raw = FynxBackendClient.postJson(context, "/api/marketplace/listings", JSONObject().apply { put("title", title.trim()); put("description", description.trim()); put("storeName", storeName.trim()); put("price", price); put("currency", currency.trim().uppercase()); put("category", category.trim()); put("condition", condition.trim().uppercase()); put("quantity", quantity); put("location", location.trim()); put("deliveryAvailable", deliveryAvailable); put("pickupAvailable", pickupAvailable); put("deliveryFee", deliveryFee ?: JSONObject.NULL); put("mediaIds", JSONArray(mediaIds)) }.toString()).getOrThrow()
+        val persistedShopName = if (storeName.trim().isNotEmpty()) {
+            storeName.trim()
+        } else {
+            FynxBackendClient.get(context, "/api/marketplace/my-shop")
+                .getOrNull()
+                ?.let { rawProfile ->
+                    runCatching {
+                        JSONObject(rawProfile).optJSONObject("shop")?.optString("shopName").orEmpty().trim()
+                    }.getOrNull()
+                }.orEmpty()
+        }
+        val raw = FynxBackendClient.postJson(context, "/api/marketplace/listings", JSONObject().apply { put("title", title.trim()); put("description", description.trim()); put("storeName", persistedShopName); put("price", price); put("currency", currency.trim().uppercase()); put("category", category.trim()); put("condition", condition.trim().uppercase()); put("quantity", quantity); put("location", location.trim()); put("deliveryAvailable", deliveryAvailable); put("pickupAvailable", pickupAvailable); put("deliveryFee", deliveryFee ?: JSONObject.NULL); put("mediaIds", JSONArray(mediaIds)) }.toString()).getOrThrow()
         val id = JSONObject(raw).getJSONObject("listing").optString("id").trim()
         // The create response is authoritative. Do not make publish success depend on a second
         // request to owner inventory: that request can fail after the listing is already committed.
