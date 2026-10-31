@@ -8,6 +8,7 @@ refresh = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt").read
 backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+draft_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt").read_text(encoding="utf-8")
 
 checks = [
     ("Camera Dialog applies/restores the actual system-bar window and white icon appearance",
@@ -107,6 +108,43 @@ checks = [
      and "camera-video-effect-output.png" in runtime
      and "never tap Next" in runtime),
     ("Home camera starts a fresh session", "capturedUris = emptyList()" in home and "cameraOpenedFromComposer = false" in home),
+    ("Post details follow the reference information order with a fixed Drafts/Post footer",
+     all(label in home for label in ["Add description...", "# Hashtags", "@ Mention", "Content disclosure and ads", "Location", "Add link", "More options", "Share to", "Edit cover", "Drafts"])
+     and home.index("Add description...") < home.index("# Hashtags") < home.index("Content disclosure and ads")
+     and home.index("Content disclosure and ads") < home.index("Location") < home.index("Add link")
+     and home.index("Add link") < home.index("Who can view this post") < home.index("More options") < home.index("Share to")
+     and 'Text(if (posting) "Publishing…" else "Post"' in home
+     and ".imePadding()" in home),
+    ("Drafts are private per account and durable media is copied out of the transient cache",
+     "FynxAuthStore.accountStorageKey(context)" in draft_store
+     and "MessageDigest.getInstance(\"SHA-256\")" in draft_store
+     and 'File(context.filesDir, "post_drafts")' in draft_store
+     and "source.copyTo(output)" in draft_store
+     and "fun save(" in draft_store and "fun delete(" in draft_store),
+    ("Composer saves, restores and deletes local drafts without changing the remote post API",
+     "FynxLocalPostDraftStore.save(" in home
+     and "restoreSavedPostDraft(draft)" in home
+     and "FynxLocalPostDraftStore.delete(context, savedId)" in home
+     and "Save current draft" in home and "No saved drafts yet" in home),
+    ("Add link inserts only a validated http/https URL into the existing caption field",
+     "Uri.parse(candidate)" in home
+     and 'parsed.scheme !in listOf("http", "https")' in home
+     and 'text = updated' in home and "FynxMultiMediaPostClient.createPost" in home),
+    ("Unsupported paid disclosure and custom video cover are explained rather than falsely marked active",
+     "Paid partnership labeling is not supported yet" in home
+     and "does not yet support paid-partnership or branded-content disclosure fields" in home
+     and "custom video-cover field is not supported" in home),
+    ("Share to opens Android sharing for the current caption without inventing an unpublished FYNX URL",
+     "Intent.ACTION_SEND" in home and 'Intent.EXTRA_TEXT, payload' in home
+     and 'Intent.createChooser(sendIntent, "Share to")' in home),
+    ("More options reuses the existing music, people, location, gallery and voice actions",
+     all(marker in home for marker in ["showMusicPicker = true", "showPeoplePicker = true", "requestComposerLocation()", "PickVisualMedia.ImageAndVideo", "showVoiceRecorder = true"])),
+    ("Runtime test navigates through More options and checks the supplied post-details sequence and local draft",
+     '["More options"]' in runtime and '["Add photo or video"]' in runtime
+     and "required_top = [\"Add description...\", \"# Hashtags\", \"@ Mention\", \"Edit cover\"]" in runtime
+     and "required_options = [\"Content disclosure and ads\", \"Location\", \"Add link\", \"More options\", \"Share to\", \"Post\"]" in runtime
+     and "local post Drafts saved captured media" in runtime
+     and "no post was published" in runtime),
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
     ("Camera dismiss returns to an existing composer draft", "cameraOpenedFromComposer && !posting" in home),
     ("Camera preview supports retake before handoff", 'Text("Retake")' in camera and "retake()" in camera),
