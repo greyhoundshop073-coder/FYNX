@@ -119,6 +119,10 @@ jobs:
           node --check verify-stage15h-admin.mjs
           node --check verify-stage15d-advanced.mjs
           node --check verify-stage15d-jobs.mjs
+      - name: Run buyer wallet backend verification
+        run: node verify-buyer-wallet-foundation.mjs
+      - name: Run buyer wallet PostgreSQL schema and ledger tests
+        run: node test-buyer-wallet-schema.mjs
       - name: Syntax-check every backend JavaScript module
         run: |
           for file in *.js *.mjs; do
