@@ -35,6 +35,7 @@ marketplace_reviews = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplace
 discovery_routes = (ROOT / "backend/discoveryRoutes.js").read_text()
 social_routes = (ROOT / "backend/socialRoutes.js").read_text()
 marketplace_checkout_route = (ROOT / "backend/marketplaceCheckout.js").read_text()
+marketplace_transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 settlement_routes = (ROOT / "backend/marketplaceSettlement.js").read_text()
 shop_profile_routes = (ROOT / "backend/marketplaceShopProfiles.js").read_text()
 
@@ -179,7 +180,9 @@ checks = [
     ("protected order lifecycle supports completion after inspection", '"INSPECTION" -> Button(enabled = !busy && confirmOrderMatch' in order_lifecycle and '"I confirm the received item and quantity match my order."' in order_lifecycle),
     ("protected order lifecycle exposes the reason-based dispute form and photo evidence", "disputeMarketplaceOrder" in order_lifecycle and "Open dispute" in order_lifecycle and "Add photo evidence" in order_lifecycle),
     ("buyer dispute action is offered only for post-payment protected order states", "marketplaceOrderAllowsProblemReport(order.status)" in marketplace and "if (canReportProblem)" in marketplace and "openDisputeInitially = true" in marketplace),
-    ("buyer dispute state helper excludes unpaid, cancelled, refunded and already-disputed orders", 'status.trim().uppercase(Locale.US) in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED")' in order_lifecycle),
+    ("buyer dispute state helper matches the backend and excludes unpaid, disputed, cancelled, refunded and completed orders", 'status.trim().uppercase(Locale.US) in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION")' in order_lifecycle and "['CANCELLED','REFUNDED','COMPLETED'].includes(order.status)" in marketplace_transactions),
+    ("completed orders remain rateable but cannot open a protection dispute", 'order.status == "COMPLETED" -> Button(' in marketplace and "COMPLETED" not in order_lifecycle[order_lifecycle.index("internal fun marketplaceOrderAllowsProblemReport"):order_lifecycle.index("@Composable",order_lifecycle.index("internal fun marketplaceOrderAllowsProblemReport"))]),
+    ("single and multi-product delivery checkout require a complete Nigerian delivery destination", 'city.isBlank() || state.isBlank()' in checkout and 'city.isBlank()||state.isBlank()' in marketplace and "city.isMarketplaceDestinationCovered" not in marketplace and "city and state are required for delivery." in checkout and "city and state are required for delivery." in marketplace),
     ("reporting a problem opens the detailed lifecycle directly in dispute mode rather than opening fulfillment", "openDisputeInitially: Boolean = false" in order_lifecycle and "openDisputeInitially && marketplaceOrderAllowsProblemReport(order.status)" in order_lifecycle and "openDisputeInitially = openDisputeInitially" in marketplace),
     ("legacy buyer order sheet no longer bypasses the protected dispute form", "FynxRemoteSocialClient.disputeMarketplaceOrder" not in marketplace and "Report problem" in marketplace),
     ("unpaid order cancellation shows busy feedback and a recoverable error", "The unpaid order could not be cancelled. Try again." in marketplace and "actionBusy" in marketplace and "cancelMarketplaceOrder(context, order.id)" in marketplace),
