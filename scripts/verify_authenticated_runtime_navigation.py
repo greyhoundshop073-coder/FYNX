@@ -13,6 +13,7 @@ PACKAGE="com.fynx.app"
 USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1"
+MARKETPLACE_ONLY=os.environ.get("FYNX_MARKETPLACE_RUNTIME_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
 LOGIN_MODE="server credential login"
@@ -1381,7 +1382,7 @@ xml,error=login()
 
 # Capture the Home glass surface in the same system dark mode as the supplied reference.
 # This is a read-only screenshot: preserve the actual feed/error state and never invent posts.
-if VISUALS_ONLY and not error:
+if VISUALS_ONLY and not MARKETPLACE_ONLY and not error:
     night_mode = run("adb", "shell", "cmd", "uimode", "night", "yes", timeout=15)
     if night_mode.returncode != 0:
         night_mode = run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "2", timeout=15)
@@ -1449,8 +1450,8 @@ if VISUALS_ONLY and not error:
 # Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an
 # unrelated instrumentation test fails. This branch performs read-only navigation:
 # it never publishes a listing, changes inventory, creates an order, or initiates payment.
-if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
-    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace and My Shop; no listing/order/payment mutations.")
+if VISUALS_ONLY or MARKETPLACE_ONLY:
+    report.append("- Capture scope: Marketplace and My Shop only; Home, Avatar/Profile, Chat/Groups, Status/Story and other workstreams are not navigated.")
     if error:
         report += [
             "",
@@ -1470,10 +1471,12 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
     else:
         report.append("- Session: the existing login flow reached Home; live Marketplace data remains unverified unless its API loads successfully.")
 
-    # Verify the real camera and effect layout before navigating to Marketplace.
-    xml = capture_camera_post_journey(xml, "debug-camera")
-    if not xml or not find_control(xml, ["Open FYNX camera"]):
-        FAILURES.append("read-only camera/photo/video-effects journey did not return to Home")
+    # Marketplace-only capture goes directly from the existing authenticated Home
+    # session to Marketplace; it must not enter the camera or any other workstream.
+    if not MARKETPLACE_ONLY:
+        xml = capture_camera_post_journey(xml, "debug-camera")
+        if not xml or not find_control(xml, ["Open FYNX camera"]):
+            FAILURES.append("read-only camera/photo/video-effects journey did not return to Home")
     marketplace_xml = tap_control(
         xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
     )
