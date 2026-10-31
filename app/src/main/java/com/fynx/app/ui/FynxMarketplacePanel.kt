@@ -797,6 +797,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var protectedOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var showSell by remember { mutableStateOf(false) }
     var publishSuccessListingId by remember { mutableStateOf<String?>(null) }
+    var pinnedPublishedListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var publishRefreshKey by remember { mutableIntStateOf(0) }
     var showOrders by remember { mutableStateOf(false) }
     // Keep saved carts isolated when multiple accounts use the same device.
     val cartOwnerKey = currentUsername.removePrefix("@").trim().lowercase(Locale.US).ifBlank { "preview" }
@@ -927,7 +929,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 error = "Marketplace is taking longer than expected. Check your connection and try again."
             } else {
                 result.onSuccess { (items, more, fallbackWarning) ->
-                    listings = items.distinctBy { it.id }
+                    val pinned = pinnedPublishedListing?.takeIf {
+                        requestQuery.isBlank() && requestCategory.equals("All", ignoreCase = true) && !requestNearbyMode
+                    }
+                    listings = (listOfNotNull(pinned) + items).distinctBy { it.id }
                     hasMoreListings = more
                     discoveryFallbackWarning = fallbackWarning
                     nextListingsOffset = advanceMarketplaceListingsOffset(0, 24)
@@ -995,7 +1000,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
     }
 
-    LaunchedEffect(query, category, nearbyMode, nearbyLabel) {
+    LaunchedEffect(query, category, nearbyMode, nearbyLabel, publishRefreshKey) {
+        if (query.isNotBlank() || !category.equals("All", ignoreCase = true) || nearbyMode) {
+            pinnedPublishedListing = null
+        }
         // Invalidate prior requests immediately, before the search debounce completes.
         listingRequestGeneration += 1
         delay(if (query.isBlank()) 0L else 350L)
@@ -1392,7 +1400,36 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         if (listings.isNotEmpty()) FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
     }
 
-    if (showSell) MarketplaceSellDialog(context, onPublished = { listingId -> showSell = false; publishSuccessListingId = listingId; reload() }, onCancel = { showSell = false })
+    if (showSell) MarketplaceSellDialog(context, onPublished = { listingId ->
+        showSell = false
+        publishSuccessListingId = listingId
+        // A new product must not remain hidden by the search, category or nearby filters
+        // that happened to be active when the seller opened the publishing form.
+        query = ""
+        category = "All"
+        nearbyMode = false
+        nearbyLabel = ""
+        showAllProducts = true
+        pinnedPublishedListing = null
+        publishRefreshKey += 1
+        scope.launch {
+            val exact = loadExactMarketplaceListing(context, listingId)
+            val confirmed = exact.getOrNull()
+                ?: FynxRemoteSocialClient.myListings(context).getOrThrow()
+                    .firstOrNull { it.id == listingId }
+                ?: throw IllegalStateException("The product was accepted, but its saved listing could not be read yet.")
+            pinnedPublishedListing = confirmed
+            listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }
+            error = null
+        }.invokeOnCompletion { failure ->
+            if (failure != null) {
+                error = marketplaceSafeError(
+                    failure,
+                    "Product was accepted, but could not be shown yet. Open My Shop to verify it before publishing again."
+                )
+            }
+        }
+    }, onCancel = { showSell = false })
     publishSuccessListingId?.let { listingId ->
         AlertDialog(
             onDismissRequest = { publishSuccessListingId = null },
