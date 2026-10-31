@@ -140,7 +140,7 @@ DIAGNOSTIC_MARKERS = (
     "Open FYNX camera", "FYNX", "Chat", "Chats", "Friends", "More", "Stories",
     "Status", "Find People", "Search username or name", "Search chats",
     "Messages and groups in one place", "Your private conversations",
-    "New post", "Add description...", "Add music", "More options", "Add photo or video", "Drafts", "Content disclosure and ads", "Add link", "Share to", "Edit cover",
+    "New post", "Add description...", "Add music", "Your Story", "More options", "Add photo or video", "Drafts", "Content disclosure and ads", "Add link", "Share to", "Edit cover",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
@@ -1107,9 +1107,63 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         if second_editor:
             screenshot(f"{prefix}-camera-photo-editor-for-post-draft.png")
             verify_camera_controls_fit_safe_area(
-                second_editor, ["Retake", "Rotate", "Next"],
+                second_editor, ["Retake", "Rotate", "Your Story", "Next"],
                 prefix + " photo editor before post handoff"
             )
+
+            # Verify the left CTA enters the existing Status composer with this captured
+            # asset preselected. This is a navigation hand-off only: Send is never tapped.
+            story_xml = tap_control(
+                second_editor, ["Your Story"], f"{prefix}-camera-your-story-handoff",
+                ["Back from Status composer"]
+            )
+            if story_xml:
+                screenshot(f"{prefix}-camera-your-story-composer.png")
+                (ROOT / f"{prefix}-camera-your-story-composer.xml").write_text(
+                    story_xml + chr(10), encoding="utf-8"
+                )
+                if find_control(story_xml, ["Send"]) and find_control(story_xml, ["Back from Status composer"]):
+                    report.append("- PASS Your Story opened the existing Status composer with the captured media; Send was not tapped")
+                else:
+                    FAILURES.append(prefix + ": Your Story opened, but the existing Status media composer controls were not confirmed")
+                status_close_xml = tap_control(
+                    story_xml, ["Back from Status composer"], f"{prefix}-camera-your-story-close",
+                    ["Open FYNX camera"]
+                )
+                if status_close_xml:
+                    post_composer_xml = tap_control(
+                        status_close_xml, ["Open FYNX camera"], f"{prefix}-camera-post-camera-reopen",
+                        ["Add description..."]
+                    )
+                    post_options_xml = tap_control(
+                        post_composer_xml, ["More options"], f"{prefix}-camera-post-camera-more-options",
+                        ["Add photo or video"]
+                    ) if post_composer_xml else ""
+                    fresh_camera_xml = tap_control_permission_aware(
+                        post_options_xml, ["Add photo or video"], f"{prefix}-camera-post-camera-reopen-action",
+                        ["Switch front/back camera"]
+                    ) if post_options_xml else ""
+                    if fresh_camera_xml:
+                        lens_switch = find_control(fresh_camera_xml, ["Switch front/back camera"])
+                        if lens_switch:
+                            _, lens_x, lens_y = lens_switch
+                            run("adb", "shell", "input", "tap", str(lens_x), str(lens_y))
+                            time.sleep(1.5)
+                            fresh_camera_xml = dump_ui(f"{prefix}-camera-after-story-reopen.xml") or fresh_camera_xml
+                        next_editor = tap_control(
+                            fresh_camera_xml, ["Take photo"], f"{prefix}-camera-after-story-photo",
+                            ["Retake", "Next"]
+                        )
+                        if next_editor:
+                            second_editor = next_editor
+                        else:
+                            FAILURES.append(prefix + ": camera did not return to photo editing after the Your Story hand-off")
+                    else:
+                        FAILURES.append(prefix + ": could not reopen the Home camera after closing the Status composer")
+                else:
+                    FAILURES.append(prefix + ": could not close the unpublished Status composer after hand-off")
+            else:
+                FAILURES.append(prefix + ": Your Story did not open the existing Status composer")
             draft_xml = tap_control(
                 second_editor, ["Next"], f"{prefix}-camera-send-to-post-draft",
                 ["New post", "Add description...", "Post"]
