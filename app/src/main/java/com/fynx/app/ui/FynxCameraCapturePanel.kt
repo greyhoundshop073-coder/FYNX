@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Cameraswitch
@@ -156,6 +157,42 @@ private fun CameraEditorRailAction(
     }
 }
 
+@Composable
+private fun CameraMusicChip(
+    selectedMusic: FynxMusicCatalogueTrack?,
+    onChooseMusic: () -> Unit,
+    onClearMusic: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onChooseMusic,
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFF25364A).copy(alpha = 0.46f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.26f))
+    ) {
+        Row(
+            Modifier.padding(start = 13.dp, end = 7.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+            Text(
+                selectedMusic?.title?.ifBlank { "Add music" } ?: "Add music",
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1
+            )
+            if (selectedMusic != null) {
+                Box(Modifier.width(1.dp).height(20.dp).background(Color.White.copy(alpha = 0.30f)))
+                IconButton(onClick = onClearMusic, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Remove selected music", tint = Color.White, modifier = Modifier.size(17.dp))
+                }
+            }
+        }
+    }
+}
+
 private const val MAX_CAMERA_GALLERY_IMAGE_BYTES = 96L * 1024 * 1024
 private const val MAX_CAMERA_GALLERY_VIDEO_BYTES = 512L * 1024 * 1024
 
@@ -243,7 +280,10 @@ fun FynxCameraCapturePanel(
     liveProofSellerUsername: String = "",
     onLiveProofStart: () -> Unit = {},
     onDismiss: () -> Unit = {},
-    statusCapture: Boolean = false
+    statusCapture: Boolean = false,
+    selectedMusic: FynxMusicCatalogueTrack? = null,
+    onChooseMusic: () -> Unit = {},
+    onClearMusic: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -676,6 +716,14 @@ fun FynxCameraCapturePanel(
             ) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
             }
+            if (!statusCapture && !liveProofMode) {
+                CameraMusicChip(
+                    selectedMusic = selectedMusic,
+                    onChooseMusic = onChooseMusic,
+                    onClearMusic = onClearMusic,
+                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp)
+                )
+            }
             Surface(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp),
                 shape = RoundedCornerShape(24.dp),
@@ -955,6 +1003,15 @@ fun FynxCameraCapturePanel(
                 }
             }
         }
+        if (pendingUri == null && !statusCapture && !liveProofMode) {
+            CameraMusicChip(
+                selectedMusic = selectedMusic,
+                onChooseMusic = onChooseMusic,
+                onClearMusic = onClearMusic,
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp)
+            )
+        }
+
         if (pendingUri == null) {
             Row(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
