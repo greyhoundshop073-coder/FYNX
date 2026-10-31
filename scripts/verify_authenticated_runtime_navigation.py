@@ -1477,6 +1477,13 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
     if status_creator_xml:
         screenshot("authenticated-status-creator.png")
         (ROOT/"authenticated-status-creator.xml").write_text(status_creator_xml+"\n", encoding="utf-8")
+        required_bottom_nav = ["Home", "Chat", "Friends", "Marketplace"]
+        missing_bottom_nav = [label for label in required_bottom_nav if not find_control(status_creator_xml, [label])]
+        if missing_bottom_nav:
+            report.append("- FAIL: Status creator obscures bottom navigation items: "+", ".join(missing_bottom_nav)+".")
+            FAILURES.append("Status creator obscures bottom navigation items: "+", ".join(missing_bottom_nav))
+        else:
+            report.append("- PASS: Status creator keeps Home, Chat, Friends and Marketplace bottom navigation visible and accessible.")
         required_creator_actions = ["Take photo", "Record video", "Gallery", "Text", "Voice", "Music"]
         missing_creator_actions = [label for label in required_creator_actions if not find_control(status_creator_xml, [label])]
         if missing_creator_actions:

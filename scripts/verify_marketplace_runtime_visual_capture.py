@@ -115,6 +115,8 @@ checks.extend([
     (
         "live camera shutter and photo-editor controls reserve Android navigation-bar space",
         camera_source.count(".navigationBarsPadding()") >= 2
+        and ".heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)" in camera_source
+        and ".padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 14.dp)" in camera_source
         and "WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)" not in camera_source,
     ),
     (
@@ -122,7 +124,7 @@ checks.extend([
         '["Create your status"]' in navigation
         and 'authenticated-status-creator.png' in navigation
         and 'authenticated-status-text-composer.png' in navigation
-        and all(label in navigation for label in ("Take photo", "Record video", "Gallery", "Text", "Voice", "Music")),
+        and all(label in navigation for label in ("Take photo", "Record video", "Gallery", "Text", "Voice", "Music", "Home", "Chat", "Friends", "Marketplace")),
     ),
     (
         "Seller orders and Driver deliveries dialogs are captured without mutations",
