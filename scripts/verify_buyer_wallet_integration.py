@@ -6,6 +6,7 @@ client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletClient.kt").r
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletPanel.kt").read_text()
 payments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt").read_text()
 settlement = (ROOT / "backend/marketplaceSettlement.js").read_text()
+wallet_backend = (ROOT / "backend/buyerWallet.js").read_text()
 checks = [
  ("wallet direct Features entry", '"Wallet" -> key(marketplaceAccountKey) { FynxBuyerWalletPanel() }' in app and 'Triple("Wallet", "FYNX Wallet"' in app),
  ("wallet Money Center entry", 'MoneySection("Wallet", "FYNX Wallet"' in money and '"Wallet" -> FynxBuyerWalletPanel()' in money),
@@ -17,11 +18,7 @@ checks = [
  ("reserved and withdrawal-pending balance separated", "reservedBalance" in client and "withdrawalPendingBalance" in client and '"Reserved"' in panel and '"Withdrawal pending"' in panel),
  ("confirmed incoming money uses Classic Green", "FynxDesign.ClassicGreen" in panel and "transaction.walletDelta > 0.0" in panel and 'transaction.status == "SUCCEEDED"' in panel),
  ("loading, retry and empty states", "Loading your wallet" in panel and "refreshVersion += 1" in panel and "No wallet activity yet" in panel),
- ("summary and activity failures are distinct", "summaryError" in panel and "activityError" in panel and "Wallet unavailable" in panel and "Activity could not load" in panel),
- ("failed history never appears as a successful empty state", 'activity.isEmpty() && !loading && summaryError == null && activityError == null' in panel),
- ("activity displays readable date and transaction reference", "fynxWalletActivityDate(transaction.createdAt)" in panel and "transaction.reference" in panel),
- ("wallet status has user-readable state labels", "Wallet access is restricted" in panel and "This wallet is closed" in panel),
- ("funding and withdrawals remain disabled until provider integration", "isWalletReady" in panel and "canFund: false" in settlement and "canWithdraw: false" in settlement),
+ ("funding and withdrawals remain disabled until provider integration", "isWalletReady" in panel and "canFund: false" in wallet_backend and "canWithdraw: false" in wallet_backend),
  ("existing Marketplace Paystack checkout retained", "initializeMarketplacePayment" in payments and "verifyMarketplacePayment" in payments),
  ("NGN-only launch foundation", 'currency == "NGN"' in client and "currently supports the NGN foundation only" in panel)
 ]

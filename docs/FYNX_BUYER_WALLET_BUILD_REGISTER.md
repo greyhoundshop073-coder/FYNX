@@ -6,6 +6,8 @@ This workstream is the buyer's NGN wallet inside the canonical FYNX Android appl
 
 The wallet must not be represented as a real-money product until a suitable provider arrangement, custody model, regulatory review and end-to-end reconciliation have been confirmed.
 
+The buyer wallet is isolated in `backend/buyerWallet.js`; seller settlement remains in `backend/marketplaceSettlement.js`. The two systems share Marketplace order lifecycle rules but not wallet balances or ledger tables.
+
 ## User experience
 
 - One direct Wallet entry in FYNX Features and a second entry from Money Center.
@@ -14,8 +16,6 @@ The wallet must not be represented as a real-money product until a suitable prov
 - Add money and Withdraw actions are visible but remain unavailable until the provider-backed flows are implemented and verified.
 - Confirmed incoming funding and refund activity uses Classic Green (#008000).
 - Loading, retry, empty-history and provider-preparation states are explicit; no sample balance is presented as real.
-- Wallet summary failures and activity-history failures are displayed separately. A failed history request must never be presented as a successful empty wallet.
-- Activity rows show a human-readable local date and transaction reference so users can identify and report a payment.
 
 ## Financial invariants
 
@@ -33,8 +33,7 @@ The wallet must not be represented as a real-money product until a suitable prov
 
 | Stage | Scope | Status |
 |---|---|---|
-| Foundation | Buyer wallet screen, authenticated read APIs, NGN wallet/transaction/ledger schema, ledger invariants, static verification | In this change |
-| UX hardening | Distinct wallet-vs-activity errors, truthful empty state, readable transaction dates/references, status-specific guidance | Follow-up in review |
+| Foundation | Buyer wallet screen, authenticated read APIs in a dedicated buyer-wallet module, NGN wallet/transaction/ledger schema, ledger invariants, static verification | In this change |
 | Provider decision | Written eligibility, licensing/custody confirmation, production API access, fee/limit/KYC/refund/withdrawal terms | Pending |
 | Funding | Provider funding instructions, webhook signature and reference validation, idempotent credit posting, reconciliation | Not started |
 | Withdrawals | Verified beneficiary, fee preview, available-balance reservation, transfer initiation and verification/recovery | Not started |

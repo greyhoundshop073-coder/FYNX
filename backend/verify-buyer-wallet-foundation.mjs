@@ -1,5 +1,5 @@
 import fs from "node:fs";
-const source = fs.readFileSync(new URL("./marketplaceSettlement.js", import.meta.url), "utf8");
+const source = fs.readFileSync(new URL("./buyerWallet.js", import.meta.url), "utf8");
 const checks = [
   ["NGN-only wallet per buyer", source.includes("CREATE TABLE IF NOT EXISTS buyer_wallets") && source.includes("UNIQUE (user_id, currency)") && source.includes("CHECK (currency = 'NGN')")],
   ["unique transaction references and idempotency keys", source.includes("idempotency_key TEXT NOT NULL UNIQUE") && source.includes("reference TEXT NOT NULL UNIQUE")],

@@ -40,7 +40,7 @@ try {
   await client.query("SET search_path TO " + schema + ", public");
   await client.query("CREATE TABLE users (id BIGINT PRIMARY KEY)");
 
-  const source = fs.readFileSync(new URL("./marketplaceSettlement.js", import.meta.url), "utf8");
+  const source = fs.readFileSync(new URL("./buyerWallet.js", import.meta.url), "utf8");
   const schemaMarker = "buyerWalletSchemaPromise = pool.query(" + String.fromCharCode(96);
   const schemaMarkerIndex = source.indexOf(schemaMarker);
   if (schemaMarkerIndex < 0) throw new Error("Could not locate buyer wallet DDL in marketplaceSettlement.js");
