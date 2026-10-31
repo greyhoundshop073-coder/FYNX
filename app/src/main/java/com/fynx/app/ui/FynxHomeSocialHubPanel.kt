@@ -1081,10 +1081,6 @@ fun FynxHomeSocialHubPanel(
                 ) {
                     Text("Add to your post", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ComposerAction("Marketplace", Icons.Default.Storefront, onClick = { showMorePostOptions = false; onOpenMarketplace() }, enabled = !posting, compact = true)
-                    ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = !posting && postingAllowed) {
-                        showMusicPicker = true
-                        notice = null
-                    }
                     TextButton(
                         onClick = { showMorePostOptions = false; showMusicPicker = true; notice = null },
                         enabled = !posting && postingAllowed,
