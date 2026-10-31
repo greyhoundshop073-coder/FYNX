@@ -233,7 +233,7 @@ fun FynxBuyerWalletPanel() {
                         Text(
                             when {
                                 loading -> "Loading…"
-                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet?.availableBalance ?: 0.0)
+                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet.availableBalance ?: 0.0)
                                 canShowBalance -> "₦ ••••••"
                                 else -> "—"
                             },
@@ -251,7 +251,7 @@ fun FynxBuyerWalletPanel() {
                     Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         OutlinedButton(
                             onClick = {},
-                            enabled = isWalletReady && wallet?.canFund == true,
+                            enabled = isWalletReady && wallet.canFund,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
@@ -266,7 +266,7 @@ fun FynxBuyerWalletPanel() {
                         }
                         OutlinedButton(
                             onClick = {},
-                            enabled = isWalletReady && wallet?.canWithdraw == true,
+                            enabled = isWalletReady && wallet.canWithdraw,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
