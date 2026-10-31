@@ -10,12 +10,14 @@ The buyer wallet is isolated in `backend/buyerWallet.js`; seller settlement rema
 
 ## User experience
 
-- One direct Wallet entry in FYNX Features and a second entry from Money Center.
+- Direct Wallet access from the main FYNX Features hub, the Marketplace toolbar and Money Center; all three routes open the same wallet screen.
 - Azure Blue balance card (#007FFF) with white text and a balance-visibility control.
 - Clear labels for available, reserved and withdrawal-pending funds.
 - Add money and Withdraw actions are visible but remain unavailable until the provider-backed flows are implemented and verified.
 - Confirmed incoming funding and refund activity uses Classic Green (#008000).
-- Loading, retry, empty-history and provider-preparation states are explicit; no sample balance is presented as real.\n- Wallet summary failures and activity-history failures are displayed separately. A failed history request must never be presented as a successful empty wallet.\n- Activity rows show a human-readable local date and transaction reference so users can identify and report a payment.
+- Loading, retry, empty-history and provider-preparation states are explicit; no sample balance is presented as real.
+- Wallet summary failures and activity-history failures are displayed separately. A failed history request must never be presented as a successful empty wallet.
+- Activity rows show a human-readable local date and transaction reference so users can identify and report a payment.
 
 ## Financial invariants
 
@@ -33,7 +35,8 @@ The buyer wallet is isolated in `backend/buyerWallet.js`; seller settlement rema
 
 | Stage | Scope | Status |
 |---|---|---|
-| Foundation | Buyer wallet screen, authenticated read APIs in a dedicated buyer-wallet module, NGN wallet/transaction/ledger schema, ledger invariants, static verification | In this change |\n| UX hardening | Distinct wallet-vs-activity errors, truthful empty state, readable transaction dates/references, status-specific guidance | Follow-up in review |
+| Foundation | Buyer wallet screen, authenticated read APIs in a dedicated buyer-wallet module, NGN wallet/transaction/ledger schema, ledger invariants, static verification | In this change |
+| UX hardening | Distinct wallet-vs-activity errors, truthful empty state, readable transaction dates/references, status-specific guidance | Follow-up in review |
 | Provider decision | Written eligibility, licensing/custody confirmation, production API access, fee/limit/KYC/refund/withdrawal terms | Pending |
 | Funding | Provider funding instructions, webhook signature and reference validation, idempotent credit posting, reconciliation | Not started |
 | Withdrawals | Verified beneficiary, fee preview, available-balance reservation, transfer initiation and verification/recovery | Not started |
