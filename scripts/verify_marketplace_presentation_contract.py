@@ -86,6 +86,8 @@ check("My Shop client uses the private owner-inventory endpoint",
 check("This Marketplace PR runs the real read-only emulator screenshot path",
       workflow.count("github.event.pull_request.head.ref == 'fix/marketplace-presentation-avatar-onboarding-20261031'") >= 4
       and "FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py" in Path("scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8"))
+check("Runtime screenshot walk can open the actual Sell floating action button",
+      'sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]' in Path("scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8"))
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
