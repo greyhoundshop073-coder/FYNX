@@ -10,6 +10,12 @@ runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_tex
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
+    ("Camera dialog keeps a dark backdrop behind white edge-to-edge system icons",
+     "if (showCamera || showFastCamera)" in home
+     and "Surface(Modifier.fillMaxSize(), color = Color(0xFF080A10))" in home
+     and "def verify_camera_system_bar_contrast(" in runtime
+     and "mean_luminance > 52" in runtime
+     and 'verify_camera_system_bar_contrast(f"{prefix}-camera-live-preview.png"' in runtime),
     ("API 35 emulator launches with the documented environment camera source",
      "-camera-back environment -camera-front none" in workflow
      and "pre-emulator-launch-script:" not in workflow
