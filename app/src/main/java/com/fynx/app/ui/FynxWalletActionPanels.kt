@@ -183,6 +183,24 @@ internal fun FynxWalletActionPanel(
                 }
                 item { WalletActionAmountField(amount, onAmountChange, "Amount to withdraw") }
                 item {
+                    WalletReadOnlyBankField(
+                        label = "Select bank",
+                        placeholder = "Available after secure provider connection"
+                    )
+                }
+                item {
+                    WalletReadOnlyBankField(
+                        label = "Account number",
+                        placeholder = "Enter your 10-digit account number when enabled"
+                    )
+                }
+                item {
+                    WalletReadOnlyBankField(
+                        label = "Verified account name",
+                        placeholder = "Automatically confirmed by the payment provider"
+                    )
+                }
+                item {
                     WalletStepCard(
                         title = "Your withdrawal destination",
                         steps = listOf(
@@ -238,6 +256,20 @@ private fun WalletActionAmountField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         leadingIcon = { Text("₦", fontWeight = FontWeight.SemiBold) },
         supportingText = { Text("NGN wallet") }
+    )
+}
+
+@Composable
+private fun WalletReadOnlyBankField(label: String, placeholder: String) {
+    OutlinedTextField(
+        value = "",
+        onValueChange = {},
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        placeholder = { Text(placeholder) },
+        enabled = false,
+        singleLine = true,
+        trailingIcon = { Icon(Icons.Default.Info, contentDescription = "Available after provider setup") }
     )
 }
 
