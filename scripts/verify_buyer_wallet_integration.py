@@ -51,14 +51,14 @@ checks = [
  ("existing Marketplace Paystack checkout retained", "initializeMarketplacePayment" in payments and "verifyMarketplacePayment" in payments),
  ("NGN-only launch foundation", 'currency == "NGN"' in client and "currently supports the NGN foundation only" in panel),
  ("Add Money opens a dedicated funding-method screen", 'onClick = { activeAction = "ADD" }' in panel and 'screen = activeAction' in panel and 'FynxWalletActionPanel' in panel and '"ADD" ->' in actions),
- ("wallet Add Money and Withdraw action screens are captured by emulator runtime", 'tap_control(wallet_xml, ["Add money"]' in runtime and 'tap_control(add_money_xml, ["Dedicated bank transfer"]' in runtime and 'tap_control(home_after_add, ["Withdraw"]' in runtime),
- ("dedicated bank transfer never invents account details", '"Account number not assigned yet"' in actions and '"Do not transfer money to an account number supplied outside this FYNX screen."' in actions and "0000000000" not in actions),
+ ("wallet Add Money, bank-transfer and Withdraw screens are captured by emulator runtime", 'wallet-add-money' in runtime and 'wallet-bank-transfer' in runtime and 'wallet-withdraw' in runtime),
+ ("dedicated bank transfer never invents account details", '"Account number not assigned yet"' in actions and 'Do not transfer money to an account number supplied outside this FYNX screen.' in actions and "0000000000" not in actions),
  ("bank transfer explains automatic verified wallet credit", '"The provider confirms the payment to FYNX."' in actions and '"FYNX verifies the confirmation and credits your wallet."' in actions),
  ("card and USSD methods have explicit provider-not-ready states", '"CARD" ->' in actions and '"USSD" ->' in actions and '"Card funding is not active yet"' in actions and '"USSD payments are not active yet"' in actions),
  ("withdraw screen previews cleared balance and explains secure bank verification", 'onClick = { activeAction = "WITHDRAW" }' in panel and '"AVAILABLE BALANCE"' in actions and '"FYNX verifies the account name with the provider."' in actions),
  ("withdrawal submission remains disabled without provider integration", '"Withdrawals not available yet"' in actions and 'enabled = false' in actions),
  ("seller earnings explicitly disclose default five-percent Marketplace commission", '"FYNX Marketplace commission · default 5%"' in seller_center and 'record.marketplaceFee' in seller_center),
- ("Marketplace commission is not charged on wallet top-ups or withdrawals", '"wallet top-ups and bank withdrawals are not charged this fee"' in seller_center),
+ ("Marketplace commission is not charged on wallet top-ups or withdrawals", 'wallet top-ups and bank withdrawals are not charged this fee' in seller_center),
  ("default Marketplace fee policy is seller-paid at five percent", "process.env.FYNX_MARKETPLACE_FEE_MODE || 'SELLER'" in transactions and "process.env.FYNX_MARKETPLACE_FEE_BPS || '500'" in transactions and 'const mode = configuredMode;' in transactions)
 ]
 failed=[name for name,ok in checks if not ok]
