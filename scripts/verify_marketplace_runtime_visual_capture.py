@@ -99,6 +99,13 @@ checks = [
         and "No products, orders, payments, earnings, drivers, or seller records are fabricated." in navigation,
     ),
     (
+        "Marketplace PR runtime skips the Status creator journey owned by another workstream",
+        'FYNX_MARKETPLACE_RUNTIME_ONLY' in runner
+        and 'if [ "${FYNX_MARKETPLACE_RUNTIME_ONLY:-0}" != "1" ]; then' in runner
+        and 'leaving Status creator journey untouched.' in runner
+        and 'FYNX_MARKETPLACE_RUNTIME_ONLY:' in workflow,
+    ),
+    (
         "the CI workflow executes this visual-capture regression guard",
         "python3 scripts/verify_marketplace_runtime_visual_capture.py" in workflow,
     ),
