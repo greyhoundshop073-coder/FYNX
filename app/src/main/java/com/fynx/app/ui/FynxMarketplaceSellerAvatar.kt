@@ -5,7 +5,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import java.util.Locale
 
 /**
  * Marketplace-specific seller avatar binding.
@@ -22,7 +21,7 @@ internal fun FynxMarketplaceSellerAvatar(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val normalizedOwner = ownerUsername.trim().removePrefix("@").trim().lowercase(Locale.US)
+    val normalizedOwner = ownerUsername.trim().removePrefix("@").trim().lowercase()
     val avatarRevisions by FynxAvatarIdentityStore.revisions().collectAsState()
     val revision = avatarRevisions[normalizedOwner]
     val hasCachedEntry = normalizedOwner.isNotBlank() &&
