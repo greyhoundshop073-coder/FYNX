@@ -140,7 +140,7 @@ DIAGNOSTIC_MARKERS = (
     "Open FYNX camera", "FYNX", "Chat", "Chats", "Friends", "More", "Stories",
     "Status", "Find People", "Search username or name", "Search chats",
     "Messages and groups in one place", "Your private conversations",
-    "New post", "Add description...", "Add music", "Your Story", "More options", "Add photo or video", "Drafts", "Content disclosure and ads", "Add link", "Share to", "Edit cover",
+    "New post", "Add description...", "Add music", "Your Story", "More options", "Add photo or video", "Take photo or video", "Drafts", "Content disclosure and ads", "Add link", "Share to", "Edit cover",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
@@ -699,10 +699,10 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
     options_xml = tap_control(
         composer_xml, ["More options"], f"{prefix}-composer-more-options",
-        ["Add photo or video"]
+        ["Take photo or video", "Add photo or video"]
     )
     camera_xml = tap_control_permission_aware(
-        options_xml, ["Add photo or video"], f"{prefix}-composer-camera",
+        options_xml, ["Take photo or video"], f"{prefix}-composer-camera",
         ["Switch front/back camera"]
     ) if options_xml else ""
     if not camera_xml:
@@ -1137,10 +1137,10 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     )
                     post_options_xml = tap_control(
                         post_composer_xml, ["More options"], f"{prefix}-camera-post-camera-more-options",
-                        ["Add photo or video"]
+                        ["Take photo or video", "Add photo or video"]
                     ) if post_composer_xml else ""
                     fresh_camera_xml = tap_control_permission_aware(
-                        post_options_xml, ["Add photo or video"], f"{prefix}-camera-post-camera-reopen-action",
+                        post_options_xml, ["Take photo or video"], f"{prefix}-camera-post-camera-reopen-action",
                         ["Switch front/back camera"]
                     ) if post_options_xml else ""
                     if fresh_camera_xml:
@@ -1286,10 +1286,10 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     if not composer:
         return camera_return_to_home(home_xml, prefix + "-video-composer-missing")
     options = tap_control(
-        composer, ["More options"], f"{prefix}-video-composer-more-options", ["Add photo or video"]
+        composer, ["More options"], f"{prefix}-video-composer-more-options", ["Take photo or video", "Add photo or video"]
     )
     camera = tap_control(
-        options, ["Add photo or video"], f"{prefix}-video-composer-camera", ["Switch front/back camera"]
+        options, ["Take photo or video"], f"{prefix}-video-composer-camera", ["Switch front/back camera"]
     ) if options else ""
     if not camera:
         return camera_return_to_home(composer, prefix + "-video-camera-missing")
