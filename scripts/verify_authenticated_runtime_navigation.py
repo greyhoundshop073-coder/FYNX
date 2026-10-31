@@ -690,6 +690,9 @@ def verify_camera_system_bar_contrast(filename: str, prefix: str) -> bool:
 
 def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     """Exercise the real camera preview/photo editor and safe controls without publishing a post."""
+    # Keep a defined Home fallback for every early-recovery branch. The camera flow may
+    # return to Home after a successful details-page inspection or an aborted draft path.
+    home = home_xml
     composer_xml = tap_control(
         home_xml, ["Open FYNX camera"], f"{prefix}-home-camera-composer",
         ["Add description..."]
@@ -1222,7 +1225,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                                     report.append("- PASS saved post draft reopened and its test copy was deleted")
                     else:
                         FAILURES.append(prefix + ": Drafts did not persist the unpublished camera media")
-                draft_xml = camera_return_to_home(details_xml, prefix + "-post-draft-dismiss")
+                home = camera_return_to_home(details_xml, prefix + "-post-draft-dismiss")
                 report.append("- PASS camera Next handed the photo to the reference-style post details page; no post was published")
             else:
                 FAILURES.append(prefix + ": camera Next did not open the New post caption draft")
