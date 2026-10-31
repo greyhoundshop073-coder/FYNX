@@ -41,15 +41,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+internal fun marketplaceOrderAllowsProblemReport(status: String): Boolean =
+    status.trim().uppercase(Locale.US) in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED")
+
 @Composable
 fun FynxMarketplaceOrderLifecycle(
     context: Context,
     order: FynxRemoteSocialClient.MarketplaceOrder,
     onChanged: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    openDisputeInitially: Boolean = false
 ) {
-    var showFulfillment by remember { mutableStateOf(order.status == "PAID") }
-    var showDispute by remember { mutableStateOf(false) }
+    var showFulfillment by remember(order.id) { mutableStateOf(order.status == "PAID" && !openDisputeInitially) }
+    var showDispute by remember(order.id) {
+        mutableStateOf(openDisputeInitially && marketplaceOrderAllowsProblemReport(order.status))
+    }
     var disputeDetails by remember { mutableStateOf("") }
     var disputeReason by remember { mutableStateOf("OTHER") }
     var confirmOrderMatch by remember { mutableStateOf(false) }
@@ -283,13 +289,23 @@ fun FynxMarketplaceOrderLifecycle(
                         showDispute = false
                         disputeDetails = ""
                         error = null
-                    } else {
+                    } else if (marketplaceOrderAllowsProblemReport(order.status)) {
                         showDispute = true
                         error = null
+                    } else {
+                        onClose()
                     }
                 },
                 enabled = !busy
-            ) { Text(if (showDispute) "Back" else "Report problem") }
+            ) {
+                Text(
+                    when {
+                        showDispute -> "Back"
+                        marketplaceOrderAllowsProblemReport(order.status) -> "Report problem"
+                        else -> "Close"
+                    }
+                )
+            }
         }
     )
 }
