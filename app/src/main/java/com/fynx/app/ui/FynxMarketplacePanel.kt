@@ -1413,16 +1413,18 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         pinnedPublishedListing = null
         publishRefreshKey += 1
         scope.launch {
-            val exact = loadExactMarketplaceListing(context, listingId)
-            val confirmed = exact.getOrNull()
-                ?: FynxRemoteSocialClient.myListings(context).getOrThrow()
-                    .firstOrNull { it.id == listingId }
-                ?: throw IllegalStateException("The product was accepted, but its saved listing could not be read yet.")
-            pinnedPublishedListing = confirmed
-            listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }
-            error = null
-        }.invokeOnCompletion { failure ->
-            if (failure != null) {
+            try {
+                val exact = loadExactMarketplaceListing(context, listingId)
+                val confirmed = exact.getOrNull()
+                    ?: FynxRemoteSocialClient.myListings(context).getOrThrow()
+                        .firstOrNull { it.id == listingId }
+                    ?: throw IllegalStateException("The product was accepted, but its saved listing could not be read yet.")
+                pinnedPublishedListing = confirmed
+                listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }
+                error = null
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
                 error = marketplaceSafeError(
                     failure,
                     "Product was accepted, but could not be shown yet. Open My Shop to verify it before publishing again."
