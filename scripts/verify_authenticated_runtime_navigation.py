@@ -140,7 +140,7 @@ DIAGNOSTIC_MARKERS = (
     "Open FYNX camera", "FYNX", "Chat", "Chats", "Friends", "More", "Stories",
     "Status", "Find People", "Search username or name", "Search chats",
     "Messages and groups in one place", "Your private conversations",
-    "New post", "Add description...", "More options", "Add photo or video", "Drafts", "Content disclosure and ads", "Add link", "Share to", "Edit cover",
+    "New post", "Add description...", "Add music", "More options", "Add photo or video", "Drafts", "Content disclosure and ads", "Add link", "Share to", "Edit cover",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
@@ -729,7 +729,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     verify_camera_controls_fit_safe_area(camera_xml, ["Effects", "Take photo", "Gallery"], prefix + " front live camera")
     (ROOT / f"{prefix}-camera-live-preview-front.xml").write_text(camera_xml + chr(10), encoding="utf-8")
     missing_live = [
-        label for label in ["Switch front/back camera", "Effects", "Gallery", "Take photo"]
+        label for label in ["Switch front/back camera", "Effects", "Gallery", "Take photo", "Add music"]
         if not find_control(camera_xml, [label])
     ]
     if missing_live:
