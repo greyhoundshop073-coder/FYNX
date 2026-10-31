@@ -26,9 +26,12 @@ checks = [
      and "# Hashtags" in home and "@ Mention" in home
      and "Who can view this post" in home
      and 'Text(if (posting) "Publishing…" else "Post")' in home),
-    ("Camera dialog keeps a dark backdrop behind white edge-to-edge system icons",
+    ("Camera dialog draws its dark canvas edge-to-edge while controls apply their own safe-area insets",
      "if (showCamera || showFastCamera)" in home
      and "Surface(Modifier.fillMaxSize(), color = Color(0xFF080A10))" in home
+     and "Box(Modifier.fillMaxSize().background(Color(0xFF080A10)))" in home
+     and "Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing))" not in home
+     and "statusBarsPadding()" in camera and ".navigationBarsPadding()" in camera
      and "def verify_camera_system_bar_contrast(" in runtime
      and "mean_luminance > 52" in runtime
      and 'verify_camera_system_bar_contrast(f"{prefix}-camera-live-preview.png"' in runtime),
