@@ -1006,8 +1006,11 @@ fun FynxHomeSocialHubPanel(
             },
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
+            // Draw the camera's dark canvas edge-to-edge, including behind the status bar.
+            // The camera panel already insets its own controls; padding this parent would leave
+            // the system-bar strip outside the dark surface and expose the underlying window.
             Surface(Modifier.fillMaxSize(), color = Color(0xFF080A10)) {
-                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                Box(Modifier.fillMaxSize().background(Color(0xFF080A10))) {
                     FynxCameraCapturePanel(
                         fastCapture = showFastCamera,
                         onCaptured = { uri, type ->
