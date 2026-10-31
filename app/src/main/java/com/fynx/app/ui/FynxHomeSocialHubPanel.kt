@@ -763,7 +763,31 @@ fun FynxHomeSocialHubPanel(
                                 enabled = !posting && postingAllowed,
                                 label = { Text("@ Mention") }
                             )
+                        }                        
+                        selectedCatalogueMusic?.let { music ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(Icons.Default.MusicNote, contentDescription = "Selected FYNX music", tint = MaterialTheme.colorScheme.primary)
+                                    Column(Modifier.weight(1f)) {
+                                        Text(music.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                                        Text(music.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                    }
+                                    FynxRemoteAudio(
+                                        mediaUrl = "/api/social/music/catalogue/" + music.id + "/media",
+                                        modifier = Modifier.width(112.dp),
+                                        maxDurationMs = music.durationMs.coerceAtLeast(1_000L)
+                                    )
+                                    IconButton(onClick = { selectedCatalogueMusic = null; musicPlaying = false }, enabled = !posting) {
+                                        Icon(Icons.Default.Close, "Remove music")
+                                    }
+                                }
+                            }
                         }
+
 
 
 
@@ -1055,6 +1079,10 @@ fun FynxHomeSocialHubPanel(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text("Add to your post", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = !posting && postingAllowed) {
+                        showMusicPicker = true
+                        notice = null
+                    }
                     TextButton(
                         onClick = { showMorePostOptions = false; showMusicPicker = true; notice = null },
                         enabled = !posting && postingAllowed,
