@@ -47,8 +47,8 @@ checks = [
      and "LaunchedEffect(initialMediaUri, initialMediaType)" in status_hub
      and "FynxMatureStatusComposerPanel(" in status_hub
      and "initialMediaUri = selectedInitialMedia?.uri" in status_hub),
-    ("Runtime captures Your Story media hand-off and safely returns before the separate Next-to-post journey",
-     '["Your Story"]' in runtime
+    ("Runtime captures the explicit Status media hand-off and safely returns before the separate Next-to-post journey",
+     '["Status"]' in runtime
      and '["Back from Status composer"]' in runtime
      and "camera-your-story-composer.png" in runtime
      and "Your Story opened the existing Status composer with the captured media" in runtime
