@@ -518,6 +518,30 @@ checks.extend([
      and "media_ids = COALESCE($8::jsonb, media_ids)" in social_routes
      and "Marketplace listing media must be images or videos" in social_routes),
 ])
+publish_flow_start = marketplace.index("if (showSell) MarketplaceSellDialog")
+publish_flow_end = marketplace.index("publishSuccessListingId?.let", publish_flow_start)
+publish_flow = marketplace[publish_flow_start:publish_flow_end]
+
+checks.extend([
+    ("publishing clears discovery filters and forces a fresh unfiltered Marketplace read",
+     'query = ""' in publish_flow
+     and 'category = "All"' in publish_flow
+     and "nearbyMode = false" in publish_flow
+     and "nearbyLabel = \"\"" in publish_flow
+     and "showAllProducts = true" in publish_flow
+     and "publishRefreshKey += 1" in publish_flow
+     and "LaunchedEffect(query, category, nearbyMode, nearbyLabel, publishRefreshKey)" in marketplace),
+    ("published product is re-read from the server and never fabricated before it is shown",
+     "loadExactMarketplaceListing(context, listingId)" in publish_flow
+     and "FynxRemoteSocialClient.myListings(context).getOrThrow()" in publish_flow
+     and "pinnedPublishedListing = confirmed" in publish_flow
+     and "Product was accepted, but its saved listing could not be read yet." in publish_flow),
+    ("server-confirmed published product stays at the top only in the unfiltered discovery feed",
+     "requestQuery.isBlank() && requestCategory.equals(\"All\", ignoreCase = true) && !requestNearbyMode" in marketplace
+     and "listOfNotNull(pinned) + items).distinctBy { it.id }" in marketplace
+     and "listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }" in publish_flow),
+])
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
