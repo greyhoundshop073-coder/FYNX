@@ -31,6 +31,9 @@ checks = [
      and "camera after Gallery cancellation" in runtime
      and "verify_camera_controls_fit_safe_area(" in runtime
      and "camera-after-gallery-back-activity.txt" in runtime),
+    ("Camera screenshot verification rejects block-corrupted previews instead of counting colours alone",
+     "ImageFilter.FIND_EDGES" in runtime and "edge_detail_ratio < 0.15" in runtime
+     and "edge-detail=" in runtime),
     ("Runtime camera journey verifies switch, flash capability, Gallery, capture, effects and Retake without publishing",
      "def capture_camera_post_journey(" in runtime
      and '["Take photo"]' in runtime
