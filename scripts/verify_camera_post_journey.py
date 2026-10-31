@@ -141,8 +141,8 @@ checks = [
     ("Home camera starts a fresh session", "capturedUris = emptyList()" in home and "cameraOpenedFromComposer = false" in home),
     ("Post details follow the reference information order with a fixed Drafts/Post footer",
      all(label in home for label in ["Add description...", "# Hashtags", "@ Mention", "Content disclosure and ads", "Location", "Add link", "More options", "Share to", "Edit cover", "Drafts"])
-     and 'Text("Add description..."' in home
-     and home.index('Text("Add description..."') < home.index('label = { Text("# Hashtags") }') < home.index('Text("Content disclosure and ads", style')
+     and 'Text(\n                                            "Add description...",' in home
+     and home.index('Text(\n                                            "Add description...",') < home.index('label = { Text("# Hashtags") }') < home.index('Text("Content disclosure and ads", style')
      and home.index('Text("Content disclosure and ads", style') < home.index('Text("Location", style') < home.index('Text("Add link", style')
      and home.index('Text("Add link", style') < home.index('"Who can view this post"') < home.index('Text("More options", style') < home.index('Text("Share to", style')
      and 'Text(if (posting) "Publishing…" else "Post",' in home
