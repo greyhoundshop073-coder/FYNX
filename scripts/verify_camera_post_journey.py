@@ -8,6 +8,8 @@ refresh = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt").read
 backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+status_hub = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt").read_text(encoding="utf-8")
+app_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 draft_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt").read_text(encoding="utf-8")
 
 checks = [
@@ -25,6 +27,29 @@ checks = [
      and "onChooseMusic = onChooseMusic" in camera
      and "selectedMusic = selectedCatalogueMusic" in home
      and "showMusicPicker = true" in home),
+    ("Your Story and Next are separate real destinations from one captured preview",
+     "showYourStoryAction: Boolean = false" in camera
+     and 'Text("Your Story")' in camera
+     and "onShareToStatus(previewUri" in camera
+     and "onCaptured(previewUri, previewType)" in camera
+     and "showYourStoryAction = true" in home
+     and "onShareToStatus = {" in home
+     and "onOpenStatusWithMedia(uri, type)" in home),
+    ("Your Story reuses the existing Status composer media hand-off without changing Status publishing",
+     "statusInitialMediaUri" in app_source and "statusInitialMediaType" in app_source
+     and "initialMediaUri = statusInitialMediaUri" in app_source
+     and "initialMediaType = statusInitialMediaType" in app_source
+     and "initialMediaUri: Uri? = null" in status_hub
+     and "LaunchedEffect(initialMediaUri, initialMediaType)" in status_hub
+     and "FynxMatureStatusComposerPanel(" in status_hub
+     and "initialMediaUri = selectedInitialMedia?.uri" in status_hub),
+    ("Runtime captures Your Story media hand-off and safely returns before the separate Next-to-post journey",
+     '["Your Story"]' in runtime
+     and '["Back from Status composer"]' in runtime
+     and "camera-your-story-composer.png" in runtime
+     and "Your Story opened the existing Status composer with the captured media" in runtime
+     and "Send is never tapped" in runtime
+     and "camera-after-story-photo" in runtime),
     ("Camera editor exposes Next and preserves the existing captured-media callback",
      'Text("Next")' in camera and "onCaptured(previewUri, previewType)" in camera),
     ("Next details composer shows media preview, description, tag helpers and privacy entry",
