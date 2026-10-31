@@ -651,6 +651,43 @@ def verify_camera_image_signal(filename: str, crop_box: tuple[int, int, int, int
     return True
 
 
+def verify_camera_system_bar_contrast(filename: str, prefix: str) -> bool:
+    """Require the camera dialog's status-bar backdrop to stay dark behind white system icons."""
+    try:
+        from PIL import Image
+        image_path = ROOT / filename
+        if not image_path.is_file():
+            raise FileNotFoundError("camera screenshot was not saved")
+        with Image.open(image_path) as captured:
+            image = captured.convert("RGB")
+            width, height = image.size
+            # Sample the central status-bar background, avoiding clock and notification icons.
+            band = image.crop((
+                int(width * 0.20), 0, int(width * 0.80), min(height, 84)
+            )).resize((48, 8))
+            pixels = list(band.getdata())
+            luminance = [
+                0.2126 * red + 0.7152 * green + 0.0722 * blue
+                for red, green, blue in pixels
+            ]
+            mean_luminance = sum(luminance) / max(1, len(luminance))
+            dark_ratio = sum(value < 64 for value in luminance) / max(1, len(luminance))
+    except Exception as failure:
+        FAILURES.append(prefix + ": status-bar contrast could not be checked: " + str(failure)[:160])
+        return False
+    if mean_luminance > 52 or dark_ratio < 0.90:
+        FAILURES.append(
+            prefix + f": camera status-bar backdrop is too light for white system icons "
+            f"(mean luminance={mean_luminance:.1f}, dark ratio={dark_ratio:.2f})"
+        )
+        return False
+    report.append(
+        "- PASS camera status-bar backdrop is dark and keeps system icons legible "
+        f"(mean luminance={mean_luminance:.1f})"
+    )
+    return True
+
+
 def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     """Exercise the real camera preview/photo editor and safe controls without publishing a post."""
     composer_xml = tap_control(
@@ -675,6 +712,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     time.sleep(2.5)
     camera_xml = dump_ui(f"{prefix}-camera-live-preview-front.xml") or camera_xml
     screenshot(f"{prefix}-camera-live-preview-front.png")
+    verify_camera_system_bar_contrast(f"{prefix}-camera-live-preview-front.png", prefix + " front camera")
     camera_service_dump = run("adb", "shell", "dumpsys", "media.camera", timeout=15).stdout or ""
     (ROOT / f"{prefix}-camera-runtime-device-camera.txt").write_text(
         (camera_service_dump or "Camera service dump unavailable") + chr(10),
@@ -765,6 +803,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             FAILURES.append(prefix + ": rear virtual-scene camera could not start")
         else:
             screenshot(f"{prefix}-camera-live-preview.png")
+            verify_camera_system_bar_contrast(f"{prefix}-camera-live-preview.png", prefix + " rear camera")
             verify_camera_image_signal(f"{prefix}-camera-live-preview.png", (180, 650, 1260, 1900), prefix + " rear live preview")
             verify_camera_controls_fit_safe_area(camera_xml, ["Effects", "Take photo", "Gallery"], prefix + " rear live camera")
             (ROOT / f"{prefix}-camera-live-preview.xml").write_text(camera_xml + chr(10), encoding="utf-8")
@@ -893,6 +932,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 gallery_recovered = True
                 # Verify the returned surface is the live camera, not just an old UI hierarchy.
                 screenshot(f"{prefix}-camera-after-gallery-back.png")
+                verify_camera_system_bar_contrast(f"{prefix}-camera-after-gallery-back.png", prefix + " camera after Gallery")
                 verify_camera_image_signal(
                     f"{prefix}-camera-after-gallery-back.png",
                     (180, 650, 1260, 1900),
