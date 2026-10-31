@@ -203,6 +203,25 @@ checks = [
     ("Normalized media authorization excludes blocked relationships", "NOT EXISTS" in backend and "blocked_id = p.author_id" in backend),
 ]
 
+    ("Camera media preview labels the Status destination clearly and keeps the familiar story wording",
+     'Text("Status", style = MaterialTheme.typography.titleMedium' in camera
+     and 'Text("Your Story", style = MaterialTheme.typography.labelSmall' in camera
+     and 'contentDescription = "Share to Status"' in camera),
+    ("Gallery photo and video selections enter the same preview that offers Status and Next",
+     "PickVisualMedia.ImageAndVideo" in camera
+     and "pendingUri = Uri.fromFile(working)" in camera
+     and 'pendingType = if (selectedType == "video" && videoNoteMode) "video_note" else selectedType' in camera
+     and "showCaptureControls = true" in camera
+     and "if(previewUri!=null && previewType!=null)" in camera
+     and "if (showYourStoryAction && !statusCapture && !liveProofMode)" in camera
+     and "showYourStoryAction = true" in home
+     and "onShareToStatus(previewUri" in camera),
+    ("Recorded video opens the existing Status composer and is never sent by the runtime test",
+     '["Status"]' in runtime
+     and "camera-video-status-composer.png" in runtime
+     and "recorded video opened the existing Status composer with Send available; Send was not tapped" in runtime
+     and "camera-video-status-close" in runtime),
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
