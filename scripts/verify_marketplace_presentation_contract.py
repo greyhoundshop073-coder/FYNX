@@ -5,6 +5,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "app/src/main/java/com/fynx/app/ui"
+workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 def read(name: str) -> str:
     path = UI / name
