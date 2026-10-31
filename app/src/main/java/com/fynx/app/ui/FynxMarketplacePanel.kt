@@ -797,8 +797,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var protectedOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var showSell by remember { mutableStateOf(false) }
     var publishSuccessListingId by remember { mutableStateOf<String?>(null) }
-    var pinnedPublishedListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
-    var publishRefreshKey by remember { mutableIntStateOf(0) }
+    var pinnedPublishedListing by remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var publishRefreshKey by remember(currentUsername) { mutableIntStateOf(0) }
     var showOrders by remember { mutableStateOf(false) }
     // Keep saved carts isolated when multiple accounts use the same device.
     val cartOwnerKey = currentUsername.removePrefix("@").trim().lowercase(Locale.US).ifBlank { "preview" }
@@ -1002,7 +1002,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     LaunchedEffect(query, category, nearbyMode, nearbyLabel, publishRefreshKey) {
         if (query.isNotBlank() || !category.equals("All", ignoreCase = true) || nearbyMode) {
+            val pinnedId = pinnedPublishedListing?.id
             pinnedPublishedListing = null
+            if (pinnedId != null) {
+                listings = listings.filterNot { it.id == pinnedId }
+            }
         }
         // Invalidate prior requests immediately, before the search debounce completes.
         listingRequestGeneration += 1
