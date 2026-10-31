@@ -1864,7 +1864,21 @@ private fun MarketplacePaymentDialog(context: android.content.Context, order: Fy
                 Text("${order.currency} ${String.format(Locale.US, "%,.2f", order.totalAmount)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                 if (payment == null) {
                     Text("Enter the email you want to use for payment. Your FYNX password or payment secret is never requested here.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Payment email") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it.take(160); message = null },
+                        label = { Text("Payment email") },
+                        supportingText = {
+                            if (email.isNotBlank() && !isValidMarketplacePaymentEmail(email)) {
+                                Text("Enter a valid email address.")
+                            } else {
+                                Text("Used by the payment provider for your receipt.")
+                            }
+                        },
+                        singleLine = true,
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 } else {
                     Text("Checkout was opened. After completing payment, return to FYNX and verify the payment.", style = MaterialTheme.typography.bodySmall)
                     Text("Reference: ${payment?.reference.orEmpty()}", style = MaterialTheme.typography.labelSmall)
@@ -1874,7 +1888,7 @@ private fun MarketplacePaymentDialog(context: android.content.Context, order: Fy
         },
         confirmButton = {
             if (payment == null) {
-                Button(enabled = !busy, onClick = {
+                Button(enabled = !busy && isValidMarketplacePaymentEmail(email), onClick = {
                     busy = true
                     message = null
                     scope.launch {
@@ -3001,6 +3015,13 @@ private fun MarketplaceMultiProductPaymentDialog(
                         value = email,
                         onValueChange = { email = it.trim().take(160) },
                         label = { Text("Paystack payment email") },
+                        supportingText = {
+                            if (email.isNotBlank() && !isValidMarketplacePaymentEmail(email)) {
+                                Text("Enter a valid email address.")
+                            } else {
+                                Text("Used by Paystack for your payment receipt.")
+                            }
+                        },
                         singleLine = true,
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth()
@@ -3022,7 +3043,7 @@ private fun MarketplaceMultiProductPaymentDialog(
         },
         confirmButton = {
             if (payment == null) {
-                Button(enabled = !busy && email.contains("@"), onClick = {
+                Button(enabled = !busy && isValidMarketplacePaymentEmail(email), onClick = {
                     busy = true
                     message = null
                     scope.launch {
