@@ -15,7 +15,7 @@ workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="ut
 
 checks = [
     ("One Create Post composer owns supported attachments using the reference-style More options and Location rows", all(x in composer for x in [
-        'ComposerQuickChip("Music"', 'Text("Location")', 'requestComposerLocation()',
+        'ComposerQuickChip("Music"', 'Text("Location", style = MaterialTheme.typography.titleMedium', 'requestComposerLocation()',
         'Text("Feeling / Activity")', 'showFeelingActivityPicker = true',
         'FynxPostAudienceClient', 'FynxMultiMediaPostClient.createPost'
     ])),
