@@ -927,8 +927,12 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
     if not gallery_recovered:
         # Never reuse stale camera coordinates while the system picker may still own the
-        # foreground window. Abort this camera pass safely and let the next runtime stage run.
-        return camera_return_to_home(camera_xml, prefix + "-gallery-recovery-abort")
+        # foreground window. Return safely to Home, then still exercise the independent video
+        # journey so one Gallery failure does not hide the remaining camera evidence.
+        home_after_gallery_abort = camera_return_to_home(
+            camera_xml, prefix + "-gallery-recovery-abort"
+        )
+        return capture_camera_video_journey(home_after_gallery_abort, prefix)
 
     editor_xml = tap_control(
         camera_xml, ["Take photo"], f"{prefix}-camera-photo-capture", ["Send"]
