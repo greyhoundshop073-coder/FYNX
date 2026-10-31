@@ -91,4 +91,51 @@ await routes.get("PATCH /api/marketplace/my-shop")(
 assert.equal(emptyPatchResponse.statusCode, 400,
   "empty My Shop patches must be rejected");
 
+// A first-time seller must be able to create a shop by supplying a shop name.
+const createRoutes = new Map();
+const createApp = {
+  get(route, ...handlers) { createRoutes.set(`GET ${route}`, handlers.at(-1)); },
+  patch(route, ...handlers) { createRoutes.set(`PATCH ${route}`, handlers.at(-1)); }
+};
+let createParameters = null;
+const createPool = {
+  async query(sql, parameters = []) {
+    if (sql.includes("CREATE TABLE IF NOT EXISTS marketplace_shop_profiles")) {
+      return { rows: [] };
+    }
+    if (sql.includes("INSERT INTO marketplace_shop_profiles")) {
+      createParameters = parameters;
+      return { rows: [{
+        shop_name: "First Shop",
+        description: "",
+        location: "",
+        contact_phone: "",
+        updated_at: "2026-10-31T00:00:00.000Z"
+      }] };
+    }
+    if (sql.includes("SELECT username, display_name FROM users")) {
+      return { rows: [{ username: "new-seller", display_name: "New Seller" }] };
+    }
+    throw new Error(`Unexpected first-shop creation query: ${sql.slice(0, 100)}`);
+  }
+};
+registerMarketplaceShopProfileRoutes({
+  app: createApp,
+  pool: createPool,
+  auth: (_req, _res, next) => next()
+});
+const createdShopResponse = response();
+await createRoutes.get("PATCH /api/marketplace/my-shop")(
+  { user: { sub: "77" }, body: { shopName: "First Shop" } },
+  createdShopResponse
+);
+assert.equal(createdShopResponse.statusCode, 200,
+  "a first-time seller must be able to create My Shop with a shop name");
+assert.deepEqual(createParameters, ["77", "First Shop", null, null, null],
+  "first-shop creation must leave optional fields at their defaults");
+assert.equal(createdShopResponse.body.shop.shopName, "First Shop",
+  "first-shop creation must return the saved shop identity");
+assert.equal(createdShopResponse.body.shop.contactPhone, "",
+  "new shop creation must not invent or expose a contact phone");
+
 console.log("Marketplace My Shop public/private phone privacy passed.");
