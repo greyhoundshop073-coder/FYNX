@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import express from "express";
 // Profile-photo media follows profile visibility and block state.
 import http from "http";
@@ -44,17 +45,7 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  max: Number(process.env.DB_POOL_MAX || 20),
-  min: Number(process.env.DB_POOL_MIN || 2),
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+const pool = getFynxDatabasePool();
 const clientsByUserId = new Map();
 const activeCalls = new Map();
 

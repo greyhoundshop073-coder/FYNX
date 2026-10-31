@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
 
@@ -6,16 +7,7 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYMENT_RESERVATION_TTL_MINUTES = 30;
 const PAYMENT_INITIALIZATION_RECOVERY_MINUTES = 2;
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 2,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+const pool = getFynxDatabasePool();
 
 function amountSubunit(amount, currency) {
   const normalized = String(currency || '').trim().toUpperCase();

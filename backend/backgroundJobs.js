@@ -40,19 +40,26 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
     };
   }
 
+  // Normal FYNX jobs share the application's process-wide database pool.
+  // A custom connectionString remains supported for isolated tests/tools.
+  const usesSharedPool = connectionString === (process.env.DATABASE_URL || "");
   let poolPromise = null;
   async function getPool() {
     if (!poolPromise) {
-      poolPromise = import("pg").then(({ default: pg }) => new pg.Pool({
-        connectionString,
-        ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-        max: Number(process.env.JOB_DB_POOL_MAX || 5),
-        idleTimeoutMillis: 30_000,
-        connectionTimeoutMillis: 5_000,
-        statement_timeout: 15_000,
-        query_timeout: 20_000,
-        keepAlive: true
-      }));
+      if (usesSharedPool) {
+        poolPromise = import("./databasePool.js").then(({ getFynxDatabasePool }) => getFynxDatabasePool());
+      } else {
+        poolPromise = import("pg").then(({ default: pg }) => new pg.Pool({
+          connectionString,
+          ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+          max: Number(process.env.JOB_DB_POOL_MAX || 5),
+          idleTimeoutMillis: 30_000,
+          connectionTimeoutMillis: 5_000,
+          statement_timeout: 15_000,
+          query_timeout: 20_000,
+          keepAlive: true
+        }));
+      }
     }
     return poolPromise;
   }
@@ -276,7 +283,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
     stopped = true;
     if (timer) clearInterval(timer);
     const pool = poolPromise ? await poolPromise.catch(() => null) : null;
-    if (pool) await pool.end();
+    if (pool && !usesSharedPool) await pool.end();
   }
 
   return { enabled: true, enqueue, start, stop, snapshot };
