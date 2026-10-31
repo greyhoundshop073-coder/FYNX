@@ -172,7 +172,7 @@ checks = [
     ("More options reuses the existing music, people, location, gallery and voice actions",
      all(marker in home for marker in ["showMusicPicker = true", "showPeoplePicker = true", "requestComposerLocation()", "PickVisualMedia.ImageAndVideo", "showVoiceRecorder = true"])),
     ("Runtime test opens the real camera from More options without confusing Gallery selection, then checks the supplied post-details sequence and local draft",
-     '["More options"]' in runtime and '["Take photo or video"]' in runtime and '["Add photo or video"]' in runtime
+     '["More options"]' in runtime and '["Take photo or video"]' in runtime and '["Take photo or video", "Add photo or video"]' in runtime
      and 'Text("Take photo or video")' in home
      and "cameraOpenedFromComposer = true" in home and "showCamera = true" in home
      and "required_top = [\"Add description...\", \"# Hashtags\", \"@ Mention\", \"Edit cover\"]" in runtime
