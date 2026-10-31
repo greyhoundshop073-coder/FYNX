@@ -21,6 +21,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
@@ -114,6 +121,16 @@ fun FynxHomeSocialHubPanel(
     var notice by remember { mutableStateOf<String?>(null) }
     var posting by remember { mutableStateOf(false) }
     var showComposerPreview by remember { mutableStateOf(false) }
+    var showDraftsDialog by remember { mutableStateOf(false) }
+    var savedPostDrafts by remember { mutableStateOf<List<FynxLocalPostDraft>>(emptyList()) }
+    var editingDraftId by remember { mutableStateOf<String?>(null) }
+    var draftSaving by remember { mutableStateOf(false) }
+    var draftNotice by remember { mutableStateOf<String?>(null) }
+    var showPostLinkDialog by remember { mutableStateOf(false) }
+    var postLinkInput by remember { mutableStateOf("") }
+    var showDisclosureInfo by remember { mutableStateOf(false) }
+    var showCoverInfo by remember { mutableStateOf(false) }
+    var showMorePostOptions by remember { mutableStateOf(false) }
     var networkLevel by remember { mutableStateOf(FynxNetworkQuality.current(context)) }
 
     LaunchedEffect(Unit) {
@@ -453,6 +470,99 @@ fun FynxHomeSocialHubPanel(
         audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
         visibility = defaultPostVisibility
         notice = null
+        editingDraftId = null
+    }
+
+    fun restoreSavedPostDraft(draft: FynxLocalPostDraft) {
+        text = draft.caption
+        visibility = runCatching { FynxPostVisibility.valueOf(draft.visibility) }.getOrDefault(FynxPostVisibility.FRIENDS_ONLY)
+        audience = runCatching { FynxPostAudience.valueOf(draft.audience) }.getOrDefault(FynxPostAudience.FRIENDS)
+        selectedAudienceIds = draft.selectedAudienceIds.toSet()
+        postLocation = draft.location
+        textBackground = FynxPostTextBackground.entries.firstOrNull { it.key == draft.textBackgroundKey }
+        capturedUris = draft.mediaPaths.map { Uri.fromFile(java.io.File(it)) }
+        capturedTypes = draft.mediaTypes
+        selectedVisualIndex = 0
+        selectedCatalogueMusic = if (draft.musicId != null && draft.musicMediaId != null) {
+            FynxMusicCatalogueTrack(
+                id = draft.musicId,
+                mediaId = draft.musicMediaId,
+                title = draft.musicTitle.orEmpty(),
+                artist = draft.musicArtist.orEmpty(),
+                durationMs = draft.musicDurationMs
+            )
+        } else null
+        selectedFeelingActivity = null
+        editingDraftId = draft.id
+        notice = null
+        showComposer = true
+        showDraftsDialog = false
+    }
+
+    fun saveCurrentPostDraft() {
+        if (posting || draftSaving) return
+        val media = capturedUris.mapIndexed { index, uri ->
+            uri to capturedTypes.getOrElse(index) { FynxMultiMediaPostClient.mediaKind(context, uri) }
+        }
+        draftSaving = true
+        draftNotice = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                FynxLocalPostDraftStore.save(
+                    context = context,
+                    existingId = editingDraftId,
+                    caption = text,
+                    visibility = visibility,
+                    audience = audience,
+                    selectedAudienceIds = selectedAudienceIds,
+                    location = postLocation,
+                    textBackground = textBackground,
+                    media = media,
+                    music = selectedCatalogueMusic
+                )
+            }
+            result.onSuccess { draft ->
+                editingDraftId = draft.id
+                savedPostDrafts = FynxLocalPostDraftStore.list(context)
+                draftNotice = "Draft saved on this device."
+            }.onFailure { failure ->
+                draftNotice = failure.message ?: "Draft could not be saved."
+            }
+            draftSaving = false
+        }
+    }
+
+    fun requestComposerLocation() {
+        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (fine || coarse) {
+            locationLoading = true
+            scope.launch {
+                FynxPostLocationClient.currentPlace(context)
+                    .onSuccess { postLocation = it; notice = null }
+                    .onFailure { notice = it.message ?: "Could not determine your location." }
+                locationLoading = false
+            }
+        } else {
+            locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
+
+    fun sharePostCaption() {
+        val payload = text.trim().ifBlank {
+            if (capturedUris.isNotEmpty()) "A photo or video from FYNX." else ""
+        }
+        if (payload.isBlank()) {
+            notice = "Add a caption before sharing."
+            return
+        }
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TITLE, "FYNX post")
+            putExtra(Intent.EXTRA_TEXT, payload)
+        }
+        runCatching { context.startActivity(Intent.createChooser(sendIntent, "Share to")) }
+            .onFailure { notice = "No sharing app is available." }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -830,7 +940,12 @@ fun FynxHomeSocialHubPanel(
                                     val result = withContext(Dispatchers.IO) {
                                         FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, null, selectedCatalogueMusic, selectedFeelingActivity)
                                     }
-                                    result.onSuccess { finishComposerAfterSuccess() }
+                                    result.onSuccess {
+                                        editingDraftId?.let { savedId ->
+                                            withContext(Dispatchers.IO) { runCatching { FynxLocalPostDraftStore.delete(context, savedId) } }
+                                        }
+                                        finishComposerAfterSuccess()
+                                    }
                                         .onFailure { notice = it.message ?: "Post could not be published." }
                                     posting = false
                                 }
