@@ -526,6 +526,16 @@ checks.append(
      and 'put("contactPhone", shopContactPhone.trim())' in seller_center)
 )
 
+shop_profile_ui_start = seller_center.index('if (activeSection == "Shop profile") item {')
+shop_profile_ui_end = seller_center.index('if (activeSection == "Earnings & payouts") item {', shop_profile_ui_start)
+shop_profile_ui = seller_center[shop_profile_ui_start:shop_profile_ui_end]
+
+checks.append(
+    ("My Shop profile fields remain locked while saved shop details load, preventing an in-progress edit from being overwritten",
+     shop_profile_ui.count("enabled = !shopLoading && !shopSaving") == 4
+     and 'enabled = !shopLoading && !shopSaving, modifier = Modifier.fillMaxWidth(), singleLine = true' in shop_profile_ui)
+)
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
