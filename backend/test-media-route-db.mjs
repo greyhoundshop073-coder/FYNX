@@ -51,7 +51,7 @@ try {
     [116,2,false,"unsupported listing currency"]
   ];
   for (const [id,viewer,expected,name] of cases) assert.equal(await allowed(id,viewer),expected,name);
-  console.log("PostgreSQL media authorization integration tests passed (11 cases).");
+  console.log("PostgreSQL media authorization integration tests passed (13 cases).");
 } finally {
   await db.end();
 }
