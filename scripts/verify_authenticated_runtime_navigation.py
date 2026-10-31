@@ -880,6 +880,29 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     if not camera:
         return camera_return_to_home(composer, prefix + "-video-camera-missing")
 
+    # Camera screens reopen on the normal front-facing default. Switch explicitly to the rear
+    # virtual-scene fixture for real video preview/recording pixels in the emulator.
+    rear_switch = find_control(camera, ["Switch front/back camera"])
+    if not rear_switch:
+        FAILURES.append(prefix + ": video camera did not expose the front/back switch")
+        return camera_return_to_home(camera, prefix + "-video-camera-switch-missing")
+    _, rear_x, rear_y = rear_switch
+    run("adb", "shell", "input", "tap", str(rear_x), str(rear_y))
+    time.sleep(1.6)
+    camera = dump_ui(f"{prefix}-camera-video-live-preview.xml") or camera
+    if find_control(camera, ["Camera could not start", "No camera is available"]):
+        FAILURES.append(prefix + ": rear virtual-scene camera could not start for video")
+        return camera_return_to_home(camera, prefix + "-video-rear-camera-failed")
+    screenshot(f"{prefix}-camera-video-live-preview.png")
+    verify_camera_image_signal(
+        f"{prefix}-camera-video-live-preview.png", (60, 210, 660, 1480),
+        prefix + " rear live video preview"
+    )
+    verify_camera_controls_fit_safe_area(
+        camera, ["Effects", "Switch front/back camera", "Take photo", "Gallery"],
+        prefix + " rear live video camera"
+    )
+
     video_mode = tap_control(camera, ["Video"], f"{prefix}-camera-video-mode", ["Record video note"])
     if not video_mode:
         FAILURES.append(prefix + ": could not enter video capture mode")
