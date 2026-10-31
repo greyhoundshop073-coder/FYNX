@@ -467,6 +467,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                         if (shopLoading) CircularProgressIndicator(Modifier.size(18.dp))
                     }
                     Text("Set a shop name and details that stay with your seller account. A Business Account is not required.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Your public shop currently uses your FYNX profile photo as its image. A separate shop logo upload is not available yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     OutlinedTextField(value = shopName, onValueChange = { shopName = it.take(120); shopMessage = null; shopError = null }, label = { Text("Shop name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     OutlinedTextField(value = shopDescription, onValueChange = { shopDescription = it.take(800); shopMessage = null; shopError = null }, label = { Text("About your shop (optional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !shopSaving)
