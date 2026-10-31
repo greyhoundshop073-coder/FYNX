@@ -62,7 +62,7 @@ private data class FynxRecentMedia(
 
 /** Single Status/Stories surface. */
 @Composable
-fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}, initialText: String? = null, onInitialTextAccepted: () -> Unit = {}, onComposerVisibilityChange: (Boolean) -> Unit = {}) {
+fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}, initialText: String? = null, onInitialTextAccepted: () -> Unit = {}, onComposerVisibilityChange: (Boolean) -> Unit = {}, initialMediaUri: Uri? = null, initialMediaType: FynxStatusType? = null, onInitialMediaAccepted: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var addStatusOpen by remember { mutableStateOf(startWithCreator) }
@@ -84,6 +84,28 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
         composing = true
         addStatusOpen = false
         onInitialTextAccepted()
+    }
+
+    // Accept media handed off from the Home camera's "Your Story" action.
+    // This enters the existing Status composer; it does not publish automatically.
+    LaunchedEffect(initialMediaUri, initialMediaType) {
+        val mediaUri = initialMediaUri ?: return@LaunchedEffect
+        val mediaType = initialMediaType ?: return@LaunchedEffect
+        if (mediaType != FynxStatusType.PHOTO && mediaType != FynxStatusType.VIDEO) {
+            onInitialMediaAccepted()
+            return@LaunchedEffect
+        }
+        selectedInitialMedia = FynxRecentMedia(
+            uri = mediaUri,
+            isVideo = mediaType == FynxStatusType.VIDEO,
+            dateAddedSeconds = System.currentTimeMillis() / 1000L
+        )
+        selectedInitialType = mediaType
+        cameraError = null
+        cameraOpen = false
+        composing = true
+        addStatusOpen = false
+        onInitialMediaAccepted()
     }
     var statusMusicSearch by remember { mutableStateOf("") }
     var statusMusicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
