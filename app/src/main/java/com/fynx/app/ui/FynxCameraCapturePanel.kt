@@ -530,7 +530,7 @@ fun FynxCameraCapturePanel(
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .navigationBarsPadding()
                     .imePadding()
                     .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
@@ -835,7 +835,7 @@ fun FynxCameraCapturePanel(
         if (showCaptureControls || recording != null) Column(
             Modifier.align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .navigationBarsPadding()
                 .imePadding()
                 .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
