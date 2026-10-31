@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.GridOff
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -283,7 +284,9 @@ fun FynxCameraCapturePanel(
     statusCapture: Boolean = false,
     selectedMusic: FynxMusicCatalogueTrack? = null,
     onChooseMusic: () -> Unit = {},
-    onClearMusic: () -> Unit = {}
+    onClearMusic: () -> Unit = {},
+    showYourStoryAction: Boolean = false,
+    onShareToStatus: (Uri, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -923,19 +926,69 @@ fun FynxCameraCapturePanel(
                     }
                 }
                 }
+                TextButton(
+                    onClick = { if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) retake() },
+                    enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
+                    modifier = Modifier.align(Alignment.Start).padding(start = 4.dp)
+                ) { Text("Retake") }
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedButton(
-                        onClick = { if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) retake() },
-                        enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
-                        modifier = Modifier.weight(1f).heightIn(min = 52.dp)
-                    ) { Text("Retake") }
+                    if (showYourStoryAction && !statusCapture && !liveProofMode) {
+                        OutlinedButton(
+                            onClick = {
+                                if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) {
+                                    onShareToStatus(previewUri, if (previewType == "video_note") "video" else previewType)
+                                }
+                            },
+                            enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
+                            modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF17191F)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.88f))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    Modifier.size(34.dp)
+                                        .border(2.dp, Color(0xFF27B7D4), androidx.compose.foundation.shape.CircleShape)
+                                        .padding(2.dp)
+                                        .clip(androidx.compose.foundation.shape.CircleShape)
+                                ) {
+                                    if (!profilePhotoId.isNullOrBlank()) {
+                                        FynxRemoteMedia(
+                                            "/api/media/$profilePhotoId",
+                                            "image",
+                                            Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop,
+                                            rounded = true
+                                        )
+                                    } else {
+                                        Box(
+                                            Modifier.fillMaxSize().background(Color(0xFF273747), androidx.compose.foundation.shape.CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                                        }
+                                    }
+                                }
+                                Text("Your Story", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                            }
+                        }
+                    }
                     Button(
                         onClick = { if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) onCaptured(previewUri, previewType) },
                         enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
-                        modifier = Modifier.weight(1.2f).heightIn(min = 52.dp)
+                        modifier = Modifier.weight(if (showYourStoryAction && !statusCapture && !liveProofMode) 1f else 1.2f).heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF2457), contentColor = Color.White)
                     ) {
                         Icon(Icons.Default.ArrowForward, null)
                         Spacer(Modifier.width(4.dp))
