@@ -1110,19 +1110,19 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         if second_editor:
             screenshot(f"{prefix}-camera-photo-editor-for-post-draft.png")
             verify_camera_controls_fit_safe_area(
-                second_editor, ["Retake", "Rotate", "Your Story", "Next"],
+                second_editor, ["Retake", "Rotate", "Status", "Next"],
                 prefix + " photo editor before post handoff"
             )
 
             # Verify the left CTA enters the existing Status composer with this captured
             # asset preselected. This is a navigation hand-off only: Send is never tapped.
             story_xml = tap_control(
-                second_editor, ["Your Story"], f"{prefix}-camera-your-story-handoff",
+                second_editor, ["Status"], f"{prefix}-camera-status-handoff",
                 ["Back from Status composer"]
             )
             if story_xml:
-                screenshot(f"{prefix}-camera-your-story-composer.png")
-                (ROOT / f"{prefix}-camera-your-story-composer.xml").write_text(
+                screenshot(f"{prefix}-camera-status-composer.png")
+                (ROOT / f"{prefix}-camera-status-composer.xml").write_text(
                     story_xml + chr(10), encoding="utf-8"
                 )
                 if find_control(story_xml, ["Send"]) and find_control(story_xml, ["Back from Status composer"]):
@@ -1130,7 +1130,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 else:
                     FAILURES.append(prefix + ": Your Story opened, but the existing Status media composer controls were not confirmed")
                 status_close_xml = tap_control(
-                    story_xml, ["Back from Status composer"], f"{prefix}-camera-your-story-close",
+                    story_xml, ["Back from Status composer"], f"{prefix}-camera-status-close",
                     ["Open FYNX camera"]
                 )
                 if status_close_xml:
@@ -1152,9 +1152,9 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                             _, lens_x, lens_y = lens_switch
                             run("adb", "shell", "input", "tap", str(lens_x), str(lens_y))
                             time.sleep(1.5)
-                            fresh_camera_xml = dump_ui(f"{prefix}-camera-after-story-reopen.xml") or fresh_camera_xml
+                            fresh_camera_xml = dump_ui(f"{prefix}-camera-after-status-reopen.xml") or fresh_camera_xml
                         next_editor = tap_control(
-                            fresh_camera_xml, ["Take photo"], f"{prefix}-camera-after-story-photo",
+                            fresh_camera_xml, ["Take photo"], f"{prefix}-camera-after-status-photo",
                             ["Retake", "Next"]
                         )
                         if next_editor:
