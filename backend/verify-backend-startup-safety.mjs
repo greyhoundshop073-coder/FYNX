@@ -19,6 +19,7 @@ assert.ok(init.includes('await pool.query("UPDATE users SET verified = TRUE WHER
 assert.ok(server.includes('import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";'), "deployed server must import My Shop routes");
 assert.ok(server.includes("if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });"), "deployed server must register My Shop routes only when a pool exists");
 
+const dollar = String.fromCharCode(36, 36);
 assert.ok(init.includes("DO "+dollar+" BEGIN") && init.includes("END "+dollar+";"), "foreign-key DO block must retain valid PostgreSQL dollar quoting");
 
 for (const route of [
