@@ -50,10 +50,10 @@ checks = [
     ("Runtime captures the explicit Status media hand-off and safely returns before the separate Next-to-post journey",
      '["Status"]' in runtime
      and '["Back from Status composer"]' in runtime
-     and "camera-your-story-composer.png" in runtime
+     and "camera-status-composer.png" in runtime
      and "Your Story opened the existing Status composer with the captured media" in runtime
      and "Send is never tapped" in runtime
-     and "camera-after-story-photo" in runtime),
+     and "camera-after-status-photo" in runtime),
     ("Camera editor exposes Next and preserves the existing captured-media callback",
      'Text("Next")' in camera and "onCaptured(previewUri, previewType)" in camera),
     ("Next details composer shows media preview, description, tag helpers and privacy entry",
@@ -114,7 +114,7 @@ checks = [
      and "camera-after-retake.png" in runtime
      and "camera-create-post-caption.png" in runtime
      and "camera-post-details-options.png" in runtime
-     and "camera-your-story-composer.png" in runtime
+     and "camera-status-composer.png" in runtime
      and all(label in runtime for label in ["New post", "Add description...", "Post"])
      and "# Hashtags" in home and "@ Mention" in home
      and "gallery_recovered = False" in runtime
