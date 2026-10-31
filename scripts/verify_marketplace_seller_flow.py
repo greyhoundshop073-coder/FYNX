@@ -536,10 +536,13 @@ checks.extend([
      and "FynxRemoteSocialClient.myListings(context).getOrThrow()" in publish_flow
      and "pinnedPublishedListing = confirmed" in publish_flow
      and "The product was accepted, but its saved listing could not be read yet." in publish_flow),
-    ("server-confirmed published product stays at the top only in the unfiltered discovery feed",
+    ("server-confirmed published product stays at the top only in the unfiltered discovery feed and pin state is account-scoped",
      "requestQuery.isBlank() && requestCategory.equals(\"All\", ignoreCase = true) && !requestNearbyMode" in marketplace
      and "listOfNotNull(pinned) + items).distinctBy { it.id }" in marketplace
-     and "listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }" in publish_flow),
+     and "listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }" in publish_flow
+     and "remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }" in marketplace
+     and "remember(currentUsername) { mutableIntStateOf(0) }" in marketplace
+     and "listings = listings.filterNot { it.id == pinnedId }" in marketplace),
 ])
 
 failed = [name for name, ok in checks if not ok]
