@@ -47,11 +47,12 @@ try {
     [112,2,true,"public status"],
     [113,2,false,"friends-only status without friendship"],
     [114,2,false,"unrelated private media"],
-    [115,2,false,"out-of-stock listing"],
+    [115,2,false,"out-of-stock listing denied to buyer"],
+    [115,1,true,"seller retains own media access when listing is out of stock"],
     [116,2,false,"unsupported listing currency"]
   ];
   for (const [id,viewer,expected,name] of cases) assert.equal(await allowed(id,viewer),expected,name);
-  console.log("PostgreSQL media authorization integration tests passed (13 cases).");
+  console.log("PostgreSQL media authorization integration tests passed (14 cases).");
 } finally {
   await db.end();
 }
