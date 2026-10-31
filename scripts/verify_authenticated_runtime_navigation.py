@@ -900,7 +900,38 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     if missing_editor:
         FAILURES.append(prefix + ": captured-photo editor missing expected category/action controls: " + ", ".join(missing_editor))
     else:
-        report.append("- PASS photo editor exposes the grouped effect categories and Retake/Send actions")
+        report.append("- PASS photo editor exposes the grouped effect categories and Retake/Rotate/Send actions")
+
+    # Rotate is a real file operation, not just a decorative action. Exercise it before other
+    # edits and require the editor and its safe action row to remain usable afterwards.
+    rotate_xml = tap_control(
+        editor_xml, ["Rotate"], f"{prefix}-camera-photo-rotate",
+        ["Retake", "Send"]
+    )
+    if rotate_xml:
+        editor_xml = camera_wait_for_control(
+            rotate_xml, ["Send"], enabled=True, timeout=20.0,
+            prefix=f"{prefix}-camera-photo-rotate-ready"
+        )
+        screenshot(f"{prefix}-camera-photo-editor-after-rotate.png")
+        verify_camera_image_signal(
+            f"{prefix}-camera-photo-editor-after-rotate.png",
+            (180, 650, 1260, 1900),
+            prefix + " rotated photo editor preview"
+        )
+        verify_camera_controls_fit_safe_area(
+            editor_xml, ["Retake", "Rotate", "Send"],
+            prefix + " rotated photo editor"
+        )
+        if control_is_enabled(editor_xml, ["Send"]):
+            report.append("- PASS Rotate completed and the photo editor retained its visible, enabled action row")
+        else:
+            FAILURES.append(prefix + ": Send did not remain enabled after photo rotation")
+        (ROOT / f"{prefix}-camera-photo-editor-after-rotate.xml").write_text(
+            editor_xml + chr(10), encoding="utf-8"
+        )
+    else:
+        FAILURES.append(prefix + ": Rotate did not leave the captured-photo editor usable")
 
     # Verify each category exposes its actual controls without flooding one screen with every effect row.
     for category, expected_effect, slug in [
