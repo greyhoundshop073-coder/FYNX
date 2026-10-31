@@ -127,7 +127,7 @@ internal fun MarketplaceReferenceProductCard(
                 Text(listing.title, color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(listing.currency.uppercase() + " " + String.format(Locale.US, "%,.2f", listing.price), color = FynxMarketplaceReferenceStyle.primarySoft, fontWeight = FontWeight.Bold, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    FynxRemoteProfileAvatar(sellerPhotoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(24.dp).clip(CircleShape), ownerUsername = listing.sellerUsername)
+                    FynxMarketplaceSellerAvatar(sellerPhotoId, listing.sellerUsername, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(24.dp).clip(CircleShape))
                     Spacer(Modifier.width(6.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         val sellerLabel = listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }

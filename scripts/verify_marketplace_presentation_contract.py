@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""Guard Marketplace-owned presentation, seller avatar and first-listing entry points."""
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+UI = ROOT / "app/src/main/java/com/fynx/app/ui"
+workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+
+def read(name: str) -> str:
+    path = UI / name
+    if not path.is_file():
+        raise AssertionError(f"required Marketplace UI source is missing: {name}")
+    return path.read_text(encoding="utf-8")
+
+checks = []
+
+def check(name: str, ok: bool) -> None:
+    checks.append((name, bool(ok)))
+
+panel = read("FynxMarketplacePanel.kt")
+reference = read("FynxMarketplaceReferenceProductComponents.kt")
+storefront = read("FynxMarketplaceSellerStoreDialog.kt")
+details = read("FynxMarketplaceDetailsSearchReference.kt")
+seller_center = read("FynxMarketplaceSellerCenterPanel.kt")
+remote = read("FynxRemoteSocialClient.kt")
+client = read("FynxMarketplaceClient.kt")
+
+# The active Marketplace screen must let a first-time seller create their first listing.
+sell_lines = [line.strip() for line in panel.splitlines() if "FloatingActionButton(onClick = { showSell = true }" in line]
+check("Sell entry point remains visible when Marketplace has no current listings",
+      len(sell_lines) == 1 and "if (listings.isNotEmpty())" not in sell_lines[0])
+check("Sell entry point opens the real product-publish dialog",
+      "if (showSell) MarketplaceSellDialog(" in panel and "onPublished = { listingId ->" in panel)
+
+# Marketplace-specific wrapper prefers the ID fetched for the listing seller while observing
+# identity revisions so authoritative profile photo changes/removals are reflected live.
+def avatar_lines(source: str):
+    return [line.strip() for line in source.splitlines() if "FynxMarketplaceSellerAvatar(" in line]
+
+panel_avatars = avatar_lines(panel)
+reference_avatars = avatar_lines(reference)
+storefront_avatars = avatar_lines(storefront)
+avatar_binding = read("FynxMarketplaceSellerAvatar.kt")
+check("Marketplace seller-card and details avatars receive fetched seller photo IDs",
+      len(panel_avatars) == 2 and all("FynxMarketplaceSellerAvatar(photoId," in line for line in panel_avatars))
+check("Marketplace fetches seller avatars for all currently loaded product sellers",
+      "val sellers = listings.distinctBy" in panel
+      and "val reputationSellers = sellers.take(12)" in panel
+      and "if (!photoMap.containsKey(key))" in panel
+      and "FynxProfileRemoteClient.cachedProfilePhotoId(context, username)" in panel)
+check("Marketplace product-card avatar receives sellerPhotoId directly",
+      len(reference_avatars) == 1 and "FynxMarketplaceSellerAvatar(sellerPhotoId," in reference_avatars[0])
+check("Public seller-store avatar receives fetched photoId directly",
+      len(storefront_avatars) == 1 and "FynxMarketplaceSellerAvatar(photoId," in storefront_avatars[0])
+check("Marketplace avatars observe cache revisions and authoritative removals",
+      "FynxAvatarIdentityStore.revisions().collectAsState()" in avatar_binding
+      and "hasCachedProfilePhotoEntry(context, normalizedOwner)" in avatar_binding
+      and "cachedProfilePhotoId(context, it)" in avatar_binding
+      and "FynxRemoteProfileAvatar(" in avatar_binding
+      and "ownerUsername =" not in avatar_binding)
+
+# Verify listing media IDs are wired through the authenticated remote-media loader in all
+# buyer and seller presentation surfaces.
+check("Marketplace product cards render the listing's uploaded media IDs",
+      "RemoteMarketMedia(context, listing.mediaIds.first()" in reference
+      and "FynxMarketplaceClient.mediaUrl(context, mediaId)" in reference)
+check("Product detail gallery renders listing media through FYNX media URLs",
+      "listing.mediaIds.take(12)" in details
+      and "FynxMarketplaceClient.mediaUrl(context, mediaId)" in details
+      and "FynxRemoteMedia(url" in details)
+check("My Shop inventory loads owner listings and renders uploaded product media",
+      "FynxMarketplaceClient.myListings(context)" in seller_center
+      and "FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())" in seller_center)
+check("Public seller storefront requests that seller's own available inventory",
+      'FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())' in storefront
+      and "storefrontListings = fetched.filter { it.active && it.quantity > 0 }" in storefront)
+
+# Publish path uploads the selected product media and posts listing media IDs before confirming.
+check("Product publishing uploads selected media before creating the listing",
+      "FynxProductionMessaging.uploadMedia(context, u, mime).getOrThrow().id" in remote
+      and 'FynxBackendClient.postJson(context, "/api/marketplace/listings"' in remote
+      and 'put("mediaIds", JSONArray(mediaIds))' in remote)
+check("My Shop client uses the private owner-inventory endpoint",
+      '"/api/marketplace/my-listings"' in client)
+check("This Marketplace PR runs the real read-only emulator screenshot path",
+      workflow.count("github.event.pull_request.head.ref == 'fix/marketplace-presentation-avatar-onboarding-20261031'") >= 4
+      and "FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py" in Path("scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8"))
+check("Runtime screenshot walk can open the actual Sell floating action button",
+      'sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]' in Path("scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8"))
+
+failed = [name for name, ok in checks if not ok]
+for name, ok in checks:
+    print(f"[{'PASS' if ok else 'FAIL'}] {name}")
+if failed:
+    print(f"\nMARKETPLACE PRESENTATION CONTRACT RED ({len(failed)} failures)")
+    sys.exit(1)
+print(f"\nMARKETPLACE PRESENTATION CONTRACT GREEN ({len(checks)} checks)")

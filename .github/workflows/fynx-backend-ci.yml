@@ -67,6 +67,7 @@ jobs:
           node --check marketplaceTransactions.js
           node --check verify-marketplace-receipts.mjs
           node --check marketplaceShopProfiles.js
+          node --check verify-marketplace-shop-privacy.mjs
           node --check verify-marketplace-shop-profile.mjs
           node --check marketplaceReputation.js
           node --check verify-marketplace-multi-checkout-lifecycle.mjs
@@ -83,6 +84,8 @@ jobs:
           node --check notificationBootstrap.js
           node --check marketplaceBatch2FinalHardening.js
           node --check verify-marketplace-recovery-worker-safety.mjs
+      - name: Verify Marketplace My Shop public/private contact privacy
+        run: node verify-marketplace-shop-privacy.mjs
           node --check notificationDevices.js
           node --check verify-marketplace-ad-creative-identity.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs

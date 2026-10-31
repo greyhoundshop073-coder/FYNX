@@ -35,13 +35,17 @@ if [ "$TEST_EXIT" -eq 0 ]; then
     TEST_EXIT="$NAV_EXIT"
   fi
 
-  # Keep Status creator certification independent of Marketplace navigation. A failure in
-  # the Marketplace visual walk must not suppress Status evidence after instrumentation passes.
-  python3 scripts/verify_status_creator_runtime.py
-  STATUS_EXIT=$?
-  if [ "$STATUS_EXIT" -ne 0 ]; then
-    echo "::error::Status creator runtime verification failed (exit $STATUS_EXIT)."
-    if [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$STATUS_EXIT"; fi
+  # This PR is scoped to Marketplace/My Shop. Do not enter the Status creator journey
+  # while another workstream owns it; its own PR/runtime workflow retains that coverage.
+  if [ "${FYNX_MARKETPLACE_RUNTIME_ONLY:-0}" != "1" ]; then
+    python3 scripts/verify_status_creator_runtime.py
+    STATUS_EXIT=$?
+    if [ "$STATUS_EXIT" -ne 0 ]; then
+      echo "::error::Status creator runtime verification failed (exit $STATUS_EXIT)."
+      if [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$STATUS_EXIT"; fi
+    fi
+  else
+    echo "::notice::Marketplace-only runtime capture; leaving Status creator journey untouched."
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 else
@@ -52,10 +56,14 @@ else
   if [ "$VISUAL_EXIT" -ne 0 ]; then
     echo "::warning::Marketplace/My Shop visual capture did not complete (exit $VISUAL_EXIT); the instrumentation result remains $TEST_EXIT."
   fi
-  python3 scripts/verify_status_creator_runtime.py
-  STATUS_EXIT=$?
-  if [ "$STATUS_EXIT" -ne 0 ]; then
-    echo "::warning::Status creator diagnostic capture did not complete (exit $STATUS_EXIT); the instrumentation result remains $TEST_EXIT."
+  if [ "${FYNX_MARKETPLACE_RUNTIME_ONLY:-0}" != "1" ]; then
+    python3 scripts/verify_status_creator_runtime.py
+    STATUS_EXIT=$?
+    if [ "$STATUS_EXIT" -ne 0 ]; then
+      echo "::warning::Status creator diagnostic capture did not complete (exit $STATUS_EXIT); the instrumentation result remains $TEST_EXIT."
+    fi
+  else
+    echo "::notice::Marketplace-only runtime capture; leaving Status creator journey untouched."
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 fi

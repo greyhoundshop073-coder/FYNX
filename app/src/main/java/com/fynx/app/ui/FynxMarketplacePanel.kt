@@ -1026,17 +1026,38 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     LaunchedEffect(listings) {
-        val sellers = listings.distinctBy { it.sellerUsername.removePrefix("@").trim().lowercase() }.take(12)
-        val reputationMap = linkedMapOf<String, FynxMarketplaceClient.SellerReputation>()
-        val photoMap = linkedMapOf<String, String?>()
+        // Product cards can show more than twelve different sellers across paged results.
+        // Load an avatar for every seller represented in the current catalogue, but keep the
+        // smaller reputation ranking request bounded to the first twelve sellers.
+        val sellers = listings.distinctBy { it.sellerUsername.removePrefix("@").trim().lowercase(Locale.US) }
+        val reputationSellers = sellers.take(12)
+        val reputationMap = sellerReputations.toMutableMap()
+        val photoMap = sellerPhotoIds.toMutableMap()
         sellers.forEach { listing ->
             val username = listing.sellerUsername.removePrefix("@").trim()
             if (username.isBlank()) return@forEach
-            FynxMarketplaceClient.sellerReputation(context, username).onSuccess { reputationMap[username.lowercase()] = it }
-            FynxProfileRemoteClient.get(context, username).onSuccess { photoMap[username.lowercase()] = it.profilePhotoMediaId }
+            val key = username.lowercase(Locale.US)
+            if (!photoMap.containsKey(key)) {
+                FynxProfileRemoteClient.cachedProfilePhotoId(context, username)?.let { cachedPhotoId ->
+                    photoMap[key] = cachedPhotoId
+                    sellerPhotoIds = photoMap.toMap()
+                }
+                FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
+                    photoMap[key] = profile.profilePhotoMediaId
+                    sellerPhotoIds = photoMap.toMap()
+                }
+            }
         }
-        sellerReputations = reputationMap
-        sellerPhotoIds = photoMap
+        reputationSellers.forEach { listing ->
+            val username = listing.sellerUsername.removePrefix("@").trim()
+            val key = username.lowercase(Locale.US)
+            if (username.isNotBlank() && !reputationMap.containsKey(key)) {
+                FynxMarketplaceClient.sellerReputation(context, username).onSuccess { reputation ->
+                    reputationMap[key] = reputation
+                    sellerReputations = reputationMap.toMap()
+                }
+            }
+        }
     }
 
     val visibleSellerListings = remember(listings, sellerReputations) {
@@ -1401,7 +1422,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
             }
         }
-        if (listings.isNotEmpty()) FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
+        FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
     }
 
     if (showSell) MarketplaceSellDialog(context, onPublished = { listingId ->
@@ -1661,7 +1682,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
     Surface(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = onProfile, modifier = Modifier.size(34.dp)) { FynxRemoteProfileAvatar(photoId, l.sellerDisplayName.ifBlank { l.sellerUsername }, Modifier.size(30.dp).clip(RoundedCornerShape(50)), ownerUsername = l.sellerUsername) }
+                IconButton(onClick = onProfile, modifier = Modifier.size(34.dp)) { FynxMarketplaceSellerAvatar(photoId, l.sellerUsername, l.sellerDisplayName.ifBlank { l.sellerUsername }, Modifier.size(30.dp).clip(RoundedCornerShape(50))) }
                 Column(Modifier.weight(1f).padding(start = 2.dp)) {
                     Text(l.sellerDisplayName.ifBlank { l.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, style = MaterialTheme.typography.labelLarge)
                     Text(l.storeName.ifBlank { "FYNX seller" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -1707,7 +1728,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
 private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceListing, reputation: FynxMarketplaceClient.SellerReputation, photoId: String?, onProfile: () -> Unit) {
     Surface(Modifier.width(190.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            FynxRemoteProfileAvatar(photoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(42.dp).clip(RoundedCornerShape(50)), ownerUsername = listing.sellerUsername)
+            FynxMarketplaceSellerAvatar(photoId, listing.sellerUsername, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(42.dp).clip(RoundedCornerShape(50)))
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
