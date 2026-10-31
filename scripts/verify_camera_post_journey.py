@@ -7,8 +7,13 @@ client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt"
 refresh = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt").read_text(encoding="utf-8")
 backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
+    ("API 35 emulator launches with the documented environment camera source",
+     "-camera-back environment -camera-front none" in workflow
+     and "pre-emulator-launch-script:" not in workflow
+     and "avd_config" not in workflow),
     ("Home camera opens the real camera panel", "showCamera = true" in home and "FynxCameraCapturePanel(" in home),
     ("Runtime UI hierarchies preserve XML terminators for live/photo/video editor captures",
      runtime.count("write_text(camera_xml + chr(10)") >= 1
