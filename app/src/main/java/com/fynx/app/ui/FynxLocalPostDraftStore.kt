@@ -60,10 +60,13 @@ object FynxLocalPostDraftStore {
                     val item = array.optJSONObject(index) ?: continue
                     val paths = item.optJSONArray("mediaPaths") ?: JSONArray()
                     val types = item.optJSONArray("mediaTypes") ?: JSONArray()
-                    val mediaPaths = (0 until paths.length()).mapNotNull { paths.optString(it).takeIf(String::isNotBlank) }
-                        .filter { File(it).isFile }
-                    val mediaTypes = (0 until types.length()).map { types.optString(it, "image") }
-                    val alignedTypes = mediaPaths.mapIndexed { mediaIndex, _ -> mediaTypes.getOrElse(mediaIndex) { "image" } }
+                    val validMedia = (0 until paths.length()).mapNotNull { mediaIndex ->
+                        val path = paths.optString(mediaIndex).takeIf(String::isNotBlank) ?: return@mapNotNull null
+                        if (!File(path).isFile) return@mapNotNull null
+                        path to types.optString(mediaIndex, "image")
+                    }
+                    val mediaPaths = validMedia.map { it.first }
+                    val alignedTypes = validMedia.map { it.second }
                     val friendIds = item.optJSONArray("selectedAudienceIds") ?: JSONArray()
                     add(
                         FynxLocalPostDraft(
