@@ -1074,48 +1074,29 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         time.sleep(0.5)
         editor = dump_ui(f"{prefix}-camera-video-style-selected.xml") or editor
 
+    editor = camera_wait_for_control(
+        editor, ["Apply style / captions"], enabled=True, timeout=30.0,
+        prefix=prefix + "-camera-video-initial-apply"
+    )
     apply_button = find_control(editor, ["Apply style / captions"])
     processed_xml = ""
-    if not apply_button:
-        FAILURES.append(prefix + ": video style apply action was not reachable")
+    export_completed = False
+    if not apply_button or not control_is_enabled(editor, ["Apply style / captions"]):
+        FAILURES.append(prefix + ": enabled video style apply action was not reachable")
     else:
         _, ax, ay = apply_button
         run("adb", "logcat", "-c")
         run("adb", "shell", "input", "tap", str(ax), str(ay))
-        apply_deadline = time.monotonic() + 135.0
-        applying_seen = False
-        while time.monotonic() < apply_deadline:
-            time.sleep(0.8)
-            processed_xml = dump_ui(f"{prefix}-camera-video-effect-processing.xml") or processed_xml
-            processing = bool(find_control(processed_xml, ["Processing video…"]))
-            applying_seen = applying_seen or processing
-            visible_error = bool(find_control(processed_xml, [
-                "Video effects could not be applied.", "The video file is unavailable.",
-                "Export failed", "Unable to export", "Video export timed out. Try a shorter clip."
-            ]))
-            if visible_error:
-                break
-            elapsed = 135.0 - (apply_deadline - time.monotonic())
-            if not processing and find_control(processed_xml, ["Apply style / captions"]) and elapsed >= 3.0:
-                break
-        if not processed_xml:
-            FAILURES.append(prefix + ": no UI hierarchy was captured after applying video style")
-        elif find_control(processed_xml, ["Processing video…"]):
-            FAILURES.append(prefix + ": video styling was still processing after 135 seconds")
-        elif find_control(processed_xml, [
-            "Video effects could not be applied.", "The video file is unavailable.",
-            "Export failed", "Unable to export", "Video export timed out. Try a shorter clip."
-        ]):
-            FAILURES.append(prefix + ": video effect export showed an error: " + visible_marker_summary(processed_xml))
+        processed_xml, export_completed = camera_wait_for_video_export_idle(
+            editor, prefix + "-camera-video-effect", timeout=150.0
+        )
+        if not export_completed:
+            FAILURES.append(
+                prefix + ": Cinematic export did not settle into an enabled editor state: "
+                + visible_marker_summary(processed_xml)
+            )
         else:
-            final_missing = [
-                label for label in ["Retake", "Send"]
-                if not find_control(processed_xml, [label])
-            ]
-            if final_missing:
-                FAILURES.append(prefix + ": processed video preview lost actions: " + ", ".join(final_missing))
-            else:
-                report.append("- PASS processed video returned to a playable preview with Retake and Send; Send was not tapped")
+            report.append("- PASS Cinematic export returned to a stable, enabled video editor; Send was not tapped")
             screenshot(f"{prefix}-camera-video-effect-output.png")
             (ROOT / f"{prefix}-camera-video-effect-output.xml").write_text(
                 processed_xml + chr(10), encoding="utf-8"
@@ -1155,7 +1136,11 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         ("B&W", "black-and-white"),
         ("Vivid", "vivid"),
     ]:
-        current_editor = dump_ui(f"{prefix}-camera-video-{slug}-editor.xml") or processed_xml
+        # Do not select another style while the previous export is still processing.
+        current_editor = camera_wait_for_control(
+            editor, ["Apply style / captions"], enabled=True, timeout=150.0,
+            prefix=prefix + f"-camera-video-{slug}-ready"
+        )
         style_node = find_control(current_editor, [style_label])
         if not style_node:
             run("adb", "shell", "input", "swipe", "1220", "2360", "300", "2360", "420")
@@ -1164,39 +1149,31 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             style_node = find_control(current_editor, [style_label])
         if not style_node:
             FAILURES.append(prefix + f": video style {style_label} was not reachable in the style carousel")
-            continue
+            break
+        edited_before = list_app_cache_videos()
         _, style_x, style_y = style_node
         run("adb", "shell", "input", "tap", str(style_x), str(style_y))
-        time.sleep(0.35)
+        time.sleep(0.6)
         current_editor = dump_ui(f"{prefix}-camera-video-{slug}-selected.xml") or current_editor
+        current_editor = camera_wait_for_control(
+            current_editor, ["Apply style / captions"], enabled=True, timeout=20.0,
+            prefix=prefix + f"-camera-video-{slug}-apply-ready"
+        )
         apply_node = find_control(current_editor, ["Apply style / captions"])
-        if not apply_node:
-            FAILURES.append(prefix + f": video style {style_label} had no reachable Apply action")
-            continue
+        if not apply_node or not control_is_enabled(current_editor, ["Apply style / captions"]):
+            FAILURES.append(prefix + f": video style {style_label} did not expose an enabled Apply action: " + visible_marker_summary(current_editor))
+            break
         _, apply_x, apply_y = apply_node
         run("adb", "logcat", "-c")
         run("adb", "shell", "input", "tap", str(apply_x), str(apply_y))
-        deadline = time.monotonic() + 100.0
-        styled_xml = ""
-        while time.monotonic() < deadline:
-            time.sleep(0.7)
-            styled_xml = dump_ui(f"{prefix}-camera-video-{slug}-processing.xml") or styled_xml
-            if find_control(styled_xml, ["Processing video…"]):
-                continue
-            if find_control(styled_xml, ["Apply style / captions"]) and find_control(styled_xml, ["Retake"]) and find_control(styled_xml, ["Send"]):
-                time.sleep(0.6)
-                styled_xml = dump_ui(f"{prefix}-camera-video-{slug}-complete.xml") or styled_xml
-                break
-            if find_control(styled_xml, ["The selected", "Video export produced", "Video export did not", "did not preserve", "could not decode"]):
-                break
-        if not styled_xml or find_control(styled_xml, ["Processing video…"]):
-            FAILURES.append(prefix + f": {style_label} export did not finish within 100 seconds")
-            continue
-        if not (find_control(styled_xml, ["Retake"]) and find_control(styled_xml, ["Send"])):
-            FAILURES.append(prefix + f": {style_label} export did not return to the playable editor: " + visible_marker_summary(styled_xml))
-            continue
+        styled_xml, style_completed = camera_wait_for_video_export_idle(
+            current_editor, prefix + f"-camera-video-{slug}", timeout=150.0
+        )
+        if not style_completed:
+            FAILURES.append(prefix + f": {style_label} export did not settle into an enabled editor state: " + visible_marker_summary(styled_xml))
+            break
         edited_candidates = [
-            path for path in list_app_cache_videos()
+            path for path in list_app_cache_videos() - edited_before
             if Path(path).name.startswith("fynx_video_edit_")
         ]
         output_path = sorted(edited_candidates)[-1] if edited_candidates else ""
