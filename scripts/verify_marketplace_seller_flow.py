@@ -518,6 +518,14 @@ checks.extend([
      and "media_ids = COALESCE($8::jsonb, media_ids)" in social_routes
      and "Marketplace listing media must be images or videos" in social_routes),
 ])
+checks.append(
+    ("public seller storefront never retains or displays the private shop contact phone while My Shop keeps its own contact field",
+     "contactPhone" not in storefront
+     and "shopContactPhone" not in storefront
+     and "Shop contact:" not in storefront
+     and 'put("contactPhone", shopContactPhone.trim())' in seller_center)
+)
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
