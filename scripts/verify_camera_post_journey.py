@@ -13,6 +13,10 @@ app_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(e
 draft_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt").read_text(encoding="utf-8")
 
 checks = [
+    ("Camera runtime journey initializes Home recovery state before all optional Status and post-draft branches",
+     'home = home_xml' in runtime
+     and 'home = camera_return_to_home(details_xml, prefix + "-post-draft-dismiss")' in runtime
+     and "return capture_camera_video_journey(home, prefix)" in runtime),
     ("Camera Dialog applies/restores the actual system-bar window and white icon appearance",
      "DialogWindowProvider" in camera and "resolveFynxCameraWindow(cameraWindowView)" in camera
      and "window.setBackgroundDrawable(ColorDrawable(cameraBackdrop))" in camera
