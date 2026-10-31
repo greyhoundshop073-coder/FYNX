@@ -76,7 +76,8 @@ checks = [
      and "camera-after-retake.png" in runtime
      and "camera-create-post-caption.png" in runtime
      and "camera-create-post-media.png" in runtime
-     and all(label in runtime for label in ["New post", "Add description...", "# Hashtags", "@ Mention", "Post"])
+     and all(label in runtime for label in ["New post", "Add description...", "Post"])
+     and "# Hashtags" in home and "@ Mention" in home
      and "gallery_recovered = False" in runtime
      and "if not gallery_recovered:" in runtime
      and "return capture_camera_video_journey(home_after_gallery_abort, prefix)" in runtime
