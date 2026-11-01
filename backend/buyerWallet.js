@@ -1028,6 +1028,55 @@ export function registerBuyerWalletRoutes({ app }) {
         });
       }
 
+      // Check the wallet PIN before creating provider-side recipient records.
+      // The PIN is checked again under the wallet row lock before funds are reserved.
+      const pinClient = await pool.connect();
+      try {
+        await pinClient.query('BEGIN');
+        const pinWallet = (await pinClient.query(`
+          SELECT id,status,withdrawal_pin_hash,withdrawal_pin_failed_attempts,withdrawal_pin_locked_until
+            FROM buyer_wallets
+           WHERE user_id=$1 AND currency='NGN'
+           FOR UPDATE
+        `, [req.user.sub])).rows[0];
+        if (!pinWallet || pinWallet.status !== 'ACTIVE' || !pinWallet.withdrawal_pin_hash) {
+          await pinClient.query('ROLLBACK');
+          return res.status(409).json({ error: 'an active wallet with a withdrawal PIN is required' });
+        }
+        const lockedUntil = pinWallet.withdrawal_pin_locked_until ? new Date(pinWallet.withdrawal_pin_locked_until).getTime() : 0;
+        if (lockedUntil > Date.now()) {
+          await pinClient.query('ROLLBACK');
+          return res.status(423).json({ error: 'wallet withdrawals are temporarily locked after repeated incorrect PIN attempts' });
+        }
+        if (!(await bcrypt.compare(pin, pinWallet.withdrawal_pin_hash))) {
+          const previous = lockedUntil > 0 && lockedUntil <= Date.now() ? 0 : Number(pinWallet.withdrawal_pin_failed_attempts || 0);
+          const attempts = previous + 1;
+          await pinClient.query(`
+            UPDATE buyer_wallets
+               SET withdrawal_pin_failed_attempts=$1,
+                   withdrawal_pin_locked_until=CASE WHEN $1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE NULL END,
+                   updated_at=NOW()
+             WHERE id=$2
+          `, [attempts, pinWallet.id]);
+          await pinClient.query('COMMIT');
+          return res.status(403).json({
+            error: attempts >= 5
+              ? 'wallet PIN attempts exceeded; withdrawals are locked for 15 minutes'
+              : 'wallet withdrawal PIN is incorrect'
+          });
+        }
+        await pinClient.query(
+          'UPDATE buyer_wallets SET withdrawal_pin_failed_attempts=0,withdrawal_pin_locked_until=NULL WHERE id=$1',
+          [pinWallet.id]
+        );
+        await pinClient.query('COMMIT');
+      } catch (error) {
+        await pinClient.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        pinClient.release();
+      }
+
       const resolved = await walletPaystackRequest('/bank/resolve?account_number=' + encodeURIComponent(accountNumber) + '&bank_code=' + encodeURIComponent(bankCode));
       const verifiedName = String(resolved.account_name || '').trim();
       if (!verifiedName) return res.status(422).json({ error: 'bank account could not be verified' });
