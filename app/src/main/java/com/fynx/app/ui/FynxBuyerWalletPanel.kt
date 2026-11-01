@@ -573,7 +573,7 @@ fun FynxBuyerWalletPanel() {
                     Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     TextButton(
                         onClick = { statementLauncher.launch("fynx-wallet-statement.csv") },
-                        enabled = !statementExporting && !loading
+                        enabled = !statementExporting && !loading && FynxBackendClient.hasAccessToken(context)
                     ) {
                         Text(if (statementExporting) "Preparing…" else "Statement")
                     }
