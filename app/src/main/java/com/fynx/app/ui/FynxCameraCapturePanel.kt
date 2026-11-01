@@ -582,11 +582,15 @@ fun FynxCameraCapturePanel(
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var timerCaptureJob by remember { mutableStateOf<Job?>(null) }
+    // A generation token prevents a stale countdown coroutine from capturing after Cancel.
+    var timerCaptureGeneration by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
     var selectedCameraTool by remember { mutableStateOf("Looks") }
     var showEditorToolOptions by remember { mutableStateOf(true) }
     var showAdjustments by remember { mutableStateOf(false) }
     fun cancelCaptureTimer() {
+        // Invalidate first so even a coroutine already resuming cannot trigger capture.
+        timerCaptureGeneration += 1
         timerCaptureJob?.cancel()
         timerCaptureJob = null
         timerCountingDown = 0
@@ -1620,12 +1624,17 @@ fun FynxCameraCapturePanel(
                         if (captureTimerSeconds > 0) {
                             if (timerCaptureJob?.isActive != true) {
                                 val seconds = captureTimerSeconds
+                                val generation = timerCaptureGeneration + 1
+                                timerCaptureGeneration = generation
                                 showCaptureControls = false
                                 timerCaptureJob = scope.launch {
                                     for (remaining in seconds downTo 1) {
+                                        if (generation != timerCaptureGeneration) return@launch
                                         timerCountingDown = remaining
                                         delay(1000L)
                                     }
+                                    // Check again after the final delay; Cancel invalidates this token.
+                                    if (generation != timerCaptureGeneration) return@launch
                                     timerCountingDown = 0
                                     timerCaptureJob = null
                                     capturePhotoNow()
