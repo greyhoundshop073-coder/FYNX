@@ -163,6 +163,15 @@ fun FynxBuyerWalletPanel() {
         hasMoreActivity = false
         nextActivityCursor = null
 
+        // A saved-device/debug session is intentionally local-only. Do not flood the
+        // protected Wallet API with requests that cannot carry a server-issued JWT.
+        if (!FynxBackendClient.hasAccessToken(context)) {
+            summaryError = "This device is using saved-device sign-in. Sign out and sign in with your FYNX username and password to connect Wallet to live services. No balance or payment request has been created."
+            summaryLoading = false
+            activityLoading = false
+            return@LaunchedEffect
+        }
+
         try {
             val walletResult = FynxBuyerWalletClient.loadSummary(context)
             if (requestGeneration != activityRequestGeneration) return@LaunchedEffect
@@ -196,6 +205,11 @@ fun FynxBuyerWalletPanel() {
     LaunchedEffect(refreshVersion) {
         sellerSummaryLoading = true
         sellerSummaryError = null
+        if (!FynxBackendClient.hasAccessToken(context)) {
+            sellerSummaryError = "Marketplace earnings require a live FYNX sign-in."
+            sellerSummaryLoading = false
+            return@LaunchedEffect
+        }
         FynxBuyerWalletClient.loadSellerSummary(context)
             .onSuccess { sellerSummary = it }
             .onFailure {
@@ -331,6 +345,7 @@ fun FynxBuyerWalletPanel() {
                             when {
                                 summaryLoading -> "Checking your wallet status securely"
                                 canShowBalance -> "Cleared funds available to use"
+                                summaryError != null && !FynxBackendClient.hasAccessToken(context) -> "Sign in to FYNX to securely load your balance"
                                 summaryError != null -> "Balance unavailable until your connection is restored"
                                 else -> "Your wallet balance will appear here after activation"
                             },
@@ -391,17 +406,38 @@ fun FynxBuyerWalletPanel() {
         }
         if (summaryError != null) {
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Wallet unavailable", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Text(summaryError.orEmpty(), color = MaterialTheme.colorScheme.onErrorContainer)
-                        TextButton(onClick = { refreshVersion += 1 }) {
-                            Icon(Icons.Default.Refresh, contentDescription = null)
-                            Text(" Retry")
+                if (!FynxBackendClient.hasAccessToken(context)) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = FynxDesign.AzureBlue)
+                            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("Connect your FYNX account", fontWeight = FontWeight.SemiBold)
+                                Text(summaryError.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                } else {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Wallet unavailable", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(summaryError.orEmpty(), color = MaterialTheme.colorScheme.onErrorContainer)
+                            TextButton(onClick = { refreshVersion += 1 }) {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                                Text(" Retry")
+                            }
                         }
                     }
                 }
