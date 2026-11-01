@@ -25,8 +25,8 @@ object FynxBackendClient {
     private const val KEY_BASE_URL = "base_url"
     private const val KEY_BASE_URL_EXPLICIT = "base_url_explicit"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
-    private const val PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
-    private const val DEBUG_TEST_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
+    private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
+    private const val DEBUG_TEST_BASE_URL = "https://fynx-ai-backend.onrender.com"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 750L
     private const val NETWORK_VALIDATION_WAIT_MS = 6_000L
@@ -50,13 +50,15 @@ object FynxBackendClient {
         val normalized = stored?.trimEnd('/')?.takeIf { it.isNotBlank() }
         val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
-        // Render was retired. Migrate persisted addresses from older APKs in both
-        // debug and release builds so an upgrade cannot silently keep calling it.
-        val retiredRenderUrls = setOf(
-            "https://fynx-ai-backend.onrender.com",
+        // Railway testing and the separate Creative Studio host are legacy backends.
+        // The shared FYNX Render service now runs against the recovered FYNX database.
+        // Migrate old saved Railway/Studio URLs in both build types, but never migrate
+        // away from the active FYNX Render URL.
+        val retiredBackendUrls = setOf(
+            "https://fynx-backend-testing-testing.up.railway.app",
             "https://ai-creative-studio-572v.onrender.com"
         )
-        if (normalized in retiredRenderUrls) {
+        if (normalized in retiredBackendUrls) {
             // Persist the replacement URL, not just return it for this request.
             // Otherwise each app start can rediscover the retired host, and callers
             // inspecting preferences still see no migrated endpoint.
