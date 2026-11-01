@@ -1142,16 +1142,21 @@ export function registerBuyerWalletRoutes({ app }) {
         return res.send(buildBuyerWalletStatementCsv([]));
       }
       const rows = await pool.query(`
-        SELECT t.transaction_type,t.status,t.amount,t.fee,t.currency,t.reference,t.description,
+        SELECT t.transaction_type,
+               CASE WHEN op.status='PENDING' THEN 'PROCESSING'
+                    WHEN op.status IS NOT NULL THEN op.status ELSE t.status END AS status,
+               t.amount,t.fee,t.currency,t.reference,t.description,
                to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
                COALESCE(delta.wallet_delta,0)::numeric(18,2) AS wallet_delta
           FROM buyer_wallet_transactions t
+          LEFT JOIN buyer_wallet_provider_operations op ON op.transaction_id=t.id
           LEFT JOIN LATERAL (
             SELECT SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END) AS wallet_delta
               FROM buyer_wallet_ledger_entries e
              WHERE e.transaction_id=t.id AND e.account_code='AVAILABLE'
           ) delta ON TRUE
          WHERE t.user_id=$1 AND t.wallet_id=$2
+           AND COALESCE(t.metadata->>'internal','false') <> 'true'
            AND t.created_at >= $3::date
            AND t.created_at < ($4::date + INTERVAL '1 day')
          ORDER BY t.created_at ASC,t.id ASC
@@ -1185,6 +1190,22 @@ export function registerBuyerWalletRoutes({ app }) {
     try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).json({ error: 'invalid webhook payload' }); }
     const eventName = String(event?.event || '').trim().toLowerCase();
     const data = event?.data || {};
+
+    if (eventName.startsWith('transfer.')) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const outcome = await reconcileWalletTransferEvent(client, eventName, data);
+        await client.query('COMMIT');
+        return res.status(200).json({ received: true, ...outcome });
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error('buyer wallet Paystack transfer webhook', error);
+        return res.status(500).json({ error: 'wallet transfer reconciliation failed' });
+      } finally {
+        client.release();
+      }
+    }
 
     if (eventName === 'customeridentification.failed' || eventName === 'dedicatedaccount.assign.failed') {
       const customerCode = String(data.customer_code || data.customer?.customer_code || '').trim();
@@ -1326,16 +1347,21 @@ export function registerBuyerWalletRoutes({ app }) {
         ? [req.user.sub, wallet.id, parsedDirection.direction, cursor.createdAt, cursor.id, limit + 1]
         : [req.user.sub, wallet.id, parsedDirection.direction, limit + 1];
       const result = await pool.query(`
-        SELECT t.id,t.transaction_type,t.status,t.amount,t.fee,t.currency,t.reference,t.description,t.created_at,
+        SELECT t.id,t.transaction_type,
+               CASE WHEN op.status='PENDING' THEN 'PROCESSING'
+                    WHEN op.status IS NOT NULL THEN op.status ELSE t.status END AS status,
+               t.amount,t.fee,t.currency,t.reference,t.description,t.created_at,
                to_char(t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
                COALESCE(activity_delta.wallet_delta,0)::numeric(18,2) AS wallet_delta
           FROM buyer_wallet_transactions t
+          LEFT JOIN buyer_wallet_provider_operations op ON op.transaction_id=t.id
           LEFT JOIN LATERAL (
             SELECT SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END) AS wallet_delta
               FROM buyer_wallet_ledger_entries e
              WHERE e.transaction_id=t.id AND e.account_code='AVAILABLE'
           ) activity_delta ON TRUE
          WHERE t.user_id=$1 AND t.wallet_id=$2
+           AND COALESCE(t.metadata->>'internal','false') <> 'true'
            AND (
              $3::text='ALL'
              OR ($3::text='IN' AND COALESCE(activity_delta.wallet_delta,0) > 0)
