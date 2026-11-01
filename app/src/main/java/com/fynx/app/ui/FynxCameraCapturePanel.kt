@@ -7,7 +7,10 @@ import android.app.Activity
 import android.content.ContextWrapper
 import android.graphics.drawable.ColorDrawable
 import android.view.View
+import android.view.ViewGroup
+import android.view.Gravity
 import android.view.Window
+import android.widget.FrameLayout
 import android.content.pm.PackageManager
 import android.content.Context
 import android.graphics.ColorMatrix
@@ -94,6 +97,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -140,6 +145,27 @@ private fun resolveFynxHostActivityWindow(view: View): Window? {
         currentContext = baseContext
     }
     return (currentContext as? Activity)?.window
+}
+
+
+/**
+ * Resolve the actual top status-bar inset on the host Activity decor view. The
+ * camera Dialog can be edge-to-edge while Android 15 leaves the system-bar strip
+ * attached to the Activity content surface; this height is used for a scoped scrim.
+ */
+private fun resolveFynxStatusBarHeightPx(view: View): Int {
+    val insetTop = ViewCompat.getRootWindowInsets(view)
+        ?.getInsets(WindowInsetsCompat.Type.statusBars())
+        ?.top
+        ?: 0
+    if (insetTop > 0) return insetTop
+
+    val resourceId = view.resources.getIdentifier("status_bar_height", "dimen", "android")
+    return if (resourceId != 0) {
+        runCatching { view.resources.getDimensionPixelSize(resourceId) }.getOrDefault(0)
+    } else {
+        0
+    }
 }
 
 @Composable
@@ -377,6 +403,9 @@ fun FynxCameraCapturePanel(
         val hostController = hostActivityWindow
             ?.takeIf { it !== window }
             ?.let { WindowInsetsControllerCompat(it, it.decorView) }
+        val hostDecorView = hostActivityWindow
+            ?.takeIf { it !== window }
+            ?.decorView as? ViewGroup
         val previousDimAmount = window?.attributes?.dimAmount
         val previousDimBehind = window?.attributes?.flags
             ?.and(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0
@@ -393,6 +422,33 @@ fun FynxCameraCapturePanel(
         } else null
 
         val cameraBackdrop = FYNX_CAMERA_WINDOW_BACKGROUND_ARGB
+        // Draw over the Activity's edge-to-edge Compose content only inside the
+        // system status-bar inset. Setting Window.statusBarColor/background alone
+        // does not cover a bright Compose root that is drawing behind transparent bars.
+        val statusBarScrim = hostDecorView?.let { decor ->
+            val height = resolveFynxStatusBarHeightPx(decor)
+            if (height <= 0) {
+                null
+            } else {
+                View(decor.context).apply {
+                    setBackgroundColor(cameraBackdrop)
+                    isClickable = false
+                    isFocusable = false
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    elevation = 24f * decor.resources.displayMetrics.density
+                }.also { scrim ->
+                    decor.addView(
+                        scrim,
+                        FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            height,
+                            Gravity.TOP
+                        )
+                    )
+                    scrim.bringToFront()
+                }
+            }
+        }
         if (window != null) {
             // This full-screen camera has no meaningful dimmed content behind it. Dimming
             // the host Activity also dims Android 15's transparent status bar, which remains
@@ -445,6 +501,7 @@ fun FynxCameraCapturePanel(
                 }
             }
             if (hostActivityWindow != null && hostActivityWindow !== window) {
+                statusBarScrim?.let { hostDecorView?.removeView(it) }
                 hostActivityWindow.decorView.background = previousHostDecorBackground
                 previousHostStatusBarColor?.let { hostActivityWindow.statusBarColor = it }
                 previousHostNavigationBarColor?.let { hostActivityWindow.navigationBarColor = it }

@@ -50,6 +50,168 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun hostedWalletFundingSessionParsesPendingCardCheckout() {
+        val session = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":5000.0,"paymentMethod":"CARD","authorizationUrl":"https://checkout.paystack.com/session","message":"pending"}"""
+        )
+        assertEquals("PENDING", session.status)
+        assertEquals("CARD", session.paymentMethod)
+        assertEquals(5000.0, session.amount, 0.0)
+        assertTrue(session.authorizationUrl!!.startsWith("https://"))
+    }
+
+    @Test
+    fun hostedWalletFundingSessionAcceptsVerifiedSuccessWithoutCheckoutUrl() {
+        val session = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"SUCCEEDED","reference":"fwd_abcdef0123456789abcdef0123456789","amount":2000.0,"paymentMethod":"USSD"}"""
+        )
+        assertEquals("SUCCEEDED", session.status)
+        assertNull(session.authorizationUrl)
+    }
+
+    @Test
+    fun hostedWalletFundingSessionRejectsInvalidReferenceAndUnsafeUrl() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWalletFundingSession(
+                """{"status":"PENDING","reference":"bad-ref","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"http://checkout.invalid"}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWalletFundingSession(
+                """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":100.0,"paymentMethod":"WIRE"}"""
+            )
+        }
+    }
+
+    @Test
+    fun fundingAccountParsesOnlyAssignedProviderAccount() {
+        val account = FynxBuyerWalletClient.parseFundingAccount(
+            """{"status":"ACTIVE","currency":"NGN","canRequest":false,"account":{"bankName":"Wema Bank","accountName":"FYNX / TEST USER","accountNumber":"0123456789","currency":"NGN"}}"""
+        )
+        assertEquals("ACTIVE", account.status)
+        assertEquals("Wema Bank", account.bankName)
+        assertEquals("0123456789", account.accountNumber)
+        assertFalse(account.canRequest)
+    }
+
+    @Test
+    fun pendingFundingAccountDoesNotInventBankDetails() {
+        val account = FynxBuyerWalletClient.parseFundingAccount(
+            """{"status":"ASSIGNING","currency":"NGN","canRequest":false,"account":null}"""
+        )
+        assertEquals("ASSIGNING", account.status)
+        assertNull(account.bankName)
+        assertNull(account.accountName)
+        assertNull(account.accountNumber)
+    }
+
+    @Test
+    fun activeFundingAccountRejectsMissingOrInvalidAccountNumber() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseFundingAccount(
+                """{"status":"ACTIVE","currency":"NGN","account":{"bankName":"Wema","accountName":"FYNX","accountNumber":"123"}}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseFundingAccount(
+                """{"status":"ACTIVE","currency":"USD","account":{"bankName":"Bank","accountName":"FYNX","accountNumber":"0123456789"}}"""
+            )
+        }
+    }
+
+    @Test
+    fun walletSecurityParsesServerEnforcedDailyWithdrawalLimits() {
+        val security = FynxBuyerWalletClient.parseWalletSecurity(
+            """{"hasWithdrawalPin":true,"isLocked":false,"limits":{"maximumPerTransfer":50000,"dailyAmountLimit":150000,"dailyCountLimit":3}}"""
+        )
+        assertEquals(50000.0, security.maximumPerTransfer!!, 0.0)
+        assertEquals(150000.0, security.dailyAmountLimit!!, 0.0)
+        assertEquals(3, security.dailyCountLimit)
+    }
+
+    @Test
+    fun walletSecurityReportsWhenWithdrawalPinIsNotConfigured() {
+        val security = FynxBuyerWalletClient.parseWalletSecurity(
+            """{"hasWithdrawalPin":false,"isLocked":false,"lockedUntil":null}"""
+        )
+        assertFalse(security.hasWithdrawalPin)
+        assertFalse(security.isLocked)
+        assertNull(security.lockedUntil)
+    }
+
+    @Test
+    fun walletSecurityReportsTemporaryPinLock() {
+        val security = FynxBuyerWalletClient.parseWalletSecurity(
+            """{"hasWithdrawalPin":true,"isLocked":true,"lockedUntil":"2026-11-01T10:15:00Z"}"""
+        )
+        assertTrue(security.hasWithdrawalPin)
+        assertTrue(security.isLocked)
+        assertEquals("2026-11-01T10:15:00Z", security.lockedUntil)
+    }
+
+    @Test
+    fun payoutBankListKeepsOnlyValidProviderBankRecords() {
+        val banks = FynxBuyerWalletClient.parsePayoutBanks(
+            """{"banks":[{"name":"Access Bank","code":"044","slug":"access-bank"},{"name":"Invalid","code":"x"}]}"""
+        )
+        assertEquals(1, banks.size)
+        assertEquals("Access Bank", banks.single().name)
+        assertEquals("044", banks.single().code)
+    }
+
+    @Test
+    fun withdrawalResultParsesPendingReferenceAndValidatesAmounts() {
+        val result = FynxBuyerWalletClient.parseWithdrawalResult(
+            """{"status":"PENDING","reference":"fw_1234567890","amount":2500.0,"bankName":"Access Bank","accountLast4":"6789","message":"processing"}"""
+        )
+        assertEquals("PENDING", result.status)
+        assertEquals("fw_1234567890", result.reference)
+        assertEquals(2500.0, result.amount, 0.0)
+        assertEquals("6789", result.accountLast4)
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWithdrawalResult(
+                """{"status":"PENDING","reference":"fw_bad","amount":-1}"""
+            )
+        }
+    }
+
+    @Test
+    fun sellerSummarySeparatesGrossSalesFeesAndNetEarnings() {
+        val summary = FynxBuyerWalletClient.parseSellerSummary(
+            """{"totals":[{"currency":"NGN","protectedFunds":1000.0,"availableForPayout":500.0,"payoutPending":100.0,"paidOut":2500.0,"grossSales":4500.0,"marketplaceFees":225.0,"netEarnings":4275.0}],"settlements":[{"orderId":"order-1","title":"Leather bag","currency":"NGN","sellerNetAmount":950.0,"marketplaceFeeSeller":50.0,"funds":"HELD","payoutStatus":"HELD","updatedAt":"2026-10-31T10:00:00Z"}]}"""
+        )
+        assertEquals(1, summary.totals.size)
+        assertEquals(4500.0, summary.totals[0].grossSales, 0.0)
+        assertEquals(225.0, summary.totals[0].marketplaceFees, 0.0)
+        assertEquals(4275.0, summary.totals[0].netEarnings, 0.0)
+        assertEquals(50.0, summary.settlements[0].marketplaceFeeSeller, 0.0)
+        assertEquals("HELD", summary.settlements[0].funds)
+    }
+
+    @Test
+    fun sellerSummaryAcceptsUsdAndEmptySellerHistory() {
+        val summary = FynxBuyerWalletClient.parseSellerSummary(
+            """{"totals":[{"currency":"USD","protectedFunds":0,"availableForPayout":0,"payoutPending":0,"paidOut":0,"grossSales":0,"marketplaceFees":0,"netEarnings":0}],"settlements":[]}"""
+        )
+        assertEquals("USD", summary.totals.single().currency)
+        assertTrue(summary.settlements.isEmpty())
+    }
+
+    @Test
+    fun sellerSummaryRejectsNegativeOrUnsupportedAmounts() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseSellerSummary(
+                """{"totals":[{"currency":"NGN","protectedFunds":-1,"availableForPayout":0,"payoutPending":0,"paidOut":0,"grossSales":0,"marketplaceFees":0,"netEarnings":0}]}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseSellerSummary(
+                """{"totals":[{"currency":"EUR","protectedFunds":0,"availableForPayout":0,"payoutPending":0,"paidOut":0,"grossSales":0,"marketplaceFees":0,"netEarnings":0}]}"""
+            )
+        }
+    }
+
+    @Test
     fun activityDirectionIsNormalizedAndAllowlisted() {
         assertEquals("ALL", FynxBuyerWalletClient.normalizeActivityDirection(" all "))
         assertEquals("IN", FynxBuyerWalletClient.normalizeActivityDirection("in"))

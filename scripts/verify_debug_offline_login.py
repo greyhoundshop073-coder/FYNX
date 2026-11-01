@@ -13,7 +13,7 @@ checks = {
     "release and invalid-credential paths do not receive an unconditional local session": "if (allowOfflineEntry) {" not in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
     "live-backend probe is separately opt-in and not required for feature-branch APK runtime": "run_live_backend_probe:" in workflow and "inputs.run_live_backend_probe == true" in workflow and "github.ref == 'refs/heads/main'" in workflow and "if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}" not in workflow,
     "explicit live-backend probe remains available when deliberately requested": "inputs.run_live_backend_probe == true" in workflow and "github.ref == 'refs/heads/main'" in workflow and "run: node scripts/verify_production_backend_reachability.mjs" in workflow,
-    "Android instrumentation keeps live Railway reachability opt-in": "InstrumentationRegistry.getArguments()" in network_test and 'getString("fynxRequireLiveBackend")' in network_test and "assumeTrue(" in network_test and "fynxRequireLiveBackend=true" in network_test and "android.testInstrumentationRunnerArguments.fynxRequireLiveBackend" not in workflow,
+    "Android instrumentation keeps live Render reachability opt-in": "InstrumentationRegistry.getArguments()" in network_test and 'getString("fynxRequireLiveBackend")' in network_test and "assumeTrue(" in network_test and "fynxRequireLiveBackend=true" in network_test and "android.testInstrumentationRunnerArguments.fynxRequireLiveBackend" not in workflow,
 }
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():

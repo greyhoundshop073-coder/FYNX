@@ -143,7 +143,7 @@ DIAGNOSTIC_MARKERS = (
     "New post", "Add description...", "Add music", "Your Story", "More options", "Add photo or video", "Take photo or video", "Drafts", "Content disclosure and ads", "Add link", "Share to", "Edit cover",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
-    "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
+    "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
@@ -1752,7 +1752,7 @@ def wait_for_my_shop_section_settled(slug: str, timeout: float = 20.0) -> tuple[
 
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
-    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-ai-backend.onrender.com").rstrip("/")
     try:
         login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
         login_req=urllib.request.Request(
@@ -2189,6 +2189,17 @@ def find_wallet_feature_entry(xml_text:str):
     return None
 
 
+
+def wallet_destination_ready(xml_text: str) -> bool:
+    """Require the Wallet page and its visible balance buckets, not below-fold copy."""
+    return bool(
+        find_control(xml_text, ["FYNX Wallet"])
+        and find_control(xml_text, ["Balance details"])
+        and find_control(xml_text, ["Reserved"])
+        and find_control(xml_text, ["Withdrawal pending"])
+    )
+
+
 def capture_wallet_from_features(prefix:str):
     """Open the real FYNX Wallet destination, capture it, and restore Home."""
     home_xml=restore_home_after_restart(prefix+"-home")
@@ -2237,12 +2248,7 @@ def capture_wallet_from_features(prefix:str):
     for attempt in range(60):
         time.sleep(.5)
         wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
-        wallet_shell_opened=bool(
-            wallet_xml
-            and find_control(wallet_xml, ["FYNX Wallet"])
-            and find_control(wallet_xml, ["Balance details"])
-            and find_control(wallet_xml, ["Understand your money"])
-        )
+        wallet_shell_opened=wallet_destination_ready(wallet_xml)
         wallet_still_loading=bool(wallet_xml and any(marker in wallet_xml for marker in wallet_loading_markers))
         if wallet_shell_opened and not wallet_still_loading:
             wallet_settled=True
@@ -2261,7 +2267,7 @@ def capture_wallet_from_features(prefix:str):
         if wallet_shell_opened:
             result_message="Wallet sections rendered, but summary or activity was still loading after 30 seconds."
         else:
-            result_message="Wallet result was tapped, but its title, Balance details and money explanation did not appear."
+            result_message="Wallet result opened, but its title and visible balance-detail cards did not appear."
 
     action_screens_captured = False
     if wallet_opened:
@@ -2274,7 +2280,7 @@ def capture_wallet_from_features(prefix:str):
             (ROOT/"authenticated-wallet-add-money.xml").write_text(add_money_xml+chr(10),encoding="utf-8")
             transfer_xml = tap_control(
                 add_money_xml, ["Dedicated bank transfer"], "wallet-bank-transfer",
-                ["Account number not assigned yet"]
+                ["Your dedicated FYNX funding account", "Dedicated account not ready"]
             )
             if transfer_xml:
                 (ROOT/"authenticated-wallet-bank-transfer.xml").write_text(transfer_xml+chr(10),encoding="utf-8")
@@ -2283,18 +2289,40 @@ def capture_wallet_from_features(prefix:str):
                     ["Dedicated bank transfer"]
                 )
                 if add_money_return:
-                    home_after_add = tap_control(
-                        add_money_return, ["Back to Wallet"], "wallet-add-back-home",
-                        ["Balance details", "Understand your money"]
+                    card_xml = tap_control(
+                        add_money_return, ["Debit card"], "wallet-card-funding",
+                        ["Debit card funding"]
                     )
-                    if home_after_add:
-                        withdraw_xml = tap_control(
-                            home_after_add, ["Withdraw"], "wallet-withdraw",
-                            ["Withdraw Money", "AVAILABLE BALANCE"]
+                    if card_xml:
+                        (ROOT/"authenticated-wallet-card.xml").write_text(card_xml+chr(10),encoding="utf-8")
+                        add_money_after_card = tap_control(
+                            card_xml, ["Back to Wallet"], "wallet-card-back",
+                            ["Dedicated bank transfer"]
                         )
-                        if withdraw_xml:
-                            (ROOT/"authenticated-wallet-withdraw.xml").write_text(withdraw_xml+chr(10),encoding="utf-8")
-                            action_screens_captured = True
+                        if add_money_after_card:
+                            ussd_xml = tap_control(
+                                add_money_after_card, ["USSD and other methods"], "wallet-ussd-funding",
+                                ["USSD funding"]
+                            )
+                            if ussd_xml:
+                                (ROOT/"authenticated-wallet-ussd.xml").write_text(ussd_xml+chr(10),encoding="utf-8")
+                                add_money_after_ussd = tap_control(
+                                    ussd_xml, ["Back to Wallet"], "wallet-ussd-back",
+                                    ["Dedicated bank transfer"]
+                                )
+                                if add_money_after_ussd:
+                                    home_after_add = tap_control(
+                                        add_money_after_ussd, ["Back to Wallet"], "wallet-add-back-home",
+                                        ["Balance details", "Reserved", "Withdrawal pending"]
+                                    )
+                                    if home_after_add:
+                                        withdraw_xml = tap_control(
+                                            home_after_add, ["Withdraw"], "wallet-withdraw",
+                                            ["Withdraw Money", "AVAILABLE BALANCE"]
+                                        )
+                                        if withdraw_xml:
+                                            (ROOT/"authenticated-wallet-withdraw.xml").write_text(withdraw_xml+chr(10),encoding="utf-8")
+                                            action_screens_captured = True
 
     # The runtime runner starts a separate Status creator check immediately after
     # this function. Restore Home on both pass and fail so Wallet/keyboard state
@@ -3050,7 +3078,7 @@ def open_features(target_labels:list[str]|None=None):
         report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
         journeys=(
             ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
-            ("wallet",["FYNX Wallet"],["FYNX Wallet","Understand your money","Balance details"]),
+            ("wallet",["FYNX Wallet"],["FYNX Wallet","Balance details","Reserved","Withdrawal pending"]),
             ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
         )
         for name,labels,expected in journeys:
@@ -3067,7 +3095,7 @@ def open_features(target_labels:list[str]|None=None):
             if not after:
                 FAILURES.append("authenticated Features -> "+name)
                 continue
-            if name == "wallet" and not all(find_control(after,[marker]) for marker in ["FYNX Wallet","Understand your money","Balance details"]):
+            if name == "wallet" and not wallet_destination_ready(after):
                 FAILURES.append("authenticated Features -> Wallet did not expose the complete wallet summary surface")
                 continue
             if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")

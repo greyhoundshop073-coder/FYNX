@@ -25,6 +25,11 @@ checks = [
      and "window.setDimAmount(0f)" in camera
      and "previousDimAmount?.let { window.setDimAmount(it) }" in camera
      and "window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)" in camera
+     and "resolveFynxStatusBarHeightPx" in camera
+     and "WindowInsetsCompat.Type.statusBars()" in camera
+     and "decor.addView(" in camera
+     and "FrameLayout.LayoutParams(" in camera
+     and "statusBarScrim?.let { hostDecorView?.removeView(it) }" in camera
      and "hostActivityWindow.decorView.background = ColorDrawable(cameraBackdrop)" in camera
      and "previousHostDecorBackground" in camera
      and "hostActivityWindow.decorView.background = previousHostDecorBackground" in camera

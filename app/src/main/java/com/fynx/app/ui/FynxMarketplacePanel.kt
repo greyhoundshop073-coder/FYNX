@@ -77,6 +77,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -1854,60 +1856,186 @@ private fun MarketplaceDetails(
 }
 
 @Composable
-private fun MarketplacePaymentDialog(context: android.content.Context, order: FynxRemoteSocialClient.MarketplaceOrder, onPaid: () -> Unit, onClose: () -> Unit) {
+private fun MarketplacePaymentDialog(
+    context: android.content.Context,
+    order: FynxRemoteSocialClient.MarketplaceOrder,
+    onPaid: () -> Unit,
+    onClose: () -> Unit
+) {
     var email by remember { mutableStateOf("") }
     var payment by remember { mutableStateOf<FynxMarketplacePayment?>(null) }
+    var paymentMethod by remember { mutableStateOf("PAYSTACK") }
+    var walletSummary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
+    var walletSummaryLoading by remember { mutableStateOf(true) }
+    var walletPin by remember { mutableStateOf("") }
+    var walletPaymentMessage by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var verifying by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    val walletPaymentIdempotencyKey = remember(order.id) { UUID.randomUUID().toString().replace("-", "") }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(order.id) {
+        walletSummaryLoading = true
+        FynxBuyerWalletClient.loadSummary(context)
+            .onSuccess { walletSummary = it }
+            .onFailure { walletSummary = null }
+        walletSummaryLoading = false
+    }
+
+    val walletOptionAvailable = order.currency.equals("NGN", ignoreCase = true) &&
+        walletSummary?.walletStatus == "ACTIVE" && walletSummary?.canSpend == true
+    val walletBalance = walletSummary?.availableBalance
+    val hasEnoughWalletBalance = walletBalance != null && walletBalance >= order.totalAmount
+    val canPayWithWallet = walletOptionAvailable && hasEnoughWalletBalance &&
+        walletPin.matches(Regex("^\\d{6}$")) && !busy && payment == null
+
     AlertDialog(
         onDismissRequest = { if (!busy && !verifying) onClose() },
         title = { Text("Secure checkout") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text(order.productTitle.ifBlank { "FYNX order" }, style = MaterialTheme.typography.titleMedium)
-                Text("${order.currency} ${String.format(Locale.US, "%,.2f", order.totalAmount)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    order.currency + " " + String.format(Locale.US, "%,.2f", order.totalAmount),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
                 if (payment == null) {
-                    Text("Enter the email you want to use for payment. Your FYNX password or payment secret is never requested here.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Payment email") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                    Text("Choose how you want to pay for this protected order.", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = paymentMethod == "PAYSTACK",
+                            onClick = { paymentMethod = "PAYSTACK"; message = null },
+                            enabled = !busy,
+                            label = { Text("Card / bank") }
+                        )
+                        if (walletOptionAvailable) {
+                            FilterChip(
+                                selected = paymentMethod == "FYNX_WALLET",
+                                onClick = { paymentMethod = "FYNX_WALLET"; message = null },
+                                enabled = !busy,
+                                label = { Text("FYNX Wallet") }
+                            )
+                        }
+                    }
+                    if (walletSummaryLoading) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text("Checking Wallet payment availability…", style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (paymentMethod == "FYNX_WALLET") {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("Available Wallet balance", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    walletBalance?.let { "₦" + String.format(Locale.US, "%,.2f", it) } ?: "Unavailable",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (!hasEnoughWalletBalance) {
+                                    Text(
+                                        "Your cleared Wallet balance is not enough for this order. Add money or choose card/bank payment.",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                        OutlinedTextField(
+                            value = walletPin,
+                            onValueChange = { walletPin = it.filter(Char::isDigit).take(6) },
+                            label = { Text("Wallet security PIN") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !busy,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                        )
+                        Text(
+                            "FYNX checks your Wallet PIN and deducts only cleared funds. The order is protected in Marketplace escrow.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = { email = it.trim().take(160) },
+                            label = { Text("Payment email") },
+                            singleLine = true,
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 } else {
                     Text("Checkout was opened. After completing payment, return to FYNX and verify the payment.", style = MaterialTheme.typography.bodySmall)
                     Text("Reference: ${payment?.reference.orEmpty()}", style = MaterialTheme.typography.labelSmall)
                 }
-                message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                walletPaymentMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
             if (payment == null) {
-                Button(enabled = !busy, onClick = {
-                    busy = true
-                    message = null
-                    scope.launch {
-                        initializeMarketplacePayment(context, order.id, email)
-                            .onSuccess { checkout ->
-                                payment = checkout
-                                openMarketplaceCheckout(context, checkout.authorizationUrl).onFailure {
-                                    payment = null
-                                    message = marketplaceSafeError(it, "Could not open payment checkout.")
+                Button(
+                    enabled = if (paymentMethod == "FYNX_WALLET") canPayWithWallet
+                        else !busy && email.contains("@") && !walletSummaryLoading,
+                    onClick = {
+                        busy = true
+                        message = null
+                        walletPaymentMessage = null
+                        scope.launch {
+                            if (paymentMethod == "FYNX_WALLET") {
+                                FynxBuyerWalletClient.payMarketplaceOrder(
+                                    context,
+                                    order.id,
+                                    walletPin,
+                                    walletPaymentIdempotencyKey
+                                ).onSuccess {
+                                    walletPin = ""
+                                    onPaid()
+                                }.onFailure {
+                                    message = marketplaceSafeError(it, "Wallet payment could not be completed.")
                                 }
+                            } else {
+                                initializeMarketplacePayment(context, order.id, email)
+                                    .onSuccess { checkout ->
+                                        payment = checkout
+                                        openMarketplaceCheckout(context, checkout.authorizationUrl).onFailure {
+                                            payment = null
+                                            message = marketplaceSafeError(it, "Could not open payment checkout.")
+                                        }
+                                    }
+                                    .onFailure { message = marketplaceSafeError(it, "Could not start payment.") }
                             }
-                            .onFailure { message = marketplaceSafeError(it, "Could not start payment.") }
-                        busy = false
+                            busy = false
+                        }
                     }
-                }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Continue to payment") }
+                ) {
+                    if (busy) CircularProgressIndicator(Modifier.size(18.dp))
+                    else Text(if (paymentMethod == "FYNX_WALLET") "Pay with FYNX Wallet" else "Continue to payment")
+                }
             } else {
                 Button(enabled = !verifying, onClick = {
                     verifying = true
                     message = null
                     scope.launch {
-                        verifyMarketplacePayment(context, payment?.reference.orEmpty()).onSuccess { onPaid() }.onFailure { message = marketplaceSafeError(it, "Payment is not verified yet.") }
+                        verifyMarketplacePayment(context, payment?.reference.orEmpty())
+                            .onSuccess { onPaid() }
+                            .onFailure { message = marketplaceSafeError(it, "Payment is not verified yet.") }
                         verifying = false
                     }
                 }) { if (verifying) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Verify payment") }
             }
         },
-        dismissButton = { TextButton(onClick = onClose, enabled = !busy && !verifying) { Text("Close") } }
+        dismissButton = {
+            TextButton(onClick = onClose, enabled = !busy && !verifying) { Text("Close") }
+        }
     )
 }
 
