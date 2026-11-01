@@ -1610,12 +1610,14 @@ def capture_wallet_from_features(prefix:str):
         )
         if add_money_xml:
             (ROOT/"authenticated-wallet-add-money.xml").write_text(add_money_xml+chr(10),encoding="utf-8")
+            screenshot("authenticated-wallet-add-money.png")
             transfer_xml = tap_control(
                 add_money_xml, ["Dedicated bank transfer"], "wallet-bank-transfer",
                 ["Your dedicated FYNX funding account", "Dedicated account not ready"]
             )
             if transfer_xml:
                 (ROOT/"authenticated-wallet-bank-transfer.xml").write_text(transfer_xml+chr(10),encoding="utf-8")
+                screenshot("authenticated-wallet-bank-transfer.png")
                 add_money_return = tap_control(
                     transfer_xml, ["Back to Wallet"], "wallet-transfer-back",
                     ["Dedicated bank transfer"]
@@ -1627,6 +1629,7 @@ def capture_wallet_from_features(prefix:str):
                     )
                     if card_xml:
                         (ROOT/"authenticated-wallet-card.xml").write_text(card_xml+chr(10),encoding="utf-8")
+                        screenshot("authenticated-wallet-card.png")
                         add_money_after_card = tap_control(
                             card_xml, ["Back to Wallet"], "wallet-card-back",
                             ["Dedicated bank transfer"]
@@ -1638,6 +1641,7 @@ def capture_wallet_from_features(prefix:str):
                             )
                             if ussd_xml:
                                 (ROOT/"authenticated-wallet-ussd.xml").write_text(ussd_xml+chr(10),encoding="utf-8")
+                                screenshot("authenticated-wallet-ussd.png")
                                 add_money_after_ussd = tap_control(
                                     ussd_xml, ["Back to Wallet"], "wallet-ussd-back",
                                     ["Dedicated bank transfer"]
@@ -1654,6 +1658,7 @@ def capture_wallet_from_features(prefix:str):
                                         )
                                         if withdraw_xml:
                                             (ROOT/"authenticated-wallet-withdraw.xml").write_text(withdraw_xml+chr(10),encoding="utf-8")
+                                            screenshot("authenticated-wallet-withdraw.png")
                                             action_screens_captured = True
 
     # The runtime runner starts a separate Status creator check immediately after
@@ -2263,35 +2268,43 @@ def open_features(target_labels:list[str]|None=None):
             feature_xml=dump_ui(f"authenticated-features-{direction}.xml")
     return feature_xml if find_feature_entry(feature_xml,target_labels) else ""
 
-    features=open_features()
-    if features:
-        report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
-        journeys=(
-            ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
-            ("wallet",["FYNX Wallet"],["FYNX Wallet","Balance details","Reserved","Withdrawal pending"]),
-            ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
-        )
-        for name,labels,expected in journeys:
-            current=open_features(labels)
-            entry=find_feature_entry(current,labels)
-            if not current or not entry:
-                FAILURES.append("authenticated Features -> "+name)
-                continue
-            _,ex,ey=entry
-            run("adb","shell","input","tap",str(ex),str(ey))
-            time.sleep(1.2)
-            after=dump_ui(f"authenticated-{name}-destination.xml")
-            screenshot(f"authenticated-{name}.png")
-            if not after:
-                FAILURES.append("authenticated Features -> "+name)
-                continue
-            if name == "wallet" and not wallet_destination_ready(after):
-                FAILURES.append("authenticated Features -> Wallet did not expose the complete wallet summary surface")
-                continue
-            if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
-            else: FAILURES.append("authenticated Features -> "+name)
-    else: FAILURES.append("authenticated Home -> Features")
+features=open_features()
+if features:
+    screenshot("authenticated-features.png")
+    report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
+    journeys=(
+        ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
+        ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
+    )
+    for name,labels,expected in journeys:
+        current=open_features(labels)
+        entry=find_feature_entry(current,labels)
+        if not current or not entry:
+            FAILURES.append("authenticated Features -> "+name)
+            continue
+        _,ex,ey=entry
+        run("adb","shell","input","tap",str(ex),str(ey))
+        time.sleep(1.2)
+        after=dump_ui(f"authenticated-{name}-destination.xml")
+        screenshot(f"authenticated-{name}.png")
+        if not after:
+            FAILURES.append("authenticated Features -> "+name)
+            continue
+        if name == "wallet" and not wallet_destination_ready(after):
+            FAILURES.append("authenticated Features -> Wallet did not expose the complete wallet summary surface")
+            continue
+        if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
+        else: FAILURES.append("authenticated Features -> "+name)
+else: FAILURES.append("authenticated Home -> Features")
 
+# Open Wallet through the real authenticated feature search, wait for the API-backed
+# summary/activity to settle, and capture every read-only funding/withdrawal screen.
+wallet_captured, wallet_message = capture_wallet_from_features("authenticated-runtime-wallet")
+if wallet_captured:
+    report.append("- PASS: " + wallet_message)
+else:
+    report.append("- FAIL: " + wallet_message)
+    FAILURES.append("authenticated Wallet screen/action capture: " + wallet_message)
 # Certify the actual Marketplace destination in the same exact-commit APK.
 # This is a UI/runtime assertion only; the screen must remain navigable when the
 # live service is unavailable, and no sample listing data is fabricated.
@@ -2308,10 +2321,24 @@ if marketplace_xml:
 else:
     FAILURES.append("authenticated Home -> Marketplace")
     
-report += ["","## Captured authenticated surfaces",
-           "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-wallet.png","- authenticated-ai.png","- authenticated-marketplace.png","",
-           f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+expected_authenticated_surfaces = [
+    "authenticated-home.png", "authenticated-chat.png", "authenticated-friends.png",
+    "authenticated-stories.png", "authenticated-features.png", "authenticated-money.png",
+    "authenticated-wallet.png", "authenticated-ai.png", "authenticated-marketplace.png",
+]
+captured_authenticated_surfaces = [
+    name for name in expected_authenticated_surfaces if (ROOT / name).is_file()
+]
+missing_authenticated_surfaces = [
+    name for name in expected_authenticated_surfaces if not (ROOT / name).is_file()
+]
+if missing_authenticated_surfaces:
+    FAILURES.append(
+        "runtime report was missing real screenshot files: " + ", ".join(missing_authenticated_surfaces)
+    )
+report += ["", "## Captured authenticated surfaces"]
+report += [f"- {name}" for name in captured_authenticated_surfaces]
+report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
 print("\n".join(report))
