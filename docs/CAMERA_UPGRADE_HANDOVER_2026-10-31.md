@@ -165,3 +165,12 @@ Capture genuine emulator/device screenshots and UI hierarchy for:
 - The video recording action did start; the emulator screenshot showed an active recording timer and Stop icon, but the accessibility hierarchy initially retained the pre-recording shutter label. The runtime check previously treated that stale label as a failed start and pressed Back while recording was active, which correctly did not dismiss the camera and cascaded into Marketplace navigation failure. The check now accepts the visible recording timer as proof, stops the same shutter control even when its label has not refreshed, verifies the Retake/Next editor, and attempts to stop any active recording before recovery navigation.
 - The shutter accessibility labels now distinguish normal Feed video (`Record video`) from video notes and use a generic `Stop recording` label while recording.
 - Exact-head emulator certification is still required after these corrections; do not declare the camera/Marketplace journey green from source checks alone.
+
+
+## 11. Grouped camera reliability correction — 2026-11-01
+- Centered the live Add music chip to match the captured-media editor while reserving side clearance from the right camera rail.
+- Reworked the self-timer around one cancellable coroutine job. The countdown now exposes a visible Cancel timer action; Back cancels an active countdown before dismissing the camera; disposal cancels pending timer work.
+- Caption audio extraction now decodes the actual encoded audio track through Android MediaCodec and writes 16-bit PCM WAV for the on-device speech recognizer. This removes the old AAC-only rejection that failed against the emulator's AMR-NB camera recording. The user-facing timing note remains explicit: captions are chunk-timed estimates because the current whole-clip recognition response does not provide word timestamps.
+- Added an instrumentation regression test which records AMR-NB audio and validates the decoded WAV header and PCM payload.
+- Expanded runtime certification to check timer cancel/no-late-capture, timer completion, real post caption typing with the keyboard open, sticky footer reachability, caption persistence after keyboard dismissal, and to fail if the old unsupported-audio message returns.
+- Still not claimed as covered until exact-head CI finishes: selecting an actual image/video in the Android system Gallery, exhaustive hashtag/mention/location/link/audience/share interaction, Android hardware camera/flash variants, and on-device speech model availability on a production phone.

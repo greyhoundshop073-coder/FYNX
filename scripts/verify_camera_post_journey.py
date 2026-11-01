@@ -10,10 +10,36 @@ runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_tex
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 status_hub = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt").read_text(encoding="utf-8")
 status_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt").read_text(encoding="utf-8")
+video_effects = (ROOT / "app/src/main/java/com/fynx/app/ui/CameraVideoEffects.kt").read_text(encoding="utf-8")
+audio_test = ROOT / "app/src/androidTest/java/com/fynx/app/ui/CameraVideoAudioExtractionInstrumentationTest.kt"
 app_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 draft_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt").read_text(encoding="utf-8")
 
 checks = [
+    ("Live and editor music chips share a centered position with side clearance",
+     "modifier = Modifier.align(Alignment.TopCenter)" in camera
+     and ".padding(start = 64.dp, end = 64.dp, top = 74.dp)" in camera
+     and "widthIn(max = 196.dp)" in camera),
+    ("Camera self-timer uses one cancellable job and exposes a visible cancel action",
+     "var timerCaptureJob by remember { mutableStateOf<Job?>(null) }" in camera
+     and "timerCaptureJob?.cancel()" in camera
+     and 'Text("Cancel timer", color = Color.White)' in camera
+     and "for (remaining in seconds downTo 1)" in camera
+     and "LaunchedEffect(timerCountingDown)" not in camera),
+    ("On-device captions transcode supported device audio formats to PCM16 WAV before speech recognition",
+     'fynx_caption_audio_" + System.currentTimeMillis() + ".wav"' in video_effects
+     and "MediaCodec.createDecoderByType(mime)" in video_effects
+     and "writeCameraWavHeader(output, dataBytes, sampleRate, channelCount)" in video_effects
+     and "AudioFormat.ENCODING_PCM_16BIT" in video_effects
+     and "This video's audio format is not supported." not in video_effects
+     and audio_test.is_file),
+    ("Camera runtime explicitly rejects the old unsupported-audio caption regression",
+     "caption audio decoder still rejects the camera's recorded audio format" in runtime),
+    ("Camera runtime exercises timer cancellation, timed capture and keyboard-visible caption entry",
+     "camera-timer-cancel" in runtime
+     and "camera-timer-capture" in runtime
+     and "camera-post-caption-keyboard.png" in runtime
+     and "post details with keyboard open" in runtime),
     ("Camera photo editor tool options toggle closed on a second tap and reopen or switch cleanly",
      'var showEditorToolOptions by remember { mutableStateOf(true) }' in camera
      and all(f'if (selectedCameraTool == "{tool}") showEditorToolOptions = !showEditorToolOptions' in camera for tool in ["Looks", "Face FX", "Background", "AI Studio"])

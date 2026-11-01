@@ -5,10 +5,10 @@ package com.fynx.app.ui
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.media.MediaMuxer
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -42,6 +42,7 @@ import com.google.mlkit.genai.speechrecognition.speechRecognizerRequest
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
+import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.Locale
 import kotlin.coroutines.resume
@@ -235,7 +236,7 @@ internal fun verifyFynxVideoEditOutput(sourceUri: Uri, outputUri: Uri, style: Ca
 internal suspend fun generateFynxVideoTranscript(context: Context, videoUri: Uri): String {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) error("Automatic captions need Android 12 or newer on this device.")
     val video = videoUri.path?.let(::File) ?: error("The video file is unavailable.")
-    val audio = File(context.cacheDir, "fynx_caption_audio_" + System.currentTimeMillis() + ".m4a")
+    val audio = File(context.cacheDir, "fynx_caption_audio_" + System.currentTimeMillis() + ".wav")
     extractFynxVideoAudio(video, audio)
     val recognizer = SpeechRecognition.getClient(speechRecognizerOptions {
         locale = Locale.US
@@ -276,47 +277,164 @@ internal suspend fun generateFynxVideoTranscript(context: Context, videoUri: Uri
     }
 }
 
-private fun extractFynxVideoAudio(video: File, audio: File) {
+internal fun extractFynxVideoAudio(video: File, audio: File) {
     val extractor = MediaExtractor()
-    var muxer: MediaMuxer? = null
-    var started = false
+    var decoder: MediaCodec? = null
+    var decoderStarted = false
+    val pcmFile = File(audio.parentFile, audio.nameWithoutExtension + ".pcm")
     try {
         extractor.setDataSource(video.absolutePath)
-        var track = -1
-        var format: MediaFormat? = null
+        var audioTrack = -1
+        var sourceFormat: MediaFormat? = null
         for (index in 0 until extractor.trackCount) {
             val candidate = extractor.getTrackFormat(index)
             if (candidate.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true) {
-                track = index; format = candidate; break
+                audioTrack = index
+                sourceFormat = candidate
+                break
             }
         }
-        if (track < 0 || format == null) error("This video has no audio track to caption.")
-        if (format.getString(MediaFormat.KEY_MIME) != MediaFormat.MIMETYPE_AUDIO_AAC) error("This video's audio format is not supported.")
-        muxer = MediaMuxer(audio.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-        val outputTrack = muxer.addTrack(format)
-        extractor.selectTrack(track)
-        muxer.start(); started = true
-        val maxSize = if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceIn(65536, 2097152) else 524288
-        val buffer = ByteBuffer.allocateDirect(maxSize)
-        val info = MediaCodec.BufferInfo()
-        while (true) {
-            buffer.clear()
-            val size = extractor.readSampleData(buffer, 0)
-            if (size < 0) break
-            val extractedFlags = extractor.sampleFlags
-            check((extractedFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED) == 0) {
-                "Encrypted audio samples cannot be captioned."
+        val audioFormat = sourceFormat
+            ?: error("This video has no audio track to caption.")
+        if (audioTrack < 0) error("This video has no audio track to caption.")
+        val mime = audioFormat.getString(MediaFormat.KEY_MIME)
+            ?: error("This video's audio track has no supported format.")
+
+        extractor.selectTrack(audioTrack)
+        val audioDecoder = MediaCodec.createDecoderByType(mime)
+        decoder = audioDecoder
+        audioDecoder.configure(audioFormat, null, null, 0)
+        audioDecoder.start()
+        decoderStarted = true
+
+        var inputEnded = false
+        var outputEnded = false
+        var decodedFormat: MediaFormat? = null
+        var idleAfterInputEnd = 0
+        pcmFile.outputStream().buffered().use { pcmOutput ->
+            val bufferInfo = MediaCodec.BufferInfo()
+            while (!outputEnded) {
+                if (!inputEnded) {
+                    val inputIndex = audioDecoder.dequeueInputBuffer(10_000L)
+                    if (inputIndex >= 0) {
+                        val inputBuffer = audioDecoder.getInputBuffer(inputIndex)
+                            ?: error("Audio decoder did not provide an input buffer.")
+                        inputBuffer.clear()
+                        val sampleSize = extractor.readSampleData(inputBuffer, 0)
+                        if (sampleSize < 0) {
+                            audioDecoder.queueInputBuffer(
+                                inputIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                            )
+                            inputEnded = true
+                        } else {
+                            check((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED) == 0) {
+                                "Encrypted audio samples cannot be captioned."
+                            }
+                            audioDecoder.queueInputBuffer(
+                                inputIndex, 0, sampleSize, extractor.sampleTime.coerceAtLeast(0L), 0
+                            )
+                            extractor.advance()
+                        }
+                    }
+                }
+
+                when (val outputIndex = audioDecoder.dequeueOutputBuffer(bufferInfo, 10_000L)) {
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> decodedFormat = audioDecoder.outputFormat
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                        if (inputEnded && ++idleAfterInputEnd > 3_000) {
+                            error("Audio decoder did not finish converting this video's audio.")
+                        }
+                    }
+                    else -> if (outputIndex >= 0) {
+                        idleAfterInputEnd = 0
+                        val outputBuffer = audioDecoder.getOutputBuffer(outputIndex)
+                        if (bufferInfo.size > 0) {
+                            decodedFormat = decodedFormat ?: audioDecoder.outputFormat
+                            if (outputBuffer == null) {
+                                error("Audio decoder returned an empty output buffer.")
+                            }
+                            outputBuffer.position(bufferInfo.offset)
+                            outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+                            val decodedBytes = ByteArray(bufferInfo.size)
+                            outputBuffer.get(decodedBytes)
+                            pcmOutput.write(decodedBytes)
+                        }
+                        val reachedEnd = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
+                        audioDecoder.releaseOutputBuffer(outputIndex, false)
+                        if (reachedEnd) outputEnded = true
+                    }
+                }
             }
-            // MediaExtractor sample flags and MediaCodec buffer flags are different
-            // flag domains. AAC audio samples do not need video key-frame flags.
-            info.set(0, size, extractor.sampleTime, 0)
-            muxer.writeSampleData(outputTrack, buffer, info)
-            if (!extractor.advance()) break
         }
-        if (!audio.exists() || audio.length() == 0L) error("No audio could be extracted for captions.")
+
+        val outputFormat = decodedFormat ?: audioDecoder.outputFormat
+        val sampleRate = outputFormat.getIntegerOrDefault(MediaFormat.KEY_SAMPLE_RATE, 0)
+        val channelCount = outputFormat.getIntegerOrDefault(MediaFormat.KEY_CHANNEL_COUNT, 0)
+        val pcmEncoding = outputFormat.getIntegerOrDefault(
+            MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT
+        )
+        require(sampleRate in 8_000..192_000 && channelCount in 1..2) {
+            "The decoded audio format is not supported for captions."
+        }
+        require(pcmEncoding == AudioFormat.ENCODING_PCM_16BIT) {
+            "The audio decoder did not produce 16-bit PCM for captions."
+        }
+        val dataBytes = pcmFile.length()
+        val frameSize = channelCount * 2L
+        require(dataBytes >= frameSize && dataBytes % frameSize == 0L) {
+            "This video's audio could not be converted into complete PCM samples."
+        }
+        require(dataBytes <= Int.MAX_VALUE.toLong() - 36L) {
+            "Audio is too long to caption on this device."
+        }
+        audio.outputStream().buffered().use { output ->
+            writeCameraWavHeader(output, dataBytes, sampleRate, channelCount)
+            pcmFile.inputStream().buffered().use { input -> input.copyTo(output) }
+        }
+    } catch (failure: Throwable) {
+        audio.delete()
+        throw failure
     } finally {
-        if (started) runCatching { muxer?.stop() }
-        runCatching { muxer?.release() }
+        if (decoderStarted) runCatching { decoder?.stop() }
+        runCatching { decoder?.release() }
         extractor.release()
+        pcmFile.delete()
     }
+}
+
+private fun MediaFormat.getIntegerOrDefault(key: String, fallback: Int): Int =
+    if (containsKey(key)) getInteger(key) else fallback
+
+private fun writeCameraWavHeader(
+    output: OutputStream,
+    pcmBytes: Long,
+    sampleRate: Int,
+    channels: Int
+) {
+    val blockAlign = channels * 2
+    val byteRate = sampleRate * blockAlign
+    output.write("RIFF".toByteArray(Charsets.US_ASCII))
+    writeLittleEndian32(output, 36L + pcmBytes)
+    output.write("WAVEfmt ".toByteArray(Charsets.US_ASCII))
+    writeLittleEndian32(output, 16L)
+    writeLittleEndian16(output, 1)
+    writeLittleEndian16(output, channels)
+    writeLittleEndian32(output, sampleRate.toLong())
+    writeLittleEndian32(output, byteRate.toLong())
+    writeLittleEndian16(output, blockAlign)
+    writeLittleEndian16(output, 16)
+    output.write("data".toByteArray(Charsets.US_ASCII))
+    writeLittleEndian32(output, pcmBytes)
+}
+
+private fun writeLittleEndian16(output: OutputStream, value: Int) {
+    output.write(value and 0xff)
+    output.write((value ushr 8) and 0xff)
+}
+
+private fun writeLittleEndian32(output: OutputStream, value: Long) {
+    output.write((value and 0xffL).toInt())
+    output.write(((value ushr 8) and 0xffL).toInt())
+    output.write(((value ushr 16) and 0xffL).toInt())
+    output.write(((value ushr 24) and 0xffL).toInt())
 }

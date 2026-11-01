@@ -947,6 +947,83 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     else:
         FAILURES.append(prefix + ": opening the Face FX category did not expose the Cute Ears effect")
 
+    # Close the compact effects tray so timer controls are reachable on the first screen.
+    if find_control(camera_xml, ["Effects"]):
+        effects_closed = tap_control(
+            camera_xml, ["Effects"], f"{prefix}-camera-effects-close-for-timer",
+            ["Set capture timer"]
+        )
+        if effects_closed:
+            camera_xml = effects_closed
+
+    # The self-timer must be cancellable and must not fire after cancellation.
+    timer_panel = tap_control(
+        camera_xml, ["Set capture timer"], f"{prefix}-camera-timer-open",
+        ["3 sec", "10 sec"]
+    )
+    timer_selected = tap_control(
+        timer_panel, ["3 sec"], f"{prefix}-camera-timer-three-seconds",
+        ["Take photo"]
+    ) if timer_panel else ""
+    if timer_selected and find_control(timer_selected, ["10 sec"]):
+        countdown_xml = tap_control(
+            timer_selected, ["Take photo"], f"{prefix}-camera-timer-start-cancel",
+            ["Cancel timer"]
+        )
+        if countdown_xml:
+            screenshot(f"{prefix}-camera-timer-countdown.png")
+            cancelled_xml = tap_control(
+                countdown_xml, ["Cancel timer"], f"{prefix}-camera-timer-cancel",
+                ["Take photo"]
+            )
+            if cancelled_xml:
+                time.sleep(3.4)
+                after_cancel = dump_ui(f"{prefix}-camera-timer-cancel-settled.xml") or cancelled_xml
+                if find_control(after_cancel, ["Take photo"]) and not find_control(after_cancel, ["Retake"]):
+                    report.append("- PASS cancelling the 3-second timer returned to live camera and did not capture later")
+                    camera_xml = after_cancel
+                else:
+                    FAILURES.append(prefix + ": cancelled camera timer still triggered a photo capture")
+            else:
+                FAILURES.append(prefix + ": Cancel timer did not restore the live camera controls")
+        else:
+            FAILURES.append(prefix + ": timer countdown did not expose the visible Cancel timer action")
+    else:
+        FAILURES.append(prefix + ": timer settings did not expose both 3-second and 10-second choices")
+
+    if camera_xml and find_control(camera_xml, ["Take photo"]):
+        countdown_capture_xml = tap_control(
+            camera_xml, ["Take photo"], f"{prefix}-camera-timer-capture-start",
+            ["Cancel timer"]
+        )
+        if countdown_capture_xml:
+            timed_editor = camera_wait_for_control(
+                countdown_capture_xml, ["Retake"], enabled=True, timeout=12.0,
+                prefix=prefix + "-camera-timer-capture"
+            )
+            if find_control(timed_editor, ["Retake"]) and find_control(timed_editor, ["Next"]):
+                report.append("- PASS the 3-second self-timer completed and produced a usable photo editor")
+                screenshot(f"{prefix}-camera-timer-captured-photo.png")
+                camera_xml = tap_control(
+                    timed_editor, ["Retake"], f"{prefix}-camera-timer-retake",
+                    ["Take photo", "Off"]
+                )
+                if camera_xml:
+                    timer_off = tap_control(
+                        camera_xml, ["Off"], f"{prefix}-camera-timer-off",
+                        ["Take photo"]
+                    )
+                    if timer_off:
+                        camera_xml = timer_off
+                    else:
+                        FAILURES.append(prefix + ": timer did not return to Off after the timed photo test")
+            else:
+                FAILURES.append(prefix + ": a completed 3-second timer did not open the captured-photo editor")
+        else:
+            FAILURES.append(prefix + ": timer did not start a second countdown for the capture test")
+    else:
+        FAILURES.append(prefix + ": live camera did not recover after the timer cancellation test")
+
     # Android's system Gallery/document picker can take several seconds to become the focused
     # window on a cold API-35 emulator. Do not treat a stale ActivityRecord anywhere in the
     # task stack as proof that it is visible, and never press Back while launch is pending.
@@ -1288,6 +1365,39 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 missing_top = [label for label in required_top if not find_control(draft_xml, [label])]
                 if missing_top:
                     FAILURES.append(prefix + ": post details top layout is missing " + ", ".join(missing_top))
+                # Type into the real caption field, open the keyboard, and prove the sticky footer
+                # remains reachable; then dismiss the keyboard and check that the text survives.
+                caption_field = find_control(draft_xml, ["Add description..."])
+                test_caption = "FYNX camera test caption"
+                if caption_field:
+                    _, caption_x, caption_y = caption_field
+                    run("adb", "shell", "input", "tap", str(caption_x), str(caption_y))
+                    run("adb", "shell", "input", "text", "FYNX%scamera%stest%scaption")
+                    time.sleep(0.8)
+                    keyboard_xml = dump_ui(f"{prefix}-camera-post-caption-keyboard.xml")
+                    screenshot(f"{prefix}-camera-post-caption-keyboard.png")
+                    ime_state = run("adb", "shell", "dumpsys", "input_method").stdout or ""
+                    ime_visible = any(marker in ime_state for marker in (
+                        "mInputShown=true", "mShowRequested=true", "mIsInputViewShown=true"
+                    ))
+                    if test_caption in keyboard_xml and find_control(keyboard_xml, ["Post"]) and ime_visible:
+                        verify_post_details_footer_safe_area(
+                            keyboard_xml, prefix + " post details with keyboard open"
+                        )
+                        report.append("- PASS caption accepts text and the Drafts/Post footer remains reachable with the keyboard open")
+                    else:
+                        FAILURES.append(prefix + ": caption text entry, visible keyboard, or keyboard-visible Post action could not be verified")
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(0.5)
+                    after_keyboard_xml = dump_ui(f"{prefix}-camera-post-caption-keyboard-dismissed.xml")
+                    if test_caption in after_keyboard_xml:
+                        report.append("- PASS dismissing the caption keyboard preserves the entered text")
+                        draft_xml = after_keyboard_xml
+                    else:
+                        FAILURES.append(prefix + ": caption text was lost after dismissing the keyboard")
+                else:
+                    FAILURES.append(prefix + ": the New post description field could not be focused for keyboard testing")
+
                 # Scroll the same real details page to inspect the TikTok-style settings order.
                 run("adb", "shell", "input", "swipe", "540", "1700", "540", "850", "450")
                 time.sleep(0.6)
@@ -1316,9 +1426,13 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                         report.append("- PASS local post Drafts saved captured media and exposed an Open action without publishing")
                         opened_xml = tap_control(
                             saved_xml, ["Open"], f"{prefix}-camera-post-reopen-draft",
-                            ["New post", "Add description...", "Post"]
+                            ["New post", test_caption, "Post"]
                         )
                         if opened_xml:
+                            if test_caption in opened_xml:
+                                report.append("- PASS local post Drafts reopened with the entered caption text intact")
+                            else:
+                                FAILURES.append(prefix + ": the saved post draft did not restore its caption text")
                             reopened_drafts = tap_control(
                                 opened_xml, ["Drafts"], f"{prefix}-camera-post-delete-draft",
                                 ["Delete"]
@@ -1543,6 +1657,8 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 break
             # Record the real visible error/unsupported message, but do not confuse it with a crash.
             caption_error = visible_marker_summary(caption_xml)
+            if "This video's audio format is not supported." in caption_error:
+                FAILURES.append(prefix + ": the caption audio decoder still rejects the camera's recorded audio format")
             break
         else:
             FAILURES.append(prefix + ": caption generation remained stuck in progress for 40 seconds")

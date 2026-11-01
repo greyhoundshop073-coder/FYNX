@@ -102,6 +102,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -559,7 +560,6 @@ fun FynxCameraCapturePanel(
     var recordingNotice by remember { mutableStateOf<String?>(null) }
     var recordingStartedAt by remember { mutableLongStateOf(0L) }
     var recordingElapsed by remember { mutableLongStateOf(0L) }
-    BackHandler { if (recording == null) onDismiss() }
     var error by remember { mutableStateOf<String?>(null) }
     var statusShareChecking by remember { mutableStateOf(false) }
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
@@ -581,10 +581,23 @@ fun FynxCameraCapturePanel(
     var showEffectTray by remember { mutableStateOf(false) }
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
+    var timerCaptureJob by remember { mutableStateOf<Job?>(null) }
     var showGrid by remember { mutableStateOf(false) }
     var selectedCameraTool by remember { mutableStateOf("Looks") }
     var showEditorToolOptions by remember { mutableStateOf(true) }
     var showAdjustments by remember { mutableStateOf(false) }
+    fun cancelCaptureTimer() {
+        timerCaptureJob?.cancel()
+        timerCaptureJob = null
+        timerCountingDown = 0
+        showCaptureControls = true
+    }
+    BackHandler {
+        if (recording == null) {
+            if (timerCaptureJob?.isActive == true || timerCountingDown > 0) cancelCaptureTimer()
+            else onDismiss()
+        }
+    }
     val galleryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { selectedUri ->
@@ -669,8 +682,7 @@ fun FynxCameraCapturePanel(
             delay(200L)
         }
     }
-    // Keep the shutter and capture tools visible; only the self-timer deliberately hides them during countdown.
-    LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
+    // The self-timer uses one cancellable job so the visible countdown and shutter cannot drift apart.
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled, galleryRebindRequest) {
         val generation = bindGeneration + 1; bindGeneration = generation
         if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
@@ -720,7 +732,7 @@ fun FynxCameraCapturePanel(
             }.onFailure { if (generation == bindGeneration) error = it.message ?: "Camera could not start" }
         }, ContextCompat.getMainExecutor(context))
     }
-    DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
+    DisposableEffect(Unit) { onDispose { timerCaptureJob?.cancel(); recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
     fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; videoStyle = CameraVideoStyle.NATURAL; videoCaptionText = ""; recordingNotice = null; activeRecordingFile = null; selectedCameraTool = "Looks"; showEditorToolOptions = true; applyingVideoEffects = false; generatingCaptions = false; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
     fun rotatePhoto() {
@@ -1260,8 +1272,22 @@ fun FynxCameraCapturePanel(
             }
         }
         if (timerCountingDown > 0) {
-            Surface(modifier = Modifier.align(Alignment.Center).border(1.dp, Color.White.copy(alpha = 0.26f), MaterialTheme.shapes.extraLarge), shape = MaterialTheme.shapes.extraLarge, color = Color(0xFF25364A).copy(alpha = 0.48f)) {
-                Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge, modifier = Modifier.padding(horizontal = 28.dp, vertical = 18.dp))
+            Surface(
+                modifier = Modifier.align(Alignment.Center).border(
+                    1.dp, Color.White.copy(alpha = 0.26f), MaterialTheme.shapes.extraLarge
+                ),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = Color(0xFF25364A).copy(alpha = 0.62f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge)
+                    TextButton(onClick = ::cancelCaptureTimer) {
+                        Text("Cancel timer", color = Color.White)
+                    }
+                }
             }
         }
         if (pendingUri == null && liveProofMode) {
@@ -1282,12 +1308,12 @@ fun FynxCameraCapturePanel(
                 selectedMusic = selectedMusic,
                 onChooseMusic = onChooseMusic,
                 onClearMusic = onClearMusic,
-                // Keep the music action below the identity row on the left; the right
-                // camera-control rail occupies the opposite side of this area.
-                modifier = Modifier.align(Alignment.TopStart)
+                // Center the live music action to match the captured-media editor while
+                // reserving side space for the camera rail on compact screens.
+                modifier = Modifier.align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(start = 16.dp, top = 84.dp)
-                    .widthIn(max = 184.dp)
+                    .padding(start = 64.dp, end = 64.dp, top = 74.dp)
+                    .widthIn(max = 196.dp)
             )
         }
 
@@ -1592,12 +1618,16 @@ fun FynxCameraCapturePanel(
                 FilledIconButton(onClick = {
                     if (mode == CameraMode.PHOTO) {
                         if (captureTimerSeconds > 0) {
-                            if (timerCountingDown == 0) {
-                                timerCountingDown = captureTimerSeconds
+                            if (timerCaptureJob?.isActive != true) {
+                                val seconds = captureTimerSeconds
                                 showCaptureControls = false
-                                scope.launch {
-                                    delay(captureTimerSeconds * 1000L)
+                                timerCaptureJob = scope.launch {
+                                    for (remaining in seconds downTo 1) {
+                                        timerCountingDown = remaining
+                                        delay(1000L)
+                                    }
                                     timerCountingDown = 0
+                                    timerCaptureJob = null
                                     capturePhotoNow()
                                 }
                             }
