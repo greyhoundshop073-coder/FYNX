@@ -337,15 +337,18 @@ private fun FynxWalletWithdrawalPanel(
                     }
                 }
             } else {
-                val policy = security
-                if (policy?.maximumPerTransfer != null && policy.dailyAmountLimit != null) {
-                    Text(
-                        "Withdrawal limit: up to " + walletActionMoney(policy.maximumPerTransfer) +
-                            " per transfer · " + walletActionMoney(policy.dailyAmountLimit) +
-                            " per day · " + (policy.dailyCountLimit ?: "—") + " requests per day.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                security?.let { policy ->
+                    val maximum = policy.maximumPerTransfer
+                    val daily = policy.dailyAmountLimit
+                    if (maximum != null && daily != null) {
+                        Text(
+                            "Withdrawal limit: up to " + walletActionMoney(maximum) +
+                                " per transfer · " + walletActionMoney(daily) +
+                                " per day · " + (policy.dailyCountLimit?.toString() ?: "—") + " requests per day.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 OutlinedTextField(
                     value = withdrawalPin,
