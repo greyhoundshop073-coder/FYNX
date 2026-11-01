@@ -39,6 +39,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -117,9 +119,35 @@ fun FynxBuyerWalletPanel() {
     var sellerSummary by remember { mutableStateOf<FynxWalletSellerSummary?>(null) }
     var sellerSummaryLoading by remember { mutableStateOf(true) }
     var sellerSummaryError by remember { mutableStateOf<String?>(null) }
+    var statementExporting by remember { mutableStateOf(false) }
     var nextActivityCursor by remember { mutableStateOf<FynxBuyerWalletActivityCursor?>(null) }
     var activityRequestGeneration by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+    val statementLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null) {
+            statementExporting = true
+            scope.launch {
+                FynxBuyerWalletClient.loadStatement(context)
+                    .onSuccess { csv ->
+                        runCatching {
+                            val output = context.contentResolver.openOutputStream(uri, "w")
+                                ?: throw IllegalStateException("The selected file could not be opened.")
+                            output.bufferedWriter(Charsets.UTF_8).use { it.write(csv) }
+                        }.onSuccess {
+                            Toast.makeText(context, "Wallet statement saved", Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, "Wallet statement could not be saved", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    .onFailure {
+                        Toast.makeText(context, "Wallet statement could not be downloaded", Toast.LENGTH_LONG).show()
+                    }
+                statementExporting = false
+            }
+        }
+    }
 
     LaunchedEffect(refreshVersion, activityFilter) {
         activityRequestGeneration += 1
@@ -487,12 +515,25 @@ fun FynxBuyerWalletPanel() {
             }
         }
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { refreshVersion += 1 }, enabled = !loading) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Text(" Refresh")
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = { statementLauncher.launch("fynx-wallet-statement.csv") },
+                        enabled = !statementExporting && !loading
+                    ) {
+                        Text(if (statementExporting) "Preparing…" else "Statement")
+                    }
+                    TextButton(onClick = { refreshVersion += 1 }, enabled = !loading) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Text(" Refresh")
+                    }
                 }
+                Text(
+                    "Export your NGN wallet history as a CSV file for your records.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         item {
