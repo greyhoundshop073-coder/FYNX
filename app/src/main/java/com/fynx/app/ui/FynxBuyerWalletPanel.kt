@@ -431,6 +431,17 @@ fun FynxBuyerWalletPanel() {
             }
         }
         item {
+            OutlinedButton(
+                onClick = { activeAction = "SECURITY" },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.Info, contentDescription = null, tint = FynxDesign.AzureBlue)
+                Spacer(Modifier.size(8.dp))
+                Text("Wallet security & PIN")
+            }
+        }
+        item {
             Text("Balance details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FynxWalletMetric(
