@@ -44,6 +44,10 @@ checks = [
      and audio_test.is_file),
     ("Camera runtime explicitly rejects the old unsupported-audio caption regression",
      "caption audio decoder still rejects the camera's recorded audio format" in runtime),
+    ("Gallery runtime never taps stale camera coordinates after a timer failure",
+     "camera_xml = after_cancel" in runtime
+     and "camera_xml = dump_ui(" in runtime
+     and "Gallery verification skipped because the timer journey did not leave a live camera surface" in runtime),
     ("Camera runtime exercises timer cancellation, timed capture and keyboard-visible caption entry",
      "camera-timer-cancel" in runtime
      and "camera-timer-capture" in runtime
