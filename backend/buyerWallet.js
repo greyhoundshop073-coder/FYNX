@@ -1031,13 +1031,16 @@ export function registerBuyerWalletRoutes({ app }) {
       await ensureBuyerWalletSchema();
       let row=(await pool.query("SELECT w.*,t.status AS transaction_status FROM buyer_wallet_withdrawals w JOIN buyer_wallet_transactions t ON t.id=w.transaction_id WHERE w.user_id=$1 AND w.reference=$2",[req.user.sub,reference])).rows[0];
       if(!row)return res.status(404).json({error:'wallet withdrawal not found'});
-      if(['PENDING','PROCESSING'].includes(String(row.status))&&walletWithdrawalsEnabled()){
+      if(['PENDING','PROCESSING','PENDING_OTP','SUCCEEDED'].includes(String(row.status))&&walletWithdrawalsEnabled()){
         try{
           const data=await walletPaystackRequest('/transfer/verify/'+encodeURIComponent(reference));
           if(String(data.reference||'')===reference){
             const status=String(data.status||'').toLowerCase();
             if(status==='success')await settleBuyerWalletWithdrawal(reference,data,'transfer_verification');
-            else if(['failed','reversed'].includes(status))await failBuyerWalletWithdrawal(reference,'transfer.'+status,data.message||'transfer did not complete');
+            else if(status==='reversed'){
+              const reversal=await reverseBuyerWalletWithdrawal(reference,data,'transfer_verification');
+              if(reversal.notSettled)await failBuyerWalletWithdrawal(reference,'transfer.reversed',data.message||'transfer was reversed before settlement');
+            }else if(status==='failed')await failBuyerWalletWithdrawal(reference,'transfer.failed',data.message||'transfer did not complete');
           }
         }catch(error){console.warn('wallet withdrawal reconciliation',error?.message||error);}
         row=(await pool.query("SELECT w.*,t.status AS transaction_status FROM buyer_wallet_withdrawals w JOIN buyer_wallet_transactions t ON t.id=w.transaction_id WHERE w.user_id=$1 AND w.reference=$2",[req.user.sub,reference])).rows[0];
