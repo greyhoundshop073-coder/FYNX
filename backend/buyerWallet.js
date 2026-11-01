@@ -477,7 +477,7 @@ async function verifyPendingBuyerWalletFunding(transaction) {
 
 
 function walletPinMatches(pin, salt, storedHash) {
-  if (!/^\\d{6}$/.test(String(pin || '')) || !salt || !storedHash) return false;
+  if (!/^\d{6}$/.test(String(pin || '')) || !salt || !storedHash) return false;
   const calculated = crypto.scryptSync(String(pin), String(salt), 64);
   const stored = Buffer.from(String(storedHash), 'hex');
   return stored.length === calculated.length && crypto.timingSafeEqual(stored, calculated);
