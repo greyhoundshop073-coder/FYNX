@@ -83,7 +83,7 @@ internal fun FynxWalletActionPanel(
                     )
                 }
                 item { WalletActionAmountField(amount, onAmountChange, "Amount to add") }
-                item { WalletAmountStatus(amount = amount, availableBalance = null) }
+                item { WalletAmountStatus(amount = amount, availableBalance = null, isWithdrawal = false) }
                 item {
                     WalletMethodCard(
                         icon = "bank",
@@ -183,7 +183,7 @@ internal fun FynxWalletActionPanel(
                     }
                 }
                 item { WalletActionAmountField(amount, onAmountChange, "Amount to withdraw") }
-                item { WalletAmountStatus(amount = amount, availableBalance = availableBalance) }
+                item { WalletAmountStatus(amount = amount, availableBalance = availableBalance, isWithdrawal = true) }
                 item {
                     WalletReadOnlyBankField(
                         label = "Select bank",
@@ -268,14 +268,14 @@ private fun WalletActionAmountField(
 }
 
 @Composable
-private fun WalletAmountStatus(amount: String, availableBalance: Double?) {
+private fun WalletAmountStatus(amount: String, availableBalance: Double?, isWithdrawal: Boolean) {
     val parsed = amount.toBigDecimalOrNull()
     val message = when {
         amount.isBlank() -> "Enter an amount in NGN."
         parsed == null || parsed <= java.math.BigDecimal.ZERO -> "Enter a valid amount greater than zero."
         availableBalance != null && parsed.toDouble() > availableBalance ->
             "This amount is above your verified available balance."
-        availableBalance == null && parsed > java.math.BigDecimal.ZERO ->
+        isWithdrawal && availableBalance == null && parsed > java.math.BigDecimal.ZERO ->
             "Your available balance must be verified before a withdrawal can be submitted."
         else -> "Amount entered. The payment provider will confirm availability and fees before any money moves."
     }
