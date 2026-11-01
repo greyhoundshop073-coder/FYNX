@@ -5,6 +5,12 @@
 set +e
 mkdir -p fynx-runtime-screenshots
 
+# Camera preview proof analyses actual screencaps; fail clearly if Pillow is unavailable.
+if ! python3 -c 'from PIL import Image' >/dev/null 2>&1; then
+  python3 -m pip install --quiet --user Pillow
+fi
+python3 -c 'from PIL import Image'
+
 ./gradlew connectedDebugAndroidTest --no-daemon --build-cache
 TEST_EXIT=$?
 

@@ -13,12 +13,14 @@ manifest = read("app/src/main/AndroidManifest.xml")
 
 # Keep verification implementation-oriented rather than formatting-oriented. Compose/Kotlin
 # permits equivalent callback formatting, so do not require one exact source-string layout.
-caption_limit = "take(4000)" in home and "What's on your mind?" in home
+caption_limit = "take(4000)" in home and "Add description..." in home and "# Hashtags" in home and "@ Mention" in home
 
 checks = [
     ("camera permission", 'Manifest.permission.CAMERA' in camera and 'android.permission.CAMERA' in manifest),
     ("microphone permission", 'Manifest.permission.RECORD_AUDIO' in camera and 'android.permission.RECORD_AUDIO' in manifest),
-    ("front/back camera switching", 'LENS_FACING_FRONT' in camera and 'Cameraswitch' in camera),
+    ("front/back camera switching", 'LENS_FACING_FRONT' in camera and 'LENS_FACING_BACK' in camera and 'Cameraswitch' in camera),
+    ("CameraX uses the SurfaceView-backed performance preview and rear-first lens fallback", 'PreviewView.ImplementationMode.PERFORMANCE' in camera and 'No camera is available on this device.' in camera),
+    ("camera capture and editor docks reserve additional bottom safe area", camera.count("bottom = 84.dp") >= 2),
     ("photo capture", 'ImageCapture' in camera and 'takePicture' in camera),
     ("video capture", 'VideoCapture' in camera and 'VideoRecordEvent.Finalize' in camera),
     ("capture preview", 'pendingUri' in camera and 'Preview before' not in camera),
