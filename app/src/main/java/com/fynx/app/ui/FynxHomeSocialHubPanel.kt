@@ -639,7 +639,7 @@ fun FynxHomeSocialHubPanel(
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 // Dialog windows draw edge-to-edge on API 35; reserve a visible footer gap even when
                 // the platform reports a zero navigation inset for the dialog decor.
-                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom = 28.dp)) {
+                Column(Modifier.fillMaxSize().statusBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting) { Icon(Icons.Default.ArrowBack, "Back") }
                         Text("New post", style = MaterialTheme.typography.titleLarge)
@@ -957,6 +957,8 @@ fun FynxHomeSocialHubPanel(
                         Modifier.fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surface)
                             .imePadding()
+                            // Keep both button hit targets clear of Android gesture navigation.
+                            .padding(bottom = 32.dp)
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
