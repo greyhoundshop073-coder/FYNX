@@ -8,6 +8,9 @@ const payoutWorker = read('./marketplaceSettlementWorker.js');
 const wallet = read('./buyerWallet.js');
 const server = read('./server.js');
 const webhook = read('./marketplacePaystackWebhook.js');
+const walletMarketplace = read('./buyerWalletMarketplace.js');
+const protectionResolution = read('./marketplaceProtectionResolution.js');
+const scalability = read('./scalability.js');
 
 const checks = [
   ['Marketplace fee remains a configurable five-percent default', checkout.includes("FYNX_MARKETPLACE_FEE_BPS || '500'")],
@@ -24,6 +27,13 @@ const checks = [
   ['Funding credits are dispatched through the shared signed Paystack webhook and verified against the provider', wallet.includes("authorization?.channel") && wallet.includes('/transaction/verify/') && wallet.includes("status='SUCCEEDED'") && webhook.includes("handleBuyerWalletPaystackEvent('charge.success'") && webhook.includes("authorization?.channel")],
   ['Dedicated-account assignment events are dispatched through the shared Paystack webhook', webhook.includes("handleBuyerWalletPaystackEvent(eventName, eventData)") && wallet.includes("dedicatedaccount.assign.success")],
   ['Marketplace and Wallet transfer outcomes share one signed webhook route', webhook.includes("reconcileTransferEvent(client, eventName, eventData)") && webhook.includes("reconcileBuyerWalletTransferEvent(client, eventName, eventData)") && !wallet.includes("app.post('/api/wallet/paystack/webhook'")],
+  ['Wallet Marketplace payment is behind explicit provider, custody, compliance and spending approvals', walletMarketplace.includes("FYNX_WALLET_SPENDING_ENABLED === 'true'") && walletMarketplace.includes("FYNX_WALLET_PROVIDER_APPROVED === 'true'") && walletMarketplace.includes("FYNX_WALLET_CUSTODY_APPROVED === 'true'") && walletMarketplace.includes("FYNX_WALLET_COMPLIANCE_APPROVED === 'true'")],
+  ['Marketplace Wallet checkout is registered in the canonical backend startup', scalability.includes('import { registerBuyerWalletMarketplaceRoutes } from "./buyerWalletMarketplace.js";') && scalability.includes("registerBuyerWalletMarketplaceRoutes({ app });")],
+  ['Wallet Marketplace payment atomically checks order owner, NGN currency, Wallet PIN and available balance', walletMarketplace.includes("String(order.buyer_id) !== String(req.user.sub)") && walletMarketplace.includes("String(order.currency || '').toUpperCase() !== 'NGN'") && walletMarketplace.includes("bcrypt.compare(pin, wallet.withdrawal_pin_hash)") && walletMarketplace.includes("your cleared Wallet balance is not enough")],
+  ['Wallet Marketplace payment debits available and credits order escrow before marking the order paid', walletMarketplace.includes("'AVAILABLE','DEBIT'") && walletMarketplace.includes("'MARKETPLACE_ESCROW','CREDIT'") && walletMarketplace.includes("status='PAID',payment_method='FYNX_WALLET'")],
+  ['Buyer-favourable protection refunds return Wallet-funded orders to that same buyer Wallet', protectionResolution.includes("paymentMethod === 'FYNX_WALLET'") && protectionResolution.includes("refundBuyerWalletMarketplaceOrder(client") && protectionResolution.includes("refundedTo: resolution === 'BUYER'")],
+  ['Wallet order refunds reconcile only the original order payment and exact escrow amount', walletMarketplace.includes("metadata->>'orderId'=$3") && walletMarketplace.includes("e.transaction_id=$2") && walletMarketplace.includes("WALLET_REFUND_ESCROW_MISMATCH")],
+
   ['Funding credits are applied to the append-only double-entry wallet ledger', wallet.includes("'PROVIDER_CLEARING','DEBIT'") && wallet.includes("'AVAILABLE','CREDIT'") && wallet.includes('PAYSTACK-DVA-AVAILABLE-')],
   ['Wallet CSV statements are owner-scoped and bounded', wallet.includes('/api/wallet/statement.csv') && wallet.includes('WHERE t.user_id=$1 AND t.wallet_id=$2') && wallet.includes('LIMIT 5001') && wallet.includes('rows.rows.length > 5000')],
   ['CSV export neutralizes spreadsheet formula injection', buildBuyerWalletStatementCsv([{ description: '=HYPERLINK("bad")', reference: '+cmd' }]).includes("'=HYPERLINK") && buildBuyerWalletStatementCsv([{ description: '=HYPERLINK("bad")', reference: '+cmd' }]).includes("'+cmd")),
