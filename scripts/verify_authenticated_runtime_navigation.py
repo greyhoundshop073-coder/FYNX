@@ -1591,6 +1591,32 @@ def capture_wallet_from_features(prefix:str):
         screenshot("authenticated-wallet.png")
         (ROOT/"authenticated-wallet.xml").write_text(wallet_xml+chr(10),encoding="utf-8")
         result_message="Captured the actual FYNX Wallet after summary and activity loading settled."
+
+        # Inspect the lower Wallet content as a user would, including the real
+        # Recent activity heading and its empty/data/error state. This is read-only.
+        wallet_lower_xml=""
+        for attempt in range(5):
+            run("adb","shell","input","swipe","540","1800","540","700","500")
+            time.sleep(.45)
+            wallet_lower_xml=dump_ui(prefix+"-wallet-lower-"+str(attempt)+".xml")
+            if find_control(wallet_lower_xml,["Recent activity"]):
+                break
+        wallet_activity_captured=bool(find_control(wallet_lower_xml,["Recent activity"]))
+        if wallet_activity_captured:
+            screenshot("authenticated-wallet-lower.png")
+            (ROOT/"authenticated-wallet-lower.xml").write_text(wallet_lower_xml+chr(10),encoding="utf-8")
+            result_message += " Captured the lower Wallet and Recent activity section."
+        else:
+            FAILURES.append("Wallet Recent activity section was not reachable by normal scrolling.")
+
+        # Return to the Wallet top before opening another action.
+        for attempt in range(5):
+            if find_control(wallet_lower_xml,["Balance details"]):
+                break
+            run("adb","shell","input","swipe","540","700","540","1800","500")
+            time.sleep(.4)
+            wallet_lower_xml=dump_ui(prefix+"-wallet-return-top-"+str(attempt)+".xml")
+        wallet_xml=wallet_lower_xml or wallet_xml
     else:
         screenshot(prefix+"-wallet-destination-incomplete.png")
         (ROOT/(prefix+"-wallet-destination-incomplete.xml")).write_text(
@@ -1654,7 +1680,26 @@ def capture_wallet_from_features(prefix:str):
                                         )
                                         if withdraw_xml:
                                             (ROOT/"authenticated-wallet-withdraw.xml").write_text(withdraw_xml+chr(10),encoding="utf-8")
-                                            action_screens_captured = True
+                                            wallet_return_xml = tap_control(
+                                                withdraw_xml, ["Back to Wallet"], "wallet-withdraw-back",
+                                                ["Balance details", "Reserved", "Withdrawal pending"]
+                                            )
+                                            if wallet_return_xml:
+                                                security_xml = tap_control(
+                                                    wallet_return_xml, ["Wallet security & PIN"], "wallet-security",
+                                                    ["Wallet Security", "Protect payments and withdrawals with a separate Wallet PIN."]
+                                                )
+                                                if security_xml:
+                                                    (ROOT/"authenticated-wallet-security.xml").write_text(security_xml+chr(10),encoding="utf-8")
+                                                    security_state_visible = any(
+                                                        find_control(security_xml,[marker])
+                                                        for marker in ["Wallet PIN is set","Wallet PIN is not set","Wallet security is unavailable"]
+                                                    )
+                                                    if not security_state_visible:
+                                                        FAILURES.append("Wallet Security opened but its PIN/readiness state was not visible.")
+                                                    else:
+                                                        result_message += " Captured Wallet Security and the PIN readiness state."
+                                                        action_screens_captured = True
 
     # The runtime runner starts a separate Status creator check immediately after
     # this function. Restore Home on both pass and fail so Wallet/keyboard state
