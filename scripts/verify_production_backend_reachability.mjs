@@ -1,6 +1,6 @@
-const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-ai-backend.onrender.com").replace(/\/$/, "");
+const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\/$/, "");
 // Keep certification strict: HTTP health and database readiness are both required.
-// The URL is configurable so certification can target the active FYNX Render service.
+// The URL is configurable so certification can target the active FYNX Railway service.
 const TIMEOUT_MS = 120_000;
 const RETRIES = 3;
 const RETRY_DELAY_MS = 10_000;
@@ -47,4 +47,4 @@ if (ready?.ok !== true || ready?.service !== "fynx-backend" || ready?.database !
   throw new Error(`Production /ready is not ready: ${JSON.stringify(ready)}`);
 }
 
-console.log(`GREEN: production backend reachable at ${BASE_URL}; health and database readiness are confirmed.`);
+console.log(`GREEN: Railway backend reachable at ${BASE_URL}; health and database readiness are confirmed.`);

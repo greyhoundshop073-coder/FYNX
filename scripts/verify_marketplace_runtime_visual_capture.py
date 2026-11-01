@@ -34,7 +34,9 @@ checks = [
     ),
     (
         "Marketplace-only visuals use the actual debug entry without weakening normal credential login",
-        'find_control(xml,["Leave password blank for quick local entry"])' in navigation
+        'find_control(xml,["Preview offline (debug only)"])' in navigation
+        and 'find_control(xml,["Offline preview only"])' in navigation
+        and 'tap_control(xml,["Preview offline (debug only)"],"debug-offline-preview"' in navigation
         and 'local_visual_username = USERNAME or "marketplace_visual_check"' in navigation
         and 'if not VISUALS_ONLY and (not USERNAME or not PASSWORD):' in navigation
         and 'LOGIN_MODE="debug-only local UI entry (not server-authenticated)"' in navigation

@@ -96,7 +96,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var marketplaceStatusDraft by remember { mutableStateOf<String?>(null) }
     var marketplaceAiListingId by remember { mutableStateOf<String?>(null) }
     var openChatMarketplaceListingId by remember { mutableStateOf<String?>(null) }
-    var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); val debugOfflineSession = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 && stored.state == AuthState.SIGNED_IN; if (stored.state == AuthState.SIGNED_IN && (FynxBackendClient.hasAccessToken(context) || debugOfflineSession)) stored else AuthSession() }) }
+    var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0; val validServerSession = stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context); val explicitDebugPreview = stored.state == AuthState.SIGNED_IN && isDebuggable && FynxAuthStore.isDebugOfflinePreview(context); if (validServerSession || explicitDebugPreview) stored else { if (stored.state == AuthState.SIGNED_IN) FynxAuthStore.clear(context); AuthSession() } }) }
     // Key account-scoped Marketplace screens so transient private state cannot survive an account switch.
     val marketplaceAccountKey = authSession.username?.removePrefix("@")?.trim()?.lowercase(java.util.Locale.US)?.takeIf { it.isNotBlank() } ?: "signed-out"
     var adminRole by remember { mutableStateOf<String?>(null) }
@@ -123,9 +123,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         onDispose { appConnectionManager.dispose() }
     }
     DisposableEffect(lifecycleOwner, authSession.state) {
-        // Backend reachability is a public health probe, so the app-level connection
-        // indicator must run for the supported debug saved-device session too.
-        // Requiring a bearer token here leaves that session stuck at "Waiting for network".
+        // Explicit debug preview can render local UI; protected API calls remain blocked without a server token.
         if (authSession.state == AuthState.SIGNED_IN) {
             lifecycleOwner.lifecycle.addObserver(appConnectionManager)
         }
@@ -317,7 +315,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); adminRole = null; selected = "Home"; openChat = null; openGroup = null; profileUser = null } }
         }
     }
-    if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
+    if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> if (FynxBackendClient.hasAccessToken(context)) FynxAuthStore.save(context, username) else FynxAuthStore.saveDebugOfflinePreview(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
     if (selected == "Admin" && adminRole == null) selected = "Features"
     val mainNav = listOf(FynxNavItem("Home", "Home", Icons.Default.Home), FynxNavItem("Chats", "Chat", Icons.Default.ChatBubbleOutline), FynxNavItem("Friends", "Friends", Icons.Default.Person), FynxNavItem("Marketplace", "Marketplace", Icons.Default.ShoppingBag), FynxNavItem("Features", "More", Icons.Default.MoreHoriz))
     val isSecondary = selected !in mainNav.map { it.key }.toSet()

@@ -24,7 +24,7 @@ checks = [
     ("voice provider credentials stay server-side", "process.env.OPENAI_API_KEY" in voice and "OPENAI_API_KEY" not in android_voice and "OPENAI_API_KEY" not in android_panel),
     ("Android text AI stays on FYNX backend transport", "FynxBackendClient.get" in android_client and "FynxBackendClient.postJson" in android_client),
     ("Android realtime session stays on FYNX backend transport", "FynxBackendClient.postJson" in android_voice),
-    ("central HTTPS transport remains the Android network boundary", "PRODUCTION_BASE_URL = \"https://fynx-ai-backend.onrender.com\"" in backend_client and "startsWith(\"https://\")" in backend_client),
+    ("central HTTPS transport remains the Android network boundary", "PRODUCTION_BASE_URL = \"https://fynx-backend-testing-testing.up.railway.app\"" in backend_client and "DEBUG_TEST_BASE_URL = \"https://fynx-backend-testing-testing.up.railway.app\"" in backend_client and "\"https://fynx-ai-backend.onrender.com\"" in backend_client and "val retiredBackendUrls = setOf(" in backend_client and "startsWith(\"https://\")" in backend_client),
     ("AI panel remains presentation layer", "FynxAiConversationClient" in android_panel and "FynxAiWebRtcEngine" in android_panel),
     ("future sensitive writes remain confirmation-gated", "confirmationRequired" in registry and "NEVER sends the message" in registry),
     ("future financial/destructive writes remain blocked by policy", "Never perform payments, refunds, purchases, transfers, deletions, or settings changes" in registry),

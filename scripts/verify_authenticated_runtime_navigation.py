@@ -1085,7 +1085,7 @@ def wait_for_my_shop_section_settled(slug: str, timeout: float = 20.0) -> tuple[
 
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
-    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-ai-backend.onrender.com").rstrip("/")
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
     try:
         login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
         login_req=urllib.request.Request(
@@ -1230,21 +1230,20 @@ def login():
     if result.returncode!=0: return xml,"adb input text failed for username"
     run("adb","shell","input","keyevent","4"); time.sleep(.5)
     xml=dump_ui("authenticated-after-username.xml")
-    # Debug APKs intentionally expose a passwordless local UI-entry path when no
-    # local account is stored. Exercise that explicit affordance rather than
-    # incorrectly failing because the Password field is intentionally absent.
+    # Visual-only certification uses a separate, explicitly labelled debug preview.
+    # The normal Sign In action always requires a password and a real server token.
     debug_entry_visible = bool(
-        find_control(xml,["Saved-device login for this debug APK"])
-        or (VISUALS_ONLY and find_control(xml,["Leave password blank for quick local entry"]))
+        find_control(xml,["Offline preview only"])
+        and find_control(xml,["Preview offline (debug only)"])
     )
-    if debug_entry_visible:
+    if VISUALS_ONLY and debug_entry_visible:
         LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
-        home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
+        home_xml=tap_control(xml,["Preview offline (debug only)"],"debug-offline-preview",["Open FYNX camera","Chat","Friends"])
         if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
             return home_xml,""
-        return home_xml or xml,"debug-only UI entry did not reach Home"
+        return home_xml or xml,"debug-only UI preview did not reach Home"
     if VISUALS_ONLY and not PASSWORD:
-        return xml,"the passwordless debug-only entry was not visible; refusing to submit a server login without credentials"
+        return xml,"the explicit debug offline preview was not visible; refusing to submit a server login without credentials"
     pass_control=find_control(xml,["Password"])
     if not pass_control:
         fields=find_edit_fields(xml)

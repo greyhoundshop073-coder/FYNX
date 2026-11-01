@@ -11,6 +11,7 @@ object FynxAuthStore {
     private const val KEY_DISPLAY_NAME = "display_name"
     private const val KEY_PHONE = "phone"
     private const val KEY_ACCOUNT_CREATED = "account_created"
+    private const val KEY_DEBUG_OFFLINE_PREVIEW = "debug_offline_preview"
     private val clearingSession = AtomicBoolean(false)
 
     fun load(context: Context): AuthSession {
@@ -21,6 +22,8 @@ object FynxAuthStore {
     }
 
     fun hasAccount(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ACCOUNT_CREATED, false)
+
+    fun isDebugOfflinePreview(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_DEBUG_OFFLINE_PREVIEW, false)
 
     fun storedUsername(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_USERNAME, null)
     fun storedDisplayName(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DISPLAY_NAME, null)?.trim()?.takeIf { it.isNotEmpty() }
@@ -38,6 +41,7 @@ object FynxAuthStore {
             .putString(KEY_USERNAME, username)
             .putString(KEY_PHONE, phone)
             .putBoolean(KEY_SIGNED_IN, true)
+            .putBoolean(KEY_DEBUG_OFFLINE_PREVIEW, false)
             .apply()
     }
 
@@ -46,7 +50,13 @@ object FynxAuthStore {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_SIGNED_IN, true)
             .putString(KEY_USERNAME, username)
+            .putBoolean(KEY_DEBUG_OFFLINE_PREVIEW, false)
             .apply()
+    }
+
+    fun saveDebugOfflinePreview(context: Context, username: String) {
+        save(context, username)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_DEBUG_OFFLINE_PREVIEW, true).apply()
     }
 
     private fun clearIfSwitchingAccounts(context: Context, nextUsername: String) {
@@ -129,6 +139,7 @@ object FynxAuthStore {
                 .remove(KEY_USERNAME)
                 .remove(KEY_DISPLAY_NAME)
                 .remove(KEY_PHONE)
+                .putBoolean(KEY_DEBUG_OFFLINE_PREVIEW, false)
                 .apply()
         } finally {
             clearingSession.set(false)
