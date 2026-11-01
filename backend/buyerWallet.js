@@ -894,55 +894,7 @@ export function registerBuyerWalletRoutes({ app }) {
     }
   });
 
-
-  app.get('/api/wallet/statement.csv', auth, async (req, res) => {
-    try {
-      await ensureBuyerWalletSchema();
-      res.set('Cache-Control', 'no-store, private');
-      const today = new Date().toISOString().slice(0, 10);
-      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const from = parseStatementDate(req.query?.from, ninetyDaysAgo);
-      const to = parseStatementDate(req.query?.to, today);
-      if (!from || !to || from > to) return res.status(400).json({ error: 'statement dates must be valid ISO dates with from no later than to' });
-      const days = (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86_400_000;
-      if (days > 366) return res.status(400).json({ error: 'wallet statements are limited to 12 months per export' });
-      const wallet = (await pool.query(
-        "SELECT id FROM buyer_wallets WHERE user_id=$1 AND currency='NGN' LIMIT 1",
-        [req.user.sub]
-      )).rows[0];
-      if (!wallet) {
-        res.type('text/csv; charset=utf-8');
-        res.set('Content-Disposition', 'attachment; filename="fynx-wallet-statement.csv"');
-        return res.send(buildBuyerWalletStatementCsv([]));
-      }
-      const rows = await pool.query(`
-        SELECT t.transaction_type,t.status,t.amount,t.fee,t.currency,t.reference,t.description,
-               to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
-               COALESCE(delta.wallet_delta,0)::numeric(18,2) AS wallet_delta
-          FROM buyer_wallet_transactions t
-          LEFT JOIN LATERAL (
-            SELECT SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END) AS wallet_delta
-              FROM buyer_wallet_ledger_entries e
-             WHERE e.transaction_id=t.id AND e.account_code='AVAILABLE'
-          ) delta ON TRUE
-         WHERE t.user_id=$1 AND t.wallet_id=$2
-           AND t.created_at >= $3::date
-           AND t.created_at < ($4::date + INTERVAL '1 day')
-         ORDER BY t.created_at ASC,t.id ASC
-         LIMIT 5001
-      `, [req.user.sub, wallet.id, from, to]);
-      if (rows.rows.length > 5000) return res.status(413).json({ error: 'statement is too large; export a shorter date range' });
-      res.type('text/csv; charset=utf-8');
-      res.set('Content-Disposition', 'attachment; filename="fynx-wallet-statement-' + from + '-to-' + to + '.csv"');
-      return res.send(buildBuyerWalletStatementCsv(rows.rows));
-    } catch (error) {
-      console.error('buyer wallet statement export', error);
-      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
-        .json({ error: 'wallet statement is temporarily unavailable' });
-    }
-  });
-
-
+  app.get('/api/wallet/transactions', auth, async (req, res) => {
     try {
       const parsedCursor = parseBuyerWalletActivityCursor(req.query || {});
       if (parsedCursor.error) return res.status(400).json({ error: parsedCursor.error });
@@ -982,7 +934,7 @@ export function registerBuyerWalletRoutes({ app }) {
            )
            ${cursorClause}
          ORDER BY t.created_at DESC,t.id DESC
-         LIMIT ${params.length}
+         LIMIT $${params.length}
       `, params);
       const hasMore = result.rows.length > limit;
       const pageRows = result.rows.slice(0, limit);
@@ -1011,8 +963,6 @@ export function registerBuyerWalletRoutes({ app }) {
         .json({ error: 'wallet activity is temporarily unavailable' });
     }
   });
-
-}
 
 export async function closeBuyerWalletPool() {
   if (pool) await pool.end();
