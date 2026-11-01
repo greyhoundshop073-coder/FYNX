@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { buildBuyerWalletStatementCsv } from './buyerWallet.js';
+import './verify-wallet-hosted-funding.mjs';
 
 const read = (name) => fs.readFileSync(new URL(name, import.meta.url), 'utf8');
 const checkout = read('./marketplaceTransactions.js');
