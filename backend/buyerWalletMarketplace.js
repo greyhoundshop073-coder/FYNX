@@ -69,6 +69,19 @@ export async function refundBuyerWalletMarketplaceOrder(client, {
     return { transactionId: String(existing.id), reference: String(existing.reference), idempotent: true };
   }
 
+  const order = (await client.query(`
+    SELECT buyer_id,payment_method,status,total_amount,currency
+      FROM marketplace_orders
+     WHERE id=$1
+     FOR UPDATE
+  `, [orderId])).rows[0];
+  if (!order || String(order.buyer_id) !== String(buyerId) ||
+      String(order.payment_method || '').toUpperCase() !== 'FYNX_WALLET' ||
+      String(order.currency || '').toUpperCase() !== normalizedCurrency ||
+      Math.round(Number(order.total_amount) * 100) !== Math.round(numericAmount * 100)) {
+    throw Object.assign(new Error('Marketplace order does not match the Wallet refund owner or amount'), { code: 'WALLET_REFUND_ORDER_MISMATCH' });
+  }
+
   const wallet = (await client.query(`
     SELECT id,status
       FROM buyer_wallets
@@ -79,14 +92,25 @@ export async function refundBuyerWalletMarketplaceOrder(client, {
     throw Object.assign(new Error('Buyer Wallet is unavailable for the Marketplace refund'), { code: 'WALLET_REFUND_UNAVAILABLE' });
   }
 
+  const originalPayment = (await client.query(`
+    SELECT id,amount,currency
+      FROM buyer_wallet_transactions
+     WHERE wallet_id=$1 AND user_id=$2 AND transaction_type='MARKETPLACE_PAYMENT'
+       AND status='SUCCEEDED' AND metadata->>'orderId'=$3
+     FOR UPDATE
+  `, [wallet.id, buyerId, String(orderId)])).rows[0];
+  if (!originalPayment || String(originalPayment.currency).toUpperCase() !== normalizedCurrency ||
+      Math.round(Number(originalPayment.amount) * 100) !== Math.round(numericAmount * 100)) {
+    throw Object.assign(new Error('Original Wallet payment does not reconcile with this Marketplace order'), { code: 'WALLET_REFUND_PAYMENT_MISMATCH' });
+  }
+
   const escrowBalance = (await client.query(`
     SELECT COALESCE(SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END),0)::numeric(18,2) AS balance
       FROM buyer_wallet_ledger_entries e
-      JOIN buyer_wallet_transactions t ON t.id=e.transaction_id
-     WHERE e.wallet_id=$1 AND e.account_code='MARKETPLACE_ESCROW' AND t.status='SUCCEEDED'
-  `, [wallet.id])).rows[0];
-  if (Number(escrowBalance?.balance || 0) < numericAmount) {
-    throw Object.assign(new Error('Wallet Marketplace escrow does not contain the refundable amount'), { code: 'WALLET_REFUND_ESCROW_MISMATCH' });
+     WHERE e.wallet_id=$1 AND e.transaction_id=$2 AND e.account_code='MARKETPLACE_ESCROW'
+  `, [wallet.id, originalPayment.id])).rows[0];
+  if (Number(escrowBalance?.balance || 0) !== numericAmount) {
+    throw Object.assign(new Error('Wallet Marketplace order escrow does not contain the exact refundable amount'), { code: 'WALLET_REFUND_ESCROW_MISMATCH' });
   }
 
   const transactionId = crypto.randomUUID();
