@@ -78,6 +78,7 @@ internal fun FynxWalletActionPanel(
     onNavigate: (String) -> Unit,
     onFundingVerified: () -> Unit
 ) {
+    val context = LocalContext.current
     val title = when (screen) {
         "ADD" -> "Add Money"
         "TRANSFER" -> "Bank Transfer"
@@ -143,7 +144,16 @@ internal fun FynxWalletActionPanel(
                 }
             }
             "TRANSFER" -> {
-                item { FynxWalletFundingAccountPanel(amount = amount) }
+                if (FynxBackendClient.hasAccessToken(context)) {
+                    item { FynxWalletFundingAccountPanel(amount = amount) }
+                } else {
+                    item {
+                        WalletActionNotice(
+                            title = "Connect your FYNX account",
+                            message = "Sign out and sign in with your FYNX username and password before checking a live funding account. No account request has been sent."
+                        )
+                    }
+                }
             }
             "CARD" -> {
                 item {
@@ -176,7 +186,16 @@ internal fun FynxWalletActionPanel(
                 }
             }
             "SECURITY" -> {
-                item { FynxWalletSecurityPanel() }
+                if (FynxBackendClient.hasAccessToken(context)) {
+                    item { FynxWalletSecurityPanel() }
+                } else {
+                    item {
+                        WalletActionNotice(
+                            title = "Connect your FYNX account",
+                            message = "Wallet PIN status is private account information. Sign in with your FYNX username and password before viewing or changing Wallet security."
+                        )
+                    }
+                }
             }
             else -> item { WalletActionNotice("Wallet option unavailable", "Return to your Wallet and choose an available option.") }
         }
