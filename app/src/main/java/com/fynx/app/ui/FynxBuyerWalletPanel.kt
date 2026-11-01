@@ -622,6 +622,9 @@ fun FynxBuyerWalletPanel() {
             }
         }
         item {
+            FynxWalletMarketplaceEarningsCard(refreshKey = refreshVersion)
+        }
+        item {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
