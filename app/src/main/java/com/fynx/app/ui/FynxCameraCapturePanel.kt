@@ -842,12 +842,16 @@ fun FynxCameraCapturePanel(
         val source = pendingOriginalUri ?: current
         generatingCaptions = true
         error = null
+        recordingNotice = null
         scope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { generateFynxVideoTranscript(context, source) } }
             result.onSuccess {
                 videoCaptionText = it
-                error = "Transcript ready. Caption timing is approximate; review it before sending."
-            }.onFailure { error = it.message ?: "Automatic captions could not be generated." }
+                recordingNotice = "Transcript ready. Caption timing is approximate; review it before sending."
+            }.onFailure {
+                recordingNotice = null
+                error = it.message ?: "Automatic captions could not be generated."
+            }
             generatingCaptions = false
         }
     }
@@ -884,7 +888,14 @@ fun FynxCameraCapturePanel(
     }
 
     fun capturePhotoNow() {
-        val capture = imageCapture ?: run { error = "Camera is still starting"; return }
+        val capture = imageCapture ?: run {
+            // The countdown hides the capture controls; restore them on every early exit.
+            timerCountingDown = 0
+            timerCaptureJob = null
+            showCaptureControls = true
+            error = "Camera is still starting. Please try again."
+            return
+        }
         val stamp = System.currentTimeMillis()
         val file = File(context.cacheDir, "fynx_photo_"+stamp+".jpg")
         val original = File(context.cacheDir, "fynx_photo_original_"+stamp+".jpg")
