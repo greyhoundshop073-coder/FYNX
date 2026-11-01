@@ -978,11 +978,6 @@ fun FynxCameraCapturePanel(
                 if (previewType == "image") {
                     Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     if (showEditorToolOptions) {
-                    Text(
-                        selectedCameraTool,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
                     when (selectedCameraTool) {
                         "Face FX" -> {
                             Text("Face FX", style = MaterialTheme.typography.labelLarge)
