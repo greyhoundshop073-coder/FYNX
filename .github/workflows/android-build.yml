@@ -55,7 +55,7 @@ env:
   GOOGLE_CLOUD_PROJECT: fynx-f0868
   FYNX_WIF_PROVIDER: projects/742276831502/locations/global/workloadIdentityPools/fynx-github-actions/providers/fynx-github
   FYNX_GCP_SERVICE_ACCOUNT: fynx-github-actions@fynx-f0868.iam.gserviceaccount.com
-  FYNX_PRODUCTION_BASE_URL: https://fynx-backend-testing-testing.up.railway.app
+  FYNX_PRODUCTION_BASE_URL: https://fynx-ai-backend.onrender.com
 
 jobs:
   build:
