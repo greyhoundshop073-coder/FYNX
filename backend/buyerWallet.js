@@ -1036,7 +1036,7 @@ export function registerBuyerWalletRoutes({ app }) {
           JOIN buyer_wallet_transactions t ON t.id=e.transaction_id
          WHERE e.wallet_id=$1
            AND t.status='SUCCEEDED'
-           AND e.account_code IN ('AVAILABLE','RESERVED','WITHDRAWAL_PENDING')
+           AND e.account_code IN ('AVAILABLE','RESERVED','MARKETPLACE_ESCROW','WITHDRAWAL_PENDING')
          GROUP BY e.account_code
       `, [wallet.id]);
       const balances = Object.fromEntries(balanceRows.rows.map((row) => [row.account_code, Number(row.balance || 0)]));
