@@ -617,7 +617,15 @@ async function reconcileWalletTransferEvent(client, eventName, transfer) {
        WHERE id=$3 AND status='PENDING'
     `, [
       transfer.transfer_code ? String(transfer.transfer_code) : null,
-      JSON.stringify({ ...(operation.metadata || {}), transferEvent: eventName, providerStatus: transfer.status || 'success' }),
+      JSON.stringify({
+        ...(operation.metadata || {}),
+        transferEvent: eventName,
+        providerStatus: transfer.status || 'success',
+        providerFeeMinor: Number.isSafeInteger(Number(transfer.fee_charged)) && Number(transfer.fee_charged) >= 0
+          ? Number(transfer.fee_charged) : (operation.metadata?.providerFeeMinor ?? null),
+        providerFeesBreakdown: Array.isArray(transfer.fees_breakdown)
+          ? transfer.fees_breakdown : (operation.metadata?.providerFeesBreakdown ?? null)
+      }),
       operation.id
     ]);
     return { matched: true, status: 'SUCCEEDED' };
@@ -1864,7 +1872,14 @@ export function registerBuyerWalletRoutes({ app }) {
            WHERE id=$3 AND status='PENDING'
         `, [
           transfer.transfer_code ? String(transfer.transfer_code) : null,
-          JSON.stringify({ ...(operation.metadata || {}), providerStatus, transferId: transfer.id || null }),
+          JSON.stringify({
+            ...(operation.metadata || {}),
+            providerStatus,
+            transferId: transfer.id || null,
+            providerFeeMinor: Number.isSafeInteger(Number(transfer.fee_charged)) && Number(transfer.fee_charged) >= 0
+              ? Number(transfer.fee_charged) : null,
+            providerFeesBreakdown: Array.isArray(transfer.fees_breakdown) ? transfer.fees_breakdown : null
+          }),
           operation.id
         ]);
         return res.status(202).json({
