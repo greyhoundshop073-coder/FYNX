@@ -31,12 +31,11 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var username by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val localDebugLoginAvailable = localDebugAccountForLogin(context, username) != null
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
-    fun finish(result: Result<FynxRemoteAuthClient.ResultData>, allowOfflineEntry: Boolean = false) {
+    fun finish(result: Result<FynxRemoteAuthClient.ResultData>) {
         result.onSuccess { account ->
             // Account switching can clear the previous session, including its token.
             // Persist the new account identity first, then store the token issued for it.
@@ -48,19 +47,10 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
             onAuthenticated(account.username)
         }.onFailure { failure ->
             busy = false
-            // Offline entry is only a debug-build convenience for network failures.
-            // Invalid credentials and other server responses must never create a local session.
-            val localUsername = if (allowOfflineEntry && isLoginNetworkFailure(failure)) {
-                localDebugAccountForLogin(context, username)
-            } else null
-            if (localUsername != null) {
-                FynxAuthStore.save(context, localUsername)
-                error = null
-                onAuthenticated(localUsername)
-            } else {
-                error = failure.message?.substringAfter(": ")?.trim()?.removePrefix("{")?.removeSuffix("}")
-                    ?: "FYNX could not complete the account request."
-            }
+            // Never turn a failed remote login into a local signed-in session.
+            // Every authenticated app session must carry a server-issued access token.
+            error = failure.message?.substringAfter(": ")?.trim()?.removePrefix("{")?.removeSuffix("}")
+                ?: "FYNX could not complete the account request."
         }
     }
 
@@ -172,33 +162,19 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(18.dp))
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
-                            FynxAuthField(password, { password = it }, "Password (optional for saved-device entry)", keyboardType = KeyboardType.Password, password = true)
-                            Spacer(Modifier.height(6.dp))
-                            if (localDebugLoginAvailable) {
-                                Text("Leave password blank for quick local entry. Enter it to connect this account to the live FYNX backend.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
-                            }
+                            FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
                             Spacer(Modifier.height(10.dp))
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
                                 val requestedUsername = username.trim().removePrefix("@")
-                                val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
                                 when {
                                     requestedUsername.isBlank() -> error = "Enter your username."
-                                    savedLocalUsername != null && password.isBlank() -> {
-                                        // Preserve instant saved-device entry when no password is supplied.
-                                        // This local session does not manufacture a backend token.
-                                        FynxAuthStore.save(context, savedLocalUsername)
-                                        error = null
-                                        onAuthenticated(savedLocalUsername)
-                                    }
                                     password.isBlank() -> error = "Enter your username and password."
                                     else -> {
-                                        // A password explicitly requests a real backend session, even for a
-                                        // saved local debug account, so protected APIs receive a server token.
                                         busy = true
                                         error = null
-                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }
+                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password)) }
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
@@ -243,29 +219,3 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
         )
     )
 }
-
-/**
- * Release builds always authenticate with the server. Debug builds can restore
- * a saved local account, or enter the local UI when no account is stored.
- */
-private fun localDebugAccountForLogin(context: android.content.Context, requestedUsername: String): String? {
-    val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-    if (!isDebuggable || requestedUsername.isBlank()) return null
-
-    val normalizedUsername = requestedUsername.trim().removePrefix("@")
-    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() }
-    return when {
-        saved == null -> normalizedUsername
-        saved.equals(normalizedUsername, ignoreCase = true) -> saved
-        else -> null
-    }
-}
-
-private fun isLoginNetworkFailure(error: Throwable): Boolean =
-    generateSequence(error) { it.cause }.any { cause ->
-        cause is java.net.SocketTimeoutException ||
-            cause is java.net.UnknownHostException ||
-            cause is java.net.ConnectException ||
-            (cause is java.io.IOException &&
-                cause.message?.contains("network connection is unavailable", ignoreCase = true) == true)
-    }
