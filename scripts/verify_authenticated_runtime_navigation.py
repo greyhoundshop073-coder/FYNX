@@ -1037,11 +1037,13 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         camera_xml, ["Set capture timer"], f"{prefix}-camera-timer-open",
         ["3 sec", "10 sec"]
     )
+    # Cancellation must leave enough time for UIAutomator to observe and tap the action.
+    # Keep the short 3-second countdown as a separate positive capture test below.
     timer_selected = tap_control(
-        timer_panel, ["3 sec"], f"{prefix}-camera-timer-three-seconds",
+        timer_panel, ["10 sec"], f"{prefix}-camera-timer-ten-seconds",
         ["Take photo"]
     ) if timer_panel else ""
-    if timer_selected and find_control(timer_selected, ["10 sec"]):
+    if timer_selected and find_control(timer_selected, ["3 sec"]):
         countdown_xml = tap_control(
             timer_selected, ["Take photo"], f"{prefix}-camera-timer-start-cancel",
             ["Cancel timer"]
@@ -1056,7 +1058,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 time.sleep(3.4)
                 after_cancel = dump_ui(f"{prefix}-camera-timer-cancel-settled.xml") or cancelled_xml
                 if find_control(after_cancel, ["Take photo"]) and not find_control(after_cancel, ["Retake"]):
-                    report.append("- PASS cancelling the 3-second timer returned to live camera and did not capture later")
+                    report.append("- PASS cancelling the 10-second timer returned to live camera and did not capture later")
                     camera_xml = after_cancel
                 else:
                     FAILURES.append(prefix + ": cancelled camera timer still triggered a photo capture")
@@ -1065,7 +1067,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         else:
             FAILURES.append(prefix + ": timer countdown did not expose the visible Cancel timer action")
     else:
-        FAILURES.append(prefix + ": timer settings did not expose both 3-second and 10-second choices")
+        FAILURES.append(prefix + ": timer settings did not expose both 10-second and 3-second choices")
 
     if camera_xml and find_control(camera_xml, ["Take photo"]):
         countdown_capture_xml = tap_control(
