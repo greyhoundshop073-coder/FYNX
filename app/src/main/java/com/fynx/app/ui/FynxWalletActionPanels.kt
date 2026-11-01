@@ -498,6 +498,37 @@ private fun FynxWalletWithdrawalPanel(
                             completed.bankName + " •••• " + completed.accountLast4 + "."
                     }
                 )
+                if (completed.status in setOf("PENDING", "PROCESSING")) {
+                    OutlinedButton(
+                        onClick = {
+                            verifying = true
+                            error = null
+                            scope.launch {
+                                FynxBuyerWalletClient.refreshWithdrawalStatus(context, completed.reference)
+                                    .onSuccess { refreshed ->
+                                        result = refreshed
+                                        statusMessage = refreshed.message
+                                        if (refreshed.status !in setOf("PENDING", "PROCESSING")) {
+                                            Toast.makeText(context, "Withdrawal status updated", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .onFailure {
+                                        error = it.message ?: "Withdrawal status could not be refreshed."
+                                    }
+                                verifying = false
+                            }
+                        },
+                        enabled = !verifying && !submitting,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (verifying) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.size(8.dp))
+                        }
+                        Text(if (verifying) "Checking transfer…" else "Refresh withdrawal status")
+                    }
+                }
             }
         }
         error?.let {
