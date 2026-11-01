@@ -9,6 +9,7 @@ payments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt
 settlement = (ROOT / "backend/marketplaceSettlement.js").read_text()
 wallet_backend = (ROOT / "backend/buyerWallet.js").read_text()
 actions = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text()
+wallet_earnings = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxWalletMarketplaceEarningsCard.kt").read_text()
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
 transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text()
@@ -66,7 +67,10 @@ checks = [
  ("default Marketplace fee policy is seller-paid at five percent", "process.env.FYNX_MARKETPLACE_FEE_MODE || 'SELLER'" in transactions and "process.env.FYNX_MARKETPLACE_FEE_BPS || '500'" in transactions and 'const mode = configuredMode;' in transactions),
  ("FYNX revenue report uses the admin-only revenue endpoint", '"/api/admin/revenue"' in admin_client and "if(!(await requireAdmin(req,res)))return" in admin_routes),
  ("owner/admin control center shows separate Marketplace commission totals", '"FYNX Business Revenue"' in admin_panel and '"Marketplace commission ledger"' in admin_panel and 'it.source == "MARKETPLACE_FEE"' in admin_panel),
- ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel)
+ ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel),
+ ("Wallet itself shows each seller sale's FYNX commission and net earnings", "FynxWalletMarketplaceEarningsCard(refreshKey = refreshVersion)" in panel and '"FYNX commission"' in wallet_earnings and '"Your net earnings"' in wallet_earnings),
+ ("Wallet seller earnings show protected and payout availability separately", '"Protected"' in wallet_earnings and '"Available for payout"' in wallet_earnings and '"Payout pending"' in wallet_earnings and "separate from your personal Wallet balance" in wallet_earnings),
+ ("seller settlement endpoint distinguishes seller commission from buyer and total fees", "marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0)" in settlement and "marketplaceFeeBuyer: Number(row.marketplace_fee_buyer || 0)" in settlement and "marketplaceFeeTotal: Number(row.marketplace_fee_total || 0)" in settlement)
 ]
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
