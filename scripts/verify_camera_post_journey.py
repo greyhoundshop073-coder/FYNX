@@ -20,12 +20,16 @@ checks = [
      "modifier = Modifier.align(Alignment.TopCenter)" in camera
      and ".padding(start = 64.dp, end = 64.dp, top = 74.dp)" in camera
      and "widthIn(max = 196.dp)" in camera),
-    ("Camera self-timer uses one cancellable job and exposes a visible cancel action",
-     "var timerCaptureJob by remember { mutableStateOf<Job?>(null) }" in camera
-     and "timerCaptureJob?.cancel()" in camera
-     and 'Text("Cancel timer", color = Color.White)' in camera
-     and "for (remaining in seconds downTo 1)" in camera
-     and "LaunchedEffect(timerCountingDown)" not in camera),
+    ("Camera self-timer invalidates stale jobs and exposes a full-card cancel target",
+      "var timerCaptureJob by remember { mutableStateOf<Job?>(null) }" in camera
+      and "val timerCaptureGeneration = remember { AtomicInteger(0) }" in camera
+      and "timerCaptureJob?.cancel()" in camera
+      and camera.count("timerCaptureGeneration.incrementAndGet()") >= 2
+      and "if (generation != timerCaptureGeneration.get()) return@launch" in camera
+      and "onClick = ::cancelCaptureTimer" in camera
+      and '"Cancel timer"' in camera
+      and "for (remaining in seconds downTo 1)" in camera
+      and "LaunchedEffect(timerCountingDown)" not in camera),
     ("On-device captions transcode supported device audio formats to PCM16 WAV before speech recognition",
      'fynx_caption_audio_" + System.currentTimeMillis() + ".wav"' in video_effects
      and "MediaCodec.createDecoderByType(mime)" in video_effects
