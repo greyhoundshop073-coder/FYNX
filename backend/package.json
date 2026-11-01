@@ -2,8 +2,8 @@
   "name": "fynx-backend",
   "version": "1.1.1",
   "type": "module",
-  "scripts": {
-    "prestart": "node verify-runtime-bootstrap.mjs && node verify-deployment-provenance.mjs && node verify-media-route.mjs && node verify-marketplace-discovery-query.mjs && node verify-notification-bootstrap-idempotency.mjs && node verify-social-post-reaction-bootstrap.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
+  "scripts": {\n    "verify:wallet-ledger": "node verify-wallet-business-ledger.mjs",
+    "prestart": "node verify-runtime-bootstrap.mjs && node verify-deployment-provenance.mjs && node verify-media-route.mjs && node verify-marketplace-discovery-query.mjs && node verify-notification-bootstrap-idempotency.mjs && node verify-social-post-reaction-bootstrap.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\" && node verify-wallet-business-ledger.mjs",
     "start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"
   },
   "dependencies": {
