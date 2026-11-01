@@ -113,7 +113,10 @@ require('mature text editor uses responsive full view','BoxWithConstraints(Modif
 require('mature composer Android back closes safely','BackHandler(enabled = !publishing)' in mature and 'recording -> finishVoiceRecordingToPreview()' in mature and 'showStatusEmoji -> showStatusEmoji = false' in mature and 'else -> onClose()' in mature)
 require('mature voice preview before publish','FynxLocalStatusAudioPreview(mediaUri!!, elapsed.coerceAtLeast(1_000L))' in mature and 'private fun FynxLocalStatusAudioPreview' in mature and 'Voice Status ready' in mature)
 require('mature authenticated publish','FynxStatusClient.create(context, status, mediaId)' in mature and 'FynxStatusClient.uploadMedia(context, source, mime)' in mature)
-require('status camera owns lifecycle and back navigation','BackHandler' in camera and 'BackHandler { if (recording == null) onDismiss() }' in camera and 'cameraProvider?.unbindAll()' in camera)
+require('status camera owns lifecycle and back navigation',
+        'BackHandler' in camera and 'recording == null' in camera
+        and 'cancelCaptureTimer()' in camera and 'else onDismiss()' in camera
+        and 'cameraProvider?.unbindAll()' in camera)
 require('status camera profile identity overlay','FynxProfileRemoteClient.get(context, username)' in camera and 'profilePhotoId' in camera and 'FynxRemoteMedia("/api/media/$photoId"' in camera)
 require('status camera dialog preserves full-screen surface','DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)' in hub and 'Box(Modifier.fillMaxSize())' in hub)
 require('status camera returns to editable composer','fun openCapturedStatus(uri: Uri, type: String)' in hub and 'composing = true' in hub and 'initialMediaUri = selectedInitialMedia?.uri' in hub)
