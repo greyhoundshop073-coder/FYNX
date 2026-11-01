@@ -1119,16 +1119,25 @@ fun FynxCameraCapturePanel(
                     OutlinedButton(onClick = ::generateCaptionsForVideo, enabled = !generatingCaptions && !applyingVideoEffects, modifier = Modifier.fillMaxWidth()) {
                         Text(if (generatingCaptions) "Generating captions…" else "✦ Generate on-device captions")
                     }
-                    if (videoCaptionText.isNotBlank()) {
-                        OutlinedTextField(
-                            value = videoCaptionText, onValueChange = { videoCaptionText = it },
-                            label = { Text("Review/edit transcript") },
-                            supportingText = { Text("Local transcription. Caption timing is estimated; review before sending.") },
-                            minLines = 2, maxLines = 4, enabled = !applyingVideoEffects, modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        Text("Captions require Android 12+ and a compatible on-device speech model.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    OutlinedTextField(
+                        value = videoCaptionText,
+                        onValueChange = { videoCaptionText = it },
+                        label = { Text("Video captions") },
+                        placeholder = { Text("Type captions for your video") },
+                        supportingText = {
+                            Text(
+                                if (videoCaptionText.isBlank()) {
+                                    "Type captions here, or generate them with a compatible on-device speech model."
+                                } else {
+                                    "Caption timing is approximate. Review the text before sending."
+                                }
+                            )
+                        },
+                        minLines = 2,
+                        maxLines = 4,
+                        enabled = !applyingVideoEffects,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
                 }
                 if (previewType != "image") {
