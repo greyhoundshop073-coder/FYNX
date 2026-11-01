@@ -223,11 +223,11 @@ private fun FynxWalletSecurityPanel() {
             )
             OutlinedButton(onClick = { refresh() }, enabled = !loading) { Text("Retry") }
         } else {
-            val current = security
+            val current = checkNotNull(security)
             WalletActionNotice(
-                title = if (current?.hasWithdrawalPin == true) "Wallet PIN is set" else "Wallet PIN is not set",
+                title = if (current.hasWithdrawalPin == true) "Wallet PIN is set" else "Wallet PIN is not set",
                 message = when {
-                    current?.isLocked == true -> "Money movement is temporarily locked after repeated incorrect PIN attempts. The lock expires automatically."
+                    current.isLocked == true -> "Money movement is temporarily locked after repeated incorrect PIN attempts. The lock expires automatically."
                     current?.hasWithdrawalPin == true -> "Your PIN is stored as a password hash and is required before approved Wallet money movement."
                     else -> "Set a six-digit PIN before paying for Marketplace orders or using approved withdrawals."
                 }
@@ -291,7 +291,7 @@ private fun FynxWalletSecurityPanel() {
                                     saving = true
                                     error = null
                                     scope.launch {
-                                        FynxBuyerWalletClient.setWithdrawalPin(context,currentPassword,pin,confirmPin)
+                                        FynxBuyerWalletClient.setWithdrawalPin(context, currentPassword, pin, confirmPin)
                                             .onSuccess {
                                                 editing = false
                                                 currentPassword = ""
