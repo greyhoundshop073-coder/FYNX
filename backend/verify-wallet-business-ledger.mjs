@@ -55,7 +55,7 @@ const checks = [
   ['Transfer webhooks reconcile success, failure and reversal with balanced ledger entries', wallet.includes("reconcileWalletTransferEvent(client, eventName, transfer)") && wallet.includes("eventName === 'transfer.success'") && wallet.includes("eventName === 'transfer.failed'") && wallet.includes("eventName === 'transfer.reversed'")],
   ['Customer history hides internal reversal/settlement rows but reports provider payout status', wallet.includes("COALESCE(t.metadata->>'internal','false') <> 'true'") && wallet.includes("LEFT JOIN buyer_wallet_provider_operations op ON op.transaction_id=t.id") && wallet.includes("WHEN op.status='PENDING' THEN 'PROCESSING'")],
   ['Express preserves raw request bytes for Paystack webhook signatures', server.includes('express.json({ limit: "18mb"') && server.includes('verify: (req, _res, buffer) =>') && server.includes('req.rawBody = Buffer.from(buffer)')],
-  ['Paystack webhook validates HMAC SHA-512 before reconciliation', webhook.includes("createHmac('sha512'") && webhook.includes("req.rawBody") && webhook.includes("x-paystack-signature")]
+  ['Paystack webhook validates HMAC SHA-512 before reconciliation', webhook.includes("createHmac('sha512'") && webhook.includes("req.rawBody") && webhook.includes("x-paystack-signature")],
   ['First authenticated Wallet view provisions an empty provider-pending NGN Wallet without contacting Paystack',
     walletSummary.includes('INSERT INTO buyer_wallets (id,user_id,currency)') &&
     walletSummary.includes("VALUES ($1,$2,'NGN')") &&
