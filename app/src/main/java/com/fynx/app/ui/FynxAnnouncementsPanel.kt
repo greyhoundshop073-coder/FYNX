@@ -24,17 +24,17 @@ fun FynxAnnouncementsPanel() {
     var adminRole by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         FynxAdminClient.dashboard(context).onSuccess { dashboard ->
-            adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" }
+            adminRole = dashboard.role.takeIf { it == "OWNER" }
         }
     }
     LaunchedEffect(refresh) { loading = true; FynxAdminClient.announcements(context).onSuccess { items = it; error = null }.onFailure { error = it.message ?: "Unable to load announcements." }; loading = false }
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Official FYNX Announcements", style = MaterialTheme.typography.headlineSmall); Spacer(Modifier.height(8.dp)); Text("Important updates published by the FYNX team.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(16.dp))
-        if (adminRole == "OWNER" || adminRole == "ADMIN") {
+        if (adminRole == "OWNER") {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = 0.06f)), border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = 0.22f))) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Admin tools", style = MaterialTheme.typography.titleMedium)
-                    Text("Publish official FYNX music for everyone to use. Only the FYNX Owner and authorized Admins can manage this catalogue.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text("Publish official FYNX music for everyone to use. Only the official FYNX Owner account can manage this catalogue.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     FynxMusicAdminPanel()
                 }
             }
