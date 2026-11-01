@@ -32,7 +32,7 @@ const checks = [
   ['seller Android uses shipping and pickup-handover APIs', sellerUi.includes('/api/marketplace/orders/${order.id}/ship') && sellerUi.includes('/api/marketplace/orders/${order.id}/pickup-handover')],
   ['buyer Android requires product/quantity confirmation before completion', buyerClient.includes('receivedItemMatchesOrder') && buyerClient.includes('quantityMatchesOrder') && buyerUi.includes('confirmOrderMatch') && buyerUi.includes('I confirm the received item and quantity match my order.')],
   ['buyer Android keeps completion server-authoritative', buyerClient.includes('/api/marketplace/orders/$id/complete')],
-  ['shipping timeline remains integrated with marketplace completion', completion.includes('registerMarketplaceShippingTimeline({ app, pool, auth });') && shipping.includes('/api/marketplace')],
+  ['shipping timeline remains integrated with marketplace completion and lazy schema', completion.includes('registerMarketplaceShippingTimeline({ app, pool, auth, ensureSchema });') && shipping.includes('deliveryEvidence: deliveryEvidence.rows.map') && shipping.includes('/api/marketplace')],
 ];
 
 for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
