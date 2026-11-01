@@ -10,6 +10,7 @@ const expiry = read('./marketplaceInspectionExpiry.js');
 const settlement = read('./marketplaceSettlement.js');
 const shippingTimeline = read('./marketplaceShippingTimeline.js');
 const server = read('./server.js');
+const socialClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 
 const checks = [
   ['fulfillment selection is buyer-only', completion.includes("only the buyer can choose fulfillment")],
