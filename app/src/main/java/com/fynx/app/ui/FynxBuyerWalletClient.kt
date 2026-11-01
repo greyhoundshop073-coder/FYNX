@@ -155,14 +155,17 @@ internal object FynxBuyerWalletClient {
     }
 
     suspend fun loadWalletSecurity(context: Context): Result<FynxWalletSecurityStatus> =
-        FynxBackendClient.get(context, "/api/wallet/security").mapCatching { raw ->
-            val json = JSONObject(raw)
-            FynxWalletSecurityStatus(
-                hasWithdrawalPin = json.optBoolean("hasWithdrawalPin", false),
-                isLocked = json.optBoolean("isLocked", false),
-                lockedUntil = json.optString("lockedUntil").takeIf { it.isNotBlank() && it != "null" }
-            )
-        }
+        FynxBackendClient.get(context, "/api/wallet/security").mapCatching(::parseWalletSecurity)
+
+    internal fun parseWalletSecurity(raw: String): FynxWalletSecurityStatus {
+        val json = JSONObject(raw)
+        val isLocked = json.optBoolean("isLocked", false)
+        return FynxWalletSecurityStatus(
+            hasWithdrawalPin = json.optBoolean("hasWithdrawalPin", false),
+            isLocked = isLocked,
+            lockedUntil = json.optString("lockedUntil").takeIf { isLocked && it.isNotBlank() && it != "null" }
+        )
+    }
 
     suspend fun setWithdrawalPin(
         context: Context,
