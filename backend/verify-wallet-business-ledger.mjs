@@ -7,6 +7,10 @@ const checkout = read('./marketplaceTransactions.js');
 const settlement = read('./marketplaceSettlement.js');
 const payoutWorker = read('./marketplaceSettlementWorker.js');
 const wallet = read('./buyerWallet.js');
+const walletSummary = wallet.slice(
+  wallet.indexOf("app.get('/api/wallet/summary', auth"),
+  wallet.indexOf("app.post('/api/wallet/funding/initialize', auth')
+);
 const server = read('./server.js');
 const webhook = read('./marketplacePaystackWebhook.js');
 const walletMarketplace = read('./buyerWalletMarketplace.js');
@@ -52,6 +56,15 @@ const checks = [
   ['Customer history hides internal reversal/settlement rows but reports provider payout status', wallet.includes("COALESCE(t.metadata->>'internal','false') <> 'true'") && wallet.includes("LEFT JOIN buyer_wallet_provider_operations op ON op.transaction_id=t.id") && wallet.includes("WHEN op.status='PENDING' THEN 'PROCESSING'")],
   ['Express preserves raw request bytes for Paystack webhook signatures', server.includes('express.json({ limit: "18mb"') && server.includes('verify: (req, _res, buffer) =>') && server.includes('req.rawBody = Buffer.from(buffer)')],
   ['Paystack webhook validates HMAC SHA-512 before reconciliation', webhook.includes("createHmac('sha512'") && webhook.includes("req.rawBody") && webhook.includes("x-paystack-signature")]
+  ['First authenticated Wallet view provisions an empty provider-pending NGN Wallet without contacting Paystack',
+    walletSummary.includes('INSERT INTO buyer_wallets (id,user_id,currency)') &&
+    walletSummary.includes("VALUES ($1,$2,'NGN')") &&
+    walletSummary.includes('ON CONFLICT (user_id,currency) DO NOTHING') &&
+    walletSummary.includes('crypto.randomUUID(), req.user.sub') &&
+    walletSummary.includes("walletStatus: String(wallet.status || 'PENDING_PROVIDER')") &&
+    walletSummary.includes('canSpend: wallet.status === \'ACTIVE\' && walletProviderApproved(\'SPENDING\')') &&
+    walletSummary.includes('canWithdraw: wallet.status === \'ACTIVE\' && walletProviderApproved(\'WITHDRAWAL\')') &&
+    !walletSummary.includes('walletPaystackRequest')],
 ];
 
 const failed = checks.filter(([, ok]) => !ok);
