@@ -78,7 +78,10 @@ internal data class FynxWalletPayoutBank(
 internal data class FynxWalletSecurityStatus(
     val hasWithdrawalPin: Boolean,
     val isLocked: Boolean,
-    val lockedUntil: String?
+    val lockedUntil: String?,
+    val maximumPerTransfer: Double?,
+    val dailyAmountLimit: Double?,
+    val dailyCountLimit: Int?
 )
 
 internal data class FynxWalletWithdrawalResult(
@@ -160,10 +163,22 @@ internal object FynxBuyerWalletClient {
     internal fun parseWalletSecurity(raw: String): FynxWalletSecurityStatus {
         val json = JSONObject(raw)
         val isLocked = json.optBoolean("isLocked", false)
+        val limits = json.optJSONObject("limits")
+        fun limit(field: String): Double? {
+            if (limits == null || !limits.has(field) || limits.isNull(field)) return null
+            val value = limits.optDouble(field, Double.NaN)
+            require(value.isFinite() && value > 0.0) { "Wallet withdrawal limit is invalid." }
+            return value
+        }
+        val dailyCount = if (limits == null || !limits.has("dailyCountLimit")) null
+            else limits.optInt("dailyCountLimit").takeIf { it > 0 }
         return FynxWalletSecurityStatus(
             hasWithdrawalPin = json.optBoolean("hasWithdrawalPin", false),
             isLocked = isLocked,
-            lockedUntil = json.optString("lockedUntil").takeIf { isLocked && it.isNotBlank() && it != "null" }
+            lockedUntil = json.optString("lockedUntil").takeIf { isLocked && it.isNotBlank() && it != "null" },
+            maximumPerTransfer = limit("maximumPerTransfer"),
+            dailyAmountLimit = limit("dailyAmountLimit"),
+            dailyCountLimit = dailyCount
         )
     }
 
@@ -183,7 +198,7 @@ internal object FynxBuyerWalletClient {
             .mapCatching { raw ->
                 val json = JSONObject(raw)
                 require(json.optBoolean("hasWithdrawalPin", false)) { "Wallet PIN setup was not confirmed." }
-                FynxWalletSecurityStatus(true, false, null)
+                FynxWalletSecurityStatus(true, false, null, null, null, null)
             }
     }
 
