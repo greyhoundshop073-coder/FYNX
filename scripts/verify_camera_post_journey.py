@@ -14,6 +14,9 @@ app_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(e
 draft_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt").read_text(encoding="utf-8")
 
 checks = [
+    ("Captured photo preview fills the portrait editor from the top instead of vertically letterboxing the image",
+     "scaleType=android.widget.ImageView.ScaleType.CENTER_CROP" in camera
+     and "scaleType=android.widget.ImageView.ScaleType.FIT_CENTER" not in camera),
     ("Camera runtime journey initializes Home recovery state before all optional Status and post-draft branches",
      'home = home_xml' in runtime
      and 'home = camera_return_to_home(details_xml, prefix + "-post-draft-dismiss")' in runtime
