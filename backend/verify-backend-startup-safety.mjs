@@ -68,7 +68,9 @@ assert.ok(shop.includes("return res.json({ shop: publicProfile(result.rows[0]) }
 const routes = new Map();
 const app = {
   get(path, ...handlers) { routes.set(`GET ${path}`, handlers.at(-1)); },
-  patch(path, ...handlers) { routes.set(`PATCH ${path}`, handlers.at(-1)); }
+  post(path, ...handlers) { routes.set(`POST ${path}`, handlers.at(-1)); },
+  patch(path, ...handlers) { routes.set(`PATCH ${path}`, handlers.at(-1)); },
+  delete(path, ...handlers) { routes.set(`DELETE ${path}`, handlers.at(-1)); }
 };
 let capturedPatchParameters = null;
 const pool = {
@@ -91,6 +93,14 @@ const pool = {
   }
 };
 registerMarketplaceShopProfileRoutes({ app, pool, auth: (_req, _res, next) => next() });
+registerMarketplaceListingLifecycleRoutes({ app, pool, auth: (_req, _res, next) => next() });
+for (const route of [
+  "GET /api/marketplace/saved-products",
+  "GET /api/marketplace/listings/:id/saved",
+  "POST /api/marketplace/listings/:id/saved",
+  "DELETE /api/marketplace/listings/:id/saved",
+  "POST /api/marketplace/listings/:id/reactivate"
+]) assert.equal(typeof routes.get(route), "function", `missing registered Marketplace lifecycle handler: ${route}`);
 const response = {
   statusCode: 200,
   body: null,
