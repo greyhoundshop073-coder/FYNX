@@ -22,7 +22,8 @@ currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").r
 required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
     'DEBUG_TEST_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
-    '"https://fynx-ai-backend.onrender.com" in retiredBackendUrls',
+    '"https://fynx-ai-backend.onrender.com"',
+    'val retiredBackendUrls = setOf(',
     'requiresAuthentication = !isPublicAuthPath(path)',
     'FynxSecureTokenStore',
 ]
