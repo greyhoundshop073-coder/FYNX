@@ -1408,7 +1408,7 @@ export function registerBuyerWalletRoutes({ app }) {
       await ensureBuyerWalletSchema();
       res.set('Cache-Control', 'no-store, private');
       const wallet = (await pool.query(`
-        SELECT withdrawal_pin_hash,withdrawal_pin_locked_until
+        SELECT status,withdrawal_pin_hash,withdrawal_pin_locked_until
           FROM buyer_wallets
          WHERE user_id=$1 AND currency='NGN'
          LIMIT 1
@@ -1416,6 +1416,8 @@ export function registerBuyerWalletRoutes({ app }) {
       const lockedUntil = wallet?.withdrawal_pin_locked_until || null;
       const locked = Boolean(lockedUntil && new Date(lockedUntil).getTime() > Date.now());
       return res.json({
+        walletStatus: String(wallet?.status || 'NOT_SETUP'),
+        canSetWithdrawalPin: wallet?.status === 'ACTIVE',
         hasWithdrawalPin: Boolean(wallet?.withdrawal_pin_hash),
         isLocked: locked,
         lockedUntil: locked ? lockedUntil : null,
