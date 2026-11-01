@@ -26,7 +26,6 @@ import android.net.Uri
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -417,6 +416,7 @@ fun FynxCameraCapturePanel(
     var cameraInfo by remember { mutableStateOf<androidx.camera.core.CameraInfo?>(null) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var bindGeneration by remember { mutableIntStateOf(0) }
+    var galleryRebindRequest by remember { mutableIntStateOf(0) }
     var torchEnabled by remember { mutableStateOf(false) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var exposure by remember { mutableIntStateOf(0) }
@@ -451,9 +451,14 @@ fun FynxCameraCapturePanel(
     var selectedCameraTool by remember { mutableStateOf("Looks") }
     var showAdjustments by remember { mutableStateOf(false) }
     val galleryPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
+        contract = ActivityResultContracts.OpenDocument()
     ) { selectedUri ->
-        if (selectedUri != null) {
+        if (selectedUri == null) {
+            // Returning from Gallery without a selection must restore the live CameraX session.
+            // The ActivityResult callback runs after the external picker returns to FYNX.
+            galleryRebindRequest += 1
+            showCaptureControls = true
+        } else {
             error = null
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
@@ -474,6 +479,8 @@ fun FynxCameraCapturePanel(
                     trackedFaceBounds = emptyList()
                     showCaptureControls = true
                 }.onFailure {
+                    galleryRebindRequest += 1
+                    showCaptureControls = true
                     error = it.message ?: "The selected media could not be opened."
                 }
             }
@@ -529,7 +536,7 @@ fun FynxCameraCapturePanel(
     }
     // Keep the shutter and capture tools visible; only the self-timer deliberately hides them during countdown.
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
-    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled) {
+    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled, galleryRebindRequest) {
         val generation = bindGeneration + 1; bindGeneration = generation
         if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
         val future = ProcessCameraProvider.getInstance(context)
@@ -1087,6 +1094,15 @@ fun FynxCameraCapturePanel(
             factory = { previewView },
             modifier = Modifier.fillMaxSize()
         )
+        // Android 15 enforces transparent edge-to-edge system bars, so Window.statusBarColor
+        // alone cannot protect white icons from bright camera frames. Paint the status-bar
+        // inset in this Dialog's content while leaving the camera preview full-bleed below it.
+        Spacer(
+            Modifier.align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+                .background(Color(0xFF080A10))
+        )
         if (faceAnalysisEnabled && faceEffect != CameraFaceEffect.OFF && trackedFaceBounds.isNotEmpty()) {
             Canvas(Modifier.fillMaxSize()) {
                 val nativeCanvas = drawContext.canvas.nativeCanvas
@@ -1503,7 +1519,7 @@ fun FynxCameraCapturePanel(
                 }
                 if (!fastCapture && !liveProofMode) Surface(
                     onClick = {
-                        galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        galleryPicker.launch(arrayOf("image/*", "video/*"))
                         showCaptureControls = true
                     },
                     modifier = Modifier.size(width = 64.dp, height = 64.dp),

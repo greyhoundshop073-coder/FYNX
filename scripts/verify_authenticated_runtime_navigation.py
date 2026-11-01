@@ -454,14 +454,15 @@ def camera_wait_for_video_export_idle(
     return latest, False
 
 
-def wait_for_photo_picker_foreground(timeout: float = 25.0) -> tuple[bool, str]:
-    """Wait for the Android Photo Picker to own the focused window, not merely exist in a task stack."""
+def wait_for_gallery_picker_foreground(timeout: float = 25.0) -> tuple[bool, str]:
+    """Wait for Android's system document/media picker to own the focused window."""
     deadline = time.monotonic() + timeout
     stable_focus_samples = 0
     latest_state = ""
     picker_tokens = (
-        "photopicker", "photo picker", "com.google.android.providers.media",
-        "com.android.providers.media"
+        "documentsui", "documents ui", "com.google.android.documentsui",
+        "com.android.documentsui", "photopicker", "photo picker",
+        "com.google.android.providers.media", "com.android.providers.media"
     )
     while time.monotonic() < deadline:
         windows = run("adb", "shell", "dumpsys", "window", "windows").stdout or ""
@@ -475,10 +476,10 @@ def wait_for_photo_picker_foreground(timeout: float = 25.0) -> tuple[bool, str]:
             if "topResumedActivity" in line or "mResumedActivity" in line
         ]
         latest_state = "\\n".join(focused_lines + resumed_lines)
-        # API 35 emulator builds may expose the active Photo Picker as topResumedActivity
+        # API 35 can expose either DocumentsUI or the platform Photo Picker as topResumedActivity
         # without returning an mCurrentFocus/mFocusedApp line from dumpsys window windows.
-        # A stable top-resumed picker is authoritative foreground evidence; do not confuse
-        # a stale mResumedActivity entry with the currently top-resumed system surface.
+        # A stable top-resumed system picker is authoritative foreground evidence; do not confuse
+        # a stale mResumedActivity entry with the currently top-resumed surface.
         window_focus_picker = any(
             any(token in line.casefold() for token in picker_tokens)
             for line in focused_lines
@@ -842,9 +843,9 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     else:
         FAILURES.append(prefix + ": opening the Face FX category did not expose the Cute Ears effect")
 
-    # The Android Photo Picker can take several seconds to become the focused window on a
-    # cold API-35 emulator. Do not treat a stale ActivityRecord anywhere in the task stack
-    # as proof that it is visible, and never press Back while its launch is still pending.
+    # Android's system Gallery/document picker can take several seconds to become the focused
+    # window on a cold API-35 emulator. Do not treat a stale ActivityRecord anywhere in the
+    # task stack as proof that it is visible, and never press Back while launch is pending.
     gallery_recovered = False
     camera_activity_state = run(
         "adb", "shell", "dumpsys", "activity", "activities"
@@ -870,7 +871,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     if gallery_control:
         _, gallery_x, gallery_y = gallery_control
         run("adb", "shell", "input", "tap", str(gallery_x), str(gallery_y))
-        picker_ready, gallery_focus_state = wait_for_photo_picker_foreground(timeout=25.0)
+        picker_ready, gallery_focus_state = wait_for_gallery_picker_foreground(timeout=25.0)
         (ROOT / f"{prefix}-camera-gallery-focus.txt").write_text(
             gallery_focus_state + chr(10), encoding="utf-8"
         )
@@ -879,7 +880,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             # while the system surface is active (it can stall MediaProvider on this AVD).
             time.sleep(1.5)
             screenshot(f"{prefix}-camera-gallery-picker.png")
-            report.append("- PASS Gallery opened Android's Photo Picker as the focused foreground surface")
+            report.append("- PASS Gallery opened Android's system document/media picker as the focused foreground surface")
             # Cancel only after window focus confirms the picker, then wait for the app to resume.
             run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
             camera_returned = False
@@ -958,18 +959,18 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 report.append("- PASS Gallery Back returned to the same resumed FYNX activity; live preview and camera controls recovered without restarting or publishing")
             else:
                 if system_anr_seen:
-                    FAILURES.append(prefix + ": Android system process stopped responding while closing the Photo Picker; no FYNX crash was observed")
+                    FAILURES.append(prefix + ": Android system picker process stopped responding while closing Gallery; no FYNX crash was observed")
                 elif activity_replaced_seen:
                     FAILURES.append(prefix + ": FYNX returned from Gallery in a different ActivityRecord; the original camera activity was not retained")
                 elif not camera_activity_token:
                     FAILURES.append(prefix + ": Gallery return could not be certified against the original FYNX ActivityRecord")
                 else:
-                    FAILURES.append(prefix + ": Photo Picker did not return to the live camera after cancellation")
+                    FAILURES.append(prefix + ": Gallery picker did not return to the live camera after cancellation")
                 screenshot(f"{prefix}-camera-after-gallery-back-failed.png")
         else:
             screenshot(f"{prefix}-camera-gallery-picker-not-focused.png")
             FAILURES.append(
-                prefix + ": Gallery tap did not place the Android Photo Picker in the focused foreground window within 25 seconds"
+                prefix + ": Gallery tap did not place Android's system document/media picker in the focused foreground window within 25 seconds"
             )
     else:
         FAILURES.append(prefix + ": Gallery control was not available before opening the system picker")

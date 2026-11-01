@@ -73,7 +73,8 @@ checks = [
      and "Surface(Modifier.fillMaxSize(), color = Color(0xFF080A10))" in home
      and "Box(Modifier.fillMaxSize().background(Color(0xFF080A10)))" in home
      and "Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing))" not in home
-     and "statusBarsPadding()" in camera and ".navigationBarsPadding()" in camera
+     and "statusBarsPadding()" in camera and "windowInsetsTopHeight(WindowInsets.statusBars)" in camera
+     and ".navigationBarsPadding()" in camera
      and "def verify_camera_system_bar_contrast(" in runtime
      and "mean_luminance > 52" in runtime
      and 'verify_camera_system_bar_contrast(f"{prefix}-camera-live-preview.png"' in runtime),
@@ -89,13 +90,13 @@ checks = [
      and "camera-photo-editor-initial.xml" in runtime
      and "camera-video-editor-before-effects.xml" in runtime),
     ("Gallery picker foreground detection accepts stable API-35 top-resumed system picker state",
-     'def wait_for_photo_picker_foreground(' in runtime
+     'def wait_for_gallery_picker_foreground(' in runtime
      and '"mCurrentFocus" in line' in runtime
      and '"topResumedActivity" in line' in runtime
      and "top_resumed_picker = any(" in runtime
-     and 'wait_for_photo_picker_foreground(timeout=25.0)' in runtime
+     and 'wait_for_gallery_picker_foreground(timeout=25.0)' in runtime
      and 'for attempt in range(24)' in runtime
-     and "Android system process stopped responding while closing the Photo Picker" in runtime
+     and "Android system picker process stopped responding while closing Gallery" in runtime
      and "Gallery Back returned to the same resumed FYNX activity" in runtime),
     ("Gallery Back proves the same app activity, live preview pixels and controls recover without restart",
      '"topResumedActivity" in line and PACKAGE in line' in runtime
@@ -129,7 +130,7 @@ checks = [
      and "return capture_camera_video_journey(home_after_gallery_abort, prefix)" in runtime
      and "without publishing" in runtime
      and ("both front- and back-facing CameraX devices switched to usable previews" in runtime or "this CI AVD exposes only a rear-facing camera" in runtime)
-     and "Gallery opened Android's Photo Picker as the focused foreground surface" in runtime
+     and "Gallery opened Android's system document/media picker as the focused foreground surface" in runtime
      and "rear-camera torch toggled on and back off" in runtime
      and "Next must become enabled" in runtime
      and "without publishing a post" in runtime),
@@ -213,7 +214,8 @@ checks = [
      and 'Text("Your Story", style = MaterialTheme.typography.labelSmall' in camera
      and 'contentDescription = "Share to Status"' in camera),
     ("Gallery photo and video selections enter the same preview that offers Status and Next",
-     "PickVisualMedia.ImageAndVideo" in camera
+     "ActivityResultContracts.OpenDocument()" in camera
+     and 'galleryPicker.launch(arrayOf("image/*", "video/*"))' in camera
      and "pendingUri = Uri.fromFile(working)" in camera
      and 'pendingType = if (selectedType == "video" && videoNoteMode) "video_note" else selectedType' in camera
      and "showCaptureControls = true" in camera
