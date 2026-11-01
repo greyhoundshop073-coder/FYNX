@@ -72,11 +72,11 @@ checks = [
  ("FYNX revenue report uses the admin-only revenue endpoint", '"/api/admin/revenue"' in admin_client and "if(!(await requireAdmin(req,res)))return" in admin_routes),
  ("owner/admin control center shows separate Marketplace commission totals", '"FYNX Business Revenue"' in admin_panel and '"Marketplace commission ledger"' in admin_panel and 'it.source == "MARKETPLACE_FEE"' in admin_panel),
  ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel)
-]
  ("local-only Wallet sessions explain the required server sign-in without making anonymous wallet requests", "if (!FynxBackendClient.hasAccessToken(context))" in panel and "saved-device sign-in" in panel and "Sign in to FYNX to securely load your balance" in panel),
  ("seller earnings are not requested without a live Wallet session", "Marketplace earnings require a live FYNX sign-in." in panel),
  ("bank funding account and Wallet PIN screens require a live server session", actions.count("FynxBackendClient.hasAccessToken(context)") >= 2 and "No account request has been sent." in actions and "before viewing or changing Wallet security" in actions),
  ("Wallet statement export requires a server-issued session", "enabled = !statementExporting && !loading && FynxBackendClient.hasAccessToken(context)" in panel),
+]
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
 if failed: raise SystemExit("FYNX buyer wallet Android integration failed: "+", ".join(failed))
