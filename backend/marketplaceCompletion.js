@@ -4,7 +4,6 @@ import { isMarketplaceDestinationCovered } from './marketplaceShipping.js';
 import { getCachedMediaPayload } from './mediaPayloadCache.js';
 
 export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
-  registerMarketplaceShippingTimeline({ app, pool, auth });
   let schemaPromise;
 
   const ensureSchema = async () => {
@@ -34,6 +33,59 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
         ALTER TABLE marketplace_orders ALTER COLUMN fulfillment_status_updated_at SET NOT NULL;
         CREATE INDEX IF NOT EXISTS marketplace_orders_fulfillment_idx ON marketplace_orders (seller_id, status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS marketplace_orders_fulfillment_status_idx ON marketplace_orders (seller_id, fulfillment_status, updated_at DESC);
+        CREATE TABLE IF NOT EXISTS marketplace_delivery_assignments (
+          order_id UUID PRIMARY KEY REFERENCES marketplace_orders(id) ON DELETE CASCADE,
+          seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          driver_id BIGINT REFERENCES users(id) ON DELETE RESTRICT,
+          driver_type TEXT NOT NULL DEFAULT 'FYNX_ACCOUNT' CHECK (driver_type IN ('FYNX_ACCOUNT','SELLER_LOCAL')),
+          local_driver_name TEXT,
+          local_driver_phone TEXT,
+          pickup_point TEXT,
+          pickup_instructions TEXT,
+          vehicle_type TEXT,
+          vehicle_color TEXT,
+          vehicle_plate TEXT,
+          vehicle_note TEXT,
+          assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          accepted_at TIMESTAMPTZ,
+          handover_at TIMESTAMPTZ,
+          delivered_at TIMESTAMPTZ,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CHECK (seller_id <> driver_id)
+        );
+        ALTER TABLE marketplace_delivery_assignments ALTER COLUMN driver_id DROP NOT NULL;
+        ALTER TABLE marketplace_delivery_assignments ADD COLUMN IF NOT EXISTS driver_type TEXT NOT NULL DEFAULT 'FYNX_ACCOUNT';
+        ALTER TABLE marketplace_delivery_assignments ADD COLUMN IF NOT EXISTS local_driver_name TEXT;
+        ALTER TABLE marketplace_delivery_assignments ADD COLUMN IF NOT EXISTS local_driver_phone TEXT;
+        ALTER TABLE marketplace_delivery_assignments ADD COLUMN IF NOT EXISTS pickup_point TEXT;
+        ALTER TABLE marketplace_delivery_assignments ADD COLUMN IF NOT EXISTS pickup_instructions TEXT;
+        ALTER TABLE marketplace_delivery_assignments ADD COLUMN IF NOT EXISTS vehicle_type TEXT;
+        ALTER TABLE marketplace_delivery_assignments ADD COLUMN IF NOT EXISTS vehicle_color TEXT;
+        ALTER TABLE marketplace_delivery_assignments ADD COLUMN IF NOT EXISTS vehicle_plate TEXT;
+        ALTER TABLE marketplace_delivery_assignments ADD COLUMN IF NOT EXISTS vehicle_note TEXT;
+        CREATE INDEX IF NOT EXISTS marketplace_delivery_assignments_driver_idx ON marketplace_delivery_assignments (driver_id, updated_at DESC);
+        CREATE TABLE IF NOT EXISTS fynx_admin_roles (
+          user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK (role IN ('ADMIN')),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS marketplace_approved_drivers (
+          user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          approved_by BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          approved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_approved_drivers_active_idx ON marketplace_approved_drivers (active, user_id);
+        CREATE TABLE IF NOT EXISTS marketplace_delivery_evidence (
+          id BIGSERIAL PRIMARY KEY,
+          order_id UUID NOT NULL REFERENCES marketplace_orders(id) ON DELETE CASCADE,
+          submitted_by BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          evidence_type TEXT NOT NULL CHECK (evidence_type IN ('HANDOVER_NOTE','DELIVERY_NOTE','RECIPIENT_NAME','PHOTO_REFERENCE')),
+          value TEXT NOT NULL CHECK (length(value) BETWEEN 1 AND 1000),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_delivery_evidence_order_idx ON marketplace_delivery_evidence (order_id, created_at ASC);
       `).catch((error) => {
         schemaPromise = undefined;
         throw error;
@@ -42,9 +94,17 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
     return schemaPromise;
   };
 
+  registerMarketplaceShippingTimeline({ app, pool, auth, ensureSchema });
+
   const parseUuid = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
   const isSeller = (order, userId) => String(order.seller_id) === String(userId);
   const isBuyer = (order, userId) => String(order.buyer_id) === String(userId);
+  const hasMarketplaceAdminAccess = async (db, userId) => {
+    const owner = await db.query('SELECT id FROM users ORDER BY id ASC LIMIT 1');
+    if (owner.rows[0] && String(owner.rows[0].id) === String(userId)) return true;
+    const admin = await db.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
+    return admin.rowCount > 0;
+  };
   const DELIVERY_TRANSITIONS = new Map([
     ['PAID->PREPARING', true],
     ['PREPARING->DISPATCHED', true],
@@ -130,13 +190,13 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const params = [req.user.sub];
       let where = 'o.seller_id = $1';
       if (status && allowed.has(status)) { params.push(status); where += ` AND o.status = $${params.length}`; }
-      const result = await pool.query(`SELECT o.*, u.username AS buyer_username, u.display_name AS buyer_display_name FROM marketplace_orders o JOIN users u ON u.id = o.buyer_id WHERE ${where} ORDER BY o.created_at DESC LIMIT 100`, params);
+      const result = await pool.query(`SELECT o.*, u.username AS buyer_username, u.display_name AS buyer_display_name, da.driver_id AS delivery_driver_id, da.driver_type AS delivery_driver_type, da.local_driver_name, da.local_driver_phone, da.pickup_point, da.pickup_instructions, da.vehicle_type, da.vehicle_color, da.vehicle_plate, da.vehicle_note, da.accepted_at AS delivery_driver_accepted_at, da.handover_at AS delivery_driver_handover_at, da.delivered_at AS delivery_driver_delivered_at, COALESCE(ad.active,FALSE) AS delivery_driver_approval_active FROM marketplace_orders o JOIN users u ON u.id = o.buyer_id LEFT JOIN marketplace_delivery_assignments da ON da.order_id=o.id LEFT JOIN marketplace_approved_drivers ad ON ad.user_id=da.driver_id WHERE ${where} ORDER BY o.created_at DESC LIMIT 100`, params);
       return res.json({ orders: result.rows.map((row) => ({
         id: String(row.id), buyerId: String(row.buyer_id), buyerUsername: row.buyer_username, buyerDisplayName: row.buyer_display_name,
         listingId: String(row.listing_id), quantity: Number(row.quantity), unitPrice: Number(row.unit_price), deliveryFee: Number(row.delivery_fee),
         totalAmount: Number(row.total_amount), currency: row.currency, product: row.product_snapshot, status: row.status,
         fulfillmentStatus: row.fulfillment_status, fulfillmentStatusUpdatedAt: row.fulfillment_status_updated_at,
-        fulfillmentMethod: row.fulfillment_method, shippingAddress: row.shipping_address, buyerNote: row.buyer_note,
+        fulfillmentMethod: row.fulfillment_method, shippingAddress: row.shipping_address, buyerNote: row.buyer_note, driverId: row.delivery_driver_id ? String(row.delivery_driver_id) : null, driverType: row.delivery_driver_type || null, localDriverName: row.local_driver_name || null, localDriverPhone: row.local_driver_phone || null, pickupPoint: row.pickup_point || null, pickupInstructions: row.pickup_instructions || null, vehicleType: row.vehicle_type || null, vehicleColor: row.vehicle_color || null, vehiclePlate: row.vehicle_plate || null, vehicleNote: row.vehicle_note || null, driverApprovalActive: row.delivery_driver_approval_active === true, driverAcceptedAt: row.delivery_driver_accepted_at, driverHandoverAt: row.delivery_driver_handover_at, driverDeliveredAt: row.delivery_driver_delivered_at,
         paymentReference: row.payment_reference, trackingReference: row.tracking_reference, shippedAt: row.shipped_at,
         pickupHandoverAt: row.pickup_handover_at, pickupHandoverBy: row.pickup_handover_by ? String(row.pickup_handover_by) : null,
         deliveredAt: row.delivered_at, inspectionDeadline: row.inspection_deadline, completedAt: row.completed_at,
@@ -189,16 +249,359 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const order = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (!isSeller(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the seller can update fulfillment progress' }); }
+      let localArrivalAssignment = null;
+      if (requested === 'DELIVERED') {
+        const assignment = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
+        if (assignment?.driver_type !== 'SELLER_LOCAL' && assignment) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'assigned-driver deliveries must be marked delivered by the assigned driver with evidence' }); }
+        if (assignment?.driver_type === 'SELLER_LOCAL') {
+          if (!assignment.handover_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'record the local driver handover before reporting arrival' }); }
+          if (assignment.delivered_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'local driver arrival has already been reported' }); }
+          localArrivalAssignment = assignment;
+        }
+      }
       if (order.status !== 'PAID' && order.status !== 'SHIPPED') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not ready for fulfillment progress' }); }
       const current = order.fulfillment_status || (order.status === 'SHIPPED' ? (order.fulfillment_method === 'PICKUP' ? 'PICKUP_COMPLETED' : 'DISPATCHED') : 'PAID');
       if (!canAdvanceFulfillment(current, requested, order.fulfillment_method)) { await client.query('ROLLBACK'); return res.status(409).json({ error: `invalid fulfillment transition from ${current} to ${requested}` }); }
       if (['FAILED_DELIVERY','RETURNED'].includes(requested) && await hasActiveProtectionCase(client, id)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
       if (requested === 'RETURNED' && current !== 'FAILED_DELIVERY') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'return requires a failed delivery state first' }); }
       const updated = await client.query(`UPDATE marketplace_orders SET fulfillment_status=$1,fulfillment_status_updated_at=NOW(),updated_at=NOW() WHERE id=$2 RETURNING *`, [requested, id]);
-      await recordFulfillmentEvent(client, id, req.user.sub, `FULFILLMENT_${requested}`, current, requested, { fulfillmentMethod: order.fulfillment_method, note: note || null });
+      if (localArrivalAssignment) {
+        await client.query('UPDATE marketplace_delivery_assignments SET delivered_at=NOW(),updated_at=NOW() WHERE order_id=$1', [id]);
+        await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'DELIVERY_NOTE',$3)", [id, req.user.sub, note || 'Seller reported the local driver has arrived at the agreed pickup point.']);
+      }
+      await recordFulfillmentEvent(client, id, req.user.sub, localArrivalAssignment ? 'LOCAL_DRIVER_ARRIVAL_REPORTED' : `FULFILLMENT_${requested}`, current, requested, { fulfillmentMethod: order.fulfillment_method, note: note || null, deliveryMode: localArrivalAssignment ? 'SELLER_LOCAL' : undefined });
       await client.query('COMMIT');
       return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, fulfillmentStatusUpdatedAt: updated.rows[0].fulfillment_status_updated_at } });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace fulfillment progress', error); return res.status(500).json({ error: 'fulfillment progress update failed' }); }
+    finally { client.release(); }
+  });
+
+  app.get('/api/admin/marketplace/drivers', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      if (!(await hasMarketplaceAdminAccess(pool, req.user.sub))) return res.status(403).json({ error: 'administrator access required' });
+      const result = await pool.query(`
+        SELECT d.user_id, u.username, u.display_name, d.active, d.approved_by, d.approved_at, d.updated_at
+        FROM marketplace_approved_drivers d JOIN users u ON u.id=d.user_id
+        ORDER BY d.active DESC, d.updated_at DESC LIMIT 200
+      `);
+      return res.json({ drivers: result.rows.map(row => ({
+        userId: String(row.user_id), username: row.username, displayName: row.display_name,
+        active: row.active, approvedBy: String(row.approved_by), approvedAt: row.approved_at, updatedAt: row.updated_at
+      })) });
+    } catch (error) { console.error('marketplace approved driver list', error); return res.status(500).json({ error: 'approved driver list unavailable' }); }
+  });
+
+  app.post('/api/admin/marketplace/drivers/:userId/approval', auth, async (req, res) => {
+    const userId = Number(req.params.userId);
+    const active = req.body?.active;
+    if (!Number.isSafeInteger(userId) || userId < 1 || typeof active !== 'boolean') {
+      return res.status(400).json({ error: 'valid user id and boolean active value are required' });
+    }
+    const client = await pool.connect();
+    try {
+      await ensureSchema();
+      await client.query('BEGIN');
+      if (!(await hasMarketplaceAdminAccess(client, req.user.sub))) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'administrator access required' }); }
+      const target = await client.query('SELECT id FROM users WHERE id=$1', [userId]);
+      if (!target.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'driver account not found' }); }
+      if (String(userId) === String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'an administrator cannot approve their own driver account' }); }
+      if (!active) {
+        // Match the order-first lock order used by handover/delivery so revocation cannot race custody transfer.
+        await client.query(`
+          SELECT o.id
+          FROM marketplace_orders o
+          JOIN marketplace_delivery_assignments a ON a.order_id=o.id
+          WHERE a.driver_id=$1 AND o.status IN ('PAID','SHIPPED','INSPECTION')
+          ORDER BY o.id
+          FOR UPDATE OF o
+        `, [userId]);
+        const custody = await client.query(`
+          SELECT a.order_id
+          FROM marketplace_delivery_assignments a
+          JOIN marketplace_orders o ON o.id=a.order_id
+          WHERE a.driver_id=$1 AND a.handover_at IS NOT NULL AND a.delivered_at IS NULL
+            AND o.status IN ('PAID','SHIPPED','INSPECTION')
+          LIMIT 1
+        `, [userId]);
+        if (custody.rowCount) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'driver has an order in active custody; resolve or complete that delivery before revoking approval', code: 'DRIVER_ACTIVE_CUSTODY' });
+        }
+      }
+      const result = await client.query(`
+        INSERT INTO marketplace_approved_drivers (user_id, approved_by, active, approved_at, updated_at)
+        VALUES ($1,$2,$3,NOW(),NOW())
+        ON CONFLICT (user_id) DO UPDATE SET active=EXCLUDED.active, approved_by=EXCLUDED.approved_by,
+          approved_at=CASE WHEN EXCLUDED.active THEN NOW() ELSE marketplace_approved_drivers.approved_at END,
+          updated_at=NOW()
+        RETURNING user_id, active, approved_by, approved_at, updated_at
+      `, [userId, req.user.sub, active]);
+      await client.query('COMMIT');
+      return res.json({ driver: { userId: String(result.rows[0].user_id), active: result.rows[0].active, approvedBy: String(result.rows[0].approved_by), approvedAt: result.rows[0].approved_at, updatedAt: result.rows[0].updated_at } });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch {}
+      console.error('marketplace driver approval', error);
+      return res.status(500).json({ error: 'driver approval update failed' });
+    } finally { client.release(); }
+  });
+
+  app.get('/api/marketplace/driver/assignments', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const result = await pool.query(`
+        SELECT a.order_id, a.seller_id, a.driver_id, a.assigned_at, a.accepted_at, a.handover_at, a.delivered_at,
+               o.status, o.fulfillment_status, o.fulfillment_method, o.currency, o.total_amount,
+               o.product_snapshot, o.quantity, o.shipping_address, o.buyer_note, o.tracking_reference,
+               seller.username AS seller_username, buyer.display_name AS buyer_display_name, buyer.username AS buyer_username
+        FROM marketplace_delivery_assignments a
+        JOIN marketplace_orders o ON o.id = a.order_id
+        JOIN users seller ON seller.id = a.seller_id
+        JOIN users buyer ON buyer.id = o.buyer_id
+        JOIN marketplace_approved_drivers approved_driver ON approved_driver.user_id=a.driver_id AND approved_driver.active=TRUE
+        WHERE a.driver_id = $1 AND o.fulfillment_method = 'DELIVERY'
+          AND o.status IN ('PAID','SHIPPED','INSPECTION')
+        ORDER BY a.updated_at DESC LIMIT 100
+      `, [req.user.sub]);
+      const ids = result.rows.map(row => row.order_id);
+      const evidence = ids.length ? await pool.query(`
+        SELECT order_id, evidence_type, value, created_at
+        FROM marketplace_delivery_evidence
+        WHERE order_id = ANY($1::uuid[])
+        ORDER BY created_at ASC
+      `, [ids]) : { rows: [] };
+      const byOrder = new Map();
+      for (const row of evidence.rows) {
+        const key = String(row.order_id);
+        if (!byOrder.has(key)) byOrder.set(key, []);
+        byOrder.get(key).push({ type: row.evidence_type, value: row.value, createdAt: row.created_at });
+      }
+      return res.json({ assignments: result.rows.map(row => ({
+        orderId: String(row.order_id), sellerId: String(row.seller_id), driverId: String(row.driver_id),
+        assignedAt: row.assigned_at, acceptedAt: row.accepted_at, handoverAt: row.handover_at, deliveredAt: row.delivered_at,
+        status: row.status, fulfillmentStatus: row.fulfillment_status, currency: row.currency,
+        totalAmount: Number(row.total_amount), quantity: Number(row.quantity),
+        product: row.product_snapshot, shippingAddress: row.accepted_at ? row.shipping_address : null, buyerNote: row.accepted_at ? row.buyer_note : '',
+        trackingReference: row.tracking_reference, sellerUsername: row.seller_username,
+        buyerName: row.accepted_at ? (row.buyer_display_name || row.buyer_username) : '', evidence: byOrder.get(String(row.order_id)) || []
+      })) });
+    } catch (error) {
+      console.error('marketplace driver assignments', error);
+      return res.status(500).json({ error: 'driver assignments could not load' });
+    }
+  });
+
+  app.get('/api/marketplace/orders/:id/delivery-details', auth, async (req, res) => {
+    const id = parseUuid(req.params.id);
+    if (!id) return res.status(400).json({ error: 'invalid order id' });
+    try {
+      await ensureSchema();
+      const order = (await pool.query('SELECT * FROM marketplace_orders WHERE id=$1', [id])).rows[0];
+      if (!order) return res.status(404).json({ error: 'order not found' });
+      if (!isBuyer(order, req.user.sub) && !isSeller(order, req.user.sub)) return res.status(403).json({ error: 'only the buyer or seller can view delivery details' });
+      const evidenceResult = await pool.query(
+        "SELECT evidence_type, value, created_at FROM marketplace_delivery_evidence WHERE order_id=$1 ORDER BY created_at ASC",
+        [id]
+      );
+      const evidence = evidenceResult.rows.map((row) => ({
+        type: row.evidence_type,
+        value: row.value,
+        createdAt: row.created_at
+      }));
+      const assignment = (await pool.query(`SELECT a.*, u.username AS driver_username, u.display_name AS driver_display_name
+        FROM marketplace_delivery_assignments a LEFT JOIN users u ON u.id=a.driver_id WHERE a.order_id=$1`, [id])).rows[0];
+      if (!assignment) return res.json({ assignment: null, evidence });
+      const localDriver = (assignment.driver_type || 'FYNX_ACCOUNT') === 'SELLER_LOCAL';
+      return res.json({ assignment: {
+        driverType: localDriver ? 'SELLER_LOCAL' : 'FYNX_ACCOUNT',
+        driverName: localDriver ? assignment.local_driver_name : (assignment.driver_display_name || assignment.driver_username || 'FYNX driver'),
+        driverPhone: localDriver ? assignment.local_driver_phone : null,
+        pickupPoint: assignment.pickup_point,
+        pickupInstructions: assignment.pickup_instructions,
+        vehicleType: assignment.vehicle_type,
+        vehicleColor: assignment.vehicle_color,
+        vehiclePlate: assignment.vehicle_plate,
+        vehicleNote: assignment.vehicle_note,
+        assignedAt: assignment.assigned_at,
+        handoverAt: assignment.handover_at,
+        arrivalReportedAt: assignment.delivered_at
+      }, evidence });
+    } catch (error) { console.error('marketplace delivery details', error); return res.status(500).json({ error: 'delivery details could not load' }); }
+  });
+
+  app.post('/api/marketplace/orders/:id/driver-assignment', auth, async (req, res) => {
+    const id = parseUuid(req.params.id);
+    const driverType = typeof req.body?.driverType === 'string' ? req.body.driverType.trim().toUpperCase() : 'FYNX_ACCOUNT';
+    const requestedDriverId = Number(req.body?.driverId);
+    const driverUsername = typeof req.body?.driverUsername === 'string' ? req.body.driverUsername.trim().replace(/^@/, '').toLowerCase() : '';
+    const localDriverName = typeof req.body?.localDriverName === 'string' ? req.body.localDriverName.trim().slice(0, 120) : '';
+    const localDriverPhone = typeof req.body?.localDriverPhone === 'string' ? req.body.localDriverPhone.trim().slice(0, 40) : '';
+    const pickupPoint = typeof req.body?.pickupPoint === 'string' ? req.body.pickupPoint.trim().slice(0, 300) : '';
+    const pickupInstructions = typeof req.body?.pickupInstructions === 'string' ? req.body.pickupInstructions.trim().slice(0, 500) : '';
+    const vehicleType = typeof req.body?.vehicleType === 'string' ? req.body.vehicleType.trim().slice(0, 80) : '';
+    const vehicleColor = typeof req.body?.vehicleColor === 'string' ? req.body.vehicleColor.trim().slice(0, 80) : '';
+    const vehiclePlate = typeof req.body?.vehiclePlate === 'string' ? req.body.vehiclePlate.trim().slice(0, 40) : '';
+    const vehicleNote = typeof req.body?.vehicleNote === 'string' ? req.body.vehicleNote.trim().slice(0, 300) : '';
+    const validFynxDriver = (Number.isSafeInteger(requestedDriverId) && requestedDriverId > 0) || /^[a-z0-9_.]{2,32}$/.test(driverUsername);
+    if (!id || !['FYNX_ACCOUNT','SELLER_LOCAL'].includes(driverType)) return res.status(400).json({ error: 'choose a valid delivery driver type' });
+    if (driverType === 'FYNX_ACCOUNT' && !validFynxDriver) return res.status(400).json({ error: 'valid order id and approved FYNX driver username or id are required' });
+    if (driverType === 'SELLER_LOCAL' && (!localDriverName || !localDriverPhone || !pickupPoint)) return res.status(400).json({ error: 'local driver name, phone, and agreed pickup point are required' });
+    const client = await pool.connect();
+    try {
+      await ensureSchema(); await client.query('BEGIN');
+      const order = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
+      if (!isSeller(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the seller can assign a delivery driver' }); }
+      if (order.fulfillment_method !== 'DELIVERY') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is only available for delivery orders' }); }
+      if (!['PAID','SHIPPED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver can only be assigned to a paid order' }); }
+      let resolvedDriverId = null;
+      if (driverType === 'FYNX_ACCOUNT') {
+        const driver = (await client.query(
+          driverUsername
+            ? 'SELECT u.id FROM users u JOIN marketplace_approved_drivers ad ON ad.user_id=u.id AND ad.active=TRUE WHERE lower(u.username)=$1'
+            : 'SELECT u.id FROM users u JOIN marketplace_approved_drivers ad ON ad.user_id=u.id AND ad.active=TRUE WHERE u.id=$1',
+          driverUsername ? [driverUsername] : [requestedDriverId]
+        )).rows[0];
+        if (!driver) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'driver account not found or not approved by FYNX' }); }
+        const driverId = Number(driver.id);
+        if (String(driverId) === String(order.seller_id) || String(driverId) === String(order.buyer_id)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'buyer and seller cannot be assigned as the delivery driver' }); }
+        resolvedDriverId = driverId;
+      }
+      const prior = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
+      if (prior && (prior.handover_at || prior.delivered_at)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is locked after physical custody handover' }); }
+      let reassignedAfterRevocation = false;
+      if (prior?.driver_type === 'FYNX_ACCOUNT' && prior.accepted_at) {
+        const priorDriverActive = await client.query('SELECT 1 FROM marketplace_approved_drivers WHERE user_id=$1 AND active=TRUE', [prior.driver_id]);
+        if (priorDriverActive.rowCount || String(prior.driver_id) === String(resolvedDriverId)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'driver assignment is locked after acceptance unless FYNX has revoked the prior driver approval before custody handover' });
+        }
+        reassignedAfterRevocation = true;
+      }
+      if (prior && String(prior.driver_id || '') !== String(resolvedDriverId || '')) {
+        await client.query('DELETE FROM marketplace_delivery_evidence WHERE order_id=$1', [id]);
+      }
+      const assignment = await client.query(`
+        INSERT INTO marketplace_delivery_assignments
+          (order_id,seller_id,driver_id,driver_type,local_driver_name,local_driver_phone,pickup_point,pickup_instructions,vehicle_type,vehicle_color,vehicle_plate,vehicle_note,assigned_at,accepted_at,handover_at,delivered_at,updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NULL,NULL,NULL,NOW())
+        ON CONFLICT (order_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,driver_type=EXCLUDED.driver_type,local_driver_name=EXCLUDED.local_driver_name,local_driver_phone=EXCLUDED.local_driver_phone,pickup_point=EXCLUDED.pickup_point,pickup_instructions=EXCLUDED.pickup_instructions,vehicle_type=EXCLUDED.vehicle_type,vehicle_color=EXCLUDED.vehicle_color,vehicle_plate=EXCLUDED.vehicle_plate,vehicle_note=EXCLUDED.vehicle_note,assigned_at=NOW(),accepted_at=NULL,handover_at=NULL,delivered_at=NULL,updated_at=NOW()
+        RETURNING order_id,driver_id,driver_type,local_driver_name,local_driver_phone,pickup_point,pickup_instructions,vehicle_type,vehicle_color,vehicle_plate,vehicle_note,assigned_at,accepted_at,handover_at,delivered_at
+      `, [id, order.seller_id, resolvedDriverId, driverType, driverType === 'SELLER_LOCAL' ? localDriverName : null, driverType === 'SELLER_LOCAL' ? localDriverPhone : null, driverType === 'SELLER_LOCAL' ? pickupPoint : null, driverType === 'SELLER_LOCAL' ? pickupInstructions || null : null, driverType === 'SELLER_LOCAL' ? vehicleType || null : null, driverType === 'SELLER_LOCAL' ? vehicleColor || null : null, driverType === 'SELLER_LOCAL' ? vehiclePlate || null : null, driverType === 'SELLER_LOCAL' ? vehicleNote || null : null]);
+      await recordFulfillmentEvent(client, id, req.user.sub, driverType === 'SELLER_LOCAL' ? 'LOCAL_DRIVER_ASSIGNED' : (reassignedAfterRevocation ? 'DELIVERY_DRIVER_REASSIGNED_AFTER_REVOCATION' : 'DELIVERY_DRIVER_ASSIGNED'), order.fulfillment_status || 'PAID', order.fulfillment_status || 'PAID', { driverType, driverId: resolvedDriverId ? String(resolvedDriverId) : null, previousDriverId: prior?.driver_id ? String(prior.driver_id) : null, reassignedAfterRevocation, pickupPoint: driverType === 'SELLER_LOCAL' ? pickupPoint : null, vehicleType: vehicleType || null, vehicleColor: vehicleColor || null, vehiclePlate: vehiclePlate || null });
+      await client.query('COMMIT');
+      return res.json({ assignment: { orderId: String(assignment.rows[0].order_id), driverId: assignment.rows[0].driver_id ? String(assignment.rows[0].driver_id) : null, driverType: assignment.rows[0].driver_type, localDriverName: assignment.rows[0].local_driver_name, localDriverPhone: assignment.rows[0].local_driver_phone, pickupPoint: assignment.rows[0].pickup_point, pickupInstructions: assignment.rows[0].pickup_instructions, vehicleType: assignment.rows[0].vehicle_type, vehicleColor: assignment.rows[0].vehicle_color, vehiclePlate: assignment.rows[0].vehicle_plate, vehicleNote: assignment.rows[0].vehicle_note, assignedAt: assignment.rows[0].assigned_at, acceptedAt: assignment.rows[0].accepted_at, handoverAt: assignment.rows[0].handover_at, deliveredAt: assignment.rows[0].delivered_at } });
+    } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace driver assignment', error); return res.status(500).json({ error: 'driver assignment failed' }); }
+    finally { client.release(); }
+  });
+
+  app.post('/api/marketplace/orders/:id/driver-acceptance', auth, async (req, res) => {
+    const id = parseUuid(req.params.id);
+    if (!id) return res.status(400).json({ error: 'invalid order id' });
+    const client = await pool.connect();
+    try {
+      await ensureSchema(); await client.query('BEGIN');
+      const order = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
+      const assignment = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
+      if (!assignment) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'no delivery driver is assigned' }); }
+      if ((assignment.driver_type || 'FYNX_ACCOUNT') !== 'FYNX_ACCOUNT') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'seller-local drivers do not use FYNX account acceptance' }); }
+      if (String(assignment.driver_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the assigned driver can accept this delivery' }); }
+      const approved = await client.query('SELECT 1 FROM marketplace_approved_drivers WHERE user_id=$1 AND active=TRUE', [req.user.sub]);
+      if (!approved.rowCount) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'driver approval is inactive; contact FYNX support' }); }
+      if (!['PAID','SHIPPED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not available for driver acceptance' }); }
+      if (assignment.accepted_at) { await client.query('COMMIT'); return res.json({ accepted: true, acceptedAt: assignment.accepted_at, idempotent: true }); }
+      const updated = await client.query('UPDATE marketplace_delivery_assignments SET accepted_at=NOW(),updated_at=NOW() WHERE order_id=$1 RETURNING accepted_at', [id]);
+      await recordFulfillmentEvent(client, id, req.user.sub, 'DELIVERY_DRIVER_ACCEPTED', order.fulfillment_status || 'PAID', order.fulfillment_status || 'PAID', {});
+      await client.query('COMMIT');
+      return res.json({ accepted: true, acceptedAt: updated.rows[0].accepted_at });
+    } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace driver acceptance', error); return res.status(500).json({ error: 'driver acceptance failed' }); }
+    finally { client.release(); }
+  });
+
+  app.post('/api/marketplace/orders/:id/driver-handover', auth, async (req, res) => {
+    const id = parseUuid(req.params.id);
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 1000) : '';
+    const rawPhotoReference = typeof req.body?.photoReference === 'string' ? req.body.photoReference.trim() : '';
+    const photoMediaId = rawPhotoReference ? Number(rawPhotoReference) : null;
+    if (!id || !note) return res.status(400).json({ error: 'valid order id and handover note are required' });
+    if (rawPhotoReference && (!Number.isSafeInteger(photoMediaId) || photoMediaId < 1)) return res.status(400).json({ error: 'photo reference must be a valid uploaded media id' });
+    const client = await pool.connect();
+    try {
+      await ensureSchema(); await client.query('BEGIN');
+      const order = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
+      if (!isSeller(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the seller can hand the order to the driver' }); }
+      if (order.status !== 'SHIPPED' || order.fulfillment_method !== 'DELIVERY') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'only a shipped delivery order can be handed to a driver' }); }
+      if (await hasActiveProtectionCase(client, id)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
+      const assignment = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
+      if (!assignment) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'assign a delivery driver first' }); }
+      const localDriver = (assignment.driver_type || 'FYNX_ACCOUNT') === 'SELLER_LOCAL';
+      if (localDriver) {
+        if (!assignment.local_driver_name || !assignment.local_driver_phone || !assignment.pickup_point) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'local driver contact and agreed pickup point are required before handover' }); }
+      } else {
+        const approvedDriver = await client.query('SELECT 1 FROM marketplace_approved_drivers WHERE user_id=$1 AND active=TRUE', [assignment.driver_id]);
+        if (!approvedDriver.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'assigned driver approval is inactive; reassign to an active approved driver before handover', code: 'DRIVER_APPROVAL_INACTIVE' }); }
+        if (!assignment.accepted_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver must accept the assignment before handover' }); }
+      }
+      if (assignment.handover_at) { await client.query('COMMIT'); return res.json({ handedOver: true, handoverAt: assignment.handover_at, idempotent: true }); }
+      if (photoMediaId !== null) {
+        const media = (await client.query('SELECT mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1', [photoMediaId, req.user.sub])).rows[0];
+        if (!media) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'handover photo must be uploaded by the signed-in seller' }); }
+        const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+        if (!allowedImageTypes.has(String(media.mime_type || '').trim().toLowerCase())) { await client.query('ROLLBACK'); return res.status(415).json({ error: 'handover evidence must be a JPEG, PNG, WebP or GIF image' }); }
+      }
+      const updated = await client.query('UPDATE marketplace_delivery_assignments SET handover_at=NOW(),updated_at=NOW() WHERE order_id=$1 RETURNING handover_at', [id]);
+      await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'HANDOVER_NOTE',$3)", [id, req.user.sub, note]);
+      if (photoMediaId !== null) await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'PHOTO_REFERENCE',$3)", [id, req.user.sub, String(photoMediaId)]);
+      await recordFulfillmentEvent(client, id, req.user.sub, localDriver ? 'LOCAL_DRIVER_CUSTODY_HANDED_OVER' : 'DELIVERY_CUSTODY_HANDED_OVER', order.fulfillment_status || 'DISPATCHED', order.fulfillment_status || 'DISPATCHED', { driverType: localDriver ? 'SELLER_LOCAL' : 'FYNX_ACCOUNT', driverId: assignment.driver_id ? String(assignment.driver_id) : null, localDriverName: assignment.local_driver_name || null, pickupPoint: assignment.pickup_point || null, note });
+      await client.query('COMMIT');
+      return res.json({ handedOver: true, handoverAt: updated.rows[0].handover_at, driverId: assignment.driver_id ? String(assignment.driver_id) : null, driverType: localDriver ? 'SELLER_LOCAL' : 'FYNX_ACCOUNT' });
+    } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace driver handover', error); return res.status(500).json({ error: 'driver handover failed' }); }
+    finally { client.release(); }
+  });
+
+  app.post('/api/marketplace/orders/:id/driver-delivery', auth, async (req, res) => {
+    const id = parseUuid(req.params.id);
+    const recipientName = typeof req.body?.recipientName === 'string' ? req.body.recipientName.trim().slice(0, 120) : '';
+    const deliveryNote = typeof req.body?.deliveryNote === 'string' ? req.body.deliveryNote.trim().slice(0, 1000) : '';
+    const rawPhotoReference = typeof req.body?.photoReference === 'string' ? req.body.photoReference.trim() : '';
+    const photoMediaId = rawPhotoReference ? Number(rawPhotoReference) : null;
+    if (rawPhotoReference && (!Number.isSafeInteger(photoMediaId) || photoMediaId < 1)) return res.status(400).json({ error: 'photo reference must be a valid uploaded media id' });
+    if (!id || !recipientName || (!deliveryNote && photoMediaId === null)) return res.status(400).json({ error: 'recipient name and delivery note or photo reference are required' });
+    const client = await pool.connect();
+    try {
+      await ensureSchema(); await client.query('BEGIN');
+      const order = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
+      const assignment = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
+      if (!assignment || (assignment.driver_type || 'FYNX_ACCOUNT') !== 'FYNX_ACCOUNT' || String(assignment.driver_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the assigned driver can confirm delivery' }); }
+      const approved = await client.query('SELECT 1 FROM marketplace_approved_drivers WHERE user_id=$1 AND active=TRUE', [req.user.sub]);
+      if (!approved.rowCount) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'driver approval is inactive; contact FYNX support' }); }
+      if (order.status !== 'SHIPPED' || order.fulfillment_method !== 'DELIVERY' || !assignment.handover_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery requires a shipped order and recorded custody handover' }); }
+      if (assignment.delivered_at) { await client.query('COMMIT'); return res.json({ delivered: true, deliveredAt: assignment.delivered_at, idempotent: true }); }
+      if (await hasActiveProtectionCase(client, id)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
+      if (photoMediaId !== null) {
+        const media = (await client.query(
+          'SELECT mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1',
+          [photoMediaId, req.user.sub]
+        )).rows[0];
+        const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+        if (!media || !allowedImageTypes.has(String(media.mime_type || '').trim().toLowerCase())) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'delivery photo must be an uploaded image owned by the assigned driver' });
+        }
+      }
+      const updated = await client.query("UPDATE marketplace_delivery_assignments SET delivered_at=NOW(),updated_at=NOW() WHERE order_id=$1 RETURNING delivered_at", [id]);
+      await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'RECIPIENT_NAME',$3)", [id, req.user.sub, recipientName]);
+      if (deliveryNote) await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'DELIVERY_NOTE',$3)", [id, req.user.sub, deliveryNote]);
+      if (photoMediaId !== null) await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'PHOTO_REFERENCE',$3)", [id, req.user.sub, String(photoMediaId)]);
+      const current = order.fulfillment_status || 'DISPATCHED';
+      await client.query("UPDATE marketplace_orders SET fulfillment_status='DELIVERED',fulfillment_status_updated_at=NOW(),updated_at=NOW() WHERE id=$1", [id]);
+      await recordFulfillmentEvent(client, id, req.user.sub, 'DRIVER_DELIVERY_REPORTED', current, 'DELIVERED', { recipientName, hasPhotoReference: photoMediaId !== null, hasDeliveryNote: Boolean(deliveryNote) });
+      await client.query('COMMIT');
+      return res.json({ delivered: true, deliveredAt: updated.rows[0].delivered_at, awaitingBuyerConfirmation: true });
+    } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace driver delivery', error); return res.status(500).json({ error: 'driver delivery confirmation failed' }); }
     finally { client.release(); }
   });
 
@@ -260,6 +663,8 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const order = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (!isBuyer(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can confirm delivery' }); }
+      const driverAssignment = (await client.query('SELECT delivered_at FROM marketplace_delivery_assignments WHERE order_id=$1', [id])).rows[0];
+      if (driverAssignment && !driverAssignment.delivered_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'assigned driver has not recorded delivery evidence yet' }); }
       if (!['SHIPPED','DELIVERED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not ready for delivery confirmation' }); }
       if (order.fulfillment_method === 'PICKUP' && !order.pickup_handover_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup handover must be confirmed by the seller first' }); }
       if (await hasActiveProtectionCase(client, id)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
