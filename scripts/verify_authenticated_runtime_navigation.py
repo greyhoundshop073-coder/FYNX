@@ -2342,6 +2342,14 @@ def open_features(target_labels:list[str]|None=None):
                 continue
             if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
             else: FAILURES.append("authenticated Features -> "+name)
+
+        # Continue beyond the first Wallet landing screen and exercise the real
+        # signed-in user journey, including history and security, without moving funds.
+        wallet_captured, wallet_message = capture_wallet_from_features("authenticated-wallet-journey")
+        if wallet_captured:
+            report.append("- PASS authenticated Wallet journey: "+wallet_message)
+        else:
+            FAILURES.append("authenticated Wallet journey: "+wallet_message)
     else: FAILURES.append("authenticated Home -> Features")
 
 # Certify the actual Marketplace destination in the same exact-commit APK.
@@ -2362,7 +2370,7 @@ else:
     
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-wallet.png","- authenticated-ai.png","- authenticated-marketplace.png","",
+           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-wallet.png","- authenticated-wallet-lower.png","- authenticated-wallet-security.png","- authenticated-ai.png","- authenticated-marketplace.png","",
            f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
