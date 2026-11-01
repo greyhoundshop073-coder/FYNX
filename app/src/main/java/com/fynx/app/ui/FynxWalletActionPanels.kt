@@ -190,6 +190,7 @@ private fun FynxWalletWithdrawalPanel(
     var security by remember { mutableStateOf<FynxWalletSecurityStatus?>(null) }
     var securityLoading by remember { mutableStateOf(false) }
     var settingPin by remember { mutableStateOf(false) }
+    var changePinMode by remember { mutableStateOf(false) }
     var currentPassword by remember { mutableStateOf("") }
     var newPin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
@@ -269,7 +270,7 @@ private fun FynxWalletWithdrawalPanel(
                     title = "Withdrawals temporarily locked",
                     message = "FYNX has locked wallet withdrawals after repeated incorrect PIN attempts. Try again after the lock period ends."
                 )
-            } else if (security?.hasWithdrawalPin != true) {
+            } else if (security?.hasWithdrawalPin != true || changePinMode) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -277,7 +278,11 @@ private fun FynxWalletWithdrawalPanel(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                        Text("Set your wallet withdrawal PIN", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (security?.hasWithdrawalPin == true) "Change your wallet withdrawal PIN" else "Set your wallet withdrawal PIN",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
                         Text(
                             "This six-digit PIN is separate from your login. Confirm your current FYNX password before saving it.",
                             style = MaterialTheme.typography.bodySmall,
@@ -317,10 +322,11 @@ private fun FynxWalletWithdrawalPanel(
                                 scope.launch {
                                     FynxBuyerWalletClient.setWithdrawalPin(context, currentPassword, newPin, confirmPin)
                                         .onSuccess {
-                                            security = it
+                                            FynxBuyerWalletClient.loadWalletSecurity(context).onSuccess { security = it }
                                             currentPassword = ""
                                             newPin = ""
                                             confirmPin = ""
+                                            changePinMode = false
                                             Toast.makeText(context, "Wallet withdrawal PIN saved", Toast.LENGTH_SHORT).show()
                                         }
                                         .onFailure { error = it.message ?: "Wallet PIN could not be saved." }
@@ -359,6 +365,11 @@ private fun FynxWalletWithdrawalPanel(
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
                 )
+                TextButton(onClick = {
+                    changePinMode = true
+                    withdrawalPin = ""
+                    error = null
+                }) { Text("Change wallet PIN") }
                 Text(
                     "Your PIN is checked by FYNX before cleared funds can be reserved for a bank transfer.",
                     style = MaterialTheme.typography.bodySmall,
