@@ -1646,7 +1646,7 @@ fun FynxCameraCapturePanel(
                                         delay(1000L)
                                     }
                                     // Check again after the final delay; Cancel invalidates this token.
-                                    if (generation != timerCaptureGeneration) return@launch
+                                    if (generation != timerCaptureGeneration.get()) return@launch
                                     timerCountingDown = 0
                                     timerCaptureJob = null
                                     capturePhotoNow()
