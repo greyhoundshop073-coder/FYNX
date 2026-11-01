@@ -76,6 +76,29 @@ async export async function ensureBuyerWalletSchema() {
         ON buyer_wallets(provider_customer_code) WHERE provider_customer_code IS NOT NULL;
 
 
+      CREATE TABLE IF NOT EXISTS buyer_wallet_funding_intents (
+        id UUID PRIMARY KEY,
+        wallet_id UUID NOT NULL REFERENCES buyer_wallets(id) ON DELETE RESTRICT,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        payment_method TEXT NOT NULL CHECK (payment_method IN ('CARD','USSD')),
+        status TEXT NOT NULL CHECK (status IN ('PENDING','PROCESSING','SUCCEEDED','FAILED','BLOCKED')),
+        amount NUMERIC(18,2) NOT NULL CHECK (amount > 0),
+        currency TEXT NOT NULL CHECK (currency = 'NGN'),
+        reference TEXT NOT NULL UNIQUE,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        access_code TEXT,
+        authorization_url TEXT,
+        provider_reference TEXT UNIQUE,
+        failure_reason TEXT,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS buyer_wallet_funding_intents_owner_idx
+        ON buyer_wallet_funding_intents(user_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS buyer_wallet_funding_intents_status_idx
+        ON buyer_wallet_funding_intents(status,updated_at DESC);
+
       CREATE TABLE IF NOT EXISTS buyer_wallet_transactions (
         id UUID PRIMARY KEY,
         wallet_id UUID NOT NULL REFERENCES buyer_wallets(id) ON DELETE RESTRICT,
@@ -388,6 +411,8 @@ function walletProviderApproved(action) {
   if (!common) return false;
   if (action === 'DEPOSIT') return process.env.FYNX_WALLET_DEPOSITS_ENABLED === 'true' &&
     Boolean(process.env.FYNX_PAYSTACK_WALLET_BANK) && Boolean(walletEncryptionKey());
+  if (action === 'CARD_FUNDING') return process.env.FYNX_WALLET_CARD_FUNDING_ENABLED === 'true';
+  if (action === 'USSD_FUNDING') return process.env.FYNX_WALLET_USSD_FUNDING_ENABLED === 'true';
   if (action === 'SPENDING') return process.env.FYNX_WALLET_SPENDING_ENABLED === 'true';
   if (action === 'WITHDRAWAL') return process.env.FYNX_WALLET_WITHDRAWALS_ENABLED === 'true' &&
     process.env.FYNX_WALLET_PAYOUTS_APPROVED === 'true' &&
