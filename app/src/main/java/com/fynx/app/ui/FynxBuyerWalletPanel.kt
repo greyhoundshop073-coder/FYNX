@@ -678,19 +678,10 @@ private fun FynxWalletSellerEarningsCard(summary: FynxWalletSellerSummary) {
             summary.totals.forEach { total ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(total.currency, color = FynxDesign.AzureBlue, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Gross sales", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(fynxWalletCurrencyMoney(total.grossSales, total.currency), fontWeight = FontWeight.SemiBold)
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text("FYNX fee (seller share)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(fynxWalletCurrencyMoney(total.marketplaceFees, total.currency), fontWeight = FontWeight.SemiBold, color = FynxDesign.CrimsonRed)
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text("Net earnings", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(fynxWalletCurrencyMoney(total.netEarnings, total.currency), fontWeight = FontWeight.SemiBold, color = FynxDesign.ClassicGreen)
-                        }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FynxWalletEarningsLine("Gross sales", total.grossSales, total.currency)
+                        FynxWalletEarningsLine("FYNX fee (seller share)", total.marketplaceFees, total.currency, FynxDesign.CrimsonRed)
+                        FynxWalletEarningsLine("Net earnings", total.netEarnings, total.currency, FynxDesign.ClassicGreen)
                     }
                     Surface(
                         Modifier.fillMaxWidth(),
@@ -745,10 +736,20 @@ private fun FynxWalletSellerEarningsCard(summary: FynxWalletSellerSummary) {
 }
 
 @Composable
-private fun FynxWalletEarningsLine(label: String, amount: Double, currency: String) {
+private fun FynxWalletEarningsLine(
+    label: String,
+    amount: Double,
+    currency: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
+) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(fynxWalletCurrencyMoney(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+        Text(
+            fynxWalletCurrencyMoney(amount, currency),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = valueColor
+        )
     }
 }
 
