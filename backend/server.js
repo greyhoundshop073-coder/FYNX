@@ -12,6 +12,7 @@ import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
 import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
 import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";
+import { registerMarketplaceListingLifecycleRoutes } from "./marketplaceListingLifecycleRoutes.js";
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
@@ -862,6 +863,7 @@ if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
 registerMarketplaceReputationRoutes({ app, pool, auth });
 registerMarketplaceCompletionRoutes({ app, pool, auth });
 if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });
+if (pool) registerMarketplaceListingLifecycleRoutes({ app, pool, auth });
 if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
 if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
