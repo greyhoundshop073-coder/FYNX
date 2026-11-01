@@ -1062,8 +1062,10 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     camera_xml = after_cancel
                 else:
                     FAILURES.append(prefix + ": cancelled camera timer still triggered a photo capture")
+                    camera_xml = after_cancel
             else:
                 FAILURES.append(prefix + ": Cancel timer did not restore the live camera controls")
+                camera_xml = dump_ui(f"{prefix}-camera-timer-cancel-current.xml") or countdown_xml
         else:
             FAILURES.append(prefix + ": timer countdown did not expose the visible Cancel timer action")
     else:
