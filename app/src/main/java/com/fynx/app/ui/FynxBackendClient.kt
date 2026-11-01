@@ -155,6 +155,8 @@ object FynxBackendClient {
     private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
         val requiresAuthentication = !isPublicAuthPath(path)
+        val bearerToken = if (requiresAuthentication) accessToken(context) else null
+        if (requiresAuthentication && bearerToken.isNullOrBlank()) throw FynxUnauthorizedException()
         val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS
@@ -166,7 +168,7 @@ object FynxBackendClient {
             setRequestProperty("Pragma", "no-cache")
             setRequestProperty("Connection", "close")
             setRequestProperty("User-Agent", "FYNX-Android/1")
-            if (requiresAuthentication) accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
+            if (requiresAuthentication) setRequestProperty("Authorization", "Bearer $bearerToken")
         }
         val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
         try {
