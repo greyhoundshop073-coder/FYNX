@@ -1368,6 +1368,19 @@ if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
     print("\n".join(report)); raise SystemExit(2)
 
+def secure_access_token_persisted()->bool|None:
+    """Check only whether the encrypted access-token key exists; never read or print its value."""
+    result=run(
+        "adb", "shell", "run-as", PACKAGE, "sh", "-c",
+        "grep -q access_token shared_prefs/fynx_secure_auth.xml"
+    )
+    if result.returncode == 0:
+        return True
+    if "run-as: package not debuggable" in (result.stdout or "").lower():
+        return None
+    return False
+
+
 install=run("adb","install","-r","app/build/outputs/apk/debug/app-debug.apk")
 report.append(f"- APK install: {'PASS' if install.returncode==0 else 'FAIL'}")
 if install.returncode!=0:
@@ -1535,19 +1548,6 @@ def wallet_destination_ready(xml_text: str) -> bool:
         and find_control(xml_text, ["Reserved"])
         and find_control(xml_text, ["Withdrawal pending"])
     )
-
-
-def secure_access_token_persisted()->bool|None:
-    """Check only whether the encrypted access-token key exists; never read or print its value."""
-    result=run(
-        "adb", "shell", "run-as", PACKAGE, "sh", "-c",
-        "grep -q access_token shared_prefs/fynx_secure_auth.xml"
-    )
-    if result.returncode == 0:
-        return True
-    if "run-as: package not debuggable" in (result.stdout or "").lower():
-        return None
-    return False
 
 
 def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple[bool,str,str]:
