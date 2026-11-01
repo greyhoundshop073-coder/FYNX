@@ -642,6 +642,7 @@ async function reconcileWalletTransferEvent(client, eventName, transfer) {
 }
 
 export async function reconcileBuyerWalletTransferEvent(client, eventName, transfer) {
+  await ensureBuyerWalletSchema();
   return reconcileWalletTransferEvent(client, eventName, transfer);
 }
 
