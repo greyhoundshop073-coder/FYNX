@@ -21,9 +21,25 @@ fun FynxAnnouncementsPanel() {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
+    var adminRole by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        FynxAdminClient.dashboard(context).onSuccess { dashboard ->
+            adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" }
+        }
+    }
     LaunchedEffect(refresh) { loading = true; FynxAdminClient.announcements(context).onSuccess { items = it; error = null }.onFailure { error = it.message ?: "Unable to load announcements." }; loading = false }
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Official FYNX Announcements", style = MaterialTheme.typography.headlineSmall); Spacer(Modifier.height(8.dp)); Text("Important updates published by the FYNX team.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(16.dp))
+        if (adminRole == "OWNER" || adminRole == "ADMIN") {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = 0.06f)), border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = 0.22f))) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Admin tools", style = MaterialTheme.typography.titleMedium)
+                    Text("Publish official FYNX music for everyone to use. Only the FYNX Owner and authorized Admins can manage this catalogue.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    FynxMusicAdminPanel()
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
         when { loading -> CircularProgressIndicator(); error != null -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("Could not load announcements"); Spacer(Modifier.height(6.dp)); Text(error!!, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(10.dp)); TextButton(onClick = { refresh++ }) { Text("Retry") } } }; items.isEmpty() -> Text("No official announcements yet.", color = MaterialTheme.colorScheme.onSurfaceVariant); else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { items.forEach { announcement -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(announcement.title, style = MaterialTheme.typography.titleMedium); if (announcement.priority != "NORMAL") AssistChip(onClick = {}, label = { Text(announcement.priority) }) }; Spacer(Modifier.height(8.dp)); Text(announcement.body); if (announcement.publishedAt.isNotBlank()) { Spacer(Modifier.height(8.dp)); Text(announcement.publishedAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } } } }
         }
     }
