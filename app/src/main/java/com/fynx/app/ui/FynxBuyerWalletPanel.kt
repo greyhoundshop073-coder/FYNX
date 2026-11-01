@@ -251,6 +251,7 @@ fun FynxBuyerWalletPanel() {
             onAmountChange = { fundingAmount = it },
             availableBalance = wallet?.availableBalance,
             canWithdraw = wallet?.canWithdraw == true,
+            canFundByBankTransfer = wallet?.canFundByBankTransfer == true,
             canFundByCard = wallet?.canFundByCard == true,
             canFundByUssd = wallet?.canFundByUssd == true,
             onBack = {
