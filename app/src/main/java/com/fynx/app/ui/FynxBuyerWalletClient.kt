@@ -15,6 +15,9 @@ internal data class FynxBuyerWalletSummary(
     val canFund: Boolean,
     val canSpend: Boolean,
     val canWithdraw: Boolean,
+    val canFundByBankTransfer: Boolean = false,
+    val canFundByCard: Boolean = false,
+    val canFundByUssd: Boolean = false,
     val notice: String
 )
 
@@ -99,6 +102,15 @@ internal data class FynxWalletWithdrawalResult(
     val message: String
 )
 
+internal data class FynxWalletFundingSession(
+    val status: String,
+    val reference: String,
+    val amount: Double,
+    val authorizationUrl: String?,
+    val paymentMethod: String,
+    val message: String
+)
+
 internal data class FynxWalletFundingAccount(
     val status: String,
     val currency: String,
@@ -139,6 +151,63 @@ internal object FynxBuyerWalletClient {
             context,
             "/api/wallet/transactions?limit=" + boundedLimit + query
         ).mapCatching(::parseTransactions)
+    }
+
+    suspend fun initializeWalletFunding(
+        context: Context,
+        amount: Double,
+        email: String,
+        paymentMethod: String,
+        idempotencyKey: String
+    ): Result<FynxWalletFundingSession> {
+        require(amount.isFinite() && amount > 0.0) { "Enter a valid amount in NGN." }
+        require(email.trim().contains("@")) { "Enter a valid payment email." }
+        val method = paymentMethod.trim().uppercase(Locale.US)
+        require(method in setOf("CARD", "USSD")) { "Choose a supported wallet funding method." }
+        require(idempotencyKey.matches(Regex("^[A-Za-z0-9_-]{8,100}$"))) { "Wallet funding reference is invalid." }
+        val body = JSONObject()
+            .put("amount", amount)
+            .put("email", email.trim())
+            .put("paymentMethod", method)
+            .put("idempotencyKey", idempotencyKey)
+        return FynxBackendClient.postJson(context, "/api/wallet/funding/initialize", body.toString())
+            .mapCatching(::parseWalletFundingSession)
+    }
+
+    suspend fun refreshWalletFunding(
+        context: Context,
+        reference: String
+    ): Result<FynxWalletFundingSession> {
+        require(reference.matches(Regex("^fwd_[a-fA-F0-9]{32}$"))) { "Wallet funding reference is invalid." }
+        return FynxBackendClient.get(context, "/api/wallet/funding/" + Uri.encode(reference))
+            .mapCatching(::parseWalletFundingSession)
+    }
+
+    internal fun parseWalletFundingSession(raw: String): FynxWalletFundingSession {
+        val json = JSONObject(raw)
+        val status = json.optString("status", "PENDING").trim().uppercase(Locale.US)
+        require(status in setOf("PENDING", "PROCESSING", "SUCCEEDED", "FAILED", "BLOCKED")) {
+            "Wallet funding returned an unsupported status."
+        }
+        val reference = json.optString("reference").trim()
+        require(reference.matches(Regex("^fwd_[a-fA-F0-9]{32}$"))) {
+            "Wallet funding reference is invalid."
+        }
+        val amount = json.optDouble("amount", Double.NaN)
+        require(amount.isFinite() && amount > 0.0) { "Wallet funding amount is invalid." }
+        val authorizationUrl = json.optString("authorizationUrl").trim().takeIf { it.startsWith("https://") }
+        val paymentMethod = json.optString("paymentMethod").trim().uppercase(Locale.US)
+        require(paymentMethod.isBlank() || paymentMethod in setOf("CARD", "USSD")) {
+            "Wallet funding method is invalid."
+        }
+        return FynxWalletFundingSession(
+            status = status,
+            reference = reference,
+            amount = amount,
+            authorizationUrl = authorizationUrl,
+            paymentMethod = paymentMethod,
+            message = json.optString("message").trim()
+        )
     }
 
     suspend fun loadFundingAccount(context: Context): Result<FynxWalletFundingAccount> =
@@ -436,6 +505,9 @@ internal object FynxBuyerWalletClient {
             canFund = json.optBoolean("canFund", false),
             canSpend = json.optBoolean("canSpend", false),
             canWithdraw = json.optBoolean("canWithdraw", false),
+            canFundByBankTransfer = json.optBoolean("canFundByBankTransfer", false),
+            canFundByCard = json.optBoolean("canFundByCard", false),
+            canFundByUssd = json.optBoolean("canFundByUssd", false),
             notice = json.optString("notice").trim()
         )
     }
