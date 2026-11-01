@@ -782,7 +782,7 @@ private fun FynxWalletWithdrawalPanel(
             WalletAmountStatus(amount = amount, availableBalance = availableBalance, isWithdrawal = true)
             WalletActionNotice(
                 title = "Withdrawal fees and confirmation",
-                message = "The amount you enter is the amount FYNX requests the provider to transfer. Provider-side fees are not guessed or silently added to your wallet amount. FYNX confirms the provider response before changing the final payout status."
+                message = "The amount you enter is the amount sent to your bank. Paystack transfer charges and any applicable statutory duty are separate costs paid from FYNX's provider balance, not silently deducted from your Wallet. Withdrawals remain unavailable until FYNX approves its payout-cost policy."
             )
 
             Button(
