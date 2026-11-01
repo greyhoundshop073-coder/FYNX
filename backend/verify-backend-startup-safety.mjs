@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import assert from "node:assert/strict";
 import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";
+import { registerMarketplaceListingLifecycleRoutes } from "./marketplaceListingLifecycleRoutes.js";
 
 const read = (name) => fs.readFileSync(new URL(name, import.meta.url), "utf8");
 const server = read("./server.js");
 const shop = read("./marketplaceShopProfiles.js");
+const listings = read("./marketplaceListingLifecycleRoutes.js");
 
 const initStart = server.indexOf("async function initDatabase()");
 const initEnd = server.indexOf("\n}\n\nfunction requireConfig", initStart);
@@ -19,6 +21,17 @@ assert.ok(!schemaQuery.includes("UPDATE users SET verified = FALSE"), "startup m
 assert.ok(init.includes('await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);'), "official account verification must be a separate parameterized query");
 assert.ok(server.includes('import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";'), "deployed server must import My Shop routes");
 assert.ok(server.includes("if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });"), "deployed server must register My Shop routes only when a pool exists");
+assert.ok(server.includes('import { registerMarketplaceListingLifecycleRoutes } from "./marketplaceListingLifecycleRoutes.js";'), "deployed server must import Saved Products and listing lifecycle routes");
+assert.ok(server.includes("if (pool) registerMarketplaceListingLifecycleRoutes({ app, pool, auth });"), "deployed server must register Saved Products and listing lifecycle routes only when a pool exists");
+for (const endpoint of [
+  'app.get("/api/marketplace/saved-products", auth',
+  'app.get("/api/marketplace/listings/:id/saved", auth',
+  'app.post("/api/marketplace/listings/:id/saved", auth',
+  'app.delete("/api/marketplace/listings/:id/saved", auth',
+  'app.post("/api/marketplace/listings/:id/reactivate", auth'
+]) assert.ok(listings.includes(endpoint), `missing authenticated Marketplace lifecycle route: ${endpoint}`);
+assert.ok(listings.includes("CREATE TABLE IF NOT EXISTS marketplace_saved_products"), "Saved Products schema must be created idempotently");
+assert.ok(listings.includes("ADD COLUMN IF NOT EXISTS reserved_quantity"), "listing reactivation must account for reserved stock");
 
 const dollar = String.fromCharCode(36, 36);
 assert.ok(init.includes("DO "+dollar+" BEGIN") && init.includes("END "+dollar+";"), "foreign-key DO block must retain valid PostgreSQL dollar quoting");
