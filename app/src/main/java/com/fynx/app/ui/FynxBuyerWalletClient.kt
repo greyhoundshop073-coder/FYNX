@@ -75,6 +75,12 @@ internal data class FynxWalletPayoutBank(
     val slug: String
 )
 
+internal data class FynxWalletSecurityStatus(
+    val hasWithdrawalPin: Boolean,
+    val isLocked: Boolean,
+    val lockedUntil: String?
+)
+
 internal data class FynxWalletWithdrawalResult(
     val status: String,
     val reference: String,
@@ -148,6 +154,36 @@ internal object FynxBuyerWalletClient {
             .mapCatching(::parseFundingAccount)
     }
 
+    suspend fun loadWalletSecurity(context: Context): Result<FynxWalletSecurityStatus> =
+        FynxBackendClient.get(context, "/api/wallet/security").mapCatching { raw ->
+            val json = JSONObject(raw)
+            FynxWalletSecurityStatus(
+                hasWithdrawalPin = json.optBoolean("hasWithdrawalPin", false),
+                isLocked = json.optBoolean("isLocked", false),
+                lockedUntil = json.optString("lockedUntil").takeIf { it.isNotBlank() && it != "null" }
+            )
+        }
+
+    suspend fun setWithdrawalPin(
+        context: Context,
+        currentPassword: String,
+        pin: String,
+        confirmPin: String
+    ): Result<FynxWalletSecurityStatus> {
+        require(currentPassword.length in 8..128) { "Enter your current FYNX password." }
+        require(pin.matches(Regex("^\\d{6}$")) && pin == confirmPin) { "Enter and confirm the same six-digit wallet PIN." }
+        val body = JSONObject()
+            .put("currentPassword", currentPassword)
+            .put("pin", pin)
+            .put("confirmPin", confirmPin)
+        return FynxBackendClient.postJson(context, "/api/wallet/security/pin", body.toString())
+            .mapCatching { raw ->
+                val json = JSONObject(raw)
+                require(json.optBoolean("hasWithdrawalPin", false)) { "Wallet PIN setup was not confirmed." }
+                FynxWalletSecurityStatus(true, false, null)
+            }
+    }
+
     suspend fun loadPayoutBanks(context: Context): Result<List<FynxWalletPayoutBank>> =
         FynxBackendClient.get(context, "/api/wallet/payout-banks").mapCatching(::parsePayoutBanks)
 
@@ -191,18 +227,21 @@ internal object FynxBuyerWalletClient {
         bankCode: String,
         bankName: String,
         accountNumber: String,
-        idempotencyKey: String
+        idempotencyKey: String,
+        pin: String
     ): Result<FynxWalletWithdrawalResult> {
         require(amount.isFinite() && amount > 0.0) { "Enter a valid withdrawal amount." }
         require(bankCode.matches(Regex("^\\d{3,10}$"))) { "Choose a valid bank." }
         require(accountNumber.filter(Char::isDigit).matches(Regex("^\\d{10}$"))) { "Enter a valid 10-digit account number." }
         require(idempotencyKey.matches(Regex("^[A-Za-z0-9_-]{8,100}$"))) { "Withdrawal request reference is invalid." }
+        require(pin.matches(Regex("^\\d{6}$"))) { "Enter your six-digit wallet PIN." }
         val body = JSONObject()
             .put("amount", amount)
             .put("bankCode", bankCode)
             .put("bankName", bankName)
             .put("accountNumber", accountNumber.filter(Char::isDigit))
             .put("idempotencyKey", idempotencyKey)
+            .put("pin", pin)
         return FynxBackendClient.postJson(context, "/api/wallet/withdrawals", body.toString())
             .mapCatching(::parseWithdrawalResult)
     }
