@@ -36,7 +36,7 @@ function auth(req, res, next) {
 }
 
 let buyerWalletSchemaPromise;
-async function ensureBuyerWalletSchema() {
+async export async function ensureBuyerWalletSchema() {
   if (!pool) throw Object.assign(new Error('DATABASE_URL is not configured'), { code: 'DATABASE_NOT_CONFIGURED' });
   if (!buyerWalletSchemaPromise) {
     buyerWalletSchemaPromise = pool.query(`
@@ -388,6 +388,7 @@ function walletProviderApproved(action) {
   if (!common) return false;
   if (action === 'DEPOSIT') return process.env.FYNX_WALLET_DEPOSITS_ENABLED === 'true' &&
     Boolean(process.env.FYNX_PAYSTACK_WALLET_BANK) && Boolean(walletEncryptionKey());
+  if (action === 'SPENDING') return process.env.FYNX_WALLET_SPENDING_ENABLED === 'true';
   if (action === 'WITHDRAWAL') return process.env.FYNX_WALLET_WITHDRAWALS_ENABLED === 'true' &&
     process.env.FYNX_WALLET_PAYOUTS_APPROVED === 'true' &&
     process.env.FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true' &&
@@ -849,7 +850,7 @@ export function registerBuyerWalletRoutes({ app }) {
         reservedBalance: balances.RESERVED || 0,
         withdrawalPendingBalance: balances.WITHDRAWAL_PENDING || 0,
         canFund: wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT'),
-        canSpend: false,
+        canSpend: wallet.status === 'ACTIVE' && walletProviderApproved('SPENDING'),
         canWithdraw: wallet.status === 'ACTIVE' && walletProviderApproved('WITHDRAWAL'),
         notice: wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT')
           ? 'Your dedicated funding account is active. Wallet spending and withdrawals remain unavailable until their separate approvals are complete.'
