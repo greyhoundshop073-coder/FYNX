@@ -139,6 +139,90 @@ export async function refundBuyerWalletMarketplaceOrder(client, {
   return { transactionId, reference, idempotent: false };
 }
 
+export async function settleBuyerWalletMarketplaceOrder(client, orderId) {
+  const order = (await client.query(`
+    SELECT id,buyer_id,payment_method,total_amount,currency
+      FROM marketplace_orders
+     WHERE id=$1
+     FOR UPDATE
+  `, [orderId])).rows[0];
+  if (!order || String(order.payment_method || '').toUpperCase() !== 'FYNX_WALLET') {
+    return { handled: false };
+  }
+  const amount = Number(order.total_amount);
+  const currency = String(order.currency || '').trim().toUpperCase();
+  if (!Number.isFinite(amount) || amount <= 0 || currency !== 'NGN') {
+    throw Object.assign(new Error('Wallet-funded Marketplace order amount or currency is invalid'), { code: 'WALLET_ORDER_SETTLEMENT_INVALID' });
+  }
+
+  const idempotencyKey = `WALLET-MARKETPLACE-SETTLE-${String(order.id)}`;
+  const existing = (await client.query(
+    'SELECT id,status,reference FROM buyer_wallet_transactions WHERE idempotency_key=$1 FOR UPDATE',
+    [idempotencyKey]
+  )).rows[0];
+  if (existing) {
+    if (existing.status !== 'SUCCEEDED') {
+      throw Object.assign(new Error('Wallet Marketplace settlement requires reconciliation'), { code: 'WALLET_ORDER_SETTLEMENT_PENDING' });
+    }
+    return { handled: true, idempotent: true, transactionId: String(existing.id) };
+  }
+
+  await ensureBuyerWalletSchema();
+  const wallet = (await client.query(`
+    SELECT id,status
+      FROM buyer_wallets
+     WHERE user_id=$1 AND currency='NGN'
+     FOR UPDATE
+  `, [order.buyer_id])).rows[0];
+  if (!wallet) throw Object.assign(new Error('Buyer Wallet is missing for a Wallet-funded order'), { code: 'WALLET_ORDER_SETTLEMENT_WALLET_MISSING' });
+
+  const originalPayment = (await client.query(`
+    SELECT id,amount,currency
+      FROM buyer_wallet_transactions
+     WHERE wallet_id=$1 AND user_id=$2 AND transaction_type='MARKETPLACE_PAYMENT'
+       AND status='SUCCEEDED' AND metadata->>'orderId'=$3
+     FOR UPDATE
+  `, [wallet.id, order.buyer_id, String(order.id)])).rows[0];
+  if (!originalPayment || String(originalPayment.currency).toUpperCase() !== currency ||
+      Math.round(Number(originalPayment.amount) * 100) !== Math.round(amount * 100)) {
+    throw Object.assign(new Error('Original buyer Wallet payment does not reconcile with seller payout order'), { code: 'WALLET_ORDER_SETTLEMENT_PAYMENT_MISMATCH' });
+  }
+  const escrowBalance = (await client.query(`
+    SELECT COALESCE(SUM(CASE WHEN side='CREDIT' THEN amount ELSE -amount END),0)::numeric(18,2) AS balance
+      FROM buyer_wallet_ledger_entries
+     WHERE wallet_id=$1 AND transaction_id=$2 AND account_code='MARKETPLACE_ESCROW'
+  `, [wallet.id, originalPayment.id])).rows[0];
+  if (Number(escrowBalance?.balance || 0) !== amount) {
+    throw Object.assign(new Error('Buyer Wallet escrow does not reconcile to the exact Marketplace order payout'), { code: 'WALLET_ORDER_SETTLEMENT_ESCROW_MISMATCH' });
+  }
+
+  const transactionId = crypto.randomUUID();
+  const reference = `FYNX-WALLET-ORDER-SETTLED-${String(order.id)}`;
+  await client.query(`
+    INSERT INTO buyer_wallet_transactions
+      (id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,description,metadata)
+    VALUES ($1,$2,$3,'ADJUSTMENT','PENDING',$4,0,'NGN',$5,$6,'Wallet-funded Marketplace order settled',$7::jsonb)
+  `, [
+    transactionId, wallet.id, order.buyer_id, amount.toFixed(2), reference, idempotencyKey,
+    JSON.stringify({ internal: true, orderId: String(order.id), source: 'marketplace_seller_payout', paymentMethod: 'FYNX_WALLET' })
+  ]);
+  await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [transactionId]);
+  await client.query(`
+    INSERT INTO buyer_wallet_ledger_entries
+      (transaction_id,wallet_id,entry_key,account_code,side,amount,currency)
+    VALUES
+      ($1,$2,$3,'MARKETPLACE_ESCROW','DEBIT',$4,'NGN'),
+      ($1,$2,$5,'EXTERNAL_BANK','CREDIT',$4,'NGN')
+  `, [
+    transactionId, wallet.id,
+    'WALLET-MARKETPLACE-SETTLED-ESCROW-' + order.id,
+    amount.toFixed(2),
+    'WALLET-MARKETPLACE-SETTLED-EXTERNAL-' + order.id
+  ]);
+  await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [transactionId]);
+  return { handled: true, idempotent: false, transactionId };
+}
+
 export function registerBuyerWalletMarketplaceRoutes({ app }) {
   app.post('/api/wallet/marketplace-orders/:id/pay', auth, async (req, res) => {
     const orderId = parseUuid(req.params.id);
