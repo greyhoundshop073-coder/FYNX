@@ -35,6 +35,17 @@ checks = [
      and 'placeholder = { Text("Type captions for your video") }' in camera
      and "Type captions here, or generate them with a compatible on-device speech model." in camera
      and "Caption timing is approximate. Review the text before sending." in camera),
+    ("Timed photo early failure restores live camera controls",
+     'timerCountingDown = 0' in camera
+     and 'showCaptureControls = true' in camera
+     and 'Camera is still starting. Please try again.' in camera),
+    ("Caption success is shown as a neutral success notice, not an error",
+     'recordingNotice = "Transcript ready. Caption timing is approximate; review it before sending."' in camera
+     and 'error = "Transcript ready. Caption timing is approximate; review it before sending."' not in camera),
+    ("Runtime types and preserves a real manual video caption when speech recognition is unavailable",
+     'find_control(caption_xml, ["Video captions"])' in runtime
+     and 'run("adb", "shell", "input", "text", "FYNX%scamera%scaption%stest")' in runtime
+     and "FYNX camera caption test" in runtime),
     ("On-device captions transcode supported device audio formats to PCM16 WAV before speech recognition",
      'fynx_caption_audio_" + System.currentTimeMillis() + ".wav"' in video_effects
      and "MediaCodec.createDecoderByType(mime)" in video_effects
