@@ -377,6 +377,9 @@ fun FynxCameraCapturePanel(
         val hostController = hostActivityWindow
             ?.takeIf { it !== window }
             ?.let { WindowInsetsControllerCompat(it, it.decorView) }
+        val previousDimAmount = window?.attributes?.dimAmount
+        val previousDimBehind = window?.attributes?.flags
+            ?.and(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0
         val previousHostDecorBackground = hostActivityWindow?.takeIf { it !== window }?.decorView?.background
         val previousHostStatusBarColor = hostActivityWindow?.takeIf { it !== window }?.statusBarColor
         val previousHostNavigationBarColor = hostActivityWindow?.takeIf { it !== window }?.navigationBarColor
@@ -391,6 +394,11 @@ fun FynxCameraCapturePanel(
 
         val cameraBackdrop = FYNX_CAMERA_WINDOW_BACKGROUND_ARGB
         if (window != null) {
+            // This full-screen camera has no meaningful dimmed content behind it. Dimming
+            // the host Activity also dims Android 15's transparent status bar, which remains
+            // hosted by that Activity. Keep the host backdrop at full brightness while open.
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            window.setDimAmount(0f)
             window.setBackgroundDrawable(ColorDrawable(cameraBackdrop))
             window.statusBarColor = cameraBackdrop
             window.navigationBarColor = cameraBackdrop
@@ -417,6 +425,12 @@ fun FynxCameraCapturePanel(
 
         onDispose {
             if (window != null) {
+                previousDimAmount?.let { window.setDimAmount(it) }
+                if (previousDimBehind) {
+                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                } else {
+                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                }
                 window.setBackgroundDrawable(previousBackground)
                 window.statusBarColor = previousStatusBarColor ?: android.graphics.Color.TRANSPARENT
                 window.navigationBarColor = previousNavigationBarColor ?: android.graphics.Color.TRANSPARENT
@@ -1557,8 +1571,12 @@ fun FynxCameraCapturePanel(
                         }
                     }
                 }, modifier = Modifier.size(80.dp).semantics(mergeDescendants = true) {
-                    contentDescription = if (recording != null) "Stop video note"
-                    else if (mode == CameraMode.PHOTO) "Take photo" else "Record video note"
+                    contentDescription = when {
+                        recording != null -> "Stop recording"
+                        mode == CameraMode.PHOTO -> "Take photo"
+                        videoNoteMode -> "Record video note"
+                        else -> "Record video"
+                    }
                 }, shape = androidx.compose.foundation.shape.CircleShape,
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Color.Black)
                 ) {

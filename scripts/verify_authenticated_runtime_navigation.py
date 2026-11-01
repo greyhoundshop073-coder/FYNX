@@ -500,9 +500,42 @@ def wait_for_gallery_picker_foreground(timeout: float = 25.0) -> tuple[bool, str
     return False, latest_state
 
 
-def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> str:
-    """Dismiss camera/editor surfaces using Back until the real Home camera entry returns."""
+def camera_stop_active_recording(current_xml: str, prefix: str, timeout: float = 25.0) -> str:
+    """Stop a visible active recording before any Back-navigation recovery attempt."""
+    active_state = (
+        find_control(current_xml, ["Recording"])
+        or find_control(current_xml, ["Stop recording", "Stop video note"])
+    )
+    if not active_state:
+        return current_xml
+    # Compose can briefly retain the pre-recording semantics label while the timer and
+    # stop icon have already updated. The shutter bounds remain stable and its click action
+    # reads the current recording state, so the same button safely stops the active clip.
+    shutter = find_control(
+        current_xml, ["Stop recording", "Stop video note", "Record video", "Record video note"]
+    )
+    if not shutter:
+        return current_xml
+    _, stop_x, stop_y = shutter
+    run("adb", "shell", "input", "tap", str(stop_x), str(stop_y))
+    deadline = time.monotonic() + timeout
     latest = current_xml
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        latest = dump_ui(f"{prefix}-stop-recording-wait.xml") or latest
+        if find_control(latest, ["Retake"]) and find_control(latest, ["Next"]):
+            return latest
+        if not find_control(latest, ["Recording"]) and not find_control(latest, ["Stop recording", "Stop video note"]):
+            time.sleep(0.6)
+            latest = dump_ui(f"{prefix}-stop-recording-finalized.xml") or latest
+            if find_control(latest, ["Retake"]) and find_control(latest, ["Next"]):
+                return latest
+    return latest
+
+
+def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> str:
+    """Stop any active capture, then dismiss camera/editor surfaces and return to Home."""
+    latest = camera_stop_active_recording(current_xml, prefix)
     for attempt in range(attempts):
         if (find_control(latest, ["Open FYNX camera"])
                 and find_control(latest, ["Chat"])
@@ -1321,7 +1354,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         prefix + " rear live video camera"
     )
 
-    video_mode = tap_control(camera, ["Video"], f"{prefix}-camera-video-mode", ["Record video note"])
+    video_mode = tap_control(camera, ["Video"], f"{prefix}-camera-video-mode", ["Record video", "Record video note"])
     if not video_mode:
         FAILURES.append(prefix + ": could not enter video capture mode")
         return camera_return_to_home(camera, prefix + "-video-mode-failed")
@@ -1336,37 +1369,40 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
 
     # Select a real processing style before recording; then apply it to the captured clip.
     video_mode = tap_control(
-        video_fx, ["Cinematic"], f"{prefix}-camera-video-cinematic-style", ["Record video note"]
+        video_fx, ["Cinematic"], f"{prefix}-camera-video-cinematic-style", ["Record video", "Record video note"]
     )
+    if not video_mode:
+        return camera_return_to_home(video_fx, prefix + "-video-style-selection-failed")
     recording = tap_control_permission_aware(
-        video_mode, ["Record video note"], f"{prefix}-camera-video-record-start",
-        ["Stop video note"]
+        video_mode, ["Record video", "Record video note"], f"{prefix}-camera-video-record-start",
+        ["Stop recording", "Stop video note", "Recording"]
     )
     if not recording:
-        FAILURES.append(prefix + ": video recording did not start or expose the stop action")
+        FAILURES.append(prefix + ": video recording did not expose an active recording timer or Stop action")
         return camera_return_to_home(video_mode, prefix + "-video-recording-failed")
+    if not (
+        find_control(recording, ["Recording"])
+        or find_control(recording, ["Stop recording", "Stop video note"])
+    ):
+        FAILURES.append(prefix + ": the video shutter action did not enter the active recording state")
+        return camera_return_to_home(recording, prefix + "-video-recording-state-missing")
 
+    report.append("- PASS video shutter entered a real recording state; the active timer or Stop action was visible")
     screenshot(f"{prefix}-camera-video-recording.png")
     time.sleep(2.5)
+    stop_labels = ["Stop recording", "Stop video note", "Record video", "Record video note"]
     editor = tap_control(
-        recording, ["Stop video note"], f"{prefix}-camera-video-record-stop",
+        recording, stop_labels, f"{prefix}-camera-video-record-stop",
         ["Retake", "Next"]
     )
     if not editor:
-        FAILURES.append(prefix + ": recorded video did not reach its preview/editor")
+        FAILURES.append(prefix + ": recorded video did not reach its preview/editor after the shutter stop action")
         current_recording = dump_ui(f"{prefix}-video-recording-stop-retry.xml") or recording
-        stop_retry = find_control(current_recording, ["Stop video note"])
-        if stop_retry:
-            _, stop_x, stop_y = stop_retry
-            run("adb", "shell", "input", "tap", str(stop_x), str(stop_y))
-            time.sleep(1.0)
-            retried_editor = dump_ui(f"{prefix}-video-editor-stop-retry.xml") or current_recording
-            if find_control(retried_editor, ["Retake"]) and find_control(retried_editor, ["Next"]):
-                editor = retried_editor
-            else:
-                return camera_return_to_home(retried_editor, prefix + "-video-editor-retry-failed")
-        else:
-            return camera_return_to_home(current_recording, prefix + "-video-editor-missing")
+        editor = camera_stop_active_recording(
+            current_recording, prefix + "-video-recording-stop-retry", timeout=25.0
+        )
+        if not (find_control(editor, ["Retake"]) and find_control(editor, ["Next"])):
+            return camera_return_to_home(editor, prefix + "-video-editor-stop-retry-failed")
 
     (ROOT / f"{prefix}-camera-video-editor-before-effects.xml").write_text(
         editor + chr(10), encoding="utf-8"

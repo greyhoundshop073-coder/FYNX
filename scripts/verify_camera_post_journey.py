@@ -21,6 +21,10 @@ checks = [
     ("Camera Dialog applies/restores the actual system-bar window and white icon appearance",
      "DialogWindowProvider" in camera and "resolveFynxCameraWindow(cameraWindowView)" in camera
      and "resolveFynxHostActivityWindow(cameraWindowView)" in camera
+     and "window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)" in camera
+     and "window.setDimAmount(0f)" in camera
+     and "previousDimAmount?.let { window.setDimAmount(it) }" in camera
+     and "window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)" in camera
      and "hostActivityWindow.decorView.background = ColorDrawable(cameraBackdrop)" in camera
      and "previousHostDecorBackground" in camera
      and "hostActivityWindow.decorView.background = previousHostDecorBackground" in camera
@@ -156,6 +160,10 @@ checks = [
      and "list_app_cache_videos" in runtime
      and "processed video dropped the source audio stream" in runtime
      and "Generate on-device captions" in runtime
+      and '["Stop recording", "Stop video note", "Recording"]' in runtime
+      and '["Stop recording", "Stop video note", "Record video", "Record video note"]' in runtime
+      and "camera_stop_active_recording" in runtime
+      and "video shutter entered a real recording state" in runtime
       and 'captions = find_control(editor, ["Captions"])' in runtime
       and "visible Captions action" in runtime
      and "camera-video-effect-output.png" in runtime
