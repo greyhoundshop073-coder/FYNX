@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import "./verify-wallet-business-ledger.mjs";
 const source = fs.readFileSync(new URL("./buyerWallet.js", import.meta.url), "utf8");
 const settlement = fs.readFileSync(new URL("./marketplaceSettlement.js", import.meta.url), "utf8");
 const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url), "utf8");
