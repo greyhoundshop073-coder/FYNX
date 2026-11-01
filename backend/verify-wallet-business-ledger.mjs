@@ -9,7 +9,7 @@ const payoutWorker = read('./marketplaceSettlementWorker.js');
 const wallet = read('./buyerWallet.js');
 const walletSummary = wallet.slice(
   wallet.indexOf("app.get('/api/wallet/summary', auth"),
-  wallet.indexOf("app.post('/api/wallet/funding/initialize', auth')
+  wallet.indexOf("app.post('/api/wallet/funding/initialize', auth")
 );
 const server = read('./server.js');
 const webhook = read('./marketplacePaystackWebhook.js');
