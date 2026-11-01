@@ -20,7 +20,9 @@ for path in ROOT.rglob("*.kt"):
 backend = Path("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_text(encoding="utf-8")
 currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").read_text(encoding="utf-8")
 required = [
-    'PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"',
+    'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
+    'DEBUG_TEST_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
+    '"https://fynx-ai-backend.onrender.com" in retiredBackendUrls',
     'requiresAuthentication = !isPublicAuthPath(path)',
     'FynxSecureTokenStore',
 ]
