@@ -221,7 +221,7 @@ internal fun FynxWalletMarketplaceEarningsCard(refreshKey: Int) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(record.title, fontWeight = FontWeight.SemiBold)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("FYNX commission", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                    Text("FYNX commission (default 5%)", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                                     Text(
                                         "−" + fynxWalletEarningMoney(record.currency, record.commission),
                                         color = Color(0xFFDC143C),
