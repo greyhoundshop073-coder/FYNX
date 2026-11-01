@@ -250,8 +250,10 @@ fun FynxBuyerWalletPanel() {
             amount = fundingAmount,
             onAmountChange = { fundingAmount = it },
             availableBalance = wallet?.availableBalance,
+            canWithdraw = wallet?.canWithdraw == true,
             onBack = {
                 activeAction = if (activeAction == "TRANSFER" || activeAction == "CARD" || activeAction == "USSD") "ADD" else "HOME"
+                refreshVersion += 1
             },
             onNavigate = { activeAction = it }
         )
