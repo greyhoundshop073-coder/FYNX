@@ -30,11 +30,20 @@ source = source.replace(
   'function rateLimit(bucket, limit) {\n  return (req, res, next) => {\n    let authenticatedSubject = req.user?.sub || "";\n    if (!authenticatedSubject && JWT_SECRET) {\n      const header = req.get("authorization") || "";\n      const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";\n      if (token) {\n        try { authenticatedSubject = String(jwt.verify(token, JWT_SECRET).sub || ""); } catch { authenticatedSubject = ""; }\n      }\n    }\n    const identity = authenticatedSubject ? `user:${authenticatedSubject}` : `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;\n    const key = `${bucket}:${identity}`;'
 );
 
-source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";\nimport { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";\nimport { registerMarketplaceCheckoutRoutes } from "./marketplaceCheckout.js";\nimport { registerMarketplaceCheckoutOrderRoutes } from "./marketplaceCheckoutOrder.js";\nimport { registerMarketplaceShippingRoutes } from "./marketplaceShipping.js";');
+source = source.replace('from "./.fynx-runtime-socialRoutes.js";
+import { registerDiscoveryRoutes } from "./discoveryRoutes.js";
+import { registerBusinessRoutes } from "./businessRoutes.js";
+import { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";
+import { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";
+import { registerMarketplaceCheckoutRoutes } from "./marketplaceCheckout.js";
+import { registerMarketplaceCheckoutOrderRoutes } from "./marketplaceCheckoutOrder.js";
+import { registerMarketplaceShippingRoutes } from "./marketplaceShipping.js";
+import { registerBuyerWalletRoutes } from "./buyerWallet.js";
+import { registerBuyerWalletMarketplaceRoutes } from "./buyerWalletMarketplace.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";\nimport { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";\nimport { registerMarketplaceCheckoutRoutes } from "./marketplaceCheckout.js";\nimport { registerMarketplaceCheckoutOrderRoutes } from "./marketplaceCheckoutOrder.js";\nimport { registerMarketplaceShippingRoutes } from "./marketplaceShipping.js";');
 source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) startMarketplaceInspectionReconciliation({ pool });\nif (pool) registerMarketplacePaystackWebhook({ app, pool });');
 source = source.replace(
   'registerMarketplaceCompletionRoutes({ app, pool, auth });',
-  'registerMarketplaceCompletionRoutes({ app, pool, auth });\nif (pool) {\n  registerMarketplaceCheckoutRoutes({ app, pool, auth });\n  registerMarketplaceCheckoutOrderRoutes({ app, pool, auth });\n  registerMarketplaceShippingRoutes({ app, pool, auth });\n}'
+  'registerMarketplaceCompletionRoutes({ app, pool, auth });\nif (pool) {\n  registerMarketplaceCheckoutRoutes({ app, pool, auth });\n  registerMarketplaceCheckoutOrderRoutes({ app, pool, auth });\n  registerMarketplaceShippingRoutes({ app, pool, auth });\n  // Mount Buyer Wallet APIs on the same canonical Railway server.\n  registerBuyerWalletRoutes({ app });\n  registerBuyerWalletMarketplaceRoutes({ app });\n}'
 );
 source = source.replace(
   'app.use(express.json({ limit: "18mb", strict: true }));',
@@ -141,7 +150,7 @@ for (const contract of [
   "registerMarketplaceCheckoutRoutes({ app, pool, auth })",
   "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
   "registerMarketplaceShippingRoutes({ app, pool, auth })",
-  "registerMarketplaceCompletionRoutes({ app, pool, auth })"
+  "registerMarketplaceCompletionRoutes({ app, pool, auth })",\n  "registerBuyerWalletRoutes({ app })",\n  "registerBuyerWalletMarketplaceRoutes({ app })"
 ]) {
   assert.ok(generatedRuntime.includes(contract), `generated runtime missing route registration: ${contract}`);
 }
