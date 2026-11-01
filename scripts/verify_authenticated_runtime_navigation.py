@@ -1378,6 +1378,11 @@ if install.returncode!=0:
 # system dialog from intercepting taps intended for the real Marketplace surface.
 prepare_debug_visual_capture_permissions()
 xml,error=login()
+if not error and not VISUALS_ONLY:
+    token_present=secure_access_token_persisted()
+    report.append("- Secure encrypted access-token key immediately after app login: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
+    if token_present is False:
+        FAILURES.append("The encrypted access token was not persisted after real account login.")
 
 # Capture the Home glass surface in the same system dark mode as the supplied reference.
 # This is a read-only screenshot: preserve the actual feed/error state and never invent posts.
@@ -1530,6 +1535,55 @@ def wallet_destination_ready(xml_text: str) -> bool:
         and find_control(xml_text, ["Reserved"])
         and find_control(xml_text, ["Withdrawal pending"])
     )
+
+
+def secure_access_token_persisted()->bool|None:
+    """Check only whether the encrypted access-token key exists; never read or print its value."""
+    result=run(
+        "adb", "shell", "run-as", PACKAGE, "sh", "-c",
+        "grep -q access_token shared_prefs/fynx_secure_auth.xml"
+    )
+    if result.returncode == 0:
+        return True
+    if "run-as: package not debuggable" in (result.stdout or "").lower():
+        return None
+    return False
+
+
+def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple[bool,str,str]:
+    """Read-only Wallet entry from the real Marketplace shortcut; return to Marketplace."""
+    wallet_xml=tap_control(
+        marketplace_xml, ["Wallet"], prefix+"-marketplace-wallet", ["FYNX Wallet"]
+    )
+    if not wallet_xml:
+        return False, "Marketplace Wallet shortcut did not open the Wallet destination.", marketplace_xml
+
+    deadline=time.monotonic()+20.0
+    latest=""
+    loading_markers=("Checking…", "Checking your wallet…", "Loading wallet activity…", "Loading…")
+    while time.monotonic()<deadline:
+        latest=dump_ui(prefix+"-marketplace-wallet-settled.xml")
+        if wallet_destination_ready(latest) and not any(marker in latest for marker in loading_markers):
+            screenshot("authenticated-wallet-marketplace-shortcut.png")
+            (ROOT/"authenticated-wallet-marketplace-shortcut.xml").write_text(
+                latest+chr(10), encoding="utf-8"
+            )
+            run("adb","shell","input","keyevent","KEYCODE_BACK")
+            time.sleep(0.7)
+            back_xml=dump_ui(prefix+"-marketplace-return.xml")
+            if back_xml and find_control(back_xml, ["Search products, sellers or categories"]):
+                return True, "Marketplace -> Wallet shortcut opened and Wallet summary sections settled; returned to Marketplace.", back_xml
+            return False, "Wallet screen settled, but Back did not restore the Marketplace surface.", back_xml or marketplace_xml
+        time.sleep(0.5)
+
+    screenshot(prefix+"-marketplace-wallet-incomplete.png")
+    (ROOT/(prefix+"-marketplace-wallet-incomplete.xml")).write_text(
+        (latest or "")+chr(10), encoding="utf-8"
+    )
+    run("adb","shell","input","keyevent","KEYCODE_BACK")
+    time.sleep(0.7)
+    back_xml=dump_ui(prefix+"-marketplace-return-after-timeout.xml")
+    return False, "Marketplace Wallet shortcut opened, but Wallet summary sections did not settle within 20 seconds.", back_xml or marketplace_xml
 
 
 def capture_wallet_from_features(prefix:str):
@@ -1717,6 +1771,23 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         else:
             report.append(f"- PASS: captured the real Marketplace surface after it settled to: {settle_state}.")
 
+        if not VISUALS_ONLY:
+            token_present=secure_access_token_persisted()
+            report.append("- Secure access-token key after Marketplace discovery: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
+            if token_present is False:
+                FAILURES.append("The secure access token disappeared before Marketplace buyer/seller navigation.")
+        wallet_shortcut_ok, wallet_shortcut_message, wallet_return_xml = capture_wallet_root_from_marketplace(
+            marketplace_xml, "marketplace-visual-wallet-shortcut"
+        )
+        if wallet_shortcut_ok:
+            report.append("- PASS: "+wallet_shortcut_message)
+            marketplace_xml=wallet_return_xml
+        else:
+            report.append("- BLOCKED: "+wallet_shortcut_message)
+            FAILURES.append("Marketplace -> Wallet shortcut: "+wallet_shortcut_message)
+            if wallet_return_xml and find_control(wallet_return_xml, ["Search products, sellers or categories"]):
+                marketplace_xml=wallet_return_xml
+
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
         product_target = marketplace_product_card_target(marketplace_xml)
@@ -1774,6 +1845,11 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             ["Your shop at a glance", "Manage your storefront", "Shop profile"]
         )
         if shop_xml:
+            if not VISUALS_ONLY:
+                token_present=secure_access_token_persisted()
+                report.append("- Secure access-token key upon entering My Shop: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
+                if token_present is False:
+                    FAILURES.append("The secure access token disappeared before authenticated My Shop overview loaded.")
             shop_xml, overview_settled = wait_for_my_shop_section_settled("overview", timeout=20.0)
             if shop_xml:
                 screenshot("authenticated-marketplace-my-shop-overview.png")
