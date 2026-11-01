@@ -164,10 +164,19 @@ fun FynxBuyerWalletPanel() {
         nextActivityCursor = null
 
         try {
+            if (!FynxBackendClient.hasAccessToken(context)) {
+                summaryError = "Wallet needs an online sign-in. Sign out, then sign in with your account password; leaving it blank only opens local mode."
+                return@LaunchedEffect
+            }
             val walletResult = FynxBuyerWalletClient.loadSummary(context)
             if (requestGeneration != activityRequestGeneration) return@LaunchedEffect
             if (walletResult.isFailure) {
-                summaryError = "Your wallet could not be loaded. Check your connection and try again."
+                val failure = walletResult.exceptionOrNull()
+                summaryError = if (failure != null && FynxBackendClient.isUnauthorizedFailure(failure)) {
+                    "Your online FYNX session has expired. Sign out and sign in again with your account password to reconnect Wallet."
+                } else {
+                    "Your wallet could not be loaded. Check your connection and try again."
+                }
                 return@LaunchedEffect
             }
 
@@ -196,11 +205,21 @@ fun FynxBuyerWalletPanel() {
     LaunchedEffect(refreshVersion) {
         sellerSummaryLoading = true
         sellerSummaryError = null
+        if (!FynxBackendClient.hasAccessToken(context)) {
+            sellerSummary = null
+            sellerSummaryError = "Sign in online with your account password to view Marketplace seller earnings."
+            sellerSummaryLoading = false
+            return@LaunchedEffect
+        }
         FynxBuyerWalletClient.loadSellerSummary(context)
             .onSuccess { sellerSummary = it }
-            .onFailure {
+            .onFailure { failure ->
                 sellerSummary = null
-                sellerSummaryError = "Marketplace seller earnings are temporarily unavailable."
+                sellerSummaryError = if (FynxBackendClient.isUnauthorizedFailure(failure)) {
+                    "Your online FYNX session has expired. Reconnect with your account password to view seller earnings."
+                } else {
+                    "Marketplace seller earnings are temporarily unavailable."
+                }
             }
         sellerSummaryLoading = false
     }
