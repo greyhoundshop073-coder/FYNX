@@ -299,7 +299,7 @@ async export async function ensureBuyerWalletSchema() {
             JOIN buyer_wallet_transactions t ON t.id = e.transaction_id
            WHERE e.wallet_id = NEW.wallet_id
              AND t.status = 'SUCCEEDED'
-             AND e.account_code IN ('AVAILABLE','RESERVED','WITHDRAWAL_PENDING')
+             AND e.account_code IN ('AVAILABLE','RESERVED','MARKETPLACE_ESCROW','WITHDRAWAL_PENDING')
            GROUP BY e.account_code
           HAVING SUM(CASE WHEN e.side = 'CREDIT' THEN e.amount ELSE -e.amount END) < 0
         ) THEN
@@ -847,7 +847,7 @@ export function registerBuyerWalletRoutes({ app }) {
         walletStatus: String(wallet.status || 'PENDING_PROVIDER'),
         currency: String(wallet.currency || 'NGN'),
         availableBalance: balances.AVAILABLE || 0,
-        reservedBalance: balances.RESERVED || 0,
+        reservedBalance: (balances.RESERVED || 0) + (balances.MARKETPLACE_ESCROW || 0),
         withdrawalPendingBalance: balances.WITHDRAWAL_PENDING || 0,
         canFund: wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT'),
         canSpend: wallet.status === 'ACTIVE' && walletProviderApproved('SPENDING'),
