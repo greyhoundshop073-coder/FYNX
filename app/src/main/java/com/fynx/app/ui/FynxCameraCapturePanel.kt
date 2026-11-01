@@ -93,6 +93,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.viewinterop.AndroidView
@@ -223,9 +224,11 @@ private fun CameraMusicChip(
             Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
             Text(
                 selectedMusic?.title?.ifBlank { "Add music" } ?: "Add music",
+                modifier = Modifier.weight(1f),
                 color = Color.White,
                 style = MaterialTheme.typography.labelLarge,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             if (selectedMusic != null) {
                 Box(Modifier.width(1.dp).height(20.dp).background(Color.White.copy(alpha = 0.30f)))
@@ -911,7 +914,12 @@ fun FynxCameraCapturePanel(
                     selectedMusic = selectedMusic,
                     onChooseMusic = onChooseMusic,
                     onClearMusic = onClearMusic,
-                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp)
+                    // Keep the music action in its own top-right lane, clear of the centered
+                    // Photo preview / Video preview label on narrower phone displays.
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(end = 12.dp, top = 62.dp)
+                        .widthIn(max = 172.dp)
                 )
             }
             Surface(

@@ -44,9 +44,14 @@ checks = [
      "Color(0xFF172438).copy(alpha = 0.62f)" in camera
      and "Color(0xFF25364A).copy(alpha = 0.32f)" in camera
      and "Color.White.copy(alpha = 0.25f)" in camera),
-    ("Camera capture and preview show the selected music chip over the media without replacing the existing catalogue",
+    ("Camera capture and preview show a separate, width-bounded music chip without overlapping the centered preview label",
      "CameraMusicChip(" in camera and "selectedMusic: FynxMusicCatalogueTrack?" in camera
      and "onChooseMusic = onChooseMusic" in camera
+     and "modifier = Modifier.align(Alignment.TopEnd)" in camera
+     and ".padding(end = 12.dp, top = 62.dp)" in camera
+     and ".widthIn(max = 172.dp)" in camera
+     and "overflow = TextOverflow.Ellipsis" in camera
+     and "Photo preview" in camera and "Video preview" in camera
      and "selectedMusic = selectedCatalogueMusic" in home
      and "showMusicPicker = true" in home),
     ("Immersive Status media composer hides the app bottom navigation so caption and Send controls remain reachable",
