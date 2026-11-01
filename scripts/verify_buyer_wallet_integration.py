@@ -27,6 +27,7 @@ checks = [
  ("wallet UI hierarchy artifacts end with a real newline", "write_text(wallet_xml+chr(10)" in runtime and "(wallet_xml or \"\")+chr(10)" in runtime),
  ("visual-only navigation also captures Wallet read-only", 'capture_wallet_from_features("marketplace-visual-wallet")' in runtime and "no listing/order/payment mutations" in runtime),
  ("Wallet runtime gate checks visible balance buckets rather than below-fold explanatory copy", "def wallet_destination_ready(xml_text: str) -> bool:" in runtime and 'find_control(xml_text, ["Reserved"])' in runtime and 'find_control(xml_text, ["Withdrawal pending"])' in runtime and "wallet_shell_opened=wallet_destination_ready(wallet_xml)" in runtime and "not wallet_destination_ready(after)" in runtime),
+ ("server-authenticated Wallet runtime fails on visible summary/activity/seller/funding-account API errors", "authenticated_wallet_error_markers=(" in runtime and 'if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":' in runtime and '"Wallet unavailable"' in runtime and '"Activity could not load"' in runtime and '"Marketplace earnings unavailable"' in runtime and "if authenticated_wallet_errors:" in runtime),
  ("wallet branch receives full emulator and screenshot certification", workflow.count("refs/heads/feat/fynx-wallet-ux-hardening-20261031") == 4),
  ("wallet back navigation", '"Wallet", "Money Tools" -> "Features"' in app),
  ("wallet authenticated summary and activity APIs", '"/api/wallet/summary"' in client and '"/api/wallet/transactions?limit="' in client),
