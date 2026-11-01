@@ -547,6 +547,13 @@ checks.extend([
 ])
 
 checks.append(
+    ("My Shop seller earnings parser matches the authoritative settlement summary fee field",
+     'marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFeeSeller"))' in seller_center
+     and 'marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0)' in settlement_routes
+     and 'row.opt("marketplaceFee"))' not in seller_center),
+)
+
+checks.append(
     ("exact Marketplace listing lookup preserves ordered image/video MIME types for deep links and post-publish product cards",
      "val mediaTypesJson = o.optJSONArray(\"media_types\")" in deep_link_client
      and "for (i in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(i))" in deep_link_client
