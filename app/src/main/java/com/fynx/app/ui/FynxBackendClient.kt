@@ -104,6 +104,7 @@ object FynxBackendClient {
     suspend fun downloadToFile(context: Context, mediaUrl: String, destination: File, maxBytes: Long = 12L * 1024L * 1024L): Result<DownloadedMedia> {
         return withContext(Dispatchers.IO) {
             try {
+                val bearerToken = accessToken(context) ?: throw FynxUnauthorizedException()
                 val root = baseUrl(context).trimEnd('/'); require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }; val candidate = mediaUrl.trim(); require(candidate.isNotBlank()) { "Media URL is empty." }
                 val absoluteUrl = if (candidate.startsWith("http://") || candidate.startsWith("https://")) candidate else { require(candidate.startsWith("/")) { "Media path must start with /." }; root + candidate }
                 val target = URL(absoluteUrl); val configured = URL(root); require(target.protocol.equals("https", true)) { "FYNX media must use HTTPS." }; require(target.host.equals(configured.host, true)) { "FYNX media host is not trusted." }
@@ -111,7 +112,7 @@ object FynxBackendClient {
                 val temporary = File(parent, ".${destination.name}.part"); var attempt = 0; var completed: Result<DownloadedMedia>? = null
                 while (completed == null) {
                     try {
-                        val result: DownloadedMedia = requestSemaphore.withPermit { if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) weakRequestSemaphore.withPermit { downloadOnce(context, target, temporary, maxBytes) } else downloadOnce(context, target, temporary, maxBytes) }
+                        val result: DownloadedMedia = requestSemaphore.withPermit { if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) weakRequestSemaphore.withPermit { downloadOnce(context, target, temporary, maxBytes, bearerToken) } else downloadOnce(context, target, temporary, maxBytes) }
                         if (destination.exists() && !destination.delete()) throw IOException("Unable to replace downloaded media"); if (!temporary.renameTo(destination)) throw IOException("Unable to finalize downloaded media"); completed = Result.success(result)
                     } catch (error: Exception) {
                         if (error is CancellationException) throw error
@@ -123,9 +124,9 @@ object FynxBackendClient {
         }
     }
 
-    private suspend fun downloadOnce(context: Context, target: URL, temporary: File, maxBytes: Long): DownloadedMedia {
+    private suspend fun downloadOnce(context: Context, target: URL, temporary: File, maxBytes: Long, bearerToken: String): DownloadedMedia {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
-        val connection = (target.openConnection() as HttpURLConnection).apply { connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS; readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS; useCaches = false; instanceFollowRedirects = false; setRequestProperty("Accept", "image/*,video/*,audio/*,*/*"); setRequestProperty("Accept-Encoding", "identity"); setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0"); setRequestProperty("Pragma", "no-cache"); setRequestProperty("Connection", "close"); setRequestProperty("User-Agent", "FYNX-Android/1"); accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") } }
+        val connection = (target.openConnection() as HttpURLConnection).apply { connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS; readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS; useCaches = false; instanceFollowRedirects = false; setRequestProperty("Accept", "image/*,video/*,audio/*,*/*"); setRequestProperty("Accept-Encoding", "identity"); setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0"); setRequestProperty("Pragma", "no-cache"); setRequestProperty("Connection", "close"); setRequestProperty("User-Agent", "FYNX-Android/1"); setRequestProperty("Authorization", "Bearer $bearerToken") }
         val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
         try { val status = connection.responseCode; if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { if (!accessToken(context).isNullOrBlank()) FynxAuthStore.clear(context); throw FynxUnauthorizedException() }; val stream = if (status in 200..299) connection.inputStream else connection.errorStream; if (status !in 200..299) throw FynxHttpException(status, stream?.use { it.bufferedReader().readText().take(600) }.orEmpty()); val declaredLength = connection.contentLengthLong; require(declaredLength < 0L || declaredLength <= maxBytes) { "FYNX media is too large" }; temporary.delete(); var total = 0L; stream?.use { input -> temporary.outputStream().use { output -> val buffer = ByteArray(32 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > maxBytes) throw IOException("FYNX media is too large"); output.write(buffer, 0, count) }; output.flush() } } ?: throw IOException("FYNX media response was empty"); if (total <= 0L || temporary.length() != total) throw IOException("FYNX media download was incomplete"); return DownloadedMedia(connection.contentType?.substringBefore(';')?.trim()?.lowercase(), total) } finally { cancellationHandle.dispose(); connection.disconnect() }
     }
