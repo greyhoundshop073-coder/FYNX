@@ -69,6 +69,21 @@ internal data class FynxWalletSellerSummary(
     val settlements: List<FynxWalletSellerSettlement>
 )
 
+internal data class FynxWalletPayoutBank(
+    val name: String,
+    val code: String,
+    val slug: String
+)
+
+internal data class FynxWalletWithdrawalResult(
+    val status: String,
+    val reference: String,
+    val amount: Double,
+    val bankName: String,
+    val accountLast4: String,
+    val message: String
+)
+
 internal data class FynxWalletFundingAccount(
     val status: String,
     val currency: String,
@@ -131,6 +146,81 @@ internal object FynxBuyerWalletClient {
             .put("explicitConsent", explicitConsent)
         return FynxBackendClient.postJson(context, "/api/wallet/funding-account", body.toString())
             .mapCatching(::parseFundingAccount)
+    }
+
+    suspend fun loadPayoutBanks(context: Context): Result<List<FynxWalletPayoutBank>> =
+        FynxBackendClient.get(context, "/api/wallet/payout-banks").mapCatching { raw ->
+            val rows = JSONObject(raw).optJSONArray("banks") ?: JSONArray()
+            require(rows.length() <= 250) { "The payout bank list is too large." }
+            buildList {
+                for (index in 0 until rows.length()) {
+                    val row = rows.optJSONObject(index) ?: continue
+                    val name = row.optString("name").trim()
+                    val code = row.optString("code").trim()
+                    val slug = row.optString("slug").trim()
+                    if (name.isNotBlank() && code.matches(Regex("^\\d{3,10}$"))) {
+                        add(FynxWalletPayoutBank(name, code, slug))
+                    }
+                }
+            }
+        }
+
+    suspend fun verifyPayoutAccount(
+        context: Context,
+        bankCode: String,
+        accountNumber: String
+    ): Result<String> {
+        val body = JSONObject()
+            .put("bankCode", bankCode.trim())
+            .put("accountNumber", accountNumber.filter(Char::isDigit))
+        return FynxBackendClient.postJson(context, "/api/wallet/payout-account/verify", body.toString())
+            .mapCatching { raw ->
+                val json = JSONObject(raw)
+                require(json.optBoolean("verified", false)) { "The bank account has not been verified." }
+                val accountName = json.optString("accountName").trim()
+                require(accountName.length >= 2) { "The verified bank account name is missing." }
+                accountName
+            }
+    }
+
+    suspend fun requestWithdrawal(
+        context: Context,
+        amount: Double,
+        bankCode: String,
+        bankName: String,
+        accountNumber: String,
+        idempotencyKey: String
+    ): Result<FynxWalletWithdrawalResult> {
+        require(amount.isFinite() && amount > 0.0) { "Enter a valid withdrawal amount." }
+        require(bankCode.matches(Regex("^\\d{3,10}$"))) { "Choose a valid bank." }
+        require(accountNumber.filter(Char::isDigit).matches(Regex("^\\d{10}$"))) { "Enter a valid 10-digit account number." }
+        require(idempotencyKey.matches(Regex("^[A-Za-z0-9_-]{8,100}$"))) { "Withdrawal request reference is invalid." }
+        val body = JSONObject()
+            .put("amount", amount)
+            .put("bankCode", bankCode)
+            .put("bankName", bankName)
+            .put("accountNumber", accountNumber.filter(Char::isDigit))
+            .put("idempotencyKey", idempotencyKey)
+        return FynxBackendClient.postJson(context, "/api/wallet/withdrawals", body.toString())
+            .mapCatching(::parseWithdrawalResult)
+    }
+
+    internal fun parseWithdrawalResult(raw: String): FynxWalletWithdrawalResult {
+        val json = JSONObject(raw)
+        val status = json.optString("status", "PENDING").trim().uppercase(Locale.US)
+        require(status in setOf("PENDING", "PROCESSING", "SUCCEEDED", "FAILED", "REVERSED", "BLOCKED")) {
+            "Wallet withdrawal returned an unsupported status."
+        }
+        val amount = json.optDouble("amount", Double.NaN)
+        require(amount.isFinite() && amount > 0.0) { "Wallet withdrawal amount is invalid." }
+        return FynxWalletWithdrawalResult(
+            status = status,
+            reference = json.optString("reference").trim(),
+            amount = amount,
+            bankName = json.optString("bankName").trim(),
+            accountLast4 = json.optString("accountLast4").trim(),
+            message = json.optString("message").trim()
+        )
     }
 
     suspend fun loadStatement(context: Context): Result<String> =
