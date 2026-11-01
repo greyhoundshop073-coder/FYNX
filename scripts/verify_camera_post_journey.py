@@ -40,6 +40,20 @@ checks = [
      and "camera-timer-capture" in runtime
      and "camera-post-caption-keyboard.png" in runtime
      and "post details with keyboard open" in runtime),
+    ("Camera music picker tests selection/removal and explicit empty/error recovery",
+     "camera-music-open" in runtime
+     and "camera-music-select" in runtime
+     and "camera-music-remove" in runtime
+     and "No FYNX music is published yet" in runtime),
+    ("Post caption helper chips are exercised against the actual caption value",
+     "camera-post-hashtag-chip" in runtime
+     and "camera-post-mention-chip" in runtime
+     and "inserted a mention marker into the actual caption field" in runtime),
+    ("Post link validates malformed URLs, adds valid HTTPS and persists through Drafts",
+     "camera-post-link-reject-invalid" in runtime
+     and "https://fynx.test/camera" in runtime
+     and "camera-post-more-options-open" in runtime
+     and "saved post draft did not restore its inserted https link" in runtime),
     ("Camera photo editor tool options toggle closed on a second tap and reopen or switch cleanly",
      'var showEditorToolOptions by remember { mutableStateOf(true) }' in camera
      and all(f'if (selectedCameraTool == "{tool}") showEditorToolOptions = !showEditorToolOptions' in camera for tool in ["Looks", "Face FX", "Background", "AI Studio"])

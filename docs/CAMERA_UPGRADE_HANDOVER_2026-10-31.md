@@ -174,3 +174,11 @@ Capture genuine emulator/device screenshots and UI hierarchy for:
 - Added an instrumentation regression test which records AMR-NB audio and validates the decoded WAV header and PCM payload.
 - Expanded runtime certification to check timer cancel/no-late-capture, timer completion, real post caption typing with the keyboard open, sticky footer reachability, caption persistence after keyboard dismissal, and to fail if the old unsupported-audio message returns.
 - Still not claimed as covered until exact-head CI finishes: selecting an actual image/video in the Android system Gallery, exhaustive hashtag/mention/location/link/audience/share interaction, Android hardware camera/flash variants, and on-device speech model availability on a production phone.
+
+
+## 12. Additional camera/post interaction certification coverage — 2026-11-01
+- Camera runtime opens FYNX Music from the live camera, selects and removes a published track when one is available, or records the admin-published-only empty state and verifies it can be dismissed. An unavailable backend response is reported as an unverified catalogue result, not a successful selection.
+- New post runtime taps # Hashtags and @ Mention and checks that their markers enter the actual caption field.
+- Add link runtime rejects malformed URL input, adds a valid HTTPS test URL, checks it remains in the caption and in the saved local draft, then deletes the test draft. The test URL and test caption are local-only and no Post/Send action is tapped.
+- Content disclosure information and More options are opened and dismissed in the runtime journey.
+- The current automation still does not exercise the native location picker or final audience changes, because those paths invoke live location or friends services; the runtime must not claim those interactions as passed without a usable test account and explicit fixtures.

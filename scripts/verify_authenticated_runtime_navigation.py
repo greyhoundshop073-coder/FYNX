@@ -947,6 +947,82 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     else:
         FAILURES.append(prefix + ": opening the Face FX category did not expose the Cute Ears effect")
 
+    # Exercise the actual camera Add music route. It uses the same published catalogue as
+    # the Feed composer; an empty catalogue is a valid admin-controlled state, not a camera crash.
+    music_dialog = tap_control(
+        camera_xml, ["Add music"], f"{prefix}-camera-music-open", ["FYNX Music"]
+    )
+    if music_dialog:
+        music_state = music_dialog
+        music_deadline = time.monotonic() + 20.0
+        music_outcome = "pending"
+        while time.monotonic() < music_deadline:
+            if find_control(music_state, ["No FYNX music is published yet"]):
+                music_outcome = "empty"
+                break
+            if find_control(music_state, ["Add"]):
+                music_outcome = "tracks"
+                break
+            if find_control(music_state, ["Music catalogue could not be loaded"]):
+                music_outcome = "error"
+                break
+            time.sleep(0.6)
+            music_state = dump_ui(f"{prefix}-camera-music-catalogue-wait.xml") or music_state
+
+        if music_outcome == "tracks":
+            music_selected = tap_control(
+                music_state, ["Add"], f"{prefix}-camera-music-select",
+                ["Remove selected music"]
+            )
+            if music_selected:
+                screenshot(f"{prefix}-camera-music-selected.png")
+                music_removed = tap_control(
+                    music_selected, ["Remove selected music"], f"{prefix}-camera-music-remove",
+                    ["Add music"]
+                )
+                if music_removed:
+                    report.append("- PASS camera music picker selected a published track and Remove music cleared it")
+                    camera_xml = music_removed
+                else:
+                    FAILURES.append(prefix + ": selected camera music could not be removed cleanly")
+            else:
+                FAILURES.append(prefix + ": published catalogue track could not be added from the camera")
+        elif music_outcome == "empty":
+            screenshot(f"{prefix}-camera-music-empty-catalogue.png")
+            report.append("- NOTE camera music picker showed the explicit admin-published-only empty catalogue state; no track was available to select")
+            music_closed = tap_control(
+                music_state, ["Close"], f"{prefix}-camera-music-close-empty",
+                ["Add music"]
+            )
+            if music_closed:
+                camera_xml = music_closed
+            else:
+                FAILURES.append(prefix + ": empty music catalogue dialog did not close back to the live camera")
+        elif music_outcome == "error":
+            screenshot(f"{prefix}-camera-music-catalogue-error.png")
+            report.append("- NOTE camera music catalogue returned a visible load error; the picker remained available for dismissal")
+            music_closed = tap_control(
+                music_state, ["Close"], f"{prefix}-camera-music-close-error",
+                ["Add music"]
+            )
+            if music_closed:
+                camera_xml = music_closed
+            else:
+                FAILURES.append(prefix + ": music catalogue error dialog could not be dismissed back to the camera")
+        else:
+            screenshot(f"{prefix}-camera-music-catalogue-pending.png")
+            report.append("- NOTE music catalogue had not returned a track or explicit empty state within 20 seconds; backend/catalogue selection is not claimed as verified")
+            music_closed = tap_control(
+                music_state, ["Close"], f"{prefix}-camera-music-close-pending",
+                ["Add music"]
+            )
+            if music_closed:
+                camera_xml = music_closed
+            else:
+                FAILURES.append(prefix + ": pending music catalogue picker did not close back to the camera")
+    else:
+        FAILURES.append(prefix + ": camera Add music action did not open the FYNX Music picker")
+
     # Close the compact effects tray so timer controls are reachable on the first screen.
     if find_control(camera_xml, ["Effects"]):
         effects_closed = tap_control(
@@ -1398,6 +1474,39 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 else:
                     FAILURES.append(prefix + ": the New post description field could not be focused for keyboard testing")
 
+                # Hashtags and Mention are functional caption helpers, not just decorative chips.
+                caption_chips_xml = tap_control(
+                    draft_xml, ["# Hashtags"], f"{prefix}-camera-post-hashtag-chip",
+                    ["@ Mention"]
+                )
+                if caption_chips_xml:
+                    visible_caption = " ".join(
+                        (node.attrib.get("text") or "").strip()
+                        for node in nodes(caption_chips_xml)
+                    )
+                    if test_caption + " #" in visible_caption:
+                        report.append("- PASS # Hashtags inserted a hashtag marker into the actual caption field")
+                        mention_xml = tap_control(
+                            caption_chips_xml, ["@ Mention"], f"{prefix}-camera-post-mention-chip",
+                            ["# Hashtags"]
+                        )
+                        if mention_xml:
+                            visible_caption = " ".join(
+                                (node.attrib.get("text") or "").strip()
+                                for node in nodes(mention_xml)
+                            )
+                            if test_caption + " # @" in visible_caption:
+                                report.append("- PASS @ Mention inserted a mention marker into the actual caption field")
+                                draft_xml = mention_xml
+                            else:
+                                FAILURES.append(prefix + ": @ Mention control did not append its marker to the caption text")
+                        else:
+                            FAILURES.append(prefix + ": @ Mention helper chip was not clickable")
+                    else:
+                        FAILURES.append(prefix + ": # Hashtags control did not append its marker to the caption text")
+                else:
+                    FAILURES.append(prefix + ": # Hashtags helper chip was not clickable")
+
                 # Scroll the same real details page to inspect the TikTok-style settings order.
                 run("adb", "shell", "input", "swipe", "540", "1700", "540", "850", "450")
                 time.sleep(0.6)
@@ -1411,6 +1520,112 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 missing_options = [label for label in required_options if not find_control(details_xml, [label])]
                 if missing_options:
                     FAILURES.append(prefix + ": post details options are missing " + ", ".join(missing_options))
+
+                disclosure_xml = tap_control(
+                    details_xml, ["Content disclosure and ads"], f"{prefix}-camera-post-disclosure-open",
+                    ["Got it"]
+                )
+                if disclosure_xml:
+                    disclosure_closed = tap_control(
+                        disclosure_xml, ["Got it"], f"{prefix}-camera-post-disclosure-close",
+                        ["Add link"]
+                    )
+                    if disclosure_closed:
+                        details_xml = disclosure_closed
+                        report.append("- PASS Content disclosure explains the current sponsored-content limitation and closes without changing the draft")
+                    else:
+                        FAILURES.append(prefix + ": Content disclosure information could not be dismissed safely")
+                else:
+                    FAILURES.append(prefix + ": Content disclosure information action did not open")
+
+                # Add link must reject malformed URLs and append a valid http(s) URL to the draft.
+                link_dialog = tap_control(
+                    details_xml, ["Add link"], f"{prefix}-camera-post-link-open",
+                    ["Website URL", "Add to caption"]
+                )
+                if link_dialog:
+                    website_field = find_control(link_dialog, ["Website URL"])
+                    if website_field:
+                        _, website_x, website_y = website_field
+                        run("adb", "shell", "input", "tap", str(website_x), str(website_y))
+                        run("adb", "shell", "input", "text", "not-a-url")
+                        time.sleep(0.3)
+                        invalid_link_xml = dump_ui(f"{prefix}-camera-post-link-invalid-input.xml") or link_dialog
+                        invalid_link_result = tap_control(
+                            invalid_link_xml, ["Add to caption"], f"{prefix}-camera-post-link-reject-invalid",
+                            ["Enter a valid http or https web address."]
+                        )
+                        if invalid_link_result:
+                            report.append("- PASS Add link rejected malformed URL input and displayed a clear validation message")
+                            cancelled_link = tap_control(
+                                invalid_link_result, ["Cancel"], f"{prefix}-camera-post-link-cancel-invalid",
+                                ["Add link"]
+                            )
+                            if cancelled_link:
+                                valid_link_dialog = tap_control(
+                                    cancelled_link, ["Add link"], f"{prefix}-camera-post-link-reopen-valid",
+                                    ["Website URL", "Add to caption"]
+                                )
+                                if valid_link_dialog:
+                                    valid_field = find_control(valid_link_dialog, ["Website URL"])
+                                    if valid_field:
+                                        _, valid_x, valid_y = valid_field
+                                        run("adb", "shell", "input", "tap", str(valid_x), str(valid_y))
+                                        run("adb", "shell", "input", "text", "https://fynx.test/camera")
+                                        valid_input_xml = dump_ui(f"{prefix}-camera-post-link-valid-input.xml") or valid_link_dialog
+                                        valid_link_added = tap_control(
+                                            valid_input_xml, ["Add to caption"], f"{prefix}-camera-post-link-add-valid",
+                                            ["Post"]
+                                        )
+                                        if valid_link_added:
+                                            run("adb", "shell", "input", "swipe", "540", "850", "540", "1700", "450")
+                                            time.sleep(0.5)
+                                            link_caption_xml = dump_ui(f"{prefix}-camera-post-link-caption.xml") or valid_link_added
+                                            caption_values = " ".join(
+                                                (node.attrib.get("text") or "").strip()
+                                                for node in nodes(link_caption_xml)
+                                            )
+                                            if "https://fynx.test/camera" in caption_values:
+                                                report.append("- PASS valid https link was added to the caption without publishing the post")
+                                                details_xml = link_caption_xml
+                                                screenshot(f"{prefix}-camera-post-link-added.png")
+                                            else:
+                                                FAILURES.append(prefix + ": valid https link was accepted but was not restored in the caption field")
+                                        else:
+                                            FAILURES.append(prefix + ": valid https link could not be added to the caption")
+                                    else:
+                                        FAILURES.append(prefix + ": reopened Add link dialog did not expose its website input")
+                                else:
+                                    FAILURES.append(prefix + ": Add link dialog did not reopen cleanly after invalid-input cancellation")
+                            else:
+                                FAILURES.append(prefix + ": invalid Add link dialog could not be cancelled")
+                        else:
+                            FAILURES.append(prefix + ": Add link accepted malformed input without showing URL validation")
+                    else:
+                        FAILURES.append(prefix + ": Add link dialog did not expose the Website URL field")
+                else:
+                    FAILURES.append(prefix + ": Add link row did not open its URL dialog")
+
+                more_options_xml = tap_control(
+                    details_xml, ["More options"], f"{prefix}-camera-post-more-options-open",
+                    ["Tag people", "Feeling / Activity"]
+                )
+                if more_options_xml:
+                    required_more = ["Add music", "Tag people", "Feeling / Activity", "Add photo or video", "Take photo or video", "Record voice post", "Done"]
+                    missing_more = [label for label in required_more if not find_control(more_options_xml, [label])]
+                    if missing_more:
+                        FAILURES.append(prefix + ": More options dialog is missing " + ", ".join(missing_more))
+                    done_options = tap_control(
+                        more_options_xml, ["Done"], f"{prefix}-camera-post-more-options-close",
+                        ["More options", "Drafts"]
+                    )
+                    if done_options:
+                        details_xml = done_options
+                        report.append("- PASS More options opened its existing media, music, tagging and styling actions and closed safely")
+                    else:
+                        FAILURES.append(prefix + ": More options dialog did not close on Done")
+                else:
+                    FAILURES.append(prefix + ": More options dialog did not open from the post composer")
                 # Drafts are local-only. Save once, reopen to prove persistence, then delete the
                 # test draft. The workflow never taps Post and never creates a remote social post.
                 drafts_xml = tap_control(
@@ -1433,6 +1648,10 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                                 report.append("- PASS local post Drafts reopened with the entered caption text intact")
                             else:
                                 FAILURES.append(prefix + ": the saved post draft did not restore its caption text")
+                            if "https://fynx.test/camera" in opened_xml:
+                                report.append("- PASS local post Drafts retained the inserted https link")
+                            else:
+                                FAILURES.append(prefix + ": the saved post draft did not restore its inserted https link")
                             reopened_drafts = tap_control(
                                 opened_xml, ["Drafts"], f"{prefix}-camera-post-delete-draft",
                                 ["Delete"]
