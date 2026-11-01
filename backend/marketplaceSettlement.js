@@ -51,6 +51,7 @@ async function ensureSchema() {
       ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS fee_policy TEXT;
       ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS fee_policy_version TEXT;
       ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS provider_fee_payer TEXT;
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT 'PAYSTACK';
       UPDATE marketplace_orders SET product_subtotal=COALESCE(product_subtotal,ROUND(unit_price*quantity,2)),marketplace_fee=COALESCE(marketplace_fee,0),marketplace_fee_buyer=COALESCE(marketplace_fee_buyer,0),marketplace_fee_seller=COALESCE(marketplace_fee_seller,0),buyer_total=COALESCE(buyer_total,total_amount),seller_net_amount=COALESCE(seller_net_amount,total_amount),fee_policy=COALESCE(fee_policy,'ZERO'),fee_policy_version=COALESCE(fee_policy_version,'legacy'),provider_fee_payer=COALESCE(provider_fee_payer,'FYNX') WHERE product_subtotal IS NULL OR marketplace_fee IS NULL OR marketplace_fee_buyer IS NULL OR marketplace_fee_seller IS NULL OR buyer_total IS NULL OR seller_net_amount IS NULL OR fee_policy IS NULL OR fee_policy_version IS NULL OR provider_fee_payer IS NULL;
       ALTER TABLE marketplace_orders ALTER COLUMN product_subtotal SET NOT NULL;
       ALTER TABLE marketplace_orders ALTER COLUMN marketplace_fee SET NOT NULL;
@@ -167,6 +168,10 @@ async function ensureSchema() {
 }
 
 
+
+export async function ensureMarketplaceSettlementSchema() {
+  await ensureSchema();
+}
 
 function payoutStatusFromSettlement(row) {
   const escrow = String(row.escrow_status || 'NOT_INITIALIZED').toUpperCase();
