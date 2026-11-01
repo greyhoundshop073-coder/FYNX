@@ -69,6 +69,15 @@ internal data class FynxWalletSellerSummary(
     val settlements: List<FynxWalletSellerSettlement>
 )
 
+internal data class FynxWalletFundingAccount(
+    val status: String,
+    val currency: String,
+    val canRequest: Boolean,
+    val bankName: String?,
+    val accountName: String?,
+    val accountNumber: String?
+)
+
 internal object FynxBuyerWalletClient {
     internal fun normalizeActivityDirection(direction: String): String {
         val normalized = direction.trim().uppercase(Locale.US)
@@ -100,6 +109,56 @@ internal object FynxBuyerWalletClient {
             context,
             "/api/wallet/transactions?limit=" + boundedLimit + query
         ).mapCatching(::parseTransactions)
+    }
+
+    suspend fun loadFundingAccount(context: Context): Result<FynxWalletFundingAccount> =
+        FynxBackendClient.get(context, "/api/wallet/funding-account")
+            .mapCatching(::parseFundingAccount)
+
+    suspend fun requestFundingAccount(
+        context: Context,
+        email: String,
+        firstName: String,
+        lastName: String,
+        phone: String,
+        explicitConsent: Boolean
+    ): Result<FynxWalletFundingAccount> {
+        val body = JSONObject()
+            .put("email", email.trim())
+            .put("firstName", firstName.trim())
+            .put("lastName", lastName.trim())
+            .put("phone", phone.trim())
+            .put("explicitConsent", explicitConsent)
+        return FynxBackendClient.postJson(context, "/api/wallet/funding-account", body.toString())
+            .mapCatching(::parseFundingAccount)
+    }
+
+    suspend fun loadStatement(context: Context): Result<String> =
+        FynxBackendClient.get(context, "/api/wallet/statement.csv")
+
+    internal fun parseFundingAccount(raw: String): FynxWalletFundingAccount {
+        val json = JSONObject(raw)
+        val status = json.optString("status", "NOT_CREATED").trim().uppercase(Locale.US)
+        require(status in setOf("NOT_SETUP","NOT_CREATED","REQUESTING","ASSIGNING","ACTIVE","FAILED","RESTRICTED")) {
+            "Wallet funding account returned an unsupported status."
+        }
+        val currency = json.optString("currency", "NGN").trim().uppercase(Locale.US)
+        require(currency == "NGN") { "Wallet funding account currency is not supported." }
+        val account = json.optJSONObject("account")
+        val accountNumber = account?.optString("accountNumber")?.trim()?.takeIf { it.isNotBlank() }
+        if (status == "ACTIVE") {
+            require(accountNumber != null && accountNumber.matches(Regex("^\\d{10}$"))) {
+                "Active wallet funding account has invalid account details."
+            }
+        }
+        return FynxWalletFundingAccount(
+            status = status,
+            currency = currency,
+            canRequest = json.optBoolean("canRequest", false),
+            bankName = account?.optString("bankName")?.trim()?.takeIf { it.isNotBlank() },
+            accountName = account?.optString("accountName")?.trim()?.takeIf { it.isNotBlank() },
+            accountNumber = accountNumber
+        )
     }
 
     suspend fun loadSellerSummary(context: Context): Result<FynxWalletSellerSummary> =
