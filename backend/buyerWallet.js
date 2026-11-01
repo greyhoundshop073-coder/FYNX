@@ -968,6 +968,16 @@ export function registerBuyerWalletRoutes({ app }) {
             idempotent: true
           });
         }
+        // A customer already exists. Do not issue a second dedicated-account
+        // assignment request; wait for Paystack's assignment webhook instead.
+        await pool.query(
+          "UPDATE buyer_wallets SET funding_account_status='ASSIGNING',updated_at=NOW() WHERE id=$1",
+          [wallet.id]
+        );
+        return res.status(202).json({
+          status: 'ASSIGNING',
+          message: 'Your dedicated account request is already with Paystack. FYNX will display its details after the assignment event arrives.'
+        });
       } else {
         const customer = await walletPaystackRequest('/customer', {
           method: 'POST',
@@ -1483,7 +1493,8 @@ export function registerBuyerWalletRoutes({ app }) {
                     WHEN op.status IS NOT NULL THEN op.status ELSE t.status END AS status,
                t.amount,t.fee,t.currency,t.reference,t.description,
                to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
-               COALESCE(delta.wallet_delta,0)::numeric(18,2) AS wallet_delta
+               CASE WHEN op.status IN ('FAILED','BLOCKED','REVERSED') THEN 0
+                    ELSE COALESCE(delta.wallet_delta,0) END::numeric(18,2) AS wallet_delta
           FROM buyer_wallet_transactions t
           LEFT JOIN buyer_wallet_provider_operations op ON op.transaction_id=t.id
           LEFT JOIN LATERAL (
@@ -1538,7 +1549,8 @@ export function registerBuyerWalletRoutes({ app }) {
                     WHEN op.status IS NOT NULL THEN op.status ELSE t.status END AS status,
                t.amount,t.fee,t.currency,t.reference,t.description,t.created_at,
                to_char(t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
-               COALESCE(activity_delta.wallet_delta,0)::numeric(18,2) AS wallet_delta
+               CASE WHEN op.status IN ('FAILED','BLOCKED','REVERSED') THEN 0
+                    ELSE COALESCE(activity_delta.wallet_delta,0) END::numeric(18,2) AS wallet_delta
           FROM buyer_wallet_transactions t
           LEFT JOIN buyer_wallet_provider_operations op ON op.transaction_id=t.id
           LEFT JOIN LATERAL (
