@@ -254,7 +254,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           COALESCE(NULLIF(o.product_snapshot->>'title', ''), 'FYNX order') AS title,
           UPPER(COALESCE(o.currency, 'NGN')) AS currency,
           COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
-          COALESCE(o.marketplace_fee, 0) AS marketplace_fee,
+          COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller,
           COALESCE(e.status, 'UNKNOWN') AS funds,
           payout.status AS payout_status,
           COALESCE(payout.updated_at, o.updated_at, o.created_at) AS updated_at
@@ -276,6 +276,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           SELECT
             UPPER(COALESCE(o.currency, 'NGN')) AS currency,
             COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
+            COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller,
             COALESCE(e.status, 'UNKNOWN') AS funds,
             payout.status AS payout_status
           FROM marketplace_orders o
@@ -305,7 +306,10 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           COALESCE(SUM(CASE WHEN summary_bucket = 'protected' THEN seller_net_amount ELSE 0 END), 0) AS protected_funds,
           COALESCE(SUM(CASE WHEN summary_bucket = 'available' THEN seller_net_amount ELSE 0 END), 0) AS available_for_payout,
           COALESCE(SUM(CASE WHEN summary_bucket = 'pending' THEN seller_net_amount ELSE 0 END), 0) AS payout_pending,
-          COALESCE(SUM(CASE WHEN summary_bucket = 'paid' THEN seller_net_amount ELSE 0 END), 0) AS paid_out
+          COALESCE(SUM(CASE WHEN summary_bucket = 'paid' THEN seller_net_amount ELSE 0 END), 0) AS paid_out,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN seller_net_amount + marketplace_fee_seller ELSE 0 END), 0) AS gross_sales,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN marketplace_fee_seller ELSE 0 END), 0) AS marketplace_fees,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN seller_net_amount ELSE 0 END), 0) AS net_earnings
         FROM classified_settlements
         GROUP BY currency
         ORDER BY currency
@@ -316,14 +320,17 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           protectedFunds: Number(row.protected_funds || 0),
           availableForPayout: Number(row.available_for_payout || 0),
           payoutPending: Number(row.payout_pending || 0),
-          paidOut: Number(row.paid_out || 0)
+          paidOut: Number(row.paid_out || 0),
+          grossSales: Number(row.gross_sales || 0),
+          marketplaceFees: Number(row.marketplace_fees || 0),
+          netEarnings: Number(row.net_earnings || 0)
         })),
         settlements: result.rows.map((row) => ({
           orderId: String(row.order_id),
           title: String(row.title || 'FYNX order'),
           currency: String(row.currency || 'NGN').toUpperCase(),
           sellerNetAmount: Number(row.seller_net_amount || 0),
-          marketplaceFee: Number(row.marketplace_fee || 0),
+          marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0),
           funds: String(row.funds || 'UNKNOWN'),
           payoutStatus: String(row.payout_status || row.funds || 'UNKNOWN'),
           updatedAt: row.updated_at
@@ -332,6 +339,69 @@ export function registerMarketplaceSettlementRoutes({ app }) {
     } catch (error) {
       console.error('marketplace seller settlement summary', error);
       return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500).json({ error: 'seller earnings could not load' });
+    }
+  });
+
+  // FYNX platform commission reporting is deliberately admin-only. This reads the
+  // settled fee ledger and separately estimates commissions on orders not yet settled.
+  app.get('/api/marketplace/settlement/admin/commission-summary', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const admin = await pool.query(
+        'SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1',
+        [req.user.sub]
+      );
+      if (!admin.rowCount) return res.status(403).json({ error: 'admin access required' });
+
+      const [settled, pending] = await Promise.all([
+        pool.query(`
+          SELECT UPPER(currency) AS currency,
+                 COALESCE(SUM(amount),0)::numeric(18,2) AS settled_commission,
+                 COUNT(DISTINCT order_id)::int AS settled_orders
+            FROM marketplace_ledger_entries
+           WHERE account='fynx_marketplace_fee' AND entry_type='FEE'
+           GROUP BY UPPER(currency)
+           ORDER BY UPPER(currency)
+        `),
+        pool.query(`
+          SELECT UPPER(o.currency) AS currency,
+                 COALESCE(SUM(o.marketplace_fee),0)::numeric(18,2) AS pending_commission_estimate,
+                 COUNT(*)::int AS pending_orders
+            FROM marketplace_orders o
+           WHERE o.status IN ('PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED')
+             AND COALESCE(o.marketplace_fee,0) > 0
+             AND NOT EXISTS (
+               SELECT 1 FROM marketplace_ledger_entries e
+                WHERE e.order_id=o.id
+                  AND e.account='fynx_marketplace_fee'
+                  AND e.entry_type='FEE'
+             )
+           GROUP BY UPPER(o.currency)
+           ORDER BY UPPER(o.currency)
+        `)
+      ]);
+      const settledByCurrency = new Map(settled.rows.map((row) => [String(row.currency).toUpperCase(), row]));
+      const pendingByCurrency = new Map(pending.rows.map((row) => [String(row.currency).toUpperCase(), row]));
+      const currencies = [...new Set([...settledByCurrency.keys(), ...pendingByCurrency.keys()])].sort();
+      return res.json({
+        generatedAt: new Date().toISOString(),
+        currencyTotals: currencies.map((currency) => {
+          const paid = settledByCurrency.get(currency) || {};
+          const waiting = pendingByCurrency.get(currency) || {};
+          return {
+            currency,
+            settledCommission: Number(paid.settled_commission || 0),
+            settledOrders: Number(paid.settled_orders || 0),
+            pendingCommissionEstimate: Number(waiting.pending_commission_estimate || 0),
+            pendingOrders: Number(waiting.pending_orders || 0)
+          };
+        }),
+        accountingNote: 'Settled commission is recorded from successful seller payouts. Pending commission is an estimate only and is not platform cash revenue.'
+      });
+    } catch (error) {
+      console.error('marketplace admin commission summary', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
+        .json({ error: 'platform commission report is temporarily unavailable' });
     }
   });
 
