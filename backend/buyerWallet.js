@@ -983,11 +983,12 @@ export function registerBuyerWalletRoutes({ app }) {
     const bankCode = typeof req.body?.bankCode === 'string' ? req.body.bankCode.trim() : '';
     const accountNumber = typeof req.body?.accountNumber === 'string' ? req.body.accountNumber.replace(/\D/g, '') : '';
     const idempotencyKey = typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey.trim() : '';
+    const pin = typeof req.body?.pin === 'string' ? req.body.pin.trim() : '';
     if (!walletProviderApproved('WITHDRAWAL')) return res.status(503).json({ error: 'wallet withdrawals are not enabled for this provider environment yet' });
     if (!Number.isFinite(amountValue) || amountValue <= 0 || !Number.isSafeInteger(amountMinor) ||
         !/^[0-9]{3,10}$/.test(bankCode) || !/^[0-9]{10}$/.test(accountNumber) ||
-        !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey)) {
-      return res.status(400).json({ error: 'valid withdrawal amount, bank, account number and idempotency key are required' });
+        !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey) || !/^\d{6}$/.test(pin)) {
+      return res.status(400).json({ error: 'valid withdrawal amount, bank, account number, six-digit wallet PIN and idempotency key are required' });
     }
     const amount = (amountMinor / 100).toFixed(2);
     try {
@@ -1032,7 +1033,7 @@ export function registerBuyerWalletRoutes({ app }) {
       try {
         await client.query('BEGIN');
         const wallet = (await client.query(`
-          SELECT id,status,currency FROM buyer_wallets
+          SELECT id,status,currency,withdrawal_pin_hash,withdrawal_pin_failed_attempts,withdrawal_pin_locked_until FROM buyer_wallets
            WHERE user_id=$1 AND currency='NGN'
            FOR UPDATE
         `, [req.user.sub])).rows[0];
@@ -1040,6 +1041,39 @@ export function registerBuyerWalletRoutes({ app }) {
           await client.query('ROLLBACK');
           return res.status(409).json({ error: 'an active FYNX wallet is required before withdrawal' });
         }
+        if (!wallet.withdrawal_pin_hash) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'set your wallet withdrawal PIN before requesting a payout' });
+        }
+        const pinLockedUntil = wallet.withdrawal_pin_locked_until ? new Date(wallet.withdrawal_pin_locked_until).getTime() : 0;
+        if (pinLockedUntil > Date.now()) {
+          await client.query('ROLLBACK');
+          return res.status(423).json({ error: 'wallet withdrawals are temporarily locked after repeated incorrect PIN attempts' });
+        }
+        const enteredPinMatches = await bcrypt.compare(pin, wallet.withdrawal_pin_hash);
+        if (!enteredPinMatches) {
+          const priorFailures = pinLockedUntil > 0 && pinLockedUntil <= Date.now()
+            ? 0
+            : Number(wallet.withdrawal_pin_failed_attempts || 0);
+          const failedAttempts = priorFailures + 1;
+          await client.query(`
+            UPDATE buyer_wallets
+               SET withdrawal_pin_failed_attempts=$1,
+                   withdrawal_pin_locked_until=CASE WHEN $1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE NULL END,
+                   updated_at=NOW()
+             WHERE id=$2
+          `, [failedAttempts, wallet.id]);
+          await client.query('COMMIT');
+          return res.status(403).json({
+            error: failedAttempts >= 5
+              ? 'wallet PIN attempts exceeded; withdrawals are locked for 15 minutes'
+              : 'wallet withdrawal PIN is incorrect'
+          });
+        }
+        await client.query(
+          'UPDATE buyer_wallets SET withdrawal_pin_failed_attempts=0,withdrawal_pin_locked_until=NULL WHERE id=$1',
+          [wallet.id]
+        );
         const balance = (await client.query(`
           SELECT COALESCE(SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END),0)::numeric(18,2) AS available
             FROM buyer_wallet_ledger_entries e
