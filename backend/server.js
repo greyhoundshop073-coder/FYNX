@@ -524,6 +524,16 @@ app.get("/api/media/:id", auth, async (req, res) => {
           )
           OR EXISTS (
             SELECT 1
+            FROM marketplace_orders o
+            JOIN marketplace_listings ml ON ml.id=o.listing_id
+            WHERE (o.buyer_id=$2 OR o.seller_id=$2)
+              AND (
+                ml.media_ids @> to_jsonb(ARRAY[mm.id::bigint])
+                OR ml.media_ids @> to_jsonb(ARRAY[mm.id::text])
+              )
+          )
+          OR EXISTS (
+            SELECT 1
             FROM marketplace_delivery_evidence e
             JOIN marketplace_orders o ON o.id=e.order_id
             WHERE e.evidence_type='PHOTO_REFERENCE'
