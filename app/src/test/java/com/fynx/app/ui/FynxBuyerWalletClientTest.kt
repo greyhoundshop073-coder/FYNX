@@ -86,6 +86,32 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun payoutBankListKeepsOnlyValidProviderBankRecords() {
+        val banks = FynxBuyerWalletClient.parsePayoutBanks(
+            """{"banks":[{"name":"Access Bank","code":"044","slug":"access-bank"},{"name":"Invalid","code":"x"}]}"""
+        )
+        assertEquals(1, banks.size)
+        assertEquals("Access Bank", banks.single().name)
+        assertEquals("044", banks.single().code)
+    }
+
+    @Test
+    fun withdrawalResultParsesPendingReferenceAndValidatesAmounts() {
+        val result = FynxBuyerWalletClient.parseWithdrawalResult(
+            """{"status":"PENDING","reference":"fw_1234567890","amount":2500.0,"bankName":"Access Bank","accountLast4":"6789","message":"processing"}"""
+        )
+        assertEquals("PENDING", result.status)
+        assertEquals("fw_1234567890", result.reference)
+        assertEquals(2500.0, result.amount, 0.0)
+        assertEquals("6789", result.accountLast4)
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWithdrawalResult(
+                """{"status":"PENDING","reference":"fw_bad","amount":-1}"""
+            )
+        }
+    }
+
+    @Test
     fun sellerSummarySeparatesGrossSalesFeesAndNetEarnings() {
         val summary = FynxBuyerWalletClient.parseSellerSummary(
             """{"totals":[{"currency":"NGN","protectedFunds":1000.0,"availableForPayout":500.0,"payoutPending":100.0,"paidOut":2500.0,"grossSales":4500.0,"marketplaceFees":225.0,"netEarnings":4275.0}],"settlements":[{"orderId":"order-1","title":"Leather bag","currency":"NGN","sellerNetAmount":950.0,"marketplaceFeeSeller":50.0,"funds":"HELD","payoutStatus":"HELD","updatedAt":"2026-10-31T10:00:00Z"}]}"""
