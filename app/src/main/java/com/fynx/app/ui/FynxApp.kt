@@ -96,7 +96,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var marketplaceStatusDraft by remember { mutableStateOf<String?>(null) }
     var marketplaceAiListingId by remember { mutableStateOf<String?>(null) }
     var openChatMarketplaceListingId by remember { mutableStateOf<String?>(null) }
-    var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); val debugOfflineSession = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 && stored.state == AuthState.SIGNED_IN; if (stored.state == AuthState.SIGNED_IN && (FynxBackendClient.hasAccessToken(context) || debugOfflineSession)) stored else AuthSession() }) }
+    var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); if (stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) stored else { if (stored.state == AuthState.SIGNED_IN) FynxAuthStore.clear(context); AuthSession() } }) }
     // Key account-scoped Marketplace screens so transient private state cannot survive an account switch.
     val marketplaceAccountKey = authSession.username?.removePrefix("@")?.trim()?.lowercase(java.util.Locale.US)?.takeIf { it.isNotBlank() } ?: "signed-out"
     var adminRole by remember { mutableStateOf<String?>(null) }
@@ -123,9 +123,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         onDispose { appConnectionManager.dispose() }
     }
     DisposableEffect(lifecycleOwner, authSession.state) {
-        // Backend reachability is a public health probe, so the app-level connection
-        // indicator must run for the supported debug saved-device session too.
-        // Requiring a bearer token here leaves that session stuck at "Waiting for network".
+        // Only a real authenticated session is allowed into the app shell.
         if (authSession.state == AuthState.SIGNED_IN) {
             lifecycleOwner.lifecycle.addObserver(appConnectionManager)
         }
