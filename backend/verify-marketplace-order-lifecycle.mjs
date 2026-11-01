@@ -34,7 +34,7 @@ const checks = [
   ['marketplace orders remain protected before completion', completion.includes("order.status !== 'INSPECTION'") && completion.includes("status='COMPLETED'")],
   ['buyer lifecycle client stays server-authoritative', lifecycle.includes('FynxRemoteSocialClient') && !/marketplace_orders.*UPDATE|UPDATE.*marketplace_orders/i.test(lifecycle)],
   ['seller lifecycle client stays server-authoritative', seller.includes('FynxBackendClient') && !/marketplace_orders.*UPDATE|UPDATE.*marketplace_orders/i.test(seller)],
-  ['checkout UI does not expose provider secret material', panel.includes('password or payment secret is never requested here')],
+  ['checkout UI does not expose provider secret material', panel.includes('Wallet security PIN') && !/(PAYSTACK_SECRET_KEY|sk_live_[A-Za-z0-9]+|sk_test_[A-Za-z0-9]+|Bearer\\s+[A-Za-z0-9._-]{12,})/i.test(panel)],
   ['payment completion remains backend-verified', panel.includes('verifyMarketplacePayment(context, payment?.reference.orEmpty())')],
   ['protected-order UI keeps funds gated until completion', panel.includes('funds remain protected until the order reaches the appropriate completion state')],
   ['failed delivery does not bypass protection', completion.includes("FAILED_DELIVERY") && completion.includes('hasActiveProtectionCase') && completion.includes("status IN ('OPEN','UNDER_REVIEW')")],

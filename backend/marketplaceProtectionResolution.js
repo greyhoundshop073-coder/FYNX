@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
+import { refundBuyerWalletMarketplaceOrder } from './buyerWalletMarketplace.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -133,7 +134,7 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
       const status = typeof req.query?.status === 'string' ? req.query.status.trim().toUpperCase() : '';
       const params = status ? [status] : [];
       const result = await pool.query(`SELECT c.id,c.order_id,c.dispute_id,c.opened_by,c.role,c.case_type,c.reason,c.details,c.status,c.previous_order_status,c.previous_escrow_status,c.created_at,c.updated_at,
-        o.buyer_id,o.seller_id,o.total_amount,o.currency,o.status AS order_status,o.payment_reference
+        o.buyer_id,o.seller_id,o.total_amount,o.currency,o.status AS order_status,o.payment_reference,o.payment_method
         FROM marketplace_protection_cases c JOIN marketplace_orders o ON o.id=c.order_id ${status ? 'WHERE c.status=$1' : ''} ORDER BY c.created_at ASC LIMIT 100`, params);
       return res.json({ cases: result.rows.map(row => ({ ...row, id: String(row.id), orderId: String(row.order_id), disputeId: row.dispute_id ? String(row.dispute_id) : null, openedBy: String(row.opened_by), buyerId: String(row.buyer_id), sellerId: String(row.seller_id), totalAmount: Number(row.total_amount) })) });
     } catch (error) { console.error('marketplace protection admin list', error); return res.status(500).json({ error: 'protection cases unavailable' }); }
@@ -152,7 +153,7 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
       let refundJob = null;
       try {
         await client.query('BEGIN');
-        const row = (await client.query(`SELECT c.*,o.buyer_id,o.seller_id,o.total_amount,o.currency,o.status AS order_status,o.payment_reference,o.quantity,o.listing_id,e.id AS escrow_id,e.status AS escrow_status
+        const row = (await client.query(`SELECT c.*,o.buyer_id,o.seller_id,o.total_amount,o.currency,o.status AS order_status,o.payment_reference,o.payment_method,o.quantity,o.listing_id,e.id AS escrow_id,e.status AS escrow_status
           FROM marketplace_protection_cases c JOIN marketplace_orders o ON o.id=c.order_id LEFT JOIN marketplace_escrows e ON e.order_id=c.order_id WHERE c.id=$1 FOR UPDATE`, [caseId])).rows[0];
         if (!row) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'protection case not found' }); }
         if (!['OPEN','UNDER_REVIEW'].includes(row.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'protection case is already resolved' }); }
@@ -192,9 +193,11 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
         if (resolution === 'CANCEL' && (payoutConflict || refundConflict)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'financial operation is active; protection cannot be cancelled while money movement is pending or finalized' }); }
 
         if (resolution === 'BUYER') {
-          const paymentReference = await resolveOrderPaymentReference(client, row.order_id, row.payment_reference);
-          if (!paymentReference) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'verified payment reference is required before refund' }); }
-          if (!PAYSTACK_SECRET_KEY) { await client.query('ROLLBACK'); return res.status(503).json({ error: 'refund provider is not configured yet' }); }
+          const paymentMethod = String(row.payment_method || 'PAYSTACK').trim().toUpperCase();
+          const walletPayment = paymentMethod === 'FYNX_WALLET';
+          const paymentReference = walletPayment ? null : await resolveOrderPaymentReference(client, row.order_id, row.payment_reference);
+          if (!walletPayment && !paymentReference) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'verified payment reference is required before refund' }); }
+          if (!walletPayment && !PAYSTACK_SECRET_KEY) { await client.query('ROLLBACK'); return res.status(503).json({ error: 'refund provider is not configured yet' }); }
           const key = `REFUND-${row.order_id}`;
           const existing = (await client.query('SELECT * FROM marketplace_financial_operations WHERE idempotency_key=$1 FOR UPDATE', [key])).rows[0];
           if (existing?.status === 'SUCCEEDED') { await client.query(`UPDATE marketplace_protection_cases SET status='REFUNDED',updated_at=NOW() WHERE id=$1`, [caseId]); await client.query('COMMIT'); return res.json({ ok: true, idempotent: true, caseId: String(caseId), status: 'REFUNDED', operation: existing }); }
@@ -202,10 +205,60 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
           if (existing?.status === 'FAILED') { await client.query('COMMIT'); return res.status(409).json({ error: 'previous refund attempt failed; provider status must be reconciled before retry', protectionActive: true, caseId: String(caseId), operation: existing }); }
           if (existing?.status === 'BLOCKED') { await client.query('COMMIT'); return res.status(409).json({ error: 'refund is blocked by a financial reconciliation issue; no new refund attempt was created', protectionActive: true, caseId: String(caseId), operation: existing }); }
           const operationId = crypto.randomUUID();
-          refundJob = { operationId, orderId: String(row.order_id), caseId: String(caseId), reference: paymentReference, amount: Number(row.total_amount), currency: String(row.currency) };
-          await client.query(`INSERT INTO marketplace_financial_operations (id,order_id,operation_type,idempotency_key,status,provider,amount,currency,metadata) VALUES ($1,$2,'REFUND',$3,'PENDING','paystack',$4,$5,$6::jsonb)`, [operationId, row.order_id, key, row.total_amount, row.currency, JSON.stringify({ paymentReference, caseId: String(caseId), note, previousOrderStatus: row.previous_order_status || row.order_status || null })]);
-          await client.query(`UPDATE marketplace_escrows SET status='REFUND_PENDING',updated_at=NOW() WHERE id=$1 AND status IN ('HELD','DISPUTED','RELEASE_ELIGIBLE')`, [row.escrow_id]);
-          await client.query(`UPDATE marketplace_protection_cases SET status='UNDER_REVIEW',updated_at=NOW() WHERE id=$1`, [caseId]);
+          if (walletPayment) {
+            const walletRefund = await refundBuyerWalletMarketplaceOrder(client, {
+              buyerId: row.buyer_id,
+              orderId: row.order_id,
+              amount: escrowAmount,
+              currency: escrowCurrency
+            });
+            const walletReference = String(walletRefund.reference);
+            await client.query(`
+              INSERT INTO marketplace_financial_operations
+                (id,order_id,operation_type,idempotency_key,status,provider,provider_reference,amount,currency,metadata)
+              VALUES ($1,$2,'REFUND',$3,'SUCCEEDED','fynx_wallet',$4,$5,$6,$7::jsonb)
+            `, [
+              operationId, row.order_id, key, walletReference, escrowAmount, escrowCurrency,
+              JSON.stringify({
+                provider: 'fynx_wallet',
+                walletTransactionId: walletRefund.transactionId,
+                caseId: String(caseId),
+                note,
+                previousOrderStatus: row.previous_order_status || row.order_status || null
+              })
+            ]);
+            await client.query(`UPDATE marketplace_orders SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status='DISPUTED'`, [row.order_id]);
+            await client.query(`UPDATE marketplace_escrows SET status='REFUNDED',refunded_at=COALESCE(refunded_at,NOW()),updated_at=NOW() WHERE id=$1`, [row.escrow_id]);
+            await client.query(`UPDATE marketplace_protection_cases SET status='REFUNDED',updated_at=NOW() WHERE id=$1`, [caseId]);
+            if (row.dispute_id) {
+              await client.query(`UPDATE marketplace_order_disputes SET status='RESOLVED_BUYER',resolution_notes=$1,updated_at=NOW() WHERE id=$2`, [note, row.dispute_id]);
+            }
+            await client.query(`
+              INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata)
+              VALUES ($1,$2,'buyer_refund','REFUND',$3,$4,$5,$6::jsonb)
+              ON CONFLICT (idempotency_key) DO NOTHING
+            `, [
+              row.escrow_id, row.order_id, escrowAmount, escrowCurrency, `REFUND-${row.order_id}`,
+              JSON.stringify({ provider: 'fynx_wallet', walletTransactionId: walletRefund.transactionId, caseId: String(caseId) })
+            ]);
+            const priorStatus = String(row.previous_order_status || row.order_status || '').toUpperCase();
+            if (['PAID','SHIPPED','DELIVERED','INSPECTION'].includes(priorStatus) && row.listing_id) {
+              await client.query(`UPDATE marketplace_listings SET reserved_quantity=GREATEST(0,reserved_quantity-$1),updated_at=NOW() WHERE id=$2`, [Number(row.quantity), row.listing_id]);
+            }
+            await client.query(`
+              INSERT INTO marketplace_order_events
+                (order_id,actor_id,event_type,from_status,to_status,metadata)
+              VALUES ($1,$2,'WALLET_REFUND_COMPLETED','DISPUTED','REFUNDED',$3::jsonb)
+            `, [
+              row.order_id, req.user.sub,
+              JSON.stringify({ provider: 'fynx_wallet', walletTransactionId: walletRefund.transactionId, amount: escrowAmount, currency: escrowCurrency })
+            ]);
+          } else {
+            refundJob = { operationId, orderId: String(row.order_id), caseId: String(caseId), reference: paymentReference, amount: Number(row.total_amount), currency: String(row.currency) };
+            await client.query(`INSERT INTO marketplace_financial_operations (id,order_id,operation_type,idempotency_key,status,provider,amount,currency,metadata) VALUES ($1,$2,'REFUND',$3,'PENDING','paystack',$4,$5,$6::jsonb)`, [operationId, row.order_id, key, row.total_amount, row.currency, JSON.stringify({ paymentReference, caseId: String(caseId), note, previousOrderStatus: row.previous_order_status || row.order_status || null })]);
+            await client.query(`UPDATE marketplace_escrows SET status='REFUND_PENDING',updated_at=NOW() WHERE id=$1 AND status IN ('HELD','DISPUTED','RELEASE_ELIGIBLE')`, [row.escrow_id]);
+            await client.query(`UPDATE marketplace_protection_cases SET status='UNDER_REVIEW',updated_at=NOW() WHERE id=$1`, [caseId]);
+          }
         } else {
           const caseStatus = resolution === 'SELLER' ? 'RESOLVED_SELLER' : 'CANCELLED';
           const escrowStatus = resolution === 'SELLER' ? 'RELEASE_ELIGIBLE' : (row.previous_escrow_status || 'HELD');
@@ -239,7 +292,7 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
           return res.status(502).json({ error: 'refund processing failed; protection remains active' });
         }
       }
-      return res.status(200).json({ ok: true, caseId: String(caseId), status: resolution === 'SELLER' ? 'RESOLVED_SELLER' : 'CANCELLED' });
+      return res.status(200).json({ ok: true, caseId: String(caseId), status: resolution === 'SELLER' ? 'RESOLVED_SELLER' : resolution === 'BUYER' ? 'REFUNDED' : 'CANCELLED', refundedTo: resolution === 'BUYER' && !refundJob ? 'FYNX_WALLET' : undefined });
     } catch (error) { console.error('marketplace protection resolution', error); return res.status(error?.code === 'PAYSTACK_NOT_CONFIGURED' ? 503 : 500).json({ error: 'protection resolution failed' }); }
   });
 }

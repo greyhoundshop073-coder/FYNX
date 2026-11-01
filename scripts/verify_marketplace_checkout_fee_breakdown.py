@@ -31,8 +31,8 @@ checks = [
      'marketplaceCheckoutIntentFingerprint(' in client and 'marketplaceCheckoutAccountScope(accessToken.trim())' in client and 'JSONObject(String(payload, Charsets.UTF_8)).optString("sub").trim()' in client and '"subject:"' in client and '"token:"' in client and 'put("accountScope"' in client and 'put("address", value.address.trim().take(300))' in client and 'MessageDigest.getInstance("SHA-256")' in client),
     ("single-order ID persists for ambiguous retries and remains while server order is awaiting payment",
      'marketplaceCheckoutOrderId(context, it)' in client and 'onSuccess { order ->' in client and 'val stableOrderId = intentFingerprint?.let' in client and 'val stableOrderId = UUID.randomUUID().toString()' not in client and 'clearMarketplaceCheckoutOrderId(context, it)' not in client),
-    ("single-order retry ID is cleared only after the existing authoritative payment-verification callback succeeds",
-     'clearMarketplaceCheckoutOrderIdForOrder(context, order.id)' in panel and 'verifyMarketplacePayment(context, payment?.reference.orEmpty()).onSuccess { onPaid() }' in panel and 'only after the authoritative payment-verification path reports success for this order.' in client),
+    ("single-order retry ID is cleared only after an authoritative Paystack or Wallet payment succeeds",
+     'clearMarketplaceCheckoutOrderIdForOrder(context, order.id)' in panel and 'verifyMarketplacePayment(context, payment?.reference.orEmpty())' in panel and '.onSuccess { onPaid() }' in panel and 'FynxBuyerWalletClient.payMarketplaceOrder(' in panel and ').onSuccess {' in panel and 'only after the authoritative payment-verification path reports success for this order.' in client),
     ("stored checkout IDs are bounded and expire without storing raw delivery details",
      'MARKETPLACE_CHECKOUT_ATTEMPT_LIMIT = 50' in client and 'MARKETPLACE_CHECKOUT_ATTEMPT_MAX_AGE_MS' in client and 'preferences.all.keys.filter { it.startsWith(MARKETPLACE_CHECKOUT_ORDER_ID_PREFIX) }' in client and 'putString(idKey, created)' in client),
     ("checkout input fields and delivery/pickup controls are disabled while requests are active",
@@ -43,6 +43,8 @@ checks = [
      'validServerQuoteMapsAuthoritativeTotals' in client_test_content and 'productQuantityCurrencyAndFulfillmentMustMatchTheRequest' in client_test_content and 'subtotalAndTotalMustReconcileWithQuantityAndFeeBreakdown' in client_test_content and 'idempotencyFingerprintIsStableForTheSameAuthenticatedIntentAcrossTokenRotation' in client_test_content and 'missingSellerDisplayNameFallsBackToAuthoritativeSellerUsername' in client_test_content),
     ("valid quote seller identity survives a missing optional display name via the server-provided username",
      'sellerDisplayName = optionalText("sellerDisplayName").ifBlank { requiredText("sellerUsername") }' in client and 'requiredText("sellerUsername")' in client),
+    ("Wallet checkout uses the authenticated Wallet payment endpoint only when server capability and cleared balance allow it",
+     'walletSummary?.canSpend == true' in panel and 'walletSummary?.availableBalance' in panel and 'FynxBuyerWalletClient.payMarketplaceOrder(' in panel and 'Pay with FYNX Wallet' in panel),
 
 ]
 failed = False

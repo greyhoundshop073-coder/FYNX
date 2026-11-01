@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
+import { handleBuyerWalletPaystackEvent, reconcileBuyerWalletTransferEvent } from './buyerWallet.js';
+import { settleBuyerWalletMarketplaceOrder } from './buyerWalletMarketplace.js';
 
 function safeEqualHex(actual, expected) {
   if (!actual || !expected) return false;
@@ -154,6 +156,7 @@ async function reconcileTransferEvent(client, eventName, transfer) {
       await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'seller_payout','RELEASE',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, operationAmount, escrow.currency, `PAYOUT-RELEASE-${operation.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: eventReference, providerStatus, protectedAmount: escrowAmount, sellerNetAmount: operationAmount, marketplaceFee })]);
       if (marketplaceFee > 0) await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'fynx_marketplace_fee','FEE',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, marketplaceFee, escrow.currency, `MARKETPLACE-FEE-${operation.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: eventReference, feePolicy: operation.metadata?.feePolicy || null, feePolicyVersion: operation.metadata?.feePolicyVersion || null })]);
     }
+    await settleBuyerWalletMarketplaceOrder(client, operation.order_id);
   } else if (eventName === 'transfer.failed' || eventName === 'transfer.reversed') {
     await client.query(`UPDATE marketplace_financial_operations SET status='FAILED',provider_reference=COALESCE($1,provider_reference),failure_reason=$2,metadata=$3::jsonb,updated_at=NOW() WHERE id=$4 AND status='PENDING'`, [eventReference || null, `Paystack transfer ${eventName === 'transfer.reversed' ? 'reversed' : 'failed'}`, JSON.stringify(metadata), operation.id]);
     await client.query(`UPDATE marketplace_escrows SET status='RELEASE_ELIGIBLE',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [operation.order_id]);
@@ -170,6 +173,18 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
     let event;
     try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).json({ error: 'invalid webhook payload' }); }
     const eventName = typeof event?.event === 'string' ? event.event.trim().toLowerCase() : '';
+    const eventData = event.data || {};
+
+    if (eventName === 'customeridentification.failed' || eventName.startsWith('dedicatedaccount.')) {
+      try {
+        const outcome = await handleBuyerWalletPaystackEvent(eventName, eventData);
+        return res.status(200).json({ received: true, ...outcome });
+      } catch (error) {
+        console.error('FYNX wallet account-assignment webhook', error);
+        return res.status(500).json({ error: 'wallet account-assignment reconciliation failed' });
+      }
+    }
+
     if (eventName.startsWith('refund.')) {
       const client = await pool.connect();
       try { await client.query('BEGIN'); const matched = await reconcileRefundEvent(client, eventName, event.data || {}); await client.query('COMMIT'); return res.status(200).json({ received: true, matched, refundEvent: eventName }); }
@@ -178,12 +193,40 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
     }
     if (eventName.startsWith('transfer.')) {
       const client = await pool.connect();
-      try { await client.query('BEGIN'); const matched = await reconcileTransferEvent(client, eventName, event.data || {}); await client.query('COMMIT'); return res.status(200).json({ received: true, matched, transferEvent: eventName }); }
-      catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace Paystack transfer webhook', error); return res.status(500).json({ error: 'transfer webhook processing failed' }); }
-      finally { client.release(); }
+      try {
+        await client.query('BEGIN');
+        const marketplaceMatched = await reconcileTransferEvent(client, eventName, eventData);
+        const walletOutcome = await reconcileBuyerWalletTransferEvent(client, eventName, eventData);
+        await client.query('COMMIT');
+        return res.status(200).json({
+          received: true,
+          matched: marketplaceMatched || Boolean(walletOutcome?.matched),
+          transferEvent: eventName,
+          wallet: walletOutcome
+        });
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch {}
+        console.error('shared FYNX Paystack transfer webhook', error);
+        return res.status(500).json({ error: 'transfer webhook processing failed' });
+      } finally {
+        client.release();
+      }
     }
     if (eventName !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
-    const transaction = event.data || {}, reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
+    const transaction = eventData, reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
+    const walletFundingIntentId = String(transaction.metadata?.fynxWalletFundingIntentId || transaction.metadata?.walletFundingIntentId || '');
+    if (String(transaction.authorization?.channel || '').toLowerCase() === 'dedicated_nuban' || walletFundingIntentId) {
+      try {
+        const outcome = await handleBuyerWalletPaystackEvent('charge.success', transaction);
+        if (outcome.handled) {
+          const statusCode = Number(outcome.statusCode) || 200;
+          return res.status(statusCode).json({ received: true, ...outcome });
+        }
+      } catch (error) {
+        console.error('FYNX wallet funding webhook', error);
+        return res.status(500).json({ error: 'wallet funding webhook processing failed' });
+      }
+    }
     if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference)) return res.status(400).json({ error: 'invalid payment reference' });
     if (reference.startsWith('FYNX-CHECKOUT-')) {
       if (!/^FYNX-CHECKOUT-[0-9a-f-]{36}$/i.test(reference)) return res.status(400).json({ error: 'invalid checkout payment reference' });

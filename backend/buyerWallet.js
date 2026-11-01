@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -35,7 +36,7 @@ function auth(req, res, next) {
 }
 
 let buyerWalletSchemaPromise;
-async function ensureBuyerWalletSchema() {
+export async function ensureBuyerWalletSchema() {
   if (!pool) throw Object.assign(new Error('DATABASE_URL is not configured'), { code: 'DATABASE_NOT_CONFIGURED' });
   if (!buyerWalletSchemaPromise) {
     buyerWalletSchemaPromise = pool.query(`
@@ -54,6 +55,49 @@ async function ensureBuyerWalletSchema() {
       CREATE UNIQUE INDEX IF NOT EXISTS buyer_wallet_provider_wallet_reference_uidx
         ON buyer_wallets(provider, provider_wallet_reference)
         WHERE provider_wallet_reference IS NOT NULL;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS provider_customer_code TEXT;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS funding_account_id TEXT;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS funding_bank_name TEXT NOT NULL DEFAULT '';
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS funding_account_name TEXT NOT NULL DEFAULT '';
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS funding_account_ciphertext TEXT;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS funding_account_iv TEXT;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS funding_account_tag TEXT;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS funding_account_status TEXT NOT NULL DEFAULT 'NOT_CREATED'
+        CHECK (funding_account_status IN ('NOT_CREATED','REQUESTING','ASSIGNING','ACTIVE','FAILED','RESTRICTED'));
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS provider_consent_at TIMESTAMPTZ;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS provider_consent_version TEXT;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_hash TEXT;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_set_at TIMESTAMPTZ;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_failed_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_locked_until TIMESTAMPTZ;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_setup_failed_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_setup_locked_until TIMESTAMPTZ;
+      CREATE UNIQUE INDEX IF NOT EXISTS buyer_wallet_provider_customer_code_uidx
+        ON buyer_wallets(provider_customer_code) WHERE provider_customer_code IS NOT NULL;
+
+
+      CREATE TABLE IF NOT EXISTS buyer_wallet_funding_intents (
+        id UUID PRIMARY KEY,
+        wallet_id UUID NOT NULL REFERENCES buyer_wallets(id) ON DELETE RESTRICT,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        payment_method TEXT NOT NULL CHECK (payment_method IN ('CARD','USSD')),
+        status TEXT NOT NULL CHECK (status IN ('PENDING','PROCESSING','SUCCEEDED','FAILED','BLOCKED')),
+        amount NUMERIC(18,2) NOT NULL CHECK (amount > 0),
+        currency TEXT NOT NULL CHECK (currency = 'NGN'),
+        reference TEXT NOT NULL UNIQUE,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        access_code TEXT,
+        authorization_url TEXT,
+        provider_reference TEXT UNIQUE,
+        failure_reason TEXT,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS buyer_wallet_funding_intents_owner_idx
+        ON buyer_wallet_funding_intents(user_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS buyer_wallet_funding_intents_status_idx
+        ON buyer_wallet_funding_intents(status,updated_at DESC);
 
       CREATE TABLE IF NOT EXISTS buyer_wallet_transactions (
         id UUID PRIMARY KEY,
@@ -171,6 +215,33 @@ async function ensureBuyerWalletSchema() {
       CREATE INDEX IF NOT EXISTS buyer_wallet_ledger_transaction_idx
         ON buyer_wallet_ledger_entries (transaction_id);
 
+      CREATE TABLE IF NOT EXISTS buyer_wallet_provider_operations (
+        id UUID PRIMARY KEY,
+        wallet_id UUID NOT NULL REFERENCES buyer_wallets(id) ON DELETE RESTRICT,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        transaction_id UUID NOT NULL UNIQUE REFERENCES buyer_wallet_transactions(id) ON DELETE RESTRICT,
+        operation_type TEXT NOT NULL CHECK (operation_type IN ('WITHDRAWAL')),
+        idempotency_key TEXT NOT NULL UNIQUE,
+        provider_reference TEXT NOT NULL UNIQUE,
+        provider_transfer_code TEXT UNIQUE,
+        recipient_code TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('PENDING','SUCCEEDED','FAILED','REVERSED','BLOCKED')),
+        amount NUMERIC(18,2) NOT NULL CHECK (amount > 0),
+        currency TEXT NOT NULL CHECK (currency = 'NGN'),
+        bank_name TEXT NOT NULL DEFAULT '',
+        account_name TEXT NOT NULL DEFAULT '',
+        account_last4 TEXT NOT NULL DEFAULT '',
+        failure_reason TEXT,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS buyer_wallet_provider_operations_owner_idx
+        ON buyer_wallet_provider_operations(user_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS buyer_wallet_provider_operations_status_idx
+        ON buyer_wallet_provider_operations(status,updated_at DESC);
+
+
       CREATE OR REPLACE FUNCTION fynx_buyer_wallet_guard_ledger_insert()
       RETURNS trigger AS $fynxwallet$
       DECLARE
@@ -251,7 +322,7 @@ async function ensureBuyerWalletSchema() {
             JOIN buyer_wallet_transactions t ON t.id = e.transaction_id
            WHERE e.wallet_id = NEW.wallet_id
              AND t.status = 'SUCCEEDED'
-             AND e.account_code IN ('AVAILABLE','RESERVED','WITHDRAWAL_PENDING')
+             AND e.account_code IN ('AVAILABLE','RESERVED','MARKETPLACE_ESCROW','WITHDRAWAL_PENDING')
            GROUP BY e.account_code
           HAVING SUM(CASE WHEN e.side = 'CREDIT' THEN e.amount ELSE -e.amount END) < 0
         ) THEN
@@ -321,6 +392,579 @@ async function ensureBuyerWalletSchema() {
   return buyerWalletSchemaPromise;
 }
 
+
+function walletWithdrawalLimits() {
+  const maximum = Number(process.env.FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT || '');
+  const daily = Number(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT || '');
+  const count = Number.parseInt(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT || '', 10);
+  // Paystack Nigeria transfer limits: NGN 50 minimum and NGN 10,000,000 maximum.
+  if (!Number.isFinite(maximum) || maximum < 50 || maximum > 10_000_000 ||
+      !Number.isFinite(daily) || daily < maximum ||
+      !Number.isInteger(count) || count <= 0) return null;
+  return { maximumPerTransfer: maximum, dailyAmountLimit: daily, dailyCountLimit: count };
+}
+
+function walletProviderApproved(action) {
+  const common = process.env.FYNX_WALLET_PROVIDER_APPROVED === 'true' &&
+    process.env.FYNX_WALLET_CUSTODY_APPROVED === 'true' &&
+    process.env.FYNX_WALLET_COMPLIANCE_APPROVED === 'true' &&
+    Boolean(process.env.PAYSTACK_SECRET_KEY);
+  if (!common) return false;
+  if (action === 'DEPOSIT') return process.env.FYNX_WALLET_DEPOSITS_ENABLED === 'true' &&
+    Boolean(process.env.FYNX_PAYSTACK_WALLET_BANK) && Boolean(walletEncryptionKey());
+  if (action === 'CARD_FUNDING') return process.env.FYNX_WALLET_CARD_FUNDING_ENABLED === 'true' && walletFundingLimits() !== null;
+  if (action === 'USSD_FUNDING') return process.env.FYNX_WALLET_USSD_FUNDING_ENABLED === 'true' && walletFundingLimits() !== null;
+  if (action === 'SPENDING') return process.env.FYNX_WALLET_SPENDING_ENABLED === 'true';
+  if (action === 'WITHDRAWAL') return process.env.FYNX_WALLET_WITHDRAWALS_ENABLED === 'true' &&
+    process.env.FYNX_WALLET_PAYOUTS_APPROVED === 'true' &&
+    process.env.FYNX_WALLET_WITHDRAWAL_FEE_POLICY_APPROVED === 'true' &&
+    process.env.FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true' &&
+    walletWithdrawalLimits() !== null;
+  return false;
+}
+
+function walletFundingLimits() {
+  const minimum = Number(process.env.FYNX_WALLET_FUNDING_MIN_AMOUNT || '');
+  const maximum = Number(process.env.FYNX_WALLET_FUNDING_MAX_AMOUNT || '');
+  if (!Number.isFinite(minimum) || minimum <= 0 ||
+      !Number.isFinite(maximum) || maximum <= 0 || maximum < minimum) return null;
+  return { minimum, maximum };
+}
+
+function walletEncryptionKey() {
+  const raw = String(process.env.FYNX_WALLET_ACCOUNT_ENCRYPTION_KEY || '').trim();
+  if (/^[0-9a-f]{64}$/i.test(raw)) return Buffer.from(raw, 'hex');
+  const decoded = Buffer.from(raw, 'base64');
+  return decoded.length === 32 ? decoded : null;
+}
+
+function encryptWalletAccountNumber(accountNumber) {
+  const key = walletEncryptionKey();
+  if (!key) throw Object.assign(new Error('wallet account encryption is not configured'), { code: 'WALLET_ENCRYPTION_NOT_CONFIGURED' });
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(accountNumber, 'utf8'), cipher.final()]);
+  return { ciphertext: ciphertext.toString('base64'), iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64') };
+}
+
+function decryptWalletAccountNumber(wallet) {
+  const key = walletEncryptionKey();
+  if (!key || !wallet?.funding_account_ciphertext || !wallet?.funding_account_iv || !wallet?.funding_account_tag) return null;
+  try {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(wallet.funding_account_iv, 'base64'));
+    decipher.setAuthTag(Buffer.from(wallet.funding_account_tag, 'base64'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(wallet.funding_account_ciphertext, 'base64')),
+      decipher.final()
+    ]).toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
+async function walletPaystackRequest(path, { method = 'GET', body } = {}) {
+  const secret = String(process.env.PAYSTACK_SECRET_KEY || '').trim();
+  if (!secret) throw Object.assign(new Error('wallet payment provider is not configured'), { code: 'PAYSTACK_NOT_CONFIGURED' });
+  const response = await fetch('https://api.paystack.co' + path, {
+    method,
+    headers: {
+      Authorization: 'Bearer ' + secret,
+      Accept: 'application/json',
+      ...(body ? { 'Content-Type': 'application/json' } : {})
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(15_000)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.status !== true) {
+    const error = new Error(String(payload?.message || 'payment provider request failed').slice(0, 240));
+    error.code = 'PAYSTACK_REQUEST_FAILED';
+    error.status = response.status;
+    throw error;
+  }
+  return payload.data || {};
+}
+
+function walletCsvCell(value) {
+  let text = String(value ?? '');
+  if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+
+export function buildBuyerWalletStatementCsv(rows) {
+  const header = ['Date','Reference','Type','Status','Description','Amount','Fee','Wallet change','Currency'];
+  const output = [header.map(walletCsvCell).join(',')];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    output.push([
+      walletCsvCell(row.created_at_iso || row.created_at),
+      walletCsvCell(row.reference),
+      walletCsvCell(row.transaction_type),
+      walletCsvCell(row.status),
+      walletCsvCell(row.description),
+      Number(row.amount || 0).toFixed(2),
+      Number(row.fee || 0).toFixed(2),
+      Number(row.wallet_delta || 0).toFixed(2),
+      walletCsvCell(row.currency)
+    ].join(','));
+  }
+  return '\uFEFF' + output.join('\r\n') + '\r\n';
+}
+
+function parseStatementDate(value, fallback) {
+  if (value == null || value === '') return fallback;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(value + 'T00:00:00.000Z');
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return null;
+  return value;
+}
+
+async function persistWalletFundingAccount(walletId, data) {
+  const accountNumber = String(data?.account_number || '').replace(/\D/g, '');
+  const accountName = String(data?.account_name || '').trim().slice(0, 160);
+  const bankName = String(data?.bank?.name || data?.bank_name || '').trim().slice(0, 120);
+  const currency = String(data?.currency || '').trim().toUpperCase();
+  if (!/^\d{10}$/.test(accountNumber) || !accountName || !bankName || currency !== 'NGN' || data?.active === false || data?.assigned === false) {
+    throw Object.assign(new Error('provider returned incomplete or inactive wallet account details'), { code: 'WALLET_ACCOUNT_INVALID' });
+  }
+  const encrypted = encryptWalletAccountNumber(accountNumber);
+  await pool.query(`
+    UPDATE buyer_wallets
+       SET funding_account_id=$2,
+           funding_bank_name=$3,
+           funding_account_name=$4,
+           funding_account_ciphertext=$5,
+           funding_account_iv=$6,
+           funding_account_tag=$7,
+           funding_account_status='ACTIVE',
+           status='ACTIVE',
+           provider='paystack',
+           updated_at=NOW()
+     WHERE id=$1
+  `, [walletId, String(data.id || ''), bankName, accountName, encrypted.ciphertext, encrypted.iv, encrypted.tag]);
+}
+
+async function postWalletInternalLedgerTransaction(client, {
+  walletId, userId, amount, reference, description, debitAccount, creditAccount, metadata
+}) {
+  const transactionId = crypto.randomUUID();
+  await client.query(`
+    INSERT INTO buyer_wallet_transactions
+      (id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,description,metadata)
+    VALUES ($1,$2,$3,'ADJUSTMENT','PENDING',$4,0,'NGN',$5,$6,$7,$8::jsonb)
+  `, [
+    transactionId, walletId, userId, amount, reference,
+    'INTERNAL-' + reference, description,
+    JSON.stringify({ ...(metadata || {}), internal: true })
+  ]);
+  await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [transactionId]);
+  await client.query(`
+    INSERT INTO buyer_wallet_ledger_entries
+      (transaction_id,wallet_id,entry_key,account_code,side,amount,currency)
+    VALUES
+      ($1,$2,$3,$4,'DEBIT',$5,'NGN'),
+      ($1,$2,$6,$7,'CREDIT',$5,'NGN')
+  `, [
+    transactionId, walletId, reference + '-DEBIT', debitAccount,
+    amount, reference + '-CREDIT', creditAccount
+  ]);
+  await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [transactionId]);
+  return transactionId;
+}
+
+async function reconcileWalletTransferEvent(client, eventName, transfer) {
+  const reference = typeof transfer?.reference === 'string' ? transfer.reference.trim() : '';
+  if (!reference) return { matched: false };
+  const operation = (await client.query(`
+    SELECT * FROM buyer_wallet_provider_operations
+     WHERE provider_reference=$1
+     FOR UPDATE
+  `, [reference])).rows[0];
+  if (!operation) return { matched: false };
+  const providerAmount = Number(transfer.amount);
+  const expectedAmount = Math.round(Number(operation.amount) * 100);
+  const providerCurrency = String(transfer.currency || '').trim().toUpperCase();
+  if (!Number.isFinite(providerAmount) || providerAmount !== expectedAmount || providerCurrency !== 'NGN') {
+    await client.query(`
+      UPDATE buyer_wallet_provider_operations
+         SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW()
+       WHERE id=$3 AND status='PENDING'
+    `, [
+      'Paystack transfer amount or currency did not match the withdrawal request',
+      JSON.stringify({ ...(operation.metadata || {}), transferEvent: eventName, providerAmount, expectedAmount, providerCurrency }),
+      operation.id
+    ]);
+    return { matched: true, blocked: true };
+  }
+
+  const currentStatus = String(operation.status || '').toUpperCase();
+  if (eventName === 'transfer.success') {
+    if (currentStatus === 'SUCCEEDED') return { matched: true, idempotent: true };
+    if (currentStatus !== 'PENDING') return { matched: true, idempotent: true };
+    await postWalletInternalLedgerTransaction(client, {
+      walletId: operation.wallet_id,
+      userId: operation.user_id,
+      amount: operation.amount,
+      reference: 'WALLET-WD-SETTLE-' + operation.id,
+      description: 'Internal withdrawal settlement',
+      debitAccount: 'WITHDRAWAL_PENDING',
+      creditAccount: 'EXTERNAL_BANK',
+      metadata: { provider: 'paystack', operationId: String(operation.id), providerReference: reference }
+    });
+    await client.query(`
+      UPDATE buyer_wallet_provider_operations
+         SET status='SUCCEEDED',provider_transfer_code=COALESCE($1,provider_transfer_code),
+             failure_reason=NULL,metadata=$2::jsonb,updated_at=NOW()
+       WHERE id=$3 AND status='PENDING'
+    `, [
+      transfer.transfer_code ? String(transfer.transfer_code) : null,
+      JSON.stringify({
+        ...(operation.metadata || {}),
+        transferEvent: eventName,
+        providerStatus: transfer.status || 'success',
+        providerFeeMinor: Number.isSafeInteger(Number(transfer.fee_charged)) && Number(transfer.fee_charged) >= 0
+          ? Number(transfer.fee_charged) : (operation.metadata?.providerFeeMinor ?? null),
+        providerFeesBreakdown: Array.isArray(transfer.fees_breakdown)
+          ? transfer.fees_breakdown : (operation.metadata?.providerFeesBreakdown ?? null)
+      }),
+      operation.id
+    ]);
+    return { matched: true, status: 'SUCCEEDED' };
+  }
+
+  if (eventName === 'transfer.failed') {
+    if (currentStatus === 'FAILED') return { matched: true, idempotent: true };
+    if (currentStatus !== 'PENDING') return { matched: true, idempotent: true };
+    await postWalletInternalLedgerTransaction(client, {
+      walletId: operation.wallet_id,
+      userId: operation.user_id,
+      amount: operation.amount,
+      reference: 'WALLET-WD-RELEASE-' + operation.id,
+      description: 'Failed withdrawal funds returned',
+      debitAccount: 'WITHDRAWAL_PENDING',
+      creditAccount: 'AVAILABLE',
+      metadata: { provider: 'paystack', operationId: String(operation.id), providerReference: reference }
+    });
+    await client.query(`
+      UPDATE buyer_wallet_provider_operations
+         SET status='FAILED',provider_transfer_code=COALESCE($1,provider_transfer_code),
+             failure_reason=$2,metadata=$3::jsonb,updated_at=NOW()
+       WHERE id=$4 AND status='PENDING'
+    `, [
+      transfer.transfer_code ? String(transfer.transfer_code) : null,
+      String(transfer.reason || transfer.message || 'Paystack transfer failed').slice(0, 240),
+      JSON.stringify({ ...(operation.metadata || {}), transferEvent: eventName, providerStatus: transfer.status || 'failed' }),
+      operation.id
+    ]);
+    return { matched: true, status: 'FAILED' };
+  }
+
+  if (eventName === 'transfer.reversed') {
+    if (currentStatus === 'REVERSED') return { matched: true, idempotent: true };
+    if (currentStatus !== 'SUCCEEDED') return { matched: true, idempotent: true };
+    await postWalletInternalLedgerTransaction(client, {
+      walletId: operation.wallet_id,
+      userId: operation.user_id,
+      amount: operation.amount,
+      reference: 'WALLET-WD-REVERSE-' + operation.id,
+      description: 'Reversed bank withdrawal returned to wallet',
+      debitAccount: 'EXTERNAL_BANK',
+      creditAccount: 'AVAILABLE',
+      metadata: { provider: 'paystack', operationId: String(operation.id), providerReference: reference }
+    });
+    await client.query(`
+      UPDATE buyer_wallet_provider_operations
+         SET status='REVERSED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW()
+       WHERE id=$3 AND status='SUCCEEDED'
+    `, [
+      String(transfer.reason || transfer.message || 'Paystack reversed the transfer').slice(0, 240),
+      JSON.stringify({ ...(operation.metadata || {}), transferEvent: eventName, providerStatus: transfer.status || 'reversed' }),
+      operation.id
+    ]);
+    return { matched: true, status: 'REVERSED' };
+  }
+  return { matched: true, ignored: true };
+}
+
+export async function reconcileBuyerWalletTransferEvent(client, eventName, transfer) {
+  // A Marketplace transfer must never be blocked by an uninitialized Wallet schema.
+  // Wallet payout rows exist only after the wallet payout route creates the table.
+  const table = await client.query("SELECT to_regclass('public.buyer_wallet_provider_operations') IS NOT NULL AS ready");
+  if (!table.rows[0]?.ready) return { matched: false };
+  return reconcileWalletTransferEvent(client, eventName, transfer);
+}
+
+async function reconcileWalletHostedFunding(reference, userId = null) {
+  const normalizedReference = String(reference || '').trim();
+  if (!/^fwd_[a-f0-9]{32}$/i.test(normalizedReference)) {
+    throw Object.assign(new Error('Wallet funding reference is invalid'), { code: 'WALLET_FUNDING_REFERENCE_INVALID' });
+  }
+  await ensureBuyerWalletSchema();
+  const existing = (await pool.query(`
+    SELECT * FROM buyer_wallet_funding_intents
+     WHERE reference=$1 AND ($2::bigint IS NULL OR user_id=$2)
+     LIMIT 1
+  `, [normalizedReference, userId])).rows[0];
+  if (!existing) return { matched: false, status: 'NOT_FOUND' };
+  if (existing.status === 'SUCCEEDED') {
+    return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(existing.amount), idempotent: true };
+  }
+  if (['FAILED','BLOCKED'].includes(String(existing.status).toUpperCase())) {
+    return { matched: true, status: String(existing.status), reference: normalizedReference, amount: Number(existing.amount) };
+  }
+
+  const verified = await walletPaystackRequest('/transaction/verify/' + encodeURIComponent(normalizedReference));
+  const providerStatus = String(verified?.status || '').trim().toLowerCase();
+  const providerReference = String(verified?.reference || '').trim();
+  const providerCurrency = String(verified?.currency || '').trim().toUpperCase();
+  const providerAmount = Number(verified?.amount);
+  const providerChannel = String(verified?.authorization?.channel || '').trim().toLowerCase();
+  const metadata = verified?.metadata && typeof verified.metadata === 'object' ? verified.metadata : {};
+  const metadataIntentId = String(metadata.fynxWalletFundingIntentId || metadata.walletFundingIntentId || '');
+  const metadataUserId = String(metadata.fynxUserId || metadata.userId || '');
+
+  if (providerStatus !== 'success') {
+    if (providerStatus === 'failed' || providerStatus === 'abandoned') {
+      await pool.query(`
+        UPDATE buyer_wallet_funding_intents
+           SET status='FAILED',failure_reason=$1,updated_at=NOW()
+         WHERE id=$2 AND status IN ('PENDING','PROCESSING')
+      `, [String(verified?.gateway_response || verified?.message || 'Paystack funding transaction failed').slice(0, 240), existing.id]);
+      return { matched: true, status: 'FAILED', reference: normalizedReference, amount: Number(existing.amount) };
+    }
+    return { matched: true, status: 'PENDING', reference: normalizedReference, amount: Number(existing.amount) };
+  }
+
+  const expectedAmount = Math.round(Number(existing.amount) * 100);
+  const expectedChannel = existing.payment_method === 'CARD' ? 'card' : 'ussd';
+  if (!Number.isSafeInteger(providerAmount) || providerAmount !== expectedAmount ||
+      providerCurrency !== 'NGN' || providerReference !== normalizedReference ||
+      metadataIntentId !== String(existing.id) || metadataUserId !== String(existing.user_id) ||
+      providerChannel !== expectedChannel) {
+    await pool.query(`
+      UPDATE buyer_wallet_funding_intents
+         SET status='BLOCKED',failure_reason=$1,updated_at=NOW()
+       WHERE id=$2 AND status IN ('PENDING','PROCESSING')
+    `, ['Paystack funding verification did not match this Wallet funding request', existing.id]);
+    return { matched: true, status: 'BLOCKED', reference: normalizedReference, amount: Number(existing.amount) };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const intent = (await client.query(`
+      SELECT * FROM buyer_wallet_funding_intents
+       WHERE id=$1
+       FOR UPDATE
+    `, [existing.id])).rows[0];
+    if (!intent) {
+      await client.query('ROLLBACK');
+      return { matched: false, status: 'NOT_FOUND' };
+    }
+    if (intent.status === 'SUCCEEDED') {
+      await client.query('COMMIT');
+      return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(intent.amount), idempotent: true };
+    }
+    if (!['PENDING','PROCESSING'].includes(String(intent.status).toUpperCase())) {
+      await client.query('ROLLBACK');
+      return { matched: true, status: String(intent.status), reference: normalizedReference, amount: Number(intent.amount) };
+    }
+
+    const wallet = (await client.query(`
+      SELECT id,status FROM buyer_wallets
+       WHERE id=$1 AND user_id=$2 AND currency='NGN'
+       FOR UPDATE
+    `, [intent.wallet_id, intent.user_id])).rows[0];
+    if (!wallet || wallet.status === 'CLOSED' || wallet.status === 'RESTRICTED') {
+      await client.query("UPDATE buyer_wallet_funding_intents SET status='BLOCKED',failure_reason='Wallet is not eligible for funding',updated_at=NOW() WHERE id=$1", [intent.id]);
+      await client.query('COMMIT');
+      return { matched: true, status: 'BLOCKED', reference: normalizedReference, amount: Number(intent.amount) };
+    }
+
+    const walletTx = (await client.query(
+      'SELECT id,status FROM buyer_wallet_transactions WHERE provider_reference=$1 FOR UPDATE',
+      [normalizedReference]
+    )).rows[0];
+    if (!walletTx) {
+      const transactionId = crypto.randomUUID();
+      const amount = Number(intent.amount).toFixed(2);
+      await client.query(`
+        INSERT INTO buyer_wallet_transactions
+          (id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,provider_reference,description,metadata)
+        VALUES ($1,$2,$3,'FUNDING','PENDING',$4,0,'NGN',$5,$6,$5,'Wallet payment top-up',$7::jsonb)
+      `, [
+        transactionId, intent.wallet_id, intent.user_id, amount, normalizedReference,
+        'PAYSTACK-WALLET-FUND-' + normalizedReference,
+        JSON.stringify({ provider: 'paystack', paymentMethod: intent.payment_method, fundingIntentId: String(intent.id), providerFeeSubunit: Number(verified.fees || 0) })
+      ]);
+      await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [transactionId]);
+      await client.query(`
+        INSERT INTO buyer_wallet_ledger_entries
+          (transaction_id,wallet_id,entry_key,account_code,side,amount,currency)
+        VALUES
+          ($1,$2,$3,'PROVIDER_CLEARING','DEBIT',$4,'NGN'),
+          ($1,$2,$5,'AVAILABLE','CREDIT',$4,'NGN')
+      `, [
+        transactionId, intent.wallet_id, 'PAYSTACK-WALLET-FUND-CLEARING-' + normalizedReference,
+        amount, 'PAYSTACK-WALLET-FUND-AVAILABLE-' + normalizedReference
+      ]);
+      await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [transactionId]);
+    } else if (walletTx.status !== 'SUCCEEDED') {
+      await client.query('ROLLBACK');
+      return { matched: true, status: 'PROCESSING', reference: normalizedReference, amount: Number(intent.amount) };
+    }
+
+    await client.query(`
+      UPDATE buyer_wallets SET status='ACTIVE',provider='paystack',updated_at=NOW()
+       WHERE id=$1 AND status='PENDING_PROVIDER'
+    `, [intent.wallet_id]);
+    await client.query(`
+      UPDATE buyer_wallet_funding_intents
+         SET status='SUCCEEDED',provider_reference=$1,failure_reason=NULL,updated_at=NOW()
+       WHERE id=$2
+    `, [normalizedReference, intent.id]);
+    await client.query('COMMIT');
+    return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(intent.amount), credited: true };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function handleBuyerWalletPaystackEvent(eventName, data = {}) {
+  const normalizedEvent = String(eventName || '').trim().toLowerCase();
+  const dedicatedAccountEvent = normalizedEvent === 'customeridentification.failed' ||
+    normalizedEvent.startsWith('dedicatedaccount.');
+  const paymentChannel = String(data.authorization?.channel || '').trim().toLowerCase();
+  const hostedFundingIntentId = String(data.metadata?.fynxWalletFundingIntentId || data.metadata?.walletFundingIntentId || '');
+  const dedicatedFundingEvent = normalizedEvent === 'charge.success' && paymentChannel === 'dedicated_nuban';
+  const hostedFundingEvent = normalizedEvent === 'charge.success' && hostedFundingIntentId.length > 0;
+  if (!dedicatedAccountEvent && !dedicatedFundingEvent && !hostedFundingEvent) return { handled: false };
+  await ensureBuyerWalletSchema();
+
+  if (normalizedEvent === 'customeridentification.failed' || normalizedEvent === 'dedicatedaccount.assign.failed') {
+    const customerCode = String(data.customer_code || data.customer?.customer_code || '').trim();
+    if (!customerCode) return { handled: true, matched: false };
+    const updated = await pool.query(
+      "UPDATE buyer_wallets SET funding_account_status='RESTRICTED',status='RESTRICTED',updated_at=NOW() WHERE provider_customer_code=$1",
+      [customerCode]
+    );
+    return { handled: true, matched: updated.rowCount > 0, restricted: updated.rowCount > 0 };
+  }
+
+  if (normalizedEvent === 'dedicatedaccount.assign.success') {
+    const customerCode = String(data.customer_code || data.customer?.customer_code || '').trim();
+    if (!customerCode) return { handled: true, matched: false };
+    const wallet = (await pool.query(
+      'SELECT id FROM buyer_wallets WHERE provider_customer_code=$1 LIMIT 1',
+      [customerCode]
+    )).rows[0];
+    if (!wallet) return { handled: true, matched: false };
+    let account = data.dedicated_account || data.account || data;
+    if (!account?.account_number) {
+      const customer = await walletPaystackRequest('/customer/' + encodeURIComponent(customerCode));
+      account = customer?.dedicated_account;
+    }
+    await persistWalletFundingAccount(wallet.id, account);
+    return { handled: true, matched: true, accountAssigned: true };
+  }
+
+  if (normalizedEvent !== 'charge.success') return { handled: false };
+  if (hostedFundingEvent) {
+    const intentId = String(data.metadata?.fynxWalletFundingIntentId || data.metadata?.walletFundingIntentId || '');
+    const reference = typeof data.reference === 'string' ? data.reference.trim() : '';
+    const intent = (await pool.query(
+      'SELECT user_id FROM buyer_wallet_funding_intents WHERE id=$1 AND reference=$2 LIMIT 1',
+      [intentId, reference]
+    )).rows[0];
+    if (!intent) return { handled: true, matched: false };
+    return reconcileWalletHostedFunding(reference, String(intent.user_id));
+  }
+  const reference = typeof data.reference === 'string' ? data.reference.trim() : '';
+  if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference) ||
+      String(data.status || '').toLowerCase() !== 'success') {
+    if (String(data.authorization?.channel || '').toLowerCase() === 'dedicated_nuban') {
+      return { handled: true, statusCode: 400, error: 'invalid wallet funding transaction reference or status' };
+    }
+    return { handled: false };
+  }
+  if (String(data.authorization?.channel || '').toLowerCase() !== 'dedicated_nuban') return { handled: false };
+
+  const verified = await walletPaystackRequest('/transaction/verify/' + encodeURIComponent(reference));
+  const providerStatus = String(verified?.status || '').toLowerCase();
+  const providerAmount = Number(verified?.amount);
+  const providerCurrency = String(verified?.currency || '').toUpperCase();
+  const providerReference = String(verified?.reference || '');
+  const customerCode = String(verified?.customer?.customer_code || data.customer?.customer_code || '');
+  const receiverAccount = String(
+    verified?.authorization?.receiver_bank_account_number ||
+    data.authorization?.receiver_bank_account_number ||
+    ''
+  ).replace(/\D/g, '');
+  if (providerStatus !== 'success' || !Number.isInteger(providerAmount) || providerAmount <= 0 ||
+      providerCurrency !== 'NGN' || providerReference !== reference) {
+    return { handled: true, statusCode: 400, error: 'Paystack funding verification did not match the webhook' };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const wallet = (await client.query(`
+      SELECT id,user_id,provider_customer_code,funding_account_ciphertext,
+             funding_account_iv,funding_account_tag,status,funding_account_status
+        FROM buyer_wallets
+       WHERE provider_customer_code=$1 AND currency='NGN'
+       FOR UPDATE
+    `, [customerCode])).rows[0];
+    if (!wallet || wallet.funding_account_status !== 'ACTIVE' || wallet.status !== 'ACTIVE') {
+      await client.query('ROLLBACK');
+      return { handled: true, matched: false };
+    }
+    const expectedAccount = decryptWalletAccountNumber(wallet);
+    if (!expectedAccount || receiverAccount !== expectedAccount) {
+      await client.query('ROLLBACK');
+      return { handled: true, statusCode: 400, error: 'Paystack funding account does not match this wallet' };
+    }
+    const existing = (await client.query(
+      'SELECT id,status FROM buyer_wallet_transactions WHERE provider_reference=$1 FOR UPDATE',
+      [reference]
+    )).rows[0];
+    if (existing) {
+      await client.query('COMMIT');
+      return { handled: true, matched: true, idempotent: true, status: existing.status };
+    }
+    const amount = (providerAmount / 100).toFixed(2);
+    const transactionId = crypto.randomUUID();
+    await client.query(`
+      INSERT INTO buyer_wallet_transactions
+        (id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,provider_reference,description,metadata)
+      VALUES ($1,$2,$3,'FUNDING','PENDING',$4,0,'NGN',$5,$6,$5,'Dedicated bank transfer funding',$7::jsonb)
+    `, [
+      transactionId, wallet.id, wallet.user_id, amount, reference,
+      'PAYSTACK-DVA-' + reference,
+      JSON.stringify({ provider: 'paystack', channel: 'dedicated_nuban', providerFeeSubunit: Number(verified.fees || 0) })
+    ]);
+    await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [transactionId]);
+    await client.query(`
+      INSERT INTO buyer_wallet_ledger_entries
+        (transaction_id,wallet_id,entry_key,account_code,side,amount,currency)
+      VALUES
+        ($1,$2,$3,'PROVIDER_CLEARING','DEBIT',$4,'NGN'),
+        ($1,$2,$5,'AVAILABLE','CREDIT',$4,'NGN')
+    `, [transactionId, wallet.id, 'PAYSTACK-DVA-CLEARING-' + reference, amount, 'PAYSTACK-DVA-AVAILABLE-' + reference]);
+    await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [transactionId]);
+    await client.query('COMMIT');
+    return { handled: true, matched: true, credited: true };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error?.code === '23505') return { handled: true, matched: true, idempotent: true };
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export function parseBuyerWalletActivityCursor(query = {}) {
   const params = query && typeof query === 'object' ? query : {};
   const hasCreatedAt = Object.prototype.hasOwnProperty.call(params, 'beforeCreatedAt');
@@ -366,7 +1010,7 @@ export function registerBuyerWalletRoutes({ app }) {
       await ensureBuyerWalletSchema();
       res.set('Cache-Control', 'no-store, private');
       const wallet = (await pool.query(
-        'SELECT id,status,provider,currency,created_at,updated_at FROM buyer_wallets WHERE user_id=$1 AND currency=$2 LIMIT 1',
+        'SELECT id,status,provider,currency,funding_account_status,created_at,updated_at FROM buyer_wallets WHERE user_id=$1 AND currency=$2 LIMIT 1',
         [req.user.sub, 'NGN']
       )).rows[0];
       if (!wallet) {
@@ -376,10 +1020,13 @@ export function registerBuyerWalletRoutes({ app }) {
           availableBalance: null,
           reservedBalance: null,
           withdrawalPendingBalance: null,
-          canFund: false,
+          canFund: walletProviderApproved('DEPOSIT') || walletProviderApproved('CARD_FUNDING') || walletProviderApproved('USSD_FUNDING'),
+          canFundByBankTransfer: walletProviderApproved('DEPOSIT'),
+          canFundByCard: walletProviderApproved('CARD_FUNDING'),
+          canFundByUssd: walletProviderApproved('USSD_FUNDING'),
           canSpend: false,
           canWithdraw: false,
-          notice: 'Your FYNX Wallet is being prepared. Deposits, payments and withdrawals will open after the secure wallet provider is connected and verified.'
+          notice: 'Your FYNX Wallet is being prepared. Payment methods appear only after the approved provider connection and required checks are complete.'
         });
       }
       const balanceRows = await pool.query(`
@@ -397,12 +1044,18 @@ export function registerBuyerWalletRoutes({ app }) {
         walletStatus: String(wallet.status || 'PENDING_PROVIDER'),
         currency: String(wallet.currency || 'NGN'),
         availableBalance: balances.AVAILABLE || 0,
-        reservedBalance: balances.RESERVED || 0,
+        reservedBalance: (balances.RESERVED || 0) + (balances.MARKETPLACE_ESCROW || 0),
         withdrawalPendingBalance: balances.WITHDRAWAL_PENDING || 0,
-        canFund: false,
-        canSpend: false,
-        canWithdraw: false,
-        notice: 'Wallet money movement is not enabled until provider and regulatory checks are complete.',
+        canFund: (wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT')) ||
+          walletProviderApproved('CARD_FUNDING') || walletProviderApproved('USSD_FUNDING'),
+        canFundByBankTransfer: walletProviderApproved('DEPOSIT'),
+        canFundByCard: walletProviderApproved('CARD_FUNDING'),
+        canFundByUssd: walletProviderApproved('USSD_FUNDING'),
+        canSpend: wallet.status === 'ACTIVE' && walletProviderApproved('SPENDING'),
+        canWithdraw: wallet.status === 'ACTIVE' && walletProviderApproved('WITHDRAWAL'),
+        notice: wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT')
+          ? 'Your dedicated funding account is active. Wallet spending and withdrawals remain unavailable until their separate approvals are complete.'
+          : 'Wallet money movement is not enabled until provider, custody and regulatory checks are complete.',
         updatedAt: wallet.updated_at
       });
     } catch (error) {
@@ -411,6 +1064,931 @@ export function registerBuyerWalletRoutes({ app }) {
         .json({ error: 'wallet summary is temporarily unavailable' });
     }
   });
+
+
+  app.post('/api/wallet/funding/initialize', auth, async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const paymentMethod = typeof req.body?.paymentMethod === 'string' ? req.body.paymentMethod.trim().toUpperCase() : '';
+    const amountValue = Number(req.body?.amount);
+    const amountMinor = Math.round(amountValue * 100);
+    const idempotencyKey = typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey.trim() : '';
+    const approvalAction = paymentMethod === 'CARD' ? 'CARD_FUNDING' : paymentMethod === 'USSD' ? 'USSD_FUNDING' : '';
+    if (!approvalAction || !walletProviderApproved(approvalAction)) {
+      return res.status(503).json({ error: 'this FYNX Wallet payment method is not enabled for this provider environment yet' });
+    }
+    const limits = walletFundingLimits();
+    if (!limits) return res.status(503).json({ error: 'wallet funding limits are not configured for this provider environment yet' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+        !Number.isFinite(amountValue) || amountValue < limits.minimum || amountValue > limits.maximum ||
+        !Number.isSafeInteger(amountMinor) || !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey)) {
+      return res.status(400).json({ error: 'valid email, permitted funding amount and unique payment reference are required' });
+    }
+
+    let intent;
+    try {
+      await ensureBuyerWalletSchema();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`
+          INSERT INTO buyer_wallets (id,user_id,currency,status,provider)
+          VALUES ($1,$2,'NGN','PENDING_PROVIDER','paystack')
+          ON CONFLICT (user_id,currency) DO NOTHING
+        `, [crypto.randomUUID(), req.user.sub]);
+        const wallet = (await client.query(`
+          SELECT id,status FROM buyer_wallets
+           WHERE user_id=$1 AND currency='NGN'
+           FOR UPDATE
+        `, [req.user.sub])).rows[0];
+        if (!wallet || wallet.status === 'CLOSED' || wallet.status === 'RESTRICTED') {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'your FYNX Wallet is not available for funding' });
+        }
+
+        const existing = (await client.query(`
+          SELECT * FROM buyer_wallet_funding_intents
+           WHERE user_id=$1 AND idempotency_key=$2
+           FOR UPDATE
+        `, [req.user.sub, idempotencyKey])).rows[0];
+        if (existing) {
+          if (Number(existing.amount) !== Number(amountValue.toFixed(2)) || existing.payment_method !== paymentMethod) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'funding reference has already been used for another amount or method' });
+          }
+          if (existing.status === 'SUCCEEDED') {
+            await client.query('COMMIT');
+            return res.json({ status: 'SUCCEEDED', reference: existing.reference, amount: Number(existing.amount), idempotent: true });
+          }
+          if (existing.status === 'PENDING' && existing.authorization_url) {
+            await client.query('COMMIT');
+            return res.status(200).json({
+              status: 'PENDING',
+              reference: existing.reference,
+              amount: Number(existing.amount),
+              authorizationUrl: existing.authorization_url,
+              accessCode: existing.access_code,
+              idempotent: true
+            });
+          }
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'previous funding request is not reusable; check its payment status first' });
+        }
+
+        const intentId = crypto.randomUUID();
+        const reference = 'fwd_' + crypto.randomUUID().replace(/-/g, '');
+        intent = (await client.query(`
+          INSERT INTO buyer_wallet_funding_intents
+            (id,wallet_id,user_id,payment_method,status,amount,currency,reference,idempotency_key)
+          VALUES ($1,$2,$3,$4,'PENDING',$5,'NGN',$6,$7)
+          RETURNING *
+        `, [
+          intentId, wallet.id, req.user.sub, paymentMethod,
+          amountValue.toFixed(2), reference, idempotencyKey
+        ])).rows[0];
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      const channels = paymentMethod === 'CARD' ? ['card'] : ['ussd'];
+      const initialized = await walletPaystackRequest('/transaction/initialize', {
+        method: 'POST',
+        body: {
+          email,
+          amount: amountMinor,
+          currency: 'NGN',
+          reference: intent.reference,
+          channels,
+          metadata: {
+            fynxWalletFundingIntentId: String(intent.id),
+            fynxUserId: String(req.user.sub),
+            walletFunding: true,
+            walletPaymentMethod: paymentMethod
+          }
+        }
+      });
+      const authorizationUrl = String(initialized.authorization_url || '').trim();
+      const accessCode = String(initialized.access_code || '').trim();
+      if (!authorizationUrl.startsWith('https://') || !accessCode) {
+        await pool.query(`
+          UPDATE buyer_wallet_funding_intents
+             SET status='BLOCKED',failure_reason='Paystack initialization did not return a secure hosted authorization URL',updated_at=NOW()
+           WHERE id=$1 AND status='PENDING'
+        `, [intent.id]);
+        return res.status(502).json({ error: 'payment provider did not return a secure checkout session' });
+      }
+      await pool.query(`
+        UPDATE buyer_wallet_funding_intents
+           SET authorization_url=$1,access_code=$2,updated_at=NOW()
+         WHERE id=$3 AND status='PENDING'
+      `, [authorizationUrl, accessCode, intent.id]);
+      return res.status(200).json({
+        status: 'PENDING',
+        reference: intent.reference,
+        amount: Number(intent.amount),
+        paymentMethod,
+        authorizationUrl,
+        accessCode
+      });
+    } catch (error) {
+      console.error('buyer wallet hosted funding initialization', error);
+      if (intent?.id) {
+        await pool.query(`
+          UPDATE buyer_wallet_funding_intents
+             SET status='FAILED',failure_reason=$1,updated_at=NOW()
+           WHERE id=$2 AND status='PENDING'
+        `, [String(error?.message || 'provider initialization failed').slice(0, 240), intent.id]).catch(() => {});
+      }
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 502)
+        .json({ error: 'FYNX Wallet payment could not be initialized' });
+    }
+  });
+
+  app.get('/api/wallet/funding/:reference', auth, async (req, res) => {
+    const reference = typeof req.params.reference === 'string' ? req.params.reference.trim() : '';
+    if (!/^fwd_[a-f0-9]{32}$/i.test(reference)) return res.status(400).json({ error: 'invalid Wallet funding reference' });
+    try {
+      await ensureBuyerWalletSchema();
+      const intent = (await pool.query(`
+        SELECT user_id,amount,status,payment_method
+          FROM buyer_wallet_funding_intents
+         WHERE reference=$1 AND user_id=$2
+         LIMIT 1
+      `, [reference, req.user.sub])).rows[0];
+      if (!intent) return res.status(404).json({ error: 'Wallet funding request was not found' });
+      const outcome = await reconcileWalletHostedFunding(reference, String(req.user.sub));
+      return res.json({
+        status: outcome.status || intent.status,
+        reference,
+        amount: Number(intent.amount),
+        paymentMethod: intent.payment_method,
+        message: outcome.status === 'SUCCEEDED'
+          ? 'Paystack confirmed the payment and FYNX credited your Wallet.'
+          : outcome.status === 'FAILED' || outcome.status === 'BLOCKED'
+            ? 'The payment was not credited. Check the status and try again with a new payment request.'
+            : 'Paystack has not confirmed a successful payment yet. Your Wallet has not been credited.'
+      });
+    } catch (error) {
+      console.error('buyer wallet funding status lookup', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 502)
+        .json({ error: 'Wallet funding status could not be verified' });
+    }
+  });
+
+  app.get('/api/wallet/funding-account', auth, async (req, res) => {
+    try {
+      await ensureBuyerWalletSchema();
+      res.set('Cache-Control', 'no-store, private');
+      const wallet = (await pool.query(`
+        SELECT status,funding_account_status,funding_bank_name,funding_account_name,
+               funding_account_ciphertext,funding_account_iv,funding_account_tag,updated_at
+          FROM buyer_wallets WHERE user_id=$1 AND currency='NGN' LIMIT 1
+      `, [req.user.sub])).rows[0];
+      if (!wallet) return res.json({ status: 'NOT_SETUP', currency: 'NGN', account: null, canRequest: walletProviderApproved('DEPOSIT') });
+      const accountNumber = wallet.funding_account_status === 'ACTIVE' ? decryptWalletAccountNumber(wallet) : null;
+      const account = accountNumber ? {
+        bankName: wallet.funding_bank_name,
+        accountName: wallet.funding_account_name,
+        accountNumber,
+        currency: 'NGN'
+      } : null;
+      return res.json({
+        status: String(wallet.funding_account_status || 'NOT_CREATED'),
+        currency: 'NGN',
+        account,
+        canRequest: walletProviderApproved('DEPOSIT'),
+        updatedAt: wallet.updated_at
+      });
+    } catch (error) {
+      console.error('buyer wallet funding account lookup', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
+        .json({ error: 'funding account is temporarily unavailable' });
+    }
+  });
+
+  app.post('/api/wallet/funding-account', auth, async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const firstName = typeof req.body?.firstName === 'string' ? req.body.firstName.trim().slice(0, 80) : '';
+    const lastName = typeof req.body?.lastName === 'string' ? req.body.lastName.trim().slice(0, 80) : '';
+    const phone = typeof req.body?.phone === 'string' ? req.body.phone.replace(/[\s()-]/g, '') : '';
+    const preferredBank = String(process.env.FYNX_PAYSTACK_WALLET_BANK || '').trim();
+    const consent = req.body?.explicitConsent === true;
+    if (!consent) return res.status(400).json({ error: 'explicit consent is required before creating a dedicated account' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || firstName.length < 2 || lastName.length < 2 || !/^\+?[0-9]{10,15}$/.test(phone)) {
+      return res.status(400).json({ error: 'valid email, full name and phone number are required' });
+    }
+    if (!walletProviderApproved('DEPOSIT') || !preferredBank || !walletEncryptionKey()) {
+      return res.status(503).json({ error: 'FYNX dedicated wallet accounts are not enabled for this provider environment yet' });
+    }
+
+    let wallet;
+    try {
+      await ensureBuyerWalletSchema();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`
+          INSERT INTO buyer_wallets (id,user_id,currency,status,provider,funding_account_status)
+          VALUES ($1,$2,'NGN','PENDING_PROVIDER','paystack','NOT_CREATED')
+          ON CONFLICT (user_id,currency) DO NOTHING
+        `, [crypto.randomUUID(), req.user.sub]);
+        wallet = (await client.query(`
+          SELECT id,status,provider_customer_code,funding_account_status,
+                 funding_account_ciphertext,funding_account_iv,funding_account_tag,
+                 funding_bank_name,funding_account_name,updated_at
+            FROM buyer_wallets WHERE user_id=$1 AND currency='NGN' FOR UPDATE
+        `, [req.user.sub])).rows[0];
+        if (wallet?.funding_account_status === 'ACTIVE') {
+          await client.query('COMMIT');
+          const number = decryptWalletAccountNumber(wallet);
+          return res.json({
+            status: 'ACTIVE',
+            account: number ? { bankName: wallet.funding_bank_name, accountName: wallet.funding_account_name, accountNumber: number, currency: 'NGN' } : null,
+            idempotent: true
+          });
+        }
+        const staleRequest = wallet?.funding_account_status === 'REQUESTING' &&
+          Date.now() - new Date(wallet.updated_at).getTime() > 5 * 60 * 1000;
+        if (['REQUESTING','ASSIGNING'].includes(wallet?.funding_account_status) && !staleRequest) {
+          await client.query('COMMIT');
+          return res.status(202).json({ status: wallet.funding_account_status, message: 'Your dedicated account request is already being processed.' });
+        }
+        await client.query(`
+          UPDATE buyer_wallets
+             SET funding_account_status='REQUESTING',
+                 provider='paystack',
+                 provider_consent_at=NOW(),
+                 provider_consent_version='DVA-CONSENT-1',
+                 updated_at=NOW()
+           WHERE id=$1
+        `, [wallet.id]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      let customerCode = wallet.provider_customer_code;
+      if (customerCode) {
+        const existing = await walletPaystackRequest('/customer/' + encodeURIComponent(customerCode));
+        if (existing?.dedicated_account?.account_number && existing?.dedicated_account?.assigned) {
+          await persistWalletFundingAccount(wallet.id, existing.dedicated_account);
+          const updated = (await pool.query('SELECT * FROM buyer_wallets WHERE id=$1', [wallet.id])).rows[0];
+          return res.json({
+            status: 'ACTIVE',
+            account: {
+              bankName: updated.funding_bank_name,
+              accountName: updated.funding_account_name,
+              accountNumber: decryptWalletAccountNumber(updated),
+              currency: 'NGN'
+            },
+            idempotent: true
+          });
+        }
+        // A customer already exists. Do not issue a second dedicated-account
+        // assignment request; wait for Paystack's assignment webhook instead.
+        await pool.query(
+          "UPDATE buyer_wallets SET funding_account_status='ASSIGNING',updated_at=NOW() WHERE id=$1",
+          [wallet.id]
+        );
+        return res.status(202).json({
+          status: 'ASSIGNING',
+          message: 'Your dedicated account request is already with Paystack. FYNX will display its details after the assignment event arrives.'
+        });
+      } else {
+        const customer = await walletPaystackRequest('/customer', {
+          method: 'POST',
+          body: {
+            email,
+            first_name: firstName,
+            last_name: lastName,
+            phone,
+            metadata: { fynx_user_id: String(req.user.sub), wallet_currency: 'NGN' }
+          }
+        });
+        customerCode = String(customer.customer_code || '');
+        if (!/^CUS_[A-Za-z0-9]+$/.test(customerCode)) throw Object.assign(new Error('payment provider did not return a valid customer reference'), { code: 'WALLET_CUSTOMER_INVALID' });
+        await pool.query('UPDATE buyer_wallets SET provider_customer_code=$2,updated_at=NOW() WHERE id=$1', [wallet.id, customerCode]);
+      }
+
+      const accountData = await walletPaystackRequest('/dedicated_account', {
+        method: 'POST',
+        body: { customer: customerCode, preferred_bank: preferredBank }
+      });
+      if (accountData?.account_number && accountData?.assigned) {
+        await persistWalletFundingAccount(wallet.id, accountData);
+        const updated = (await pool.query('SELECT * FROM buyer_wallets WHERE id=$1', [wallet.id])).rows[0];
+        return res.json({
+          status: 'ACTIVE',
+          account: {
+            bankName: updated.funding_bank_name,
+            accountName: updated.funding_account_name,
+            accountNumber: decryptWalletAccountNumber(updated),
+            currency: 'NGN'
+          }
+        });
+      }
+      await pool.query(`UPDATE buyer_wallets SET funding_account_status='ASSIGNING',updated_at=NOW() WHERE id=$1`, [wallet.id]);
+      return res.status(202).json({ status: 'ASSIGNING', message: 'Your bank account is being assigned. FYNX will display it after Paystack confirms the assignment.' });
+    } catch (error) {
+      console.error('buyer wallet dedicated account setup', error);
+      await pool.query(`
+        UPDATE buyer_wallets SET funding_account_status='FAILED',updated_at=NOW()
+         WHERE user_id=$1 AND currency='NGN' AND funding_account_status='REQUESTING'
+      `, [req.user.sub]).catch(() => {});
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 502)
+        .json({ error: 'dedicated funding account setup could not be completed' });
+    }
+  });
+
+
+  app.get('/api/wallet/security', auth, async (req, res) => {
+    try {
+      await ensureBuyerWalletSchema();
+      res.set('Cache-Control', 'no-store, private');
+      const wallet = (await pool.query(`
+        SELECT withdrawal_pin_hash,withdrawal_pin_locked_until
+          FROM buyer_wallets
+         WHERE user_id=$1 AND currency='NGN'
+         LIMIT 1
+      `, [req.user.sub])).rows[0];
+      const lockedUntil = wallet?.withdrawal_pin_locked_until || null;
+      const locked = Boolean(lockedUntil && new Date(lockedUntil).getTime() > Date.now());
+      return res.json({
+        hasWithdrawalPin: Boolean(wallet?.withdrawal_pin_hash),
+        isLocked: locked,
+        lockedUntil: locked ? lockedUntil : null,
+        limits: walletWithdrawalLimits()
+      });
+    } catch (error) {
+      console.error('buyer wallet security status', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
+        .json({ error: 'wallet security status is temporarily unavailable' });
+    }
+  });
+
+  app.post('/api/wallet/security/pin', auth, async (req, res) => {
+    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+    const pin = typeof req.body?.pin === 'string' ? req.body.pin.trim() : '';
+    const confirmPin = typeof req.body?.confirmPin === 'string' ? req.body.confirmPin.trim() : '';
+    if (!/^\d{6}$/.test(pin) || pin !== confirmPin || currentPassword.length < 8 || currentPassword.length > 128) {
+      return res.status(400).json({ error: 'enter your current password and matching six-digit wallet PIN' });
+    }
+    let client;
+    try {
+      await ensureBuyerWalletSchema();
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const wallet = (await client.query(`
+        SELECT id,status,withdrawal_pin_setup_failed_attempts,withdrawal_pin_setup_locked_until
+          FROM buyer_wallets
+         WHERE user_id=$1 AND currency='NGN'
+         FOR UPDATE
+      `, [req.user.sub])).rows[0];
+      if (!wallet || wallet.status !== 'ACTIVE') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'an active FYNX Wallet is required before setting a withdrawal PIN' });
+      }
+      const lockedUntil = wallet.withdrawal_pin_setup_locked_until ? new Date(wallet.withdrawal_pin_setup_locked_until).getTime() : 0;
+      if (lockedUntil > Date.now()) {
+        await client.query('ROLLBACK');
+        return res.status(423).json({ error: 'wallet PIN setup is temporarily locked after repeated password failures' });
+      }
+      const user = (await client.query('SELECT password_hash FROM users WHERE id=$1 LIMIT 1', [req.user.sub])).rows[0];
+      if (!user?.password_hash || !(await bcrypt.compare(currentPassword, user.password_hash))) {
+        const previous = lockedUntil > 0 && lockedUntil <= Date.now() ? 0 : Number(wallet.withdrawal_pin_setup_failed_attempts || 0);
+        const attempts = previous + 1;
+        await client.query(`
+          UPDATE buyer_wallets
+             SET withdrawal_pin_setup_failed_attempts=$1,
+                 withdrawal_pin_setup_locked_until=CASE WHEN $1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE NULL END,
+                 updated_at=NOW()
+           WHERE id=$2
+        `, [attempts, wallet.id]);
+        await client.query('COMMIT');
+        return res.status(403).json({
+          error: attempts >= 5
+            ? 'current password attempts exceeded; wallet PIN setup is locked for 15 minutes'
+            : 'current FYNX password could not be verified'
+        });
+      }
+
+      const pinHash = await bcrypt.hash(pin, 12);
+      await client.query(`
+        UPDATE buyer_wallets
+           SET withdrawal_pin_hash=$1,
+               withdrawal_pin_set_at=NOW(),
+               withdrawal_pin_failed_attempts=0,
+               withdrawal_pin_locked_until=NULL,
+               withdrawal_pin_setup_failed_attempts=0,
+               withdrawal_pin_setup_locked_until=NULL,
+               updated_at=NOW()
+         WHERE id=$2
+      `, [pinHash, wallet.id]);
+      await client.query('COMMIT');
+      return res.json({ hasWithdrawalPin: true, updated: true });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('buyer wallet withdrawal PIN setup', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
+        .json({ error: 'wallet withdrawal PIN could not be saved' });
+    } finally {
+      client?.release();
+    }
+  });
+
+  app.get('/api/wallet/payout-banks', auth, async (req, res) => {
+    if (!walletProviderApproved('WITHDRAWAL')) return res.status(503).json({ error: 'wallet bank payouts are not enabled for this provider environment yet' });
+    try {
+      const data = await walletPaystackRequest('/bank?country=nigeria&perPage=100');
+      const banks = (Array.isArray(data) ? data : []).map((bank) => ({
+        name: String(bank.name || '').trim(),
+        code: String(bank.code || '').trim(),
+        slug: String(bank.slug || '').trim()
+      })).filter((bank) => bank.name && /^[0-9]{3,10}$/.test(bank.code));
+      return res.json({ banks });
+    } catch (error) {
+      console.error('buyer wallet payout bank list', error);
+      return res.status(502).json({ error: 'supported banks are temporarily unavailable' });
+    }
+  });
+
+  app.post('/api/wallet/payout-account/verify', auth, async (req, res) => {
+    const bankCode = typeof req.body?.bankCode === 'string' ? req.body.bankCode.trim() : '';
+    const accountNumber = typeof req.body?.accountNumber === 'string' ? req.body.accountNumber.replace(/\D/g, '') : '';
+    if (!walletProviderApproved('WITHDRAWAL')) return res.status(503).json({ error: 'wallet bank payouts are not enabled for this provider environment yet' });
+    if (!/^[0-9]{3,10}$/.test(bankCode) || !/^[0-9]{10}$/.test(accountNumber)) {
+      return res.status(400).json({ error: 'select a supported bank and enter a 10-digit account number' });
+    }
+    try {
+      const resolved = await walletPaystackRequest('/bank/resolve?account_number=' + encodeURIComponent(accountNumber) + '&bank_code=' + encodeURIComponent(bankCode));
+      const accountName = String(resolved.account_name || '').trim();
+      if (!accountName) return res.status(422).json({ error: 'bank account could not be verified' });
+      return res.json({ verified: true, accountName, accountLast4: accountNumber.slice(-4) });
+    } catch (error) {
+      console.error('buyer wallet payout account verification', error);
+      return res.status(422).json({ error: 'bank account could not be verified' });
+    }
+  });
+
+  app.get('/api/wallet/withdrawals/:reference', auth, async (req, res) => {
+    const reference = typeof req.params.reference === 'string' ? req.params.reference.trim() : '';
+    if (!/^fw_[a-f0-9]{32}$/i.test(reference)) return res.status(400).json({ error: 'invalid wallet withdrawal reference' });
+    try {
+      await ensureBuyerWalletSchema();
+      res.set('Cache-Control', 'no-store, private');
+      let operation = (await pool.query(`
+        SELECT id,wallet_id,user_id,provider_reference,status,amount,currency,bank_name,account_last4
+          FROM buyer_wallet_provider_operations
+         WHERE provider_reference=$1 AND user_id=$2
+         LIMIT 1
+      `, [reference, req.user.sub])).rows[0];
+      if (!operation) return res.status(404).json({ error: 'wallet withdrawal was not found' });
+      const currentStatus = String(operation.status || '').toUpperCase();
+      if (['FAILED','BLOCKED','REVERSED'].includes(currentStatus)) {
+        return res.json({
+          status: currentStatus,
+          reference,
+          amount: Number(operation.amount),
+          bankName: operation.bank_name,
+          accountLast4: operation.account_last4,
+          refreshed: false
+        });
+      }
+
+      // Poll the original Paystack reference. Never create a second transfer or
+      // infer success from a timeout, app restart or client-side request result.
+      const verified = await walletPaystackRequest('/transfer/verify/' + encodeURIComponent(reference));
+      const providerStatus = String(verified?.status || '').trim().toLowerCase();
+      const eventName = providerStatus === 'success' ? 'transfer.success'
+        : providerStatus === 'failed' ? 'transfer.failed'
+        : providerStatus === 'reversed' ? 'transfer.reversed'
+        : null;
+
+      if (eventName) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const locked = (await client.query(`
+            SELECT * FROM buyer_wallet_provider_operations
+             WHERE provider_reference=$1 AND user_id=$2
+             FOR UPDATE
+          `, [reference, req.user.sub])).rows[0];
+          if (!locked) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'wallet withdrawal was not found' });
+          }
+          await reconcileWalletTransferEvent(client, eventName, verified);
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw error;
+        } finally {
+          client.release();
+        }
+      }
+
+      operation = (await pool.query(`
+        SELECT id,status,amount,bank_name,account_last4
+          FROM buyer_wallet_provider_operations
+         WHERE provider_reference=$1 AND user_id=$2
+         LIMIT 1
+      `, [reference, req.user.sub])).rows[0];
+      return res.status(200).json({
+        status: String(operation?.status || 'PENDING'),
+        reference,
+        amount: Number(operation?.amount || 0),
+        bankName: operation?.bank_name || '',
+        accountLast4: operation?.account_last4 || '',
+        refreshed: Boolean(eventName),
+        message: eventName ? 'Wallet withdrawal status was reconciled with Paystack.' : 'Paystack has not confirmed a final transfer result yet. Your funds remain reserved.'
+      });
+    } catch (error) {
+      console.error('buyer wallet withdrawal status refresh', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 502)
+        .json({ error: 'wallet withdrawal status could not be refreshed' });
+    }
+  });
+
+  app.post('/api/wallet/withdrawals', auth, async (req, res) => {
+    const amountValue = Number(req.body?.amount);
+    const amountMinor = Math.round(amountValue * 100);
+    const bankCode = typeof req.body?.bankCode === 'string' ? req.body.bankCode.trim() : '';
+    const accountNumber = typeof req.body?.accountNumber === 'string' ? req.body.accountNumber.replace(/\D/g, '') : '';
+    const idempotencyKey = typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey.trim() : '';
+    const pin = typeof req.body?.pin === 'string' ? req.body.pin.trim() : '';
+    if (!walletProviderApproved('WITHDRAWAL')) return res.status(503).json({ error: 'wallet withdrawals are not enabled for this provider environment yet' });
+    if (!Number.isFinite(amountValue) || amountValue <= 0 || !Number.isSafeInteger(amountMinor) ||
+        !/^[0-9]{3,10}$/.test(bankCode) || !/^[0-9]{10}$/.test(accountNumber) ||
+        !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey) || !/^\d{6}$/.test(pin)) {
+      return res.status(400).json({ error: 'valid withdrawal amount, bank, account number, six-digit wallet PIN and idempotency key are required' });
+    }
+    const limits = walletWithdrawalLimits();
+    if (!limits) return res.status(503).json({ error: 'wallet withdrawal limits are not configured for this provider environment yet' });
+    if (amountValue > limits.maximumPerTransfer) {
+      return res.status(400).json({ error: 'withdrawal amount is above the current per-transfer limit' });
+    }
+    const amount = (amountMinor / 100).toFixed(2);
+    try {
+      await ensureBuyerWalletSchema();
+      const existing = (await pool.query(
+        'SELECT id,user_id,amount,status,provider_reference,bank_name,account_last4 FROM buyer_wallet_provider_operations WHERE idempotency_key=$1 LIMIT 1',
+        [idempotencyKey]
+      )).rows[0];
+      if (existing) {
+        if (String(existing.user_id) !== String(req.user.sub) || Number(existing.amount) !== Number(amount)) {
+          return res.status(409).json({ error: 'withdrawal idempotency key has already been used for another request' });
+        }
+        return res.status(202).json({
+          status: existing.status,
+          reference: existing.provider_reference,
+          amount: Number(existing.amount),
+          bankName: existing.bank_name,
+          accountLast4: existing.account_last4,
+          idempotent: true
+        });
+      }
+
+      // Check the wallet PIN before creating provider-side recipient records.
+      // The PIN is checked again under the wallet row lock before funds are reserved.
+      const pinClient = await pool.connect();
+      try {
+        await pinClient.query('BEGIN');
+        const pinWallet = (await pinClient.query(`
+          SELECT id,status,withdrawal_pin_hash,withdrawal_pin_failed_attempts,withdrawal_pin_locked_until
+            FROM buyer_wallets
+           WHERE user_id=$1 AND currency='NGN'
+           FOR UPDATE
+        `, [req.user.sub])).rows[0];
+        if (!pinWallet || pinWallet.status !== 'ACTIVE' || !pinWallet.withdrawal_pin_hash) {
+          await pinClient.query('ROLLBACK');
+          return res.status(409).json({ error: 'an active wallet with a withdrawal PIN is required' });
+        }
+        const lockedUntil = pinWallet.withdrawal_pin_locked_until ? new Date(pinWallet.withdrawal_pin_locked_until).getTime() : 0;
+        if (lockedUntil > Date.now()) {
+          await pinClient.query('ROLLBACK');
+          return res.status(423).json({ error: 'wallet withdrawals are temporarily locked after repeated incorrect PIN attempts' });
+        }
+        if (!(await bcrypt.compare(pin, pinWallet.withdrawal_pin_hash))) {
+          const previous = lockedUntil > 0 && lockedUntil <= Date.now() ? 0 : Number(pinWallet.withdrawal_pin_failed_attempts || 0);
+          const attempts = previous + 1;
+          await pinClient.query(`
+            UPDATE buyer_wallets
+               SET withdrawal_pin_failed_attempts=$1,
+                   withdrawal_pin_locked_until=CASE WHEN $1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE NULL END,
+                   updated_at=NOW()
+             WHERE id=$2
+          `, [attempts, pinWallet.id]);
+          await pinClient.query('COMMIT');
+          return res.status(403).json({
+            error: attempts >= 5
+              ? 'wallet PIN attempts exceeded; withdrawals are locked for 15 minutes'
+              : 'wallet withdrawal PIN is incorrect'
+          });
+        }
+        await pinClient.query(
+          'UPDATE buyer_wallets SET withdrawal_pin_failed_attempts=0,withdrawal_pin_locked_until=NULL WHERE id=$1',
+          [pinWallet.id]
+        );
+        await pinClient.query('COMMIT');
+      } catch (error) {
+        await pinClient.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        pinClient.release();
+      }
+
+      const resolved = await walletPaystackRequest('/bank/resolve?account_number=' + encodeURIComponent(accountNumber) + '&bank_code=' + encodeURIComponent(bankCode));
+      const verifiedName = String(resolved.account_name || '').trim();
+      if (!verifiedName) return res.status(422).json({ error: 'bank account could not be verified' });
+      const recipient = await walletPaystackRequest('/transferrecipient', {
+        method: 'POST',
+        body: {
+          type: 'nuban',
+          name: verifiedName,
+          account_number: accountNumber,
+          bank_code: bankCode,
+          currency: 'NGN',
+          description: 'FYNX wallet payout ' + String(req.user.sub)
+        }
+      });
+      const recipientCode = String(recipient.recipient_code || '');
+      if (!/^RCP_[A-Za-z0-9]+$/.test(recipientCode)) throw Object.assign(new Error('payment provider did not return a valid transfer recipient'), { code: 'WALLET_RECIPIENT_INVALID' });
+
+      const client = await pool.connect();
+      let operation;
+      try {
+        await client.query('BEGIN');
+        const wallet = (await client.query(`
+          SELECT id,status,currency,withdrawal_pin_hash,withdrawal_pin_failed_attempts,withdrawal_pin_locked_until FROM buyer_wallets
+           WHERE user_id=$1 AND currency='NGN'
+           FOR UPDATE
+        `, [req.user.sub])).rows[0];
+        if (!wallet || wallet.status !== 'ACTIVE') {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'an active FYNX wallet is required before withdrawal' });
+        }
+        if (!wallet.withdrawal_pin_hash) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'set your wallet withdrawal PIN before requesting a payout' });
+        }
+        const pinLockedUntil = wallet.withdrawal_pin_locked_until ? new Date(wallet.withdrawal_pin_locked_until).getTime() : 0;
+        if (pinLockedUntil > Date.now()) {
+          await client.query('ROLLBACK');
+          return res.status(423).json({ error: 'wallet withdrawals are temporarily locked after repeated incorrect PIN attempts' });
+        }
+        const enteredPinMatches = await bcrypt.compare(pin, wallet.withdrawal_pin_hash);
+        if (!enteredPinMatches) {
+          const priorFailures = pinLockedUntil > 0 && pinLockedUntil <= Date.now()
+            ? 0
+            : Number(wallet.withdrawal_pin_failed_attempts || 0);
+          const failedAttempts = priorFailures + 1;
+          await client.query(`
+            UPDATE buyer_wallets
+               SET withdrawal_pin_failed_attempts=$1,
+                   withdrawal_pin_locked_until=CASE WHEN $1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE NULL END,
+                   updated_at=NOW()
+             WHERE id=$2
+          `, [failedAttempts, wallet.id]);
+          await client.query('COMMIT');
+          return res.status(403).json({
+            error: failedAttempts >= 5
+              ? 'wallet PIN attempts exceeded; withdrawals are locked for 15 minutes'
+              : 'wallet withdrawal PIN is incorrect'
+          });
+        }
+        await client.query(
+          'UPDATE buyer_wallets SET withdrawal_pin_failed_attempts=0,withdrawal_pin_locked_until=NULL WHERE id=$1',
+          [wallet.id]
+        );
+        const balance = (await client.query(`
+          SELECT COALESCE(SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END),0)::numeric(18,2) AS available
+            FROM buyer_wallet_ledger_entries e
+            JOIN buyer_wallet_transactions t ON t.id=e.transaction_id
+           WHERE e.wallet_id=$1 AND e.account_code='AVAILABLE' AND t.status='SUCCEEDED'
+        `, [wallet.id])).rows[0];
+        if (Number(balance?.available || 0) < Number(amount)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'withdrawal amount is above your cleared available balance' });
+        }
+        const dailyUsage = (await client.query(`
+          SELECT COUNT(*)::int AS request_count,
+                 COALESCE(SUM(amount),0)::numeric(18,2) AS requested_amount
+            FROM buyer_wallet_provider_operations
+           WHERE user_id=$1
+             AND created_at >= date_trunc('day',NOW())
+        `, [req.user.sub])).rows[0];
+        if (Number(dailyUsage?.request_count || 0) >= limits.dailyCountLimit) {
+          await client.query('ROLLBACK');
+          return res.status(429).json({ error: 'daily wallet withdrawal request limit has been reached' });
+        }
+        if (Number(dailyUsage?.requested_amount || 0) + Number(amount) > limits.dailyAmountLimit) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'withdrawal amount would exceed your remaining daily limit' });
+        }
+        const transactionId = crypto.randomUUID();
+        const reference = 'fw_' + crypto.randomUUID().replace(/-/g, '');
+        const operationId = crypto.randomUUID();
+        await client.query(`
+          INSERT INTO buyer_wallet_transactions
+            (id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,description,metadata)
+          VALUES ($1,$2,$3,'WITHDRAWAL','PENDING',$4,0,'NGN',$5,$6,'Bank withdrawal requested',$7::jsonb)
+        `, [
+          transactionId, wallet.id, req.user.sub, amount, reference,
+          'WALLET-WITHDRAWAL-' + idempotencyKey,
+          JSON.stringify({ provider: 'paystack', bankCode, accountLast4: accountNumber.slice(-4) })
+        ]);
+        await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [transactionId]);
+        await client.query(`
+          INSERT INTO buyer_wallet_ledger_entries
+            (transaction_id,wallet_id,entry_key,account_code,side,amount,currency)
+          VALUES
+            ($1,$2,$3,'AVAILABLE','DEBIT',$4,'NGN'),
+            ($1,$2,$5,'WITHDRAWAL_PENDING','CREDIT',$4,'NGN')
+        `, [transactionId, wallet.id, 'WALLET-WD-RESERVE-' + operationId + '-DR', amount, 'WALLET-WD-RESERVE-' + operationId + '-CR']);
+        await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [transactionId]);
+        operation = (await client.query(`
+          INSERT INTO buyer_wallet_provider_operations
+            (id,wallet_id,user_id,transaction_id,operation_type,idempotency_key,provider_reference,status,amount,currency,recipient_code,bank_name,account_name,account_last4,metadata)
+          VALUES ($1,$2,$3,$4,'WITHDRAWAL',$5,$6,'PENDING',$7,'NGN',$8,$9,$10,$11,$12::jsonb)
+          RETURNING *
+        `, [
+          operationId, wallet.id, req.user.sub, transactionId, idempotencyKey, reference,
+          amount, recipientCode, String(req.body?.bankName || '').trim().slice(0, 120),
+          verifiedName, accountNumber.slice(-4), JSON.stringify({ bankCode })
+        ])).rows[0];
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        if (error?.code === '23505') return res.status(409).json({ error: 'a matching wallet withdrawal request already exists' });
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      try {
+        const transfer = await walletPaystackRequest('/transfer', {
+          method: 'POST',
+          body: {
+            source: 'balance',
+            amount: amountMinor,
+            recipient: recipientCode,
+            reference: operation.provider_reference,
+            reason: 'FYNX Wallet withdrawal'
+          }
+        });
+        const providerStatus = String(transfer.status || '').toLowerCase();
+        if (providerStatus === 'otp') {
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+            const locked = (await client.query('SELECT * FROM buyer_wallet_provider_operations WHERE id=$1 FOR UPDATE', [operation.id])).rows[0];
+            if (locked?.status === 'PENDING') {
+              await postWalletInternalLedgerTransaction(client, {
+                walletId: locked.wallet_id,
+                userId: locked.user_id,
+                amount: locked.amount,
+                reference: 'WALLET-WD-OTP-RELEASE-' + locked.id,
+                description: 'Withdrawal was not sent because provider approval is required',
+                debitAccount: 'WITHDRAWAL_PENDING',
+                creditAccount: 'AVAILABLE',
+                metadata: { operationId: String(locked.id), reason: 'provider_otp_required' }
+              });
+              await client.query("UPDATE buyer_wallet_provider_operations SET status='BLOCKED',failure_reason='provider transfer OTP is not disabled',updated_at=NOW() WHERE id=$1 AND status='PENDING'", [locked.id]);
+            }
+            await client.query('COMMIT');
+          } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
+          finally { client.release(); }
+          return res.status(409).json({ error: 'provider transfer approval is not configured; reserved funds were released' });
+        }
+        await pool.query(`
+          UPDATE buyer_wallet_provider_operations
+             SET provider_transfer_code=$1,metadata=$2::jsonb,updated_at=NOW()
+           WHERE id=$3 AND status='PENDING'
+        `, [
+          transfer.transfer_code ? String(transfer.transfer_code) : null,
+          JSON.stringify({
+            ...(operation.metadata || {}),
+            providerStatus,
+            transferId: transfer.id || null,
+            providerFeeMinor: Number.isSafeInteger(Number(transfer.fee_charged)) && Number(transfer.fee_charged) >= 0
+              ? Number(transfer.fee_charged) : null,
+            providerFeesBreakdown: Array.isArray(transfer.fees_breakdown) ? transfer.fees_breakdown : null
+          }),
+          operation.id
+        ]);
+        return res.status(202).json({
+          status: 'PENDING',
+          reference: operation.provider_reference,
+          amount: Number(operation.amount),
+          bankName: operation.bank_name,
+          accountLast4: operation.account_last4,
+          message: 'Withdrawal is processing. FYNX will update the wallet after Paystack confirms the bank transfer.'
+        });
+      } catch (error) {
+        if (Number(error?.status) >= 400 && Number(error?.status) < 500) {
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+            const locked = (await client.query('SELECT * FROM buyer_wallet_provider_operations WHERE id=$1 FOR UPDATE', [operation.id])).rows[0];
+            if (locked?.status === 'PENDING') {
+              await postWalletInternalLedgerTransaction(client, {
+                walletId: locked.wallet_id,
+                userId: locked.user_id,
+                amount: locked.amount,
+                reference: 'WALLET-WD-REJECT-RELEASE-' + locked.id,
+                description: 'Rejected withdrawal funds returned',
+                debitAccount: 'WITHDRAWAL_PENDING',
+                creditAccount: 'AVAILABLE',
+                metadata: { operationId: String(locked.id), reason: 'provider_rejected_request' }
+              });
+              await client.query(`
+                UPDATE buyer_wallet_provider_operations
+                   SET status='FAILED',failure_reason=$1,updated_at=NOW()
+                 WHERE id=$2 AND status='PENDING'
+              `, [String(error.message || 'provider rejected withdrawal').slice(0, 240), locked.id]);
+            }
+            await client.query('COMMIT');
+          } catch (releaseError) { await client.query('ROLLBACK').catch(() => {}); throw releaseError; }
+          finally { client.release(); }
+          return res.status(409).json({ error: 'the payment provider rejected this withdrawal; reserved funds have been returned' });
+        }
+        // A timeout or server error may be non-conclusive. Keep the exact reference and funds reserved for reconciliation.
+        console.error('buyer wallet payout request non-conclusive', error);
+        return res.status(202).json({
+          status: 'PENDING',
+          reference: operation.provider_reference,
+          amount: Number(operation.amount),
+          bankName: operation.bank_name,
+          accountLast4: operation.account_last4,
+          message: 'The provider response is not yet conclusive. Your funds remain reserved while FYNX reconciles this reference.'
+        });
+      }
+    } catch (error) {
+      console.error('buyer wallet withdrawal request', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 502)
+        .json({ error: 'withdrawal request could not be created' });
+    }
+  });
+
+  app.get('/api/wallet/statement.csv', auth, async (req, res) => {
+    try {
+      await ensureBuyerWalletSchema();
+      res.set('Cache-Control', 'no-store, private');
+      const today = new Date().toISOString().slice(0, 10);
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const from = parseStatementDate(req.query?.from, ninetyDaysAgo);
+      const to = parseStatementDate(req.query?.to, today);
+      if (!from || !to || from > to) return res.status(400).json({ error: 'statement dates must be valid ISO dates with from no later than to' });
+      const days = (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86_400_000;
+      if (days > 366) return res.status(400).json({ error: 'wallet statements are limited to 12 months per export' });
+      const wallet = (await pool.query(
+        "SELECT id FROM buyer_wallets WHERE user_id=$1 AND currency='NGN' LIMIT 1",
+        [req.user.sub]
+      )).rows[0];
+      if (!wallet) {
+        res.type('text/csv; charset=utf-8');
+        res.set('Content-Disposition', 'attachment; filename="fynx-wallet-statement.csv"');
+        return res.send(buildBuyerWalletStatementCsv([]));
+      }
+      const rows = await pool.query(`
+        SELECT t.transaction_type,
+               CASE WHEN op.status='PENDING' THEN 'PROCESSING'
+                    WHEN op.status IS NOT NULL THEN op.status ELSE t.status END AS status,
+               t.amount,t.fee,t.currency,t.reference,t.description,
+               to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
+               CASE WHEN op.status IN ('FAILED','BLOCKED','REVERSED') THEN 0
+                    ELSE COALESCE(delta.wallet_delta,0) END::numeric(18,2) AS wallet_delta
+          FROM buyer_wallet_transactions t
+          LEFT JOIN buyer_wallet_provider_operations op ON op.transaction_id=t.id
+          LEFT JOIN LATERAL (
+            SELECT SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END) AS wallet_delta
+              FROM buyer_wallet_ledger_entries e
+             WHERE e.transaction_id=t.id AND e.account_code='AVAILABLE'
+          ) delta ON TRUE
+         WHERE t.user_id=$1 AND t.wallet_id=$2
+           AND COALESCE(t.metadata->>'internal','false') <> 'true'
+           AND t.created_at >= $3::date
+           AND t.created_at < ($4::date + INTERVAL '1 day')
+         ORDER BY t.created_at ASC,t.id ASC
+         LIMIT 5001
+      `, [req.user.sub, wallet.id, from, to]);
+      if (rows.rows.length > 5000) return res.status(413).json({ error: 'statement is too large; export a shorter date range' });
+      res.type('text/csv; charset=utf-8');
+      res.set('Content-Disposition', 'attachment; filename="fynx-wallet-statement-' + from + '-to-' + to + '.csv"');
+      return res.send(buildBuyerWalletStatementCsv(rows.rows));
+    } catch (error) {
+      console.error('buyer wallet statement export', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
+        .json({ error: 'wallet statement is temporarily unavailable' });
+    }
+  });
+
 
   app.get('/api/wallet/transactions', auth, async (req, res) => {
     try {
@@ -435,16 +2013,22 @@ export function registerBuyerWalletRoutes({ app }) {
         ? [req.user.sub, wallet.id, parsedDirection.direction, cursor.createdAt, cursor.id, limit + 1]
         : [req.user.sub, wallet.id, parsedDirection.direction, limit + 1];
       const result = await pool.query(`
-        SELECT t.id,t.transaction_type,t.status,t.amount,t.fee,t.currency,t.reference,t.description,t.created_at,
+        SELECT t.id,t.transaction_type,
+               CASE WHEN op.status='PENDING' THEN 'PROCESSING'
+                    WHEN op.status IS NOT NULL THEN op.status ELSE t.status END AS status,
+               t.amount,t.fee,t.currency,t.reference,t.description,t.created_at,
                to_char(t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
-               COALESCE(activity_delta.wallet_delta,0)::numeric(18,2) AS wallet_delta
+               CASE WHEN op.status IN ('FAILED','BLOCKED','REVERSED') THEN 0
+                    ELSE COALESCE(activity_delta.wallet_delta,0) END::numeric(18,2) AS wallet_delta
           FROM buyer_wallet_transactions t
+          LEFT JOIN buyer_wallet_provider_operations op ON op.transaction_id=t.id
           LEFT JOIN LATERAL (
             SELECT SUM(CASE WHEN e.side='CREDIT' THEN e.amount ELSE -e.amount END) AS wallet_delta
               FROM buyer_wallet_ledger_entries e
              WHERE e.transaction_id=t.id AND e.account_code='AVAILABLE'
           ) activity_delta ON TRUE
          WHERE t.user_id=$1 AND t.wallet_id=$2
+           AND COALESCE(t.metadata->>'internal','false') <> 'true'
            AND (
              $3::text='ALL'
              OR ($3::text='IN' AND COALESCE(activity_delta.wallet_delta,0) > 0)

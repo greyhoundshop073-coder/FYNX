@@ -28,7 +28,10 @@ app.use((req, res, next) => {
   if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   next();
 });
-app.use(express.json({ limit: "18mb", strict: true }));
+app.use(express.json({ limit: "18mb", strict: true, verify: (req, _res, buffer) => {
+  // Paystack HMAC signatures are checked against the exact request bytes.
+  req.rawBody = Buffer.from(buffer);
+} }));
 app.use((req, res, next) => {
   if (req.method !== "GET" && req.method !== "HEAD") res.setHeader("Cache-Control", "no-store");
   next();
