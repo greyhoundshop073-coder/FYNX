@@ -30,7 +30,7 @@ assert.doesNotMatch(
 assert.match(schemaBatch, /CREATE TABLE IF NOT EXISTS users/);
 assert.match(schemaBatch, /CREATE TABLE IF NOT EXISTS messages/);
 assert.doesNotMatch(schemaBatch, /UPDATE users SET verified = FALSE;/, "startup must never reset every user verification flag");
-assert.match(initializer, /await pool\\.query\\("UPDATE users SET verified = TRUE WHERE lower\\(username\\) = \\$1", \\[officialFynxUsername\\]\\);/, "only the configured official account may be marked verified");
+assert.ok(initializer.includes('await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);'), "only the configured official account may be marked verified");
 assert.doesNotMatch(
   schemaBatch,
   /UPDATE users SET verified = TRUE WHERE lower\(username\) = \$1/,
