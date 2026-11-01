@@ -986,7 +986,7 @@ export function registerBuyerWalletRoutes({ app }) {
     } finally {
       client.release();
     }
-  });;
+  });
 
   app.get('/api/wallet/payout-banks', auth, async (req, res) => {
     if (!walletProviderApproved('WITHDRAWAL')) return res.status(503).json({ error: 'wallet bank payouts are not enabled for this provider environment yet' });
