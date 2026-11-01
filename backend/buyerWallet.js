@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -65,6 +66,10 @@ async function ensureBuyerWalletSchema() {
         CHECK (funding_account_status IN ('NOT_CREATED','REQUESTING','ASSIGNING','ACTIVE','FAILED','RESTRICTED'));
       ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS provider_consent_at TIMESTAMPTZ;
       ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS provider_consent_version TEXT;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_hash TEXT;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_set_at TIMESTAMPTZ;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_failed_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_locked_until TIMESTAMPTZ;
       CREATE UNIQUE INDEX IF NOT EXISTS buyer_wallet_provider_customer_code_uidx
         ON buyer_wallets(provider_customer_code) WHERE provider_customer_code IS NOT NULL;
 
@@ -875,6 +880,68 @@ export function registerBuyerWalletRoutes({ app }) {
     }
   });
 
+
+  app.get('/api/wallet/security', auth, async (req, res) => {
+    try {
+      await ensureBuyerWalletSchema();
+      res.set('Cache-Control', 'no-store, private');
+      const wallet = (await pool.query(`
+        SELECT withdrawal_pin_hash,withdrawal_pin_locked_until
+          FROM buyer_wallets
+         WHERE user_id=$1 AND currency='NGN'
+         LIMIT 1
+      `, [req.user.sub])).rows[0];
+      const lockedUntil = wallet?.withdrawal_pin_locked_until || null;
+      const locked = Boolean(lockedUntil && new Date(lockedUntil).getTime() > Date.now());
+      return res.json({
+        hasWithdrawalPin: Boolean(wallet?.withdrawal_pin_hash),
+        isLocked: locked,
+        lockedUntil: locked ? lockedUntil : null
+      });
+    } catch (error) {
+      console.error('buyer wallet security status', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
+        .json({ error: 'wallet security status is temporarily unavailable' });
+    }
+  });
+
+  app.post('/api/wallet/security/pin', auth, async (req, res) => {
+    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+    const pin = typeof req.body?.pin === 'string' ? req.body.pin.trim() : '';
+    const confirmPin = typeof req.body?.confirmPin === 'string' ? req.body.confirmPin.trim() : '';
+    if (!/^\d{6}$/.test(pin) || pin !== confirmPin || currentPassword.length < 8 || currentPassword.length > 128) {
+      return res.status(400).json({ error: 'enter your current password and matching six-digit wallet PIN' });
+    }
+    try {
+      await ensureBuyerWalletSchema();
+      const user = (await pool.query('SELECT password_hash FROM users WHERE id=$1 LIMIT 1', [req.user.sub])).rows[0];
+      if (!user?.password_hash || !(await bcrypt.compare(currentPassword, user.password_hash))) {
+        return res.status(403).json({ error: 'current FYNX password could not be verified' });
+      }
+      const wallet = (await pool.query(
+        "SELECT id,status FROM buyer_wallets WHERE user_id=$1 AND currency='NGN' LIMIT 1",
+        [req.user.sub]
+      )).rows[0];
+      if (!wallet || wallet.status !== 'ACTIVE') {
+        return res.status(409).json({ error: 'an active FYNX Wallet is required before setting a withdrawal PIN' });
+      }
+      const pinHash = await bcrypt.hash(pin, 12);
+      await pool.query(`
+        UPDATE buyer_wallets
+           SET withdrawal_pin_hash=$1,
+               withdrawal_pin_set_at=NOW(),
+               withdrawal_pin_failed_attempts=0,
+               withdrawal_pin_locked_until=NULL,
+               updated_at=NOW()
+         WHERE id=$2
+      `, [pinHash, wallet.id]);
+      return res.json({ hasWithdrawalPin: true, updated: true });
+    } catch (error) {
+      console.error('buyer wallet withdrawal PIN setup', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
+        .json({ error: 'wallet withdrawal PIN could not be saved' });
+    }
+  });
 
   app.get('/api/wallet/payout-banks', auth, async (req, res) => {
     if (!walletProviderApproved('WITHDRAWAL')) return res.status(503).json({ error: 'wallet bank payouts are not enabled for this provider environment yet' });
