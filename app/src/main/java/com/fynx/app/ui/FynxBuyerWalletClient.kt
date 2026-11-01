@@ -149,21 +149,23 @@ internal object FynxBuyerWalletClient {
     }
 
     suspend fun loadPayoutBanks(context: Context): Result<List<FynxWalletPayoutBank>> =
-        FynxBackendClient.get(context, "/api/wallet/payout-banks").mapCatching { raw ->
-            val rows = JSONObject(raw).optJSONArray("banks") ?: JSONArray()
-            require(rows.length() <= 250) { "The payout bank list is too large." }
-            buildList {
-                for (index in 0 until rows.length()) {
-                    val row = rows.optJSONObject(index) ?: continue
-                    val name = row.optString("name").trim()
-                    val code = row.optString("code").trim()
-                    val slug = row.optString("slug").trim()
-                    if (name.isNotBlank() && code.matches(Regex("^\\d{3,10}$"))) {
-                        add(FynxWalletPayoutBank(name, code, slug))
-                    }
+        FynxBackendClient.get(context, "/api/wallet/payout-banks").mapCatching(::parsePayoutBanks)
+
+    internal fun parsePayoutBanks(raw: String): List<FynxWalletPayoutBank> {
+        val rows = JSONObject(raw).optJSONArray("banks") ?: JSONArray()
+        require(rows.length() <= 250) { "The payout bank list is too large." }
+        return buildList {
+            for (index in 0 until rows.length()) {
+                val row = rows.optJSONObject(index) ?: continue
+                val name = row.optString("name").trim()
+                val code = row.optString("code").trim()
+                val slug = row.optString("slug").trim()
+                if (name.isNotBlank() && code.matches(Regex("^\\d{3,10}$"))) {
+                    add(FynxWalletPayoutBank(name, code, slug))
                 }
             }
         }
+    }
 
     suspend fun verifyPayoutAccount(
         context: Context,
