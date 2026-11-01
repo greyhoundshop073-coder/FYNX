@@ -3,6 +3,7 @@ ROOT = Path(__file__).resolve().parents[1]
 app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 money = (ROOT / "app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt").read_text()
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletClient.kt").read_text()
+wallet_client_tests = (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletPanel.kt").read_text()
 market = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
 payments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt").read_text()
@@ -76,6 +77,7 @@ checks = [
  ("local-only Wallet sessions explain the required server sign-in without making anonymous wallet requests", "if (!FynxBackendClient.hasAccessToken(context))" in panel and "saved-device sign-in" in panel and "Sign in to FYNX to securely load your balance" in panel),
  ("seller earnings are not requested without a live Wallet session", "Marketplace earnings require a live FYNX sign-in." in panel),
  ("bank funding account and Wallet PIN screens require a live server session", actions.count("FynxBackendClient.hasAccessToken(context)") >= 2 and "No account request has been sent." in actions and "before viewing or changing Wallet security" in actions),
+ ("Wallet PIN creation is hidden until the server reports an ACTIVE wallet", "canSetWithdrawalPin: Boolean" in client and "walletStatus == \"ACTIVE\"" in client and "current.canSetWithdrawalPin && (!current.hasWithdrawalPin || editing)" in actions and "Wallet PIN setup opens after your NGN Wallet is activated" in actions and "pendingWalletDoesNotAllowWithdrawalPinSetup" in wallet_client_tests and "activeWalletAllowsPinSetupOnlyWhenTheServerExplicitlyApprovesIt" in wallet_client_tests),
  ("Wallet statement export requires a server-issued session", "enabled = !statementExporting && !loading && FynxBackendClient.hasAccessToken(context)" in panel),
  ("Railway Wallet PR receives full Android emulator and screenshot certification", workflow.count("github.event.pull_request.head.ref == 'fix/railway-backend-runtime-contract-20261101'") == 4),
 ]
