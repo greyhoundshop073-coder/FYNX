@@ -259,7 +259,7 @@ checks = [
          "marketplaceRequiredBalance(row.opt(\"payoutPending\"))",
          "marketplaceRequiredBalance(row.opt(\"paidOut\"))",
          "marketplaceRequiredAmount(row.opt(\"sellerNetAmount\"))",
-         "marketplaceRequiredBalance(row.opt(\"marketplaceFee\"))",
+         "marketplaceRequiredBalance(row.opt(\"marketplaceFeeSeller\"))",
      ))
      and all(fragment in support for fragment in (
          "internal fun marketplaceRequiredAmount(value: Any?): Double",
@@ -545,6 +545,13 @@ checks.extend([
      and "remember(currentUsername) { mutableIntStateOf(0) }" in marketplace
      and "listings = listings.filterNot { it.id == pinnedId }" in marketplace),
 ])
+
+checks.append(
+    ("My Shop seller earnings parser matches the authoritative settlement summary fee field",
+     'marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFeeSeller"))' in seller_center
+     and 'marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0)' in settlement_routes
+     and 'row.opt("marketplaceFee"))' not in seller_center),
+)
 
 checks.append(
     ("exact Marketplace listing lookup preserves ordered image/video MIME types for deep links and post-publish product cards",
