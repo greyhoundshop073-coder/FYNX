@@ -228,7 +228,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             title = row.optString("title").ifBlank { "FYNX order" },
                             currency = currency,
                             sellerNet = marketplaceRequiredAmount(row.opt("sellerNetAmount")),
-                            marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFee")),
+                            marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFeeSeller")),
                             funds = funds,
                             payoutStatus = payoutStatus,
                             updatedAt = row.optString("updatedAt")
