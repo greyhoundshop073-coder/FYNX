@@ -114,6 +114,9 @@ fun FynxBuyerWalletPanel() {
     var hasMoreActivity by remember { mutableStateOf(false) }
     var loadingMoreActivity by remember { mutableStateOf(false) }
     var activityMoreError by remember { mutableStateOf<String?>(null) }
+    var sellerSummary by remember { mutableStateOf<FynxWalletSellerSummary?>(null) }
+    var sellerSummaryLoading by remember { mutableStateOf(true) }
+    var sellerSummaryError by remember { mutableStateOf<String?>(null) }
     var nextActivityCursor by remember { mutableStateOf<FynxBuyerWalletActivityCursor?>(null) }
     var activityRequestGeneration by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -160,6 +163,18 @@ fun FynxBuyerWalletPanel() {
                 activityLoading = false
             }
         }
+    }
+
+    LaunchedEffect(refreshVersion) {
+        sellerSummaryLoading = true
+        sellerSummaryError = null
+        FynxBuyerWalletClient.loadSellerSummary(context)
+            .onSuccess { sellerSummary = it }
+            .onFailure {
+                sellerSummary = null
+                sellerSummaryError = "Marketplace seller earnings are temporarily unavailable."
+            }
+        sellerSummaryLoading = false
     }
 
     val loading = summaryLoading || activityLoading
@@ -404,6 +419,54 @@ fun FynxBuyerWalletPanel() {
                 )
             }
         }
+        if (sellerSummaryLoading) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Loading Marketplace earnings…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else if (sellerSummary != null && sellerSummary!!.totals.isNotEmpty()) {
+            item { FynxWalletSellerEarningsCard(sellerSummary!!) }
+        } else if (sellerSummaryError != null) {
+            item {
+                Surface(
+                    Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Marketplace earnings unavailable", fontWeight = FontWeight.SemiBold)
+                        Text(sellerSummaryError.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { refreshVersion += 1 }) { Text("Retry") }
+                    }
+                }
+            }
+        } else {
+            item {
+                Surface(
+                    Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Marketplace seller earnings", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Your sales, FYNX fee deductions and seller payout status will appear here after your first Marketplace order.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
         item {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -587,6 +650,105 @@ fun FynxBuyerWalletPanel() {
                 TextButton(onClick = { showWithdrawalGuide = false }) { Text("Got it") }
             }
         )
+    }
+}
+
+private fun fynxWalletCurrencyMoney(amount: Double, currency: String): String {
+    val symbol = if (currency.equals("USD", ignoreCase = true)) "$" else "₦"
+    return symbol + String.format(Locale.US, "%,.2f", amount)
+}
+
+@Composable
+private fun FynxWalletSellerEarningsCard(summary: FynxWalletSellerSummary) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Marketplace seller earnings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "Gross sales, seller-paid FYNX fees and payout progress from your completed Marketplace accounting.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            summary.totals.forEach { total ->
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(total.currency, color = FynxDesign.AzureBlue, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Gross sales", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(fynxWalletCurrencyMoney(total.grossSales, total.currency), fontWeight = FontWeight.SemiBold)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("FYNX fee (seller share)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(fynxWalletCurrencyMoney(total.marketplaceFees, total.currency), fontWeight = FontWeight.SemiBold, color = FynxDesign.CrimsonRed)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("Net earnings", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(fynxWalletCurrencyMoney(total.netEarnings, total.currency), fontWeight = FontWeight.SemiBold, color = FynxDesign.ClassicGreen)
+                        }
+                    }
+                    Surface(
+                        Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    ) {
+                        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text("Payout position", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium)
+                            FynxWalletEarningsLine("Protected for orders", total.protectedFunds, total.currency)
+                            FynxWalletEarningsLine("Available for payout", total.availableForPayout, total.currency)
+                            FynxWalletEarningsLine("Payout pending", total.payoutPending, total.currency)
+                            FynxWalletEarningsLine("Paid out", total.paidOut, total.currency)
+                        }
+                    }
+                }
+            }
+            if (summary.settlements.isNotEmpty()) {
+                Text("Latest seller orders", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+                summary.settlements.take(3).forEach { row ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(row.title, maxLines = 1, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                row.funds.lowercase(Locale.US).replace('_', ' ').replaceFirstChar { it.uppercase() } +
+                                    " · " + row.payoutStatus.lowercase(Locale.US).replace('_', ' '),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(fynxWalletCurrencyMoney(row.sellerNetAmount, row.currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Fee " + fynxWalletCurrencyMoney(row.marketplaceFeeSeller, row.currency),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = FynxDesign.CrimsonRed
+                            )
+                        }
+                    }
+                }
+            }
+            Text(
+                "Marketplace fees are calculated per order and saved with its fee policy. Only the seller-paid portion is shown here; buyer-paid fees are not deducted from your earnings.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun FynxWalletEarningsLine(label: String, amount: Double, currency: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(fynxWalletCurrencyMoney(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
 }
 
