@@ -23,7 +23,8 @@ const checks = [
   ["activity page returns continuation metadata", source.includes("hasMore,") && source.includes("nextCursor: hasMore && lastRow")],
   ["activity direction validates a single ALL/IN/OUT value", source.includes("parseBuyerWalletActivityDirection") && source.includes("activity direction must be a single string") && source.includes("['ALL', 'IN', 'OUT']")],
   ["direction filtering is applied before keyset pagination", source.includes("activity_delta.wallet_delta") && source.includes("$3::text='IN'") && source.includes("$3::text='OUT'") && source.includes("LEFT JOIN LATERAL")],
-  ["real-money capabilities are off before provider approval", source.includes("canFund: false") && source.includes("canSpend: false") && source.includes("canWithdraw: false") && !source.includes("app.post('/api/wallet/")],
+  ["real-money capabilities require explicit provider, custody, compliance and payout approvals", source.includes("FYNX_WALLET_PROVIDER_APPROVED") && source.includes("FYNX_WALLET_CUSTODY_APPROVED") && source.includes("FYNX_WALLET_COMPLIANCE_APPROVED") && source.includes("FYNX_WALLET_DEPOSITS_ENABLED") && source.includes("FYNX_WALLET_WITHDRAWALS_ENABLED") && source.includes("canSpend: false")],
+  ["dedicated-account and wallet funding events use shared Paystack webhook helpers", source.includes("export async function handleBuyerWalletPaystackEvent") && source.includes("export async function reconcileBuyerWalletTransferEvent") && !source.includes("app.post('/api/wallet/paystack/webhook'")],
   ["named PL/pgSQL dollar quotes are paired", source.split("RETURNS trigger AS $fynxwallet$").length - 1 >= 7 && source.split("$fynxwallet$ LANGUAGE plpgsql;").length - 1 === source.split("RETURNS trigger AS $fynxwallet$").length - 1]
 ];
 const failed=checks.filter(([,ok])=>!ok).map(([name])=>name);
