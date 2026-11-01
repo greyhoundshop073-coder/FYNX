@@ -22,7 +22,9 @@ const checks = [
   ['successful payout records marketplace fee in ledger', worker.includes("'fynx_marketplace_fee','FEE'") && worker.includes('MARKETPLACE-FEE-${operation.order_id}')],
   ['Paystack provider fee is stored on payment confirmation', paymentState.includes('payment_provider_fee=$2') && paymentState.includes('providerFee')],
   ['Paystack webhook supplies provider fee to the transition layer', webhook.includes('providerFee: transaction.fees')],
-  ['payment verification supplies provider fee to the transition layer', read('./marketplaceReputation.js').includes('providerFee: transaction.fees')]
+  ['payment verification supplies provider fee to the transition layer', read('./marketplaceReputation.js').includes('providerFee: transaction.fees')],
+  ['seller earnings expose the seller-paid commission separately from buyer and total fees', settlement.includes('marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0)') && settlement.includes('marketplaceFeeBuyer: Number(row.marketplace_fee_buyer || 0)') && settlement.includes('marketplaceFeeTotal: Number(row.marketplace_fee_total || 0)')],
+  ['seller earnings expose product subtotal, delivery and seller net for Wallet breakdowns', settlement.includes('productSubtotal: Number(row.product_subtotal || 0)') && settlement.includes('deliveryFee: Number(row.delivery_fee || 0)') && settlement.includes('sellerNetAmount: Number(row.seller_net_amount || 0)')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);

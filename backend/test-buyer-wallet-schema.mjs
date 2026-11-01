@@ -88,6 +88,23 @@ try {
   if (sqlEnd <= sqlStart) throw new Error("Could not isolate buyer wallet DDL.");
   await client.query(source.slice(sqlStart, sqlEnd));
 
+  const walletPayoutColumns = await client.query(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='buyer_wallet_payout_accounts'",
+    [schema]
+  );
+  const payoutColumnNames = new Set(walletPayoutColumns.rows.map((row) => row.column_name));
+  if (!payoutColumnNames.has("recipient_code") || !payoutColumnNames.has("account_last4") || payoutColumnNames.has("account_number")) {
+    throw new Error("Wallet payout accounts must store the provider recipient and masked digits, never full bank account numbers.");
+  }
+  const securityColumns = await client.query(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='buyer_wallet_security'",
+    [schema]
+  );
+  const securityColumnNames = new Set(securityColumns.rows.map((row) => row.column_name));
+  if (!securityColumnNames.has("pin_salt") || !securityColumnNames.has("pin_hash") || !securityColumnNames.has("locked_until")) {
+    throw new Error("Wallet PIN storage is missing salted-hash or lockout columns.");
+  }
+
   const userId = 777001;
   const walletId = crypto.randomUUID();
   await client.query("INSERT INTO users(id) VALUES ($1)", [userId]);
@@ -189,6 +206,64 @@ try {
   );
   if (Number(balance.rows[0].amount) !== 400) throw new Error("Balanced funding entry did not produce the expected available balance.");
 
+  const payoutAccountId = crypto.randomUUID();
+  await client.query(
+    "INSERT INTO buyer_wallet_payout_accounts(id,wallet_id,user_id,provider,recipient_code,bank_code,bank_name,account_name,account_last4,currency,verified,active) VALUES($1,$2,$3,'paystack',$4,'044','Test Bank','FYNX Wallet Test','1234','NGN',TRUE,TRUE)",
+    [payoutAccountId,walletId,userId,"RCP_TEST_"+crypto.randomUUID().replace(/-/g,"")]
+  );
+  const withdrawalTransactionId = crypto.randomUUID();
+  const withdrawalId = crypto.randomUUID();
+  const withdrawalReference = "FYNX-WALLET-WD-" + crypto.randomUUID();
+  await client.query(
+    "INSERT INTO buyer_wallet_transactions(id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,description) VALUES($1,$2,$3,'WITHDRAWAL','PENDING',100,5,'NGN',$4,$5,'Wallet withdrawal test')",
+    [withdrawalTransactionId,walletId,userId,withdrawalReference,"IDEM-"+withdrawalReference]
+  );
+  await client.query(
+    "INSERT INTO buyer_wallet_withdrawals(id,transaction_id,wallet_id,user_id,payout_account_id,reference,idempotency_key,amount,fee,currency,status) VALUES($1,$2,$3,$4,$5,$6,$7,100,5,'NGN','PENDING')",
+    [withdrawalId,withdrawalTransactionId,walletId,userId,payoutAccountId,withdrawalReference,"IDEM-WD-"+withdrawalReference]
+  );
+  const held = await client.query(
+    "SELECT COALESCE(SUM(amount+fee),0)::numeric(18,2) AS amount FROM buyer_wallet_withdrawals WHERE wallet_id=$1 AND status IN ('PENDING','PROCESSING','PENDING_OTP')",
+    [walletId]
+  );
+  if (Number(held.rows[0].amount) !== 105) throw new Error("Pending withdrawal did not reserve the requested amount plus fee.");
+
+  await client.query("BEGIN");
+  await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1",[withdrawalTransactionId]);
+  await client.query(
+    "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES($1,$2,$3,'AVAILABLE','DEBIT',105,'NGN'),($1,$2,$4,'EXTERNAL_BANK','CREDIT',100,'NGN'),($1,$2,$5,'FYNX_FEES','CREDIT',5,'NGN')",
+    [withdrawalTransactionId,walletId,"WD-AVAILABLE-"+withdrawalId,"WD-BANK-"+withdrawalId,"WD-FEE-"+withdrawalId]
+  );
+  await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1",[withdrawalTransactionId]);
+  await client.query("UPDATE buyer_wallet_withdrawals SET status='SUCCEEDED' WHERE id=$1",[withdrawalId]);
+  await client.query("COMMIT");
+  const afterWithdrawal = await client.query(
+    "SELECT COALESCE(SUM(CASE WHEN side='CREDIT' THEN amount ELSE -amount END),0)::numeric(18,2) AS amount FROM buyer_wallet_ledger_entries WHERE wallet_id=$1 AND account_code='AVAILABLE'",
+    [walletId]
+  );
+  if (Number(afterWithdrawal.rows[0].amount) !== 295) throw new Error("Confirmed withdrawal did not debit amount plus fee from the available balance.");
+
+  const reversalId = crypto.randomUUID();
+  const reversalReference = "FYNX-WALLET-REV-" + crypto.randomUUID();
+  await client.query(
+    "INSERT INTO buyer_wallet_transactions(id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,description) VALUES($1,$2,$3,'REVERSAL','PENDING',105,0,'NGN',$4,$5,'Bank payout reversal test')",
+    [reversalId,walletId,userId,reversalReference,"IDEM-"+reversalReference]
+  );
+  await client.query("BEGIN");
+  await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1",[reversalId]);
+  await client.query(
+    "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES($1,$2,$3,'EXTERNAL_BANK','DEBIT',100,'NGN'),($1,$2,$4,'FYNX_FEES','DEBIT',5,'NGN'),($1,$2,$5,'AVAILABLE','CREDIT',105,'NGN')",
+    [reversalId,walletId,"REV-BANK-"+withdrawalId,"REV-FEE-"+withdrawalId,"REV-AVAILABLE-"+withdrawalId]
+  );
+  await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1",[reversalId]);
+  await client.query("UPDATE buyer_wallet_withdrawals SET status='REVERSED' WHERE id=$1",[withdrawalId]);
+  await client.query("COMMIT");
+  const afterReversal = await client.query(
+    "SELECT COALESCE(SUM(CASE WHEN side='CREDIT' THEN amount ELSE -amount END),0)::numeric(18,2) AS amount FROM buyer_wallet_ledger_entries WHERE wallet_id=$1 AND account_code='AVAILABLE'",
+    [walletId]
+  );
+  if (Number(afterReversal.rows[0].amount) !== 400) throw new Error("Bank payout reversal did not restore the wallet amount and fee exactly once.");
+
   await expectTransactionFailure(async () => {
     const id = await insertPendingTransaction(walletId, userId, 10, "SKIP_PROCESSING");
     await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [id]);
@@ -234,7 +309,7 @@ try {
     );
   }, "buyer wallet transaction owner or currency does not match its wallet");
 
-  console.log("FYNX buyer wallet PostgreSQL schema, ledger, cursor and direction tests GREEN (8 scenarios)");
+  console.log("FYNX buyer wallet PostgreSQL schema, funding, withdrawal, reversal, ledger, cursor and direction tests GREEN (11 scenarios)");
 } finally {
   if (schemaCreated) {
     await client.query("SET search_path TO public").catch(() => {});

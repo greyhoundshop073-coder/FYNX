@@ -9,6 +9,7 @@ payments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt
 settlement = (ROOT / "backend/marketplaceSettlement.js").read_text()
 wallet_backend = (ROOT / "backend/buyerWallet.js").read_text()
 actions = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text()
+wallet_earnings = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxWalletMarketplaceEarningsCard.kt").read_text()
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
 transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text()
@@ -26,7 +27,7 @@ checks = [
  ("wallet runtime dismisses keyboard and restores Home before next journey", '"KEYCODE_BACK"' in runtime and 'restore_home_after_restart(prefix+"-return-home")' in runtime and "home_after=restore_home_after_restart" in runtime),
  ("wallet UI hierarchy artifacts end with a real newline", "write_text(wallet_xml+chr(10)" in runtime and "(wallet_xml or \"\")+chr(10)" in runtime),
  ("visual-only navigation also captures Wallet read-only", 'capture_wallet_from_features("marketplace-visual-wallet")' in runtime and "no listing/order/payment mutations" in runtime),
- ("wallet branch receives full emulator and screenshot certification", workflow.count("refs/heads/feat/fynx-wallet-ux-hardening-20261031") == 4),
+ ("wallet funding branch receives full emulator and screenshot certification", workflow.count("github.event.pull_request.head.ref == 'feat/fynx-wallet-paystack-funding-20261101'") == 4),
  ("wallet back navigation", '"Wallet", "Money Tools" -> "Features"' in app),
  ("wallet authenticated summary and activity APIs", '"/api/wallet/summary"' in client and '"/api/wallet/transactions?limit="' in client),
  ("no locally fabricated balance", "SharedPreferences" not in client and "125,500" not in panel and "100,000" not in panel),
@@ -50,23 +51,26 @@ checks = [
  ("balance visibility masks amounts across the screen", "amountsVisible = balanceVisible" in panel and "if (visible) amount?.let(::fynxWalletMoney)" in panel and "if (amountsVisible) sign + fynxWalletMoney" in panel),
  ("balance buckets explain withdrawal eligibility", "Held for an order or an active review." in panel and "How bank withdrawals will work" in panel and "no money moves from this screen today" in panel),
  ("wallet status has user-readable state labels", "Wallet access is restricted" in panel and "This wallet is closed" in panel),
- ("real-money funding, spending and withdrawals remain disabled until provider integration", "canFund: false" in wallet_backend and "canSpend: false" in wallet_backend and "canWithdraw: false" in wallet_backend and 'enabled = false' in actions),
+ ("wallet funding and withdrawal capabilities are guarded by explicit provider approvals", "walletFundingEnabled" in wallet_backend and "walletWithdrawalsEnabled" in wallet_backend and "FYNX_WALLET_CUSTODY_APPROVED" in wallet_backend and "FYNX_WALLET_KYC_APPROVED" in wallet_backend and "canSpend: false" in wallet_backend),
  ("existing Marketplace Paystack checkout retained", "initializeMarketplacePayment" in payments and "verifyMarketplacePayment" in payments),
  ("NGN-only launch foundation", 'currency == "NGN"' in client and "currently supports the NGN foundation only" in panel),
  ("Add Money opens a dedicated funding-method screen", 'onClick = { activeAction = "ADD" }' in panel and 'screen = activeAction' in panel and 'FynxWalletActionPanel' in panel and '"ADD" ->' in actions),
  ("wallet Add Money, bank-transfer and Withdraw screens are captured by emulator runtime", 'wallet-add-money' in runtime and 'wallet-bank-transfer' in runtime and 'wallet-withdraw' in runtime),
- ("dedicated bank transfer never invents account details", '"Account number not assigned yet"' in actions and 'Do not transfer money to an account number supplied outside this FYNX screen.' in actions and "0000000000" not in actions),
- ("bank transfer explains automatic verified wallet credit", '"The provider confirms the payment to FYNX."' in actions and '"FYNX verifies the confirmation and credits your wallet."' in actions),
- ("card and USSD methods have explicit provider-not-ready states", '"CARD" ->' in actions and '"USSD" ->' in actions and '"Card funding is not active yet"' in actions and '"USSD payments are not active yet"' in actions),
- ("withdraw screen previews cleared balance and explains secure bank verification", 'onClick = { activeAction = "WITHDRAW" }' in panel and '"AVAILABLE BALANCE"' in actions and '"FYNX verifies the account name with the provider."' in actions),
- ("withdraw screen reserves bank, account number and verified account-name fields", 'label = "Select bank"' in actions and 'label = "Account number"' in actions and 'label = "Verified account name"' in actions and 'enabled = false' in actions),
- ("withdrawal submission remains disabled without provider integration", '"Withdrawals not available yet"' in actions and 'enabled = false' in actions),
+ ("bank transfer displays only Paystack-issued temporary account details", '"ACCOUNT FOR THIS TOP-UP ONLY"' in actions and "transfer.accountNumber" in actions and "onStartTransfer" in actions and "0000000000" not in actions),
+ ("funding settlement checks provider signature, exact amount, currency and reference", "walletWebhookSignatureValid(req.rawBody,signature)" in wallet_backend and "Number(payment.amount) !== expected" in wallet_backend and "String(payment.currency || \'\').toUpperCase() !== \'NGN\'" in wallet_backend and "settleBuyerWalletFunding" in wallet_backend),
+ ("card and USSD use Paystack-hosted checkout without FYNX collecting card data", 'onStartCheckout("card")' in actions and 'onStartCheckout("ussd")' in actions and "startFundingCheckout" in client and "checkout.paystack.com" in client),
+ ("withdraw screen uses provider bank lookup and account-name verification", '"AVAILABLE BALANCE"' in actions and "onVerifyBankAccount" in actions and "resolveBankAccount" in panel and "/api/wallet/banks/resolve" in client),
+ ("withdraw screen selects a bank and saves masked verified destinations", '"Select your bank"' in actions and '"10-digit account number"' in actions and "account.accountLast4" in actions and "accountNumber.slice(-4)" in wallet_backend),
+ ("withdrawal uses Wallet PIN, provider transfers, OTP and reconciliation", "withdrawalPin.length==6" in actions and "startWithdrawal" in client and "walletPinMatches" in wallet_backend and "/transfer/finalize" in wallet_backend and "transfer.reversed" in wallet_backend),
  ("seller earnings explicitly disclose default five-percent Marketplace commission", '"FYNX Marketplace commission · default 5%"' in seller_center and 'record.marketplaceFee' in seller_center),
  ("Marketplace commission is not charged on wallet top-ups or withdrawals", 'wallet top-ups and bank withdrawals are not charged this fee' in seller_center),
  ("default Marketplace fee policy is seller-paid at five percent", "process.env.FYNX_MARKETPLACE_FEE_MODE || 'SELLER'" in transactions and "process.env.FYNX_MARKETPLACE_FEE_BPS || '500'" in transactions and 'const mode = configuredMode;' in transactions),
  ("FYNX revenue report uses the admin-only revenue endpoint", '"/api/admin/revenue"' in admin_client and "if(!(await requireAdmin(req,res)))return" in admin_routes),
  ("owner/admin control center shows separate Marketplace commission totals", '"FYNX Business Revenue"' in admin_panel and '"Marketplace commission ledger"' in admin_panel and 'it.source == "MARKETPLACE_FEE"' in admin_panel),
- ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel)
+ ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel),
+ ("Wallet itself shows each seller sale's FYNX commission and net earnings", "FynxWalletMarketplaceEarningsCard(refreshKey = refreshVersion)" in panel and 'FYNX commission (default 5%)' in wallet_earnings and '"Your net earnings"' in wallet_earnings),
+ ("Wallet seller earnings show protected and payout availability separately", '"Protected"' in wallet_earnings and '"Available for payout"' in wallet_earnings and '"Payout pending"' in wallet_earnings and "separate from your personal Wallet balance" in wallet_earnings),
+ ("seller settlement endpoint distinguishes seller commission from buyer and total fees", "marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0)" in settlement and "marketplaceFeeBuyer: Number(row.marketplace_fee_buyer || 0)" in settlement and "marketplaceFeeTotal: Number(row.marketplace_fee_total || 0)" in settlement)
 ]
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)

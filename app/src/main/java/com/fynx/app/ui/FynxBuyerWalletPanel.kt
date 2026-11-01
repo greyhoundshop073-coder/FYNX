@@ -54,11 +54,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.util.Date
+import java.util.UUID
 import kotlinx.coroutines.launch
 
 private fun fynxWalletMoney(amount: Double): String =
@@ -100,6 +102,27 @@ fun FynxBuyerWalletPanel() {
     val context = LocalContext.current
     var activeAction by remember { mutableStateOf("HOME") }
     var fundingAmount by remember { mutableStateOf("") }
+    var fundingEmail by remember { mutableStateOf("") }
+    var fundingResult by remember { mutableStateOf<FynxWalletFundingResult?>(null) }
+    var withdrawalResult by remember { mutableStateOf<FynxWalletWithdrawal?>(null) }
+    var actionBusy by remember { mutableStateOf(false) }
+    var actionError by remember { mutableStateOf<String?>(null) }
+    var bankTransferIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
+    var cardFundingIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
+    var ussdFundingIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
+    var withdrawalIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
+    var banks by remember { mutableStateOf(emptyList<FynxWalletBank>()) }
+    var payoutAccounts by remember { mutableStateOf(emptyList<FynxWalletPayoutAccount>()) }
+    var selectedBankCode by remember { mutableStateOf("") }
+    var bankAccountNumber by remember { mutableStateOf("") }
+    var verifiedAccountName by remember { mutableStateOf<String?>(null) }
+    var selectedPayoutAccountId by remember { mutableStateOf("") }
+    var pinConfigured by remember { mutableStateOf(false) }
+    var newPin by remember { mutableStateOf("") }
+    var currentPin by remember { mutableStateOf("") }
+    var withdrawalPin by remember { mutableStateOf("") }
+    var withdrawalOtp by remember { mutableStateOf("") }
+    val uriHandler = LocalUriHandler.current
     var summary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
     var activity by remember { mutableStateOf(emptyList<FynxBuyerWalletActivity>()) }
     var summaryLoading by remember { mutableStateOf(true) }
@@ -201,16 +224,210 @@ fun FynxBuyerWalletPanel() {
         }
     }
 
+    fun runWalletAction(action: suspend () -> Unit) {
+        scope.launch {
+            actionBusy = true
+            actionError = null
+            try {
+                action()
+            } catch (error: Exception) {
+                actionError = error.message ?: "Wallet action could not be completed."
+            } finally {
+                actionBusy = false
+            }
+        }
+    }
+
+    LaunchedEffect(activeAction) {
+        if (activeAction == "WITHDRAW") {
+            actionError = null
+            FynxBuyerWalletClient.loadBanks(context)
+                .onSuccess { banks = it }
+                .onFailure { actionError = it.message ?: "Bank list is not available yet." }
+            FynxBuyerWalletClient.loadPayoutAccounts(context)
+                .onSuccess { accounts ->
+                    payoutAccounts = accounts
+                    if (selectedPayoutAccountId.isBlank()) selectedPayoutAccountId = accounts.firstOrNull()?.id.orEmpty()
+                }
+                .onFailure { /* Provider-gated until withdrawal approval. */ }
+            FynxBuyerWalletClient.walletPinConfigured(context)
+                .onSuccess { pinConfigured = it }
+                .onFailure { /* PIN status may be unavailable before the wallet backend is enabled. */ }
+        }
+    }
+
     if (activeAction != "HOME") {
         FynxWalletActionPanel(
             screen = activeAction,
             amount = fundingAmount,
-            onAmountChange = { fundingAmount = it },
+            onAmountChange = {
+                if (fundingAmount != it) {
+                    fundingAmount = it
+                    bankTransferIdempotencyKey = UUID.randomUUID().toString()
+                    cardFundingIdempotencyKey = UUID.randomUUID().toString()
+                    ussdFundingIdempotencyKey = UUID.randomUUID().toString()
+                    withdrawalIdempotencyKey = UUID.randomUUID().toString()
+                    if (fundingResult?.status != "SUCCEEDED") fundingResult = null
+                    withdrawalResult = null
+                }
+            },
+            email = fundingEmail,
+            onEmailChange = {
+                if (fundingEmail != it) {
+                    fundingEmail = it
+                    bankTransferIdempotencyKey = UUID.randomUUID().toString()
+                    cardFundingIdempotencyKey = UUID.randomUUID().toString()
+                    ussdFundingIdempotencyKey = UUID.randomUUID().toString()
+                }
+            },
             availableBalance = wallet?.availableBalance,
+            withdrawalFee = wallet?.withdrawalFee ?: 0.0,
+            fundingResult = fundingResult,
+            withdrawalResult = withdrawalResult,
+            actionError = actionError,
+            actionBusy = actionBusy,
+            onStartTransfer = {
+                if (fundingResult?.status in setOf("FAILED", "BLOCKED")) {
+                    bankTransferIdempotencyKey = UUID.randomUUID().toString()
+                }
+                runWalletAction {
+                    FynxBuyerWalletClient.startBankTransfer(
+                        context, fundingAmount.toDoubleOrNull() ?: 0.0, fundingEmail, bankTransferIdempotencyKey
+                    ).onSuccess { fundingResult = it }
+                     .onFailure { actionError = it.message ?: "Bank transfer details could not be generated." }
+                }
+            },
+            onStartCheckout = { method ->
+                if (fundingResult?.status in setOf("FAILED", "BLOCKED")) {
+                    if (method == "card") cardFundingIdempotencyKey = UUID.randomUUID().toString()
+                    else ussdFundingIdempotencyKey = UUID.randomUUID().toString()
+                }
+                val requestKey = if (method == "card") cardFundingIdempotencyKey else ussdFundingIdempotencyKey
+                runWalletAction {
+                    FynxBuyerWalletClient.startFundingCheckout(
+                        context, fundingAmount.toDoubleOrNull() ?: 0.0, fundingEmail, method, requestKey
+                    ).onSuccess { result ->
+                        fundingResult = result
+                        result.checkoutUrl?.let { uri ->
+                            runCatching { uriHandler.openUri(uri) }
+                                .onFailure { actionError = "Secure payment checkout was created, but could not be opened. Use Open payment checkout." }
+                        }
+                    }.onFailure { actionError = it.message ?: "Secure payment checkout could not be created." }
+                }
+            },
+            onRefreshFunding = {
+                runWalletAction {
+                    val funding = fundingResult
+                    val withdrawal = withdrawalResult
+                    if (activeAction == "WITHDRAW" && withdrawal != null) {
+                        FynxBuyerWalletClient.loadWithdrawalStatus(context, withdrawal.reference)
+                            .onSuccess {
+                                withdrawalResult = it
+                                if (it.status == "SUCCEEDED" || it.status == "FAILED" || it.status == "REVERSED") refreshVersion++
+                            }
+                            .onFailure { actionError = it.message ?: "Withdrawal status could not be refreshed." }
+                    } else if (funding != null) {
+                        FynxBuyerWalletClient.loadFundingStatus(context, funding.reference)
+                            .onSuccess {
+                                fundingResult = it
+                                if (it.status == "SUCCEEDED" || it.status == "FAILED" || it.status == "BLOCKED") refreshVersion++
+                            }
+                            .onFailure { actionError = it.message ?: "Funding status could not be refreshed." }
+                    }
+                }
+            },
+            onOpenCheckout = { uri -> runCatching { uriHandler.openUri(uri) }.onFailure { actionError = "Unable to open the secure payment page." } },
+            banks = banks,
+            savedPayoutAccounts = payoutAccounts,
+            selectedBankCode = selectedBankCode,
+            onSelectBank = {
+                selectedBankCode = it
+                verifiedAccountName = null
+            },
+            bankAccountNumber = bankAccountNumber,
+            onBankAccountNumberChange = {
+                bankAccountNumber = it
+                verifiedAccountName = null
+            },
+            verifiedAccountName = verifiedAccountName,
+            onVerifyBankAccount = {
+                runWalletAction {
+                    FynxBuyerWalletClient.resolveBankAccount(context, bankAccountNumber, selectedBankCode)
+                        .onSuccess { verifiedAccountName = it }
+                        .onFailure { actionError = it.message ?: "The bank could not verify this account." }
+                }
+            },
+            onSavePayoutAccount = {
+                runWalletAction {
+                    FynxBuyerWalletClient.savePayoutAccount(context, bankAccountNumber, selectedBankCode, banks.firstOrNull { it.code == selectedBankCode }?.name.orEmpty())
+                        .onSuccess { account ->
+                            payoutAccounts = (listOf(account) + payoutAccounts.filterNot { it.id == account.id })
+                            selectedPayoutAccountId = account.id
+                            bankAccountNumber = ""
+                            verifiedAccountName = null
+                            actionError = null
+                        }
+                        .onFailure { actionError = it.message ?: "Verified bank account could not be saved." }
+                }
+            },
+            selectedPayoutAccountId = selectedPayoutAccountId,
+            onSelectPayoutAccount = { selectedPayoutAccountId = it },
+            pinConfigured = pinConfigured,
+            newPin = newPin,
+            onNewPinChange = { newPin = it.filter(Char::isDigit).take(6) },
+            currentPin = currentPin,
+            onCurrentPinChange = { currentPin = it.filter(Char::isDigit).take(6) },
+            onSavePin = {
+                runWalletAction {
+                    FynxBuyerWalletClient.saveWalletPin(context, newPin, currentPin.takeIf { pinConfigured })
+                        .onSuccess {
+                            pinConfigured = true
+                            newPin = ""
+                            currentPin = ""
+                            actionError = null
+                        }
+                        .onFailure { actionError = it.message ?: "Wallet PIN could not be saved." }
+                }
+            },
+            withdrawalPin = withdrawalPin,
+            onWithdrawalPinChange = { withdrawalPin = it.filter(Char::isDigit).take(6) },
+            withdrawalOtp = withdrawalOtp,
+            onWithdrawalOtpChange = { withdrawalOtp = it.filter(Char::isDigit).take(8) },
+            onStartWithdrawal = {
+                if (withdrawalResult?.status in setOf("FAILED", "BLOCKED", "REVERSED")) {
+                    withdrawalIdempotencyKey = UUID.randomUUID().toString()
+                }
+                runWalletAction {
+                    FynxBuyerWalletClient.startWithdrawal(
+                        context, fundingAmount.toDoubleOrNull() ?: 0.0, selectedPayoutAccountId,
+                        withdrawalPin, withdrawalIdempotencyKey
+                    ).onSuccess {
+                        withdrawalResult = it
+                        withdrawalPin = ""
+                        withdrawalOtp = ""
+                    }.onFailure { actionError = it.message ?: "Withdrawal request could not be started." }
+                }
+            },
+            onFinalizeWithdrawal = {
+                val existing = withdrawalResult
+                if (existing != null) runWalletAction {
+                    FynxBuyerWalletClient.finalizeWithdrawal(context, existing.reference, withdrawalOtp)
+                        .onSuccess {
+                            withdrawalResult = it
+                            withdrawalOtp = ""
+                            if (it.status == "SUCCEEDED") refreshVersion++
+                        }
+                        .onFailure { actionError = it.message ?: "Withdrawal OTP could not be verified." }
+                }
+            },
             onBack = {
                 activeAction = if (activeAction == "TRANSFER" || activeAction == "CARD" || activeAction == "USSD") "ADD" else "HOME"
             },
-            onNavigate = { activeAction = it }
+            onNavigate = {
+                if (it == "TRANSFER" || it == "CARD" || it == "USSD") fundingResult = null
+                if (it == "WITHDRAW") withdrawalResult = null
+                activeAction = it
+            }
         )
         return
     }
@@ -403,6 +620,9 @@ fun FynxBuyerWalletPanel() {
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+        item {
+            FynxWalletMarketplaceEarningsCard(refreshKey = refreshVersion)
         }
         item {
             Surface(
