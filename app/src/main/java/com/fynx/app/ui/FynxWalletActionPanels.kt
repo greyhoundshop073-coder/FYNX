@@ -397,15 +397,16 @@ private fun FynxWalletSecurityPanel() {
             WalletActionNotice(
                 title = if (current.hasWithdrawalPin == true) "Wallet PIN is set" else "Wallet PIN is not set",
                 message = when {
-                    current.isLocked == true -> "Money movement is temporarily locked after repeated incorrect PIN attempts. The lock expires automatically."
-                    current?.hasWithdrawalPin == true -> "Your PIN is stored as a password hash and is required before approved Wallet money movement."
+                    !current.canSetWithdrawalPin -> "Wallet PIN setup opens after your NGN Wallet is activated. Provider, custody and compliance approvals are still required; no PIN or withdrawal request can be made from this pending Wallet."
+                    current.isLocked -> "Money movement is temporarily locked after repeated incorrect PIN attempts. The lock expires automatically."
+                    current.hasWithdrawalPin -> "Your PIN is stored as a password hash and is required before approved Wallet money movement."
                     else -> "Set a six-digit PIN before paying for Marketplace orders or using approved withdrawals."
                 }
             )
             if (current?.isLocked == true) {
                 Text("Locked until: " + current.lockedUntil.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
-            if (!current.hasWithdrawalPin || editing) {
+            if (current.canSetWithdrawalPin && (!current.hasWithdrawalPin || editing)) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -483,17 +484,19 @@ private fun FynxWalletSecurityPanel() {
                         }
                     }
                 }
-            } else {
+            } else if (current.canSetWithdrawalPin && current.hasWithdrawalPin) {
                 OutlinedButton(
                     onClick = { editing = true; error = null },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Change Wallet PIN") }
             }
-            Text(
-                "Five incorrect PIN attempts trigger a temporary 15-minute lock. Changing your PIN requires your current FYNX password.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (current.canSetWithdrawalPin) {
+                Text(
+                    "Five incorrect PIN attempts trigger a temporary 15-minute lock. Changing your PIN requires your current FYNX password.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         TextButton(onClick = { refresh() }, enabled = !loading && !saving) { Text("Refresh security status") }
