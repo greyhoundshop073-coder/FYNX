@@ -1592,41 +1592,50 @@ def capture_wallet_from_features(prefix:str):
     if not home_xml:
         return False, "Home could not be restored for Wallet navigation."
 
+    # Prefer the existing Features search when it is genuinely reachable. If
+    # that navigation surface is unavailable in this runtime state, use the
+    # already-visible authenticated Marketplace -> Wallet shortcut instead.
     feature_xml=tap_control(
         home_xml, ["More","Features"], prefix+"-features", ["FYNX Features"]
     )
-    if not feature_xml:
-        restore_home_after_restart(prefix+"-return-home")
-        return False, "FYNX Features could not be opened."
+    wallet_entry_opened=False
+    if feature_xml:
+        search=find_control(feature_xml, ["Search FYNX tools"])
+        if search:
+            _,sx,sy=search
+            run("adb","shell","input","tap",str(sx),str(sy))
+            time.sleep(.3)
+            run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+            run("adb","shell","input","keyevent","KEYCODE_DEL")
+            typed=input_text("FYNX Wallet")
+            if typed.returncode == 0:
+                # Dismiss the IME, then re-read the actual UI hierarchy before tapping.
+                run("adb","shell","input","keyevent","KEYCODE_BACK")
+                time.sleep(.45)
+                feature_xml=dump_ui(prefix+"-wallet-search-keyboard-dismissed.xml")
+                target=find_wallet_feature_entry(feature_xml)
+                if target:
+                    wx,wy=target
+                    run("adb","logcat","-c")
+                    run("adb","shell","input","tap",str(wx),str(wy))
+                    wallet_entry_opened=True
 
-    search=find_control(feature_xml, ["Search FYNX tools"])
-    if not search:
-        restore_home_after_restart(prefix+"-return-home")
-        return False, "The FYNX Features search field was not available."
+    if not wallet_entry_opened:
+        marketplace_xml=tap_control(
+            home_xml, ["Marketplace"], prefix+"-marketplace", ["Search products, sellers or categories"]
+        )
+        if not marketplace_xml:
+            restore_home_after_restart(prefix+"-return-home")
+            return False, "Neither Features nor the authenticated Marketplace destination could be opened."
+        wallet_shortcut_xml=tap_control(
+            marketplace_xml, ["Wallet"], prefix+"-marketplace-wallet", ["FYNX Wallet"]
+        )
+        if not wallet_shortcut_xml:
+            screenshot(prefix+"-marketplace-wallet-shortcut-not-found.png")
+            restore_home_after_restart(prefix+"-return-home")
+            return False, "Marketplace opened, but its Wallet shortcut did not open the Wallet destination."
+        run("adb","logcat","-c")
 
-    _,sx,sy=search
-    run("adb","shell","input","tap",str(sx),str(sy))
-    time.sleep(.3)
-    run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
-    run("adb","shell","input","keyevent","KEYCODE_DEL")
-    typed=input_text("FYNX Wallet")
-    if typed.returncode != 0:
-        restore_home_after_restart(prefix+"-return-home")
-        return False, "FYNX Wallet search text could not be entered."
-
-    # Dismiss the IME, then re-read the actual UI hierarchy before tapping.
-    run("adb","shell","input","keyevent","KEYCODE_BACK")
-    time.sleep(.45)
-    feature_xml=dump_ui(prefix+"-wallet-search-keyboard-dismissed.xml")
-    target=find_wallet_feature_entry(feature_xml)
-    if not target:
-        screenshot(prefix+"-wallet-result-not-found.png")
-        restore_home_after_restart(prefix+"-return-home")
-        return False, "The non-editable FYNX Wallet result card was not exposed after dismissing the keyboard."
-
-    wx,wy=target
-    run("adb","logcat","-c")
-    run("adb","shell","input","tap",str(wx),str(wy))
     wallet_xml=""
     wallet_shell_opened=False
     wallet_settled=False
