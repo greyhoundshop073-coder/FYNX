@@ -259,7 +259,7 @@ checks = [
          "marketplaceRequiredBalance(row.opt(\"payoutPending\"))",
          "marketplaceRequiredBalance(row.opt(\"paidOut\"))",
          "marketplaceRequiredAmount(row.opt(\"sellerNetAmount\"))",
-         "marketplaceRequiredBalance(row.opt(\"marketplaceFee\"))",
+         "marketplaceRequiredBalance(row.opt(\"marketplaceFeeSeller\"))",
      ))
      and all(fragment in support for fragment in (
          "internal fun marketplaceRequiredAmount(value: Any?): Double",
