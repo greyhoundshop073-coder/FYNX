@@ -36,7 +36,7 @@ function auth(req, res, next) {
 }
 
 let buyerWalletSchemaPromise;
-async export async function ensureBuyerWalletSchema() {
+export async function ensureBuyerWalletSchema() {
   if (!pool) throw Object.assign(new Error('DATABASE_URL is not configured'), { code: 'DATABASE_NOT_CONFIGURED' });
   if (!buyerWalletSchemaPromise) {
     buyerWalletSchemaPromise = pool.query(`
