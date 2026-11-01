@@ -6,6 +6,7 @@ import { registerMarketplaceListingLifecycleRoutes } from "./marketplaceListingL
 const read = (name) => fs.readFileSync(new URL(name, import.meta.url), "utf8");
 const server = read("./server.js");
 assert.ok(server.includes("ml.media_ids @> to_jsonb(ARRAY[mm.id::bigint])") && server.includes("ml.media_ids @> to_jsonb(ARRAY[mm.id::text])"), "public Marketplace listing media must support numeric JSON IDs and legacy string IDs");
+assert.ok(server.includes("JOIN marketplace_listings ml ON ml.id=o.listing_id") && server.includes("(o.buyer_id=$2 OR o.seller_id=$2)"), "historical order photos remain visible only to buyer/seller even after listing deactivation");
 const shop = read("./marketplaceShopProfiles.js");
 const listings = read("./marketplaceListingLifecycleRoutes.js");
 
