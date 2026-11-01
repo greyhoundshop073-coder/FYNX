@@ -264,6 +264,17 @@ internal object FynxBuyerWalletClient {
             .mapCatching(::parseWithdrawalResult)
     }
 
+    suspend fun refreshWithdrawalStatus(
+        context: Context,
+        reference: String
+    ): Result<FynxWalletWithdrawalResult> {
+        require(reference.matches(Regex("^fw_[a-fA-F0-9]{32}$"))) { "Wallet withdrawal reference is invalid." }
+        return FynxBackendClient.get(
+            context,
+            "/api/wallet/withdrawals/" + Uri.encode(reference)
+        ).mapCatching(::parseWithdrawalResult)
+    }
+
     internal fun parseWithdrawalResult(raw: String): FynxWalletWithdrawalResult {
         val json = JSONObject(raw)
         val status = json.optString("status", "PENDING").trim().uppercase(Locale.US)
