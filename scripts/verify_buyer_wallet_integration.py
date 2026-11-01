@@ -76,6 +76,7 @@ checks = [
  ("seller earnings are not requested without a live Wallet session", "Marketplace earnings require a live FYNX sign-in." in panel),
  ("bank funding account and Wallet PIN screens require a live server session", actions.count("FynxBackendClient.hasAccessToken(context)") >= 2 and "No account request has been sent." in actions and "before viewing or changing Wallet security" in actions),
  ("Wallet statement export requires a server-issued session", "enabled = !statementExporting && !loading && FynxBackendClient.hasAccessToken(context)" in panel),
+ ("Railway Wallet PR receives full Android emulator and screenshot certification", workflow.count("github.event.pull_request.head.ref == 'fix/railway-backend-runtime-contract-20261101'") == 4),
 ]
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
