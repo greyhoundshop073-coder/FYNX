@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
 import { handleBuyerWalletPaystackEvent, reconcileBuyerWalletTransferEvent } from './buyerWallet.js';
+import { settleBuyerWalletMarketplaceOrder } from './buyerWalletMarketplace.js';
 
 function safeEqualHex(actual, expected) {
   if (!actual || !expected) return false;
@@ -155,6 +156,7 @@ async function reconcileTransferEvent(client, eventName, transfer) {
       await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'seller_payout','RELEASE',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, operationAmount, escrow.currency, `PAYOUT-RELEASE-${operation.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: eventReference, providerStatus, protectedAmount: escrowAmount, sellerNetAmount: operationAmount, marketplaceFee })]);
       if (marketplaceFee > 0) await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'fynx_marketplace_fee','FEE',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, marketplaceFee, escrow.currency, `MARKETPLACE-FEE-${operation.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: eventReference, feePolicy: operation.metadata?.feePolicy || null, feePolicyVersion: operation.metadata?.feePolicyVersion || null })]);
     }
+    await settleBuyerWalletMarketplaceOrder(client, operation.order_id);
   } else if (eventName === 'transfer.failed' || eventName === 'transfer.reversed') {
     await client.query(`UPDATE marketplace_financial_operations SET status='FAILED',provider_reference=COALESCE($1,provider_reference),failure_reason=$2,metadata=$3::jsonb,updated_at=NOW() WHERE id=$4 AND status='PENDING'`, [eventReference || null, `Paystack transfer ${eventName === 'transfer.reversed' ? 'reversed' : 'failed'}`, JSON.stringify(metadata), operation.id]);
     await client.query(`UPDATE marketplace_escrows SET status='RELEASE_ELIGIBLE',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [operation.order_id]);
