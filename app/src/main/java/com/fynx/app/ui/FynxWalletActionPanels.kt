@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -70,8 +71,11 @@ internal fun FynxWalletActionPanel(
     onAmountChange: (String) -> Unit,
     availableBalance: Double?,
     canWithdraw: Boolean,
+    canFundByCard: Boolean,
+    canFundByUssd: Boolean,
     onBack: () -> Unit,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    onFundingVerified: () -> Unit
 ) {
     val title = when (screen) {
         "ADD" -> "Add Money"
@@ -142,17 +146,21 @@ internal fun FynxWalletActionPanel(
             }
             "CARD" -> {
                 item {
-                    WalletMethodUnavailable(
-                        title = "Card funding is not active yet",
-                        message = "A secure card checkout will open through the approved payment provider. FYNX will only credit your wallet after the provider confirms the payment."
+                    FynxWalletHostedFundingPanel(
+                        method = "CARD",
+                        amount = amount,
+                        enabled = canFundByCard,
+                        onFundingVerified = onFundingVerified
                     )
                 }
             }
             "USSD" -> {
                 item {
-                    WalletMethodUnavailable(
-                        title = "USSD payments are not active yet",
-                        message = "Supported banks and payment instructions will be shown here after the provider integration is enabled."
+                    FynxWalletHostedFundingPanel(
+                        method = "USSD",
+                        amount = amount,
+                        enabled = canFundByUssd,
+                        onFundingVerified = onFundingVerified
                     )
                 }
             }
@@ -175,6 +183,148 @@ internal fun FynxWalletActionPanel(
     }
 }
 
+
+@Composable
+private fun FynxWalletHostedFundingPanel(
+    method: String,
+    amount: String,
+    enabled: Boolean,
+    onFundingVerified: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val methodName = if (method == "CARD") "Debit card" else "USSD"
+    var email by remember { mutableStateOf("") }
+    var session by remember(method) { mutableStateOf<FynxWalletFundingSession?>(null) }
+    var idempotencyKey by remember(method) { mutableStateOf(UUID.randomUUID().toString().replace("-", "")) }
+    var submitting by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val parsedAmount = amount.toBigDecimalOrNull()
+    val validAmount = parsedAmount != null && parsedAmount > java.math.BigDecimal.ZERO &&
+        parsedAmount.toDouble().isFinite() && parsedAmount.toDouble() <= 100000000.0
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(methodName + " funding", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "FYNX uses the provider-hosted payment page. Your Wallet is credited only after the signed provider notification and server-side amount, currency and reference checks succeed.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (!enabled) {
+            WalletMethodUnavailable(
+                title = "$methodName funding is not active yet",
+                message = "This payment method will open only after FYNX has approved provider, custody and compliance settings and configured funding limits. No payment is started now."
+            )
+        } else if (session == null) {
+            Text("Funding amount", fontWeight = FontWeight.SemiBold)
+            Text("₦" + (parsedAmount?.let { String.format(Locale.US, "%,.2f", it) } ?: "—"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            if (!validAmount) {
+                Text("Return to Add Money and enter a valid NGN amount.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it.trim().take(160) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Payment email") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+            )
+            Button(
+                onClick = {
+                    submitting = true
+                    error = null
+                    scope.launch {
+                        FynxBuyerWalletClient.initializeWalletFunding(
+                            context = context,
+                            amount = parsedAmount!!.toDouble(),
+                            email = email,
+                            paymentMethod = method,
+                            idempotencyKey = idempotencyKey
+                        ).onSuccess { created ->
+                            session = created
+                            val url = created.authorizationUrl
+                            if (created.status == "PENDING" && url != null) {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                                }.onFailure {
+                                    error = "The secure payment page could not be opened. Use Open payment page to try again."
+                                }
+                            }
+                        }.onFailure { error = it.message ?: "The payment request could not be started." }
+                        submitting = false
+                    }
+                },
+                enabled = enabled && !submitting && validAmount && email.trim().matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                if (submitting) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                Spacer(Modifier.size(6.dp))
+                Text(if (submitting) "Preparing secure checkout…" else "Continue to secure payment")
+            }
+        } else {
+            val current = checkNotNull(session)
+            WalletActionNotice(
+                title = when (current.status) {
+                    "SUCCEEDED" -> "Payment confirmed"
+                    "FAILED", "BLOCKED" -> "Payment not credited"
+                    else -> "Payment awaiting confirmation"
+                },
+                message = current.message.ifBlank {
+                    if (current.status == "SUCCEEDED") "The provider confirmed this payment. Your Wallet will refresh."
+                    else "Do not pay again yet. Check the payment status; FYNX has not credited your Wallet without provider confirmation."
+                }
+            )
+            Text("Reference: " + current.reference, style = MaterialTheme.typography.labelSmall)
+            Text("Amount: " + walletActionMoney(current.amount), fontWeight = FontWeight.SemiBold)
+            current.authorizationUrl?.let { url ->
+                OutlinedButton(
+                    onClick = {
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                            .onFailure { error = "The secure payment page could not be opened on this device." }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Open payment page") }
+            }
+            if (current.status == "SUCCEEDED") {
+                Button(onClick = onFundingVerified, modifier = Modifier.fillMaxWidth()) { Text("Refresh Wallet balance") }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        checking = true
+                        error = null
+                        scope.launch {
+                            FynxBuyerWalletClient.refreshWalletFunding(context, current.reference)
+                                .onSuccess {
+                                    session = it
+                                    if (it.status == "SUCCEEDED") onFundingVerified()
+                                }
+                                .onFailure { error = it.message ?: "Payment status could not be checked." }
+                            checking = false
+                        }
+                    },
+                    enabled = !checking && !submitting,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (checking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(6.dp))
+                    Text(if (checking) "Checking provider…" else "Check payment status")
+                }
+                if (current.status == "FAILED" || current.status == "BLOCKED") {
+                    TextButton(
+                        onClick = {
+                            session = null
+                            idempotencyKey = UUID.randomUUID().toString().replace("-", "")
+                            error = null
+                        }
+                    ) { Text("Start a new payment") }
+                }
+            }
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    }
+}
 
 @Composable
 private fun FynxWalletSecurityPanel() {
