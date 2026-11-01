@@ -1104,6 +1104,14 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     else:
         FAILURES.append(prefix + ": live camera did not recover after the timer cancellation test")
 
+    # A failed timer must not let the Gallery test reuse coordinates from an earlier
+    # live-camera hierarchy after the foreground UI has moved into a media editor.
+    if not (camera_xml and find_control(camera_xml, ["Take photo"]) and find_control(camera_xml, ["Gallery"])):
+        report.append("- NOTE Gallery verification skipped because the timer journey did not leave a live camera surface")
+        current_ui = dump_ui(f"{prefix}-camera-before-gallery-recovery.xml") or camera_xml
+        recovered_home = camera_return_to_home(current_ui, prefix + "-camera-before-gallery-recovery")
+        return capture_camera_video_journey(recovered_home, prefix)
+
     # Android's system Gallery/document picker can take several seconds to become the focused
     # window on a cold API-35 emulator. Do not treat a stale ActivityRecord anywhere in the
     # task stack as proof that it is visible, and never press Back while launch is pending.
