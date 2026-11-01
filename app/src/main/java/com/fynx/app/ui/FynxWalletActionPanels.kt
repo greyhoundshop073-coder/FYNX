@@ -71,6 +71,7 @@ internal fun FynxWalletActionPanel(
     onAmountChange: (String) -> Unit,
     availableBalance: Double?,
     canWithdraw: Boolean,
+    canFundByBankTransfer: Boolean,
     canFundByCard: Boolean,
     canFundByUssd: Boolean,
     onBack: () -> Unit,
@@ -114,7 +115,7 @@ internal fun FynxWalletActionPanel(
                     WalletMethodCard(
                         icon = "bank",
                         title = "Dedicated bank transfer",
-                        description = "Your personal FYNX account number and transfer reference.",
+                        description = if (canFundByBankTransfer) "Request your provider-assigned personal account number and transfer securely." else "Available after provider go-live, account encryption and compliance approval.",
                         onClick = { onNavigate("TRANSFER") }
                     )
                 }
@@ -122,7 +123,7 @@ internal fun FynxWalletActionPanel(
                     WalletMethodCard(
                         icon = "card",
                         title = "Debit card",
-                        description = "Pay using a supported bank card.",
+                        description = if (canFundByCard) "Continue through the secure provider-hosted card checkout." else "Secure card checkout will appear after provider approval and funding limits are configured.",
                         onClick = { onNavigate("CARD") }
                     )
                 }
@@ -130,7 +131,7 @@ internal fun FynxWalletActionPanel(
                     WalletMethodCard(
                         icon = "phone",
                         title = "USSD and other methods",
-                        description = "Use an available bank payment option.",
+                        description = if (canFundByUssd) "Continue through the provider-hosted USSD payment instructions." else "USSD instructions will appear after provider approval and funding limits are configured.",
                         onClick = { onNavigate("USSD") }
                     )
                 }
