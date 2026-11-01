@@ -1587,6 +1587,27 @@ def capture_wallet_from_features(prefix:str):
             break
 
     wallet_opened=wallet_shell_opened and wallet_settled
+    authenticated_wallet_errors=[]
+    if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
+        # A visible shell is not proof that protected APIs succeeded. In the
+        # server-login path, fail the Wallet certification when summary, activity,
+        # seller earnings, or a nested funding-account request surfaces an error.
+        authenticated_wallet_error_markers=(
+            "Wallet unavailable",
+            "Your wallet could not be loaded",
+            "Activity could not load",
+            "Your wallet activity could not be loaded",
+            "Marketplace earnings unavailable",
+            "Marketplace seller earnings are temporarily unavailable",
+            "Funding account status could not be loaded",
+        )
+        authenticated_wallet_errors=[
+            marker for marker in authenticated_wallet_error_markers if marker in wallet_xml
+        ]
+        if authenticated_wallet_errors:
+            wallet_opened=False
+    if authenticated_wallet_errors:
+        result_message="Authenticated Wallet request(s) returned visible errors: "+", ".join(authenticated_wallet_errors)
     if wallet_opened:
         screenshot("authenticated-wallet.png")
         (ROOT/"authenticated-wallet.xml").write_text(wallet_xml+chr(10),encoding="utf-8")
