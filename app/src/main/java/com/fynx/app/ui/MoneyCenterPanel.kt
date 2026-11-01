@@ -18,6 +18,7 @@ fun MoneyCenterPanel() {
     val context = LocalContext.current
     var selectedTool by remember { mutableStateOf<String?>(null) }
     val sections = listOf(
+        MoneySection("Wallet", "FYNX Wallet", "View your wallet balance, payment activity and future withdrawal options", "💳"),
         MoneySection("Planner", "Money Planner", "Track income and expenses, set budgets, save toward goals and plan recurring costs", "🗓️"),
         MoneySection("Dashboard", "Money Dashboard", "Balances, income, expenses and your overall money picture", "💰"),
         MoneySection("Transfer", "Transfer Records", "Record a planned transfer; this does not move real money", "↔️"),
@@ -41,6 +42,7 @@ fun MoneyCenterPanel() {
         Column(Modifier.fillMaxSize()) {
             TextButton(onClick = { selectedTool = null }) { Text("← Money Center") }
             when (selectedTool) {
+                "Wallet" -> FynxBuyerWalletPanel()
                 "Planner" -> MoneyPlannerPanel()
                 "Dashboard" -> MoneyToolsPanel()
                 "Transfer" -> FynxMoneyTransferPanel()

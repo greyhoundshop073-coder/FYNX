@@ -40,6 +40,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
@@ -740,7 +741,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
@@ -797,6 +798,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var protectedOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var showSell by remember { mutableStateOf(false) }
     var publishSuccessListingId by remember { mutableStateOf<String?>(null) }
+    var pinnedPublishedListing by remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var publishRefreshKey by remember(currentUsername) { mutableIntStateOf(0) }
     var showOrders by remember { mutableStateOf(false) }
     // Keep saved carts isolated when multiple accounts use the same device.
     val cartOwnerKey = currentUsername.removePrefix("@").trim().lowercase(Locale.US).ifBlank { "preview" }
@@ -927,7 +930,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 error = "Marketplace is taking longer than expected. Check your connection and try again."
             } else {
                 result.onSuccess { (items, more, fallbackWarning) ->
-                    listings = items.distinctBy { it.id }
+                    val pinned = pinnedPublishedListing?.takeIf {
+                        requestQuery.isBlank() && requestCategory.equals("All", ignoreCase = true) && !requestNearbyMode
+                    }
+                    listings = (listOfNotNull(pinned) + items).distinctBy { it.id }
                     hasMoreListings = more
                     discoveryFallbackWarning = fallbackWarning
                     nextListingsOffset = advanceMarketplaceListingsOffset(0, 24)
@@ -995,7 +1001,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
     }
 
-    LaunchedEffect(query, category, nearbyMode, nearbyLabel) {
+    LaunchedEffect(query, category, nearbyMode, nearbyLabel, publishRefreshKey) {
+        if (query.isNotBlank() || !category.equals("All", ignoreCase = true) || nearbyMode) {
+            val pinnedId = pinnedPublishedListing?.id
+            pinnedPublishedListing = null
+            if (pinnedId != null) {
+                listings = listings.filterNot { it.id == pinnedId }
+            }
+        }
         // Invalidate prior requests immediately, before the search debounce completes.
         listingRequestGeneration += 1
         delay(if (query.isBlank()) 0L else 350L)
@@ -1027,9 +1040,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         sellerPhotoIds = photoMap
     }
 
+    // Keep sellers discoverable even when their reputation request is unavailable.
+    // Missing reputation is shown as "New seller", never treated as a reason to hide a shop.
     val visibleSellerListings = remember(listings, sellerReputations) {
         listings.distinctBy { it.sellerUsername.removePrefix("@").trim().lowercase() }
-            .filter { sellerReputations.containsKey(it.sellerUsername.removePrefix("@").trim().lowercase()) }
             .sortedByDescending { sellerReputations[it.sellerUsername.removePrefix("@").trim().lowercase()]?.successfulSales ?: 0 }
             .take(8)
     }
@@ -1073,6 +1087,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    OutlinedButton(onClick = onOpenWallet, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                        Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Wallet", maxLines = 1)
+                    }
                     OutlinedButton(onClick = onOpenMyShop, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                         Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
@@ -1246,7 +1265,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                     items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller ->
                                         val key = seller.sellerUsername.removePrefix("@").trim().lowercase()
                                         val reputation = sellerReputations[key]
-                                        if (reputation != null) MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { sellerStoreUsername = seller.sellerUsername }
+                                        MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { sellerStoreUsername = seller.sellerUsername }
                                     }
                                 }
                             }
@@ -1304,7 +1323,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller ->
                                     val key = seller.sellerUsername.removePrefix("@").trim().lowercase()
                                     val reputation = sellerReputations[key]
-                                    if (reputation != null) MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { sellerStoreUsername = seller.sellerUsername }
+                                    MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { sellerStoreUsername = seller.sellerUsername }
                                 }
                             }
                         }
@@ -1392,7 +1411,38 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         if (listings.isNotEmpty()) FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
     }
 
-    if (showSell) MarketplaceSellDialog(context, onPublished = { listingId -> showSell = false; publishSuccessListingId = listingId; reload() }, onCancel = { showSell = false })
+    if (showSell) MarketplaceSellDialog(context, onPublished = { listingId ->
+        showSell = false
+        publishSuccessListingId = listingId
+        // A new product must not remain hidden by the search, category or nearby filters
+        // that happened to be active when the seller opened the publishing form.
+        query = ""
+        category = "All"
+        nearbyMode = false
+        nearbyLabel = ""
+        showAllProducts = true
+        pinnedPublishedListing = null
+        publishRefreshKey += 1
+        scope.launch {
+            try {
+                val exact = loadExactMarketplaceListing(context, listingId)
+                val confirmed = exact.getOrNull()
+                    ?: FynxRemoteSocialClient.myListings(context).getOrThrow()
+                        .firstOrNull { it.id == listingId }
+                    ?: throw IllegalStateException("The product was accepted, but its saved listing could not be read yet.")
+                pinnedPublishedListing = confirmed
+                listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }
+                error = null
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                error = marketplaceSafeError(
+                    failure,
+                    "Product was accepted, but could not be shown yet. Open My Shop to verify it before publishing again."
+                )
+            }
+        }
+    }, onCancel = { showSell = false })
     publishSuccessListingId?.let { listingId ->
         AlertDialog(
             onDismissRequest = { publishSuccessListingId = null },
@@ -1661,15 +1711,15 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
 }
 
 @Composable
-private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceListing, reputation: FynxMarketplaceClient.SellerReputation, photoId: String?, onProfile: () -> Unit) {
+private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceListing, reputation: FynxMarketplaceClient.SellerReputation?, photoId: String?, onProfile: () -> Unit) {
     Surface(Modifier.width(190.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             FynxRemoteProfileAvatar(photoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(42.dp).clip(RoundedCornerShape(50)), ownerUsername = listing.sellerUsername)
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
-                Text(listing.category + " • " + reputation.successfulSales + " sales", maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (reputation.reviewCount > 0) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary); Text(" " + String.format(Locale.US, "%.1f", reputation.averageRating), style = MaterialTheme.typography.labelSmall) } }
+                Text(listing.category + " • " + (reputation?.let { it.successfulSales.toString() + " sales" } ?: "New seller"), maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (reputation != null && reputation.reviewCount > 0) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary); Text(" " + String.format(Locale.US, "%.1f", reputation.averageRating), style = MaterialTheme.typography.labelSmall) } }
                 TextButton(onClick = onProfile, contentPadding = PaddingValues(0.dp)) { Text("View Store") }
             }
         }

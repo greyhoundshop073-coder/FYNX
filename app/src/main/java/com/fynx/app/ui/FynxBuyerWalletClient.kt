@@ -1,0 +1,161 @@
+package com.fynx.app.ui
+
+import android.content.Context
+import android.net.Uri
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.Locale
+
+internal data class FynxBuyerWalletSummary(
+    val walletStatus: String,
+    val currency: String,
+    val availableBalance: Double?,
+    val reservedBalance: Double?,
+    val withdrawalPendingBalance: Double?,
+    val canFund: Boolean,
+    val canSpend: Boolean,
+    val canWithdraw: Boolean,
+    val notice: String
+)
+
+internal data class FynxBuyerWalletActivity(
+    val id: String,
+    val type: String,
+    val status: String,
+    val amount: Double,
+    val fee: Double,
+    val walletDelta: Double,
+    val currency: String,
+    val reference: String,
+    val description: String,
+    val createdAt: String
+)
+
+internal data class FynxBuyerWalletActivityCursor(
+    val createdAt: String,
+    val id: String
+)
+
+internal data class FynxBuyerWalletActivityPage(
+    val transactions: List<FynxBuyerWalletActivity>,
+    val hasMore: Boolean,
+    val nextCursor: FynxBuyerWalletActivityCursor?
+)
+
+internal object FynxBuyerWalletClient {
+    internal fun normalizeActivityDirection(direction: String): String {
+        val normalized = direction.trim().uppercase(Locale.US)
+        require(normalized in setOf("ALL", "IN", "OUT")) {
+            "Wallet activity direction is not supported."
+        }
+        return normalized
+    }
+
+    suspend fun loadSummary(context: Context): Result<FynxBuyerWalletSummary> =
+        FynxBackendClient.get(context, "/api/wallet/summary").mapCatching(::parseSummary)
+
+    suspend fun loadTransactions(
+        context: Context,
+        limit: Int = 20,
+        before: FynxBuyerWalletActivityCursor? = null,
+        direction: String = "ALL"
+    ): Result<FynxBuyerWalletActivityPage> {
+        val boundedLimit = limit.coerceIn(1, 50)
+        val normalizedDirection = normalizeActivityDirection(direction)
+        val query = buildString {
+            append("&direction=").append(Uri.encode(normalizedDirection))
+            before?.let {
+                append("&beforeCreatedAt=").append(Uri.encode(it.createdAt))
+                append("&beforeId=").append(Uri.encode(it.id))
+            }
+        }
+        return FynxBackendClient.get(
+            context,
+            "/api/wallet/transactions?limit=" + boundedLimit + query
+        ).mapCatching(::parseTransactions)
+    }
+
+    internal fun parseSummary(raw: String): FynxBuyerWalletSummary {
+        val json = JSONObject(raw)
+        val status = json.optString("walletStatus", "NOT_SETUP").trim().uppercase(Locale.US)
+        val currency = json.optString("currency", "NGN").trim().uppercase(Locale.US)
+        require(status in setOf("NOT_SETUP", "PENDING_PROVIDER", "ACTIVE", "RESTRICTED", "CLOSED")) {
+            "Wallet returned an unsupported status."
+        }
+        require(currency == "NGN") { "The buyer wallet currently supports NGN only." }
+        return FynxBuyerWalletSummary(
+            walletStatus = status,
+            currency = currency,
+            availableBalance = nullableAmount(json, "availableBalance"),
+            reservedBalance = nullableAmount(json, "reservedBalance"),
+            withdrawalPendingBalance = nullableAmount(json, "withdrawalPendingBalance"),
+            canFund = json.optBoolean("canFund", false),
+            canSpend = json.optBoolean("canSpend", false),
+            canWithdraw = json.optBoolean("canWithdraw", false),
+            notice = json.optString("notice").trim()
+        )
+    }
+
+    internal fun parseTransactions(raw: String): FynxBuyerWalletActivityPage {
+        val response = JSONObject(raw)
+        val rows = response.optJSONArray("transactions") ?: JSONArray()
+        require(rows.length() <= 50) { "Wallet activity response is too large." }
+        val transactions = buildList {
+            for (index in 0 until rows.length()) {
+                val row = rows.optJSONObject(index) ?: continue
+                val id = row.optString("id").trim()
+                val type = row.optString("type").trim().uppercase(Locale.US)
+                val status = row.optString("status").trim().uppercase(Locale.US)
+                val amount = row.optDouble("amount", Double.NaN)
+                val fee = row.optDouble("fee", 0.0)
+                val walletDelta = row.optDouble("walletDelta", 0.0)
+                val currency = row.optString("currency", "NGN").trim().uppercase(Locale.US)
+                val reference = row.optString("reference").trim()
+                val createdAt = row.optString("createdAt").trim()
+                if (id.isBlank() || reference.isBlank() || createdAt.isBlank() ||
+                    amount <= 0.0 || !amount.isFinite() ||
+                    fee < 0.0 || !fee.isFinite() || !walletDelta.isFinite() || currency != "NGN" ||
+                    type !in setOf("FUNDING", "MARKETPLACE_PAYMENT", "WITHDRAWAL", "REFUND", "REVERSAL", "ADJUSTMENT") ||
+                    status !in setOf("PENDING", "PROCESSING", "SUCCEEDED", "FAILED", "REVERSED", "BLOCKED")
+                ) {
+                    throw IllegalStateException("Wallet activity contains an invalid transaction.")
+                }
+                add(
+                    FynxBuyerWalletActivity(
+                        id = id,
+                        type = type,
+                        status = status,
+                        amount = amount,
+                        fee = fee,
+                        walletDelta = walletDelta,
+                        currency = currency,
+                        reference = reference,
+                        description = row.optString("description").trim(),
+                        createdAt = createdAt
+                    )
+                )
+            }
+        }
+        val hasMore = response.optBoolean("hasMore", false)
+        val cursorJson = response.optJSONObject("nextCursor")
+        val cursor = cursorJson?.let {
+            val createdAt = it.optString("createdAt").trim()
+            val id = it.optString("id").trim()
+            require(createdAt.isNotBlank() && id.isNotBlank()) {
+                "Wallet activity returned an invalid page cursor."
+            }
+            FynxBuyerWalletActivityCursor(createdAt, id)
+        }
+        require(!hasMore || cursor != null) {
+            "Wallet activity says more transactions exist but did not return a cursor."
+        }
+        return FynxBuyerWalletActivityPage(transactions, hasMore, cursor)
+    }
+
+    private fun nullableAmount(json: JSONObject, field: String): Double? {
+        if (!json.has(field) || json.isNull(field)) return null
+        val value = json.optDouble(field, Double.NaN)
+        require(value.isFinite() && value >= 0.0) { "Wallet returned an invalid balance." }
+        return value
+    }
+}

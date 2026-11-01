@@ -5,7 +5,9 @@ import android.widget.ImageView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.rememberScrollState
@@ -521,6 +523,21 @@ fun FynxMarketplaceSellerCenterPanel() {
                         if (moneyLoading) CircularProgressIndicator(Modifier.size(20.dp))
                     }
                     Text("FYNX keeps buyer payments protected until the order is completed. Only settlement records marked eligible can be released.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = FynxDesign.AzureBlue.copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = 0.22f))
+                    ) {
+                        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("FYNX Marketplace commission · default 5%", color = FynxDesign.AzureBlue, fontWeight = FontWeight.Bold)
+                            Text(
+                                "The default seller commission is 5% of the product subtotal on new Marketplace sales. The exact amount is calculated by the server and shown on each order. Seller proceeds already reflect the commission; wallet top-ups and bank withdrawals are not charged this fee. Refunds and reversals follow the order's settlement record.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     moneyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     if (!moneyLoading && moneyRecords.isEmpty() && moneyError == null) {
                         Text("No marketplace earnings yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -579,7 +596,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 Text(record.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                                 Text(formatSellerMoney(record.sellerNet, record.currency), color = MaterialTheme.colorScheme.primary)
                             }
-                            Text("${record.funds} • payout ${record.payoutStatus} • fee ${formatSellerMoney(record.marketplaceFee, record.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${record.funds} • payout ${record.payoutStatus} • FYNX commission ${formatSellerMoney(record.marketplaceFee, record.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (record.updatedAt.isNotBlank()) Text(record.updatedAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             HorizontalDivider(Modifier.padding(vertical = 5.dp))
                         }

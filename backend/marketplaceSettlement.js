@@ -166,6 +166,8 @@ async function ensureSchema() {
   return schemaPromise;
 }
 
+
+
 function payoutStatusFromSettlement(row) {
   const escrow = String(row.escrow_status || 'NOT_INITIALIZED').toUpperCase();
   const operation = String(row.payout_operation_status || '').toUpperCase();
@@ -424,4 +426,6 @@ export function registerMarketplaceSettlementRoutes({ app }) {
       return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500).json({ error: 'payout release request failed' });
     }
   });
+
+
 }

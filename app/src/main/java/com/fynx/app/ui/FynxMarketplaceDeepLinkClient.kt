@@ -16,6 +16,12 @@ suspend fun loadExactMarketplaceListing(
     val mediaIds = buildList {
         if (media != null) for (i in 0 until media.length()) add(media.getString(i))
     }
+    val mediaTypesJson = o.optJSONArray("media_types")
+    val mediaTypes = buildList {
+        if (mediaTypesJson != null) {
+            for (i in 0 until mediaTypesJson.length()) add(mediaTypesJson.optString(i))
+        }
+    }
     FynxRemoteSocialClient.MarketplaceListing(
         id = o.getString("id"),
         sellerId = o.optString("seller_id"),
@@ -34,6 +40,7 @@ suspend fun loadExactMarketplaceListing(
         pickupAvailable = o.optBoolean("pickup_available", true),
         deliveryFee = if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"),
         mediaIds = mediaIds,
-        active = o.optBoolean("active", true)
+        active = o.optBoolean("active", true),
+        mediaTypes = mediaTypes
     )
 }
