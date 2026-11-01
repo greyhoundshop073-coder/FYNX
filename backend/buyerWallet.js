@@ -642,13 +642,21 @@ async function reconcileWalletTransferEvent(client, eventName, transfer) {
 }
 
 export async function reconcileBuyerWalletTransferEvent(client, eventName, transfer) {
-  await ensureBuyerWalletSchema();
+  // A Marketplace transfer must never be blocked by an uninitialized Wallet schema.
+  // Wallet payout rows exist only after the wallet payout route creates the table.
+  const table = await client.query("SELECT to_regclass('public.buyer_wallet_provider_operations') IS NOT NULL AS ready");
+  if (!table.rows[0]?.ready) return { matched: false };
   return reconcileWalletTransferEvent(client, eventName, transfer);
 }
 
 export async function handleBuyerWalletPaystackEvent(eventName, data = {}) {
-  await ensureBuyerWalletSchema();
   const normalizedEvent = String(eventName || '').trim().toLowerCase();
+  const dedicatedAccountEvent = normalizedEvent === 'customeridentification.failed' ||
+    normalizedEvent.startsWith('dedicatedaccount.');
+  const dedicatedFundingEvent = normalizedEvent === 'charge.success' &&
+    String(data.authorization?.channel || '').toLowerCase() === 'dedicated_nuban';
+  if (!dedicatedAccountEvent && !dedicatedFundingEvent) return { handled: false };
+  await ensureBuyerWalletSchema();
 
   if (normalizedEvent === 'customeridentification.failed' || normalizedEvent === 'dedicatedaccount.assign.failed') {
     const customerCode = String(data.customer_code || data.customer?.customer_code || '').trim();
