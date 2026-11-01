@@ -512,7 +512,10 @@ app.get("/api/media/:id", auth, async (req, res) => {
             WHERE ml.active = TRUE
               AND ml.quantity > 0
               AND UPPER(COALESCE(ml.currency, '')) IN ('NGN', 'USD')
-              AND ml.media_ids @> to_jsonb(ARRAY[mm.id::text])
+              AND (
+                ml.media_ids @> to_jsonb(ARRAY[mm.id::bigint])
+                OR ml.media_ids @> to_jsonb(ARRAY[mm.id::text])
+              )
               AND NOT EXISTS (
                 SELECT 1 FROM blocks b
                 WHERE (b.blocker_id = $2 AND b.blocked_id = ml.seller_id)
