@@ -641,6 +641,126 @@ async function reconcileWalletTransferEvent(client, eventName, transfer) {
   return { matched: true, ignored: true };
 }
 
+export async function reconcileBuyerWalletTransferEvent(client, eventName, transfer) {
+  return reconcileWalletTransferEvent(client, eventName, transfer);
+}
+
+export async function handleBuyerWalletPaystackEvent(eventName, data = {}) {
+  await ensureBuyerWalletSchema();
+  const normalizedEvent = String(eventName || '').trim().toLowerCase();
+
+  if (normalizedEvent === 'customeridentification.failed' || normalizedEvent === 'dedicatedaccount.assign.failed') {
+    const customerCode = String(data.customer_code || data.customer?.customer_code || '').trim();
+    if (!customerCode) return { handled: true, matched: false };
+    const updated = await pool.query(
+      "UPDATE buyer_wallets SET funding_account_status='RESTRICTED',status='RESTRICTED',updated_at=NOW() WHERE provider_customer_code=$1",
+      [customerCode]
+    );
+    return { handled: true, matched: updated.rowCount > 0, restricted: updated.rowCount > 0 };
+  }
+
+  if (normalizedEvent === 'dedicatedaccount.assign.success') {
+    const customerCode = String(data.customer_code || data.customer?.customer_code || '').trim();
+    if (!customerCode) return { handled: true, matched: false };
+    const wallet = (await pool.query(
+      'SELECT id FROM buyer_wallets WHERE provider_customer_code=$1 LIMIT 1',
+      [customerCode]
+    )).rows[0];
+    if (!wallet) return { handled: true, matched: false };
+    let account = data.dedicated_account || data.account || data;
+    if (!account?.account_number) {
+      const customer = await walletPaystackRequest('/customer/' + encodeURIComponent(customerCode));
+      account = customer?.dedicated_account;
+    }
+    await persistWalletFundingAccount(wallet.id, account);
+    return { handled: true, matched: true, accountAssigned: true };
+  }
+
+  if (normalizedEvent !== 'charge.success') return { handled: false };
+  const reference = typeof data.reference === 'string' ? data.reference.trim() : '';
+  if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference) ||
+      String(data.status || '').toLowerCase() !== 'success') {
+    if (String(data.authorization?.channel || '').toLowerCase() === 'dedicated_nuban') {
+      return { handled: true, statusCode: 400, error: 'invalid wallet funding transaction reference or status' };
+    }
+    return { handled: false };
+  }
+  if (String(data.authorization?.channel || '').toLowerCase() !== 'dedicated_nuban') return { handled: false };
+
+  const verified = await walletPaystackRequest('/transaction/verify/' + encodeURIComponent(reference));
+  const providerStatus = String(verified?.status || '').toLowerCase();
+  const providerAmount = Number(verified?.amount);
+  const providerCurrency = String(verified?.currency || '').toUpperCase();
+  const providerReference = String(verified?.reference || '');
+  const customerCode = String(verified?.customer?.customer_code || data.customer?.customer_code || '');
+  const receiverAccount = String(
+    verified?.authorization?.receiver_bank_account_number ||
+    data.authorization?.receiver_bank_account_number ||
+    ''
+  ).replace(/\D/g, '');
+  if (providerStatus !== 'success' || !Number.isInteger(providerAmount) || providerAmount <= 0 ||
+      providerCurrency !== 'NGN' || providerReference !== reference) {
+    return { handled: true, statusCode: 400, error: 'Paystack funding verification did not match the webhook' };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const wallet = (await client.query(`
+      SELECT id,user_id,provider_customer_code,funding_account_ciphertext,
+             funding_account_iv,funding_account_tag,status,funding_account_status
+        FROM buyer_wallets
+       WHERE provider_customer_code=$1 AND currency='NGN'
+       FOR UPDATE
+    `, [customerCode])).rows[0];
+    if (!wallet || wallet.funding_account_status !== 'ACTIVE' || wallet.status !== 'ACTIVE') {
+      await client.query('ROLLBACK');
+      return { handled: true, matched: false };
+    }
+    const expectedAccount = decryptWalletAccountNumber(wallet);
+    if (!expectedAccount || receiverAccount !== expectedAccount) {
+      await client.query('ROLLBACK');
+      return { handled: true, statusCode: 400, error: 'Paystack funding account does not match this wallet' };
+    }
+    const existing = (await client.query(
+      'SELECT id,status FROM buyer_wallet_transactions WHERE provider_reference=$1 FOR UPDATE',
+      [reference]
+    )).rows[0];
+    if (existing) {
+      await client.query('COMMIT');
+      return { handled: true, matched: true, idempotent: true, status: existing.status };
+    }
+    const amount = (providerAmount / 100).toFixed(2);
+    const transactionId = crypto.randomUUID();
+    await client.query(`
+      INSERT INTO buyer_wallet_transactions
+        (id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,provider_reference,description,metadata)
+      VALUES ($1,$2,$3,'FUNDING','PENDING',$4,0,'NGN',$5,$6,$5,'Dedicated bank transfer funding',$7::jsonb)
+    `, [
+      transactionId, wallet.id, wallet.user_id, amount, reference,
+      'PAYSTACK-DVA-' + reference,
+      JSON.stringify({ provider: 'paystack', channel: 'dedicated_nuban', providerFeeSubunit: Number(verified.fees || 0) })
+    ]);
+    await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [transactionId]);
+    await client.query(`
+      INSERT INTO buyer_wallet_ledger_entries
+        (transaction_id,wallet_id,entry_key,account_code,side,amount,currency)
+      VALUES
+        ($1,$2,$3,'PROVIDER_CLEARING','DEBIT',$4,'NGN'),
+        ($1,$2,$5,'AVAILABLE','CREDIT',$4,'NGN')
+    `, [transactionId, wallet.id, 'PAYSTACK-DVA-CLEARING-' + reference, amount, 'PAYSTACK-DVA-AVAILABLE-' + reference]);
+    await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [transactionId]);
+    await client.query('COMMIT');
+    return { handled: true, matched: true, credited: true };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error?.code === '23505') return { handled: true, matched: true, idempotent: true };
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export function parseBuyerWalletActivityCursor(query = {}) {
   const params = query && typeof query === 'object' ? query : {};
   const hasCreatedAt = Object.prototype.hasOwnProperty.call(params, 'beforeCreatedAt');
@@ -1388,156 +1508,6 @@ export function registerBuyerWalletRoutes({ app }) {
     }
   });
 
-
-  app.post('/api/wallet/paystack/webhook', async (req, res) => {
-    const secret = String(process.env.PAYSTACK_SECRET_KEY || '');
-    const signature = req.get('x-paystack-signature') || '';
-    const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody : null;
-    const expected = secret && rawBody
-      ? crypto.createHmac('sha512', secret).update(rawBody).digest('hex')
-      : '';
-    const safeSignature = (left, right) => {
-      if (typeof left !== 'string' || typeof right !== 'string' || left.length !== right.length) return false;
-      try { return crypto.timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex')); } catch { return false; }
-    };
-    if (!secret || !rawBody || !safeSignature(expected, signature)) return res.status(401).json({ error: 'invalid wallet payment webhook signature' });
-    let event;
-    try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).json({ error: 'invalid webhook payload' }); }
-    const eventName = String(event?.event || '').trim().toLowerCase();
-    const data = event?.data || {};
-
-    if (eventName.startsWith('transfer.')) {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const outcome = await reconcileWalletTransferEvent(client, eventName, data);
-        await client.query('COMMIT');
-        return res.status(200).json({ received: true, ...outcome });
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => {});
-        console.error('buyer wallet Paystack transfer webhook', error);
-        return res.status(500).json({ error: 'wallet transfer reconciliation failed' });
-      } finally {
-        client.release();
-      }
-    }
-
-    if (eventName === 'customeridentification.failed' || eventName === 'dedicatedaccount.assign.failed') {
-      const customerCode = String(data.customer_code || data.customer?.customer_code || '').trim();
-      if (customerCode) {
-        await pool.query(
-          "UPDATE buyer_wallets SET funding_account_status='RESTRICTED',status='RESTRICTED',updated_at=NOW() WHERE provider_customer_code=$1",
-          [customerCode]
-        );
-      }
-      return res.status(200).json({ received: true, matched: Boolean(customerCode) });
-    }
-
-    if (eventName === 'dedicatedaccount.assign.success') {
-      const customerCode = String(data.customer_code || data.customer?.customer_code || '').trim();
-      if (!customerCode) return res.status(200).json({ received: true, matched: false });
-      const wallet = (await pool.query(
-        'SELECT id FROM buyer_wallets WHERE provider_customer_code=$1 LIMIT 1',
-        [customerCode]
-      )).rows[0];
-      if (!wallet) return res.status(200).json({ received: true, matched: false });
-      try {
-        let account = data.dedicated_account || data.account || data;
-        if (!account?.account_number) {
-          const customer = await walletPaystackRequest('/customer/' + encodeURIComponent(customerCode));
-          account = customer?.dedicated_account;
-        }
-        await persistWalletFundingAccount(wallet.id, account);
-        return res.status(200).json({ received: true, matched: true });
-      } catch (error) {
-        console.error('buyer wallet DVA assignment webhook', error);
-        return res.status(500).json({ error: 'wallet account assignment could not be reconciled' });
-      }
-    }
-
-    if (eventName !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
-    const reference = typeof data.reference === 'string' ? data.reference.trim() : '';
-    if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference) || String(data.status || '').toLowerCase() !== 'success') {
-      return res.status(400).json({ error: 'invalid wallet funding transaction reference or status' });
-    }
-    if (String(data.authorization?.channel || '').toLowerCase() !== 'dedicated_nuban') {
-      return res.status(200).json({ received: true, ignored: true });
-    }
-
-    const client = await pool.connect();
-    try {
-      const verified = await walletPaystackRequest('/transaction/verify/' + encodeURIComponent(reference));
-      const providerStatus = String(verified?.status || '').toLowerCase();
-      const providerAmount = Number(verified?.amount);
-      const providerCurrency = String(verified?.currency || '').toUpperCase();
-      const providerReference = String(verified?.reference || '');
-      const customerCode = String(verified?.customer?.customer_code || data.customer?.customer_code || '');
-      const receiverAccount = String(
-        verified?.authorization?.receiver_bank_account_number ||
-        data.authorization?.receiver_bank_account_number ||
-        ''
-      ).replace(/\D/g, '');
-      if (providerStatus !== 'success' || !Number.isInteger(providerAmount) || providerAmount <= 0 ||
-          providerCurrency !== 'NGN' || providerReference !== reference) {
-        return res.status(400).json({ error: 'Paystack funding verification did not match the webhook' });
-      }
-
-      await client.query('BEGIN');
-      const wallet = (await client.query(`
-        SELECT id,user_id,provider_customer_code,funding_account_ciphertext,
-               funding_account_iv,funding_account_tag,status,funding_account_status
-          FROM buyer_wallets
-         WHERE provider_customer_code=$1 AND currency='NGN'
-         FOR UPDATE
-      `, [customerCode])).rows[0];
-      if (!wallet || wallet.funding_account_status !== 'ACTIVE' || wallet.status !== 'ACTIVE') {
-        await client.query('ROLLBACK');
-        return res.status(200).json({ received: true, matched: false });
-      }
-      const expectedAccount = decryptWalletAccountNumber(wallet);
-      if (!expectedAccount || receiverAccount !== expectedAccount) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Paystack funding account does not match this wallet' });
-      }
-      const existing = (await client.query(
-        'SELECT id,status FROM buyer_wallet_transactions WHERE provider_reference=$1 FOR UPDATE',
-        [reference]
-      )).rows[0];
-      if (existing) {
-        await client.query('COMMIT');
-        return res.status(200).json({ received: true, matched: true, idempotent: true, status: existing.status });
-      }
-      const amount = (providerAmount / 100).toFixed(2);
-      const transactionId = crypto.randomUUID();
-      await client.query(`
-        INSERT INTO buyer_wallet_transactions
-          (id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,provider_reference,description,metadata)
-        VALUES ($1,$2,$3,'FUNDING','PENDING',$4,0,'NGN',$5,$6,$5,'Dedicated bank transfer funding',$7::jsonb)
-      `, [
-        transactionId, wallet.id, wallet.user_id, amount, reference,
-        'PAYSTACK-DVA-' + reference,
-        JSON.stringify({ provider: 'paystack', channel: 'dedicated_nuban', providerFeeSubunit: Number(verified.fees || 0) })
-      ]);
-      await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [transactionId]);
-      await client.query(`
-        INSERT INTO buyer_wallet_ledger_entries
-          (transaction_id,wallet_id,entry_key,account_code,side,amount,currency)
-        VALUES
-          ($1,$2,$3,'PROVIDER_CLEARING','DEBIT',$4,'NGN'),
-          ($1,$2,$5,'AVAILABLE','CREDIT',$4,'NGN')
-      `, [transactionId, wallet.id, 'PAYSTACK-DVA-CLEARING-' + reference, amount, 'PAYSTACK-DVA-AVAILABLE-' + reference]);
-      await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [transactionId]);
-      await client.query('COMMIT');
-      return res.status(200).json({ received: true, matched: true, credited: true });
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {});
-      if (error?.code === '23505') return res.status(200).json({ received: true, matched: true, idempotent: true });
-      console.error('buyer wallet Paystack charge webhook', error);
-      return res.status(500).json({ error: 'wallet funding webhook processing failed' });
-    } finally {
-      client.release();
-    }
-  });
 
   app.get('/api/wallet/transactions', auth, async (req, res) => {
     try {
