@@ -55,7 +55,7 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
-    fun activeRenderBackendAddressIsPreserved() {
+    fun activeRailwayBackendAddressIsPreserved() {
         val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
         val originalUrl = prefs.getString("base_url", null)
         val originalExplicit = prefs.getBoolean("base_url_explicit", false)
@@ -111,7 +111,7 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
-    fun staleUnmarkedRailwayOverrideMigratesToRenderForDebugBuilds() {
+    fun staleUnmarkedRetiredRailwayOverrideMigratesToActiveRailwayForDebugBuilds() {
         val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
         val originalUrl = FynxBackendClient.baseUrl(context)
         val originalExplicit = prefs.getBoolean("base_url_explicit", false)
@@ -136,7 +136,7 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
-    fun debugAndroidRuntimeCanReachLiveRenderBackend() = runBlocking {
+    fun debugAndroidRuntimeCanReachLiveRailwayBackend() = runBlocking {
         // Keep normal APK/UI certification independent of backend availability.
         // This live integration probe is opt-in; CI has a separate backend health step.
         val shouldProbeLiveBackend = InstrumentationRegistry.getArguments()
