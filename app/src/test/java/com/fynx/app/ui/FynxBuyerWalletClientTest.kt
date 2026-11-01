@@ -50,6 +50,40 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun hostedWalletFundingSessionParsesPendingCardCheckout() {
+        val session = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":5000.0,"paymentMethod":"CARD","authorizationUrl":"https://checkout.paystack.com/session","message":"pending"}"""
+        )
+        assertEquals("PENDING", session.status)
+        assertEquals("CARD", session.paymentMethod)
+        assertEquals(5000.0, session.amount, 0.0)
+        assertTrue(session.authorizationUrl!!.startsWith("https://"))
+    }
+
+    @Test
+    fun hostedWalletFundingSessionAcceptsVerifiedSuccessWithoutCheckoutUrl() {
+        val session = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"SUCCEEDED","reference":"fwd_abcdef0123456789abcdef0123456789","amount":2000.0,"paymentMethod":"USSD"}"""
+        )
+        assertEquals("SUCCEEDED", session.status)
+        assertNull(session.authorizationUrl)
+    }
+
+    @Test
+    fun hostedWalletFundingSessionRejectsInvalidReferenceAndUnsafeUrl() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWalletFundingSession(
+                """{"status":"PENDING","reference":"bad-ref","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"http://checkout.invalid"}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWalletFundingSession(
+                """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":100.0,"paymentMethod":"WIRE"}"""
+            )
+        }
+    }
+
+    @Test
     fun fundingAccountParsesOnlyAssignedProviderAccount() {
         val account = FynxBuyerWalletClient.parseFundingAccount(
             """{"status":"ACTIVE","currency":"NGN","canRequest":false,"account":{"bankName":"Wema Bank","accountName":"FYNX / TEST USER","accountNumber":"0123456789","currency":"NGN"}}"""
