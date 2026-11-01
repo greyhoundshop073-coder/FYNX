@@ -79,7 +79,7 @@ fun FynxMusicAdminPanel() {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("FYNX Music Library", style = MaterialTheme.typography.titleMedium)
         Text(
-            "Only authorized FYNX admins can add or remove catalogue tracks. Users can only select published tracks.",
+            "Only the official FYNX Owner account can add or remove catalogue tracks. All other users can only select published tracks.",
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(4.dp))
