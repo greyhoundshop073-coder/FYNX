@@ -70,6 +70,8 @@ async function ensureBuyerWalletSchema() {
       ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_set_at TIMESTAMPTZ;
       ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_failed_attempts INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_locked_until TIMESTAMPTZ;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_setup_failed_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE buyer_wallets ADD COLUMN IF NOT EXISTS withdrawal_pin_setup_locked_until TIMESTAMPTZ;
       CREATE UNIQUE INDEX IF NOT EXISTS buyer_wallet_provider_customer_code_uidx
         ON buyer_wallets(provider_customer_code) WHERE provider_customer_code IS NOT NULL;
 
@@ -924,36 +926,67 @@ export function registerBuyerWalletRoutes({ app }) {
     if (!/^\d{6}$/.test(pin) || pin !== confirmPin || currentPassword.length < 8 || currentPassword.length > 128) {
       return res.status(400).json({ error: 'enter your current password and matching six-digit wallet PIN' });
     }
+    const client = await pool.connect();
     try {
       await ensureBuyerWalletSchema();
-      const user = (await pool.query('SELECT password_hash FROM users WHERE id=$1 LIMIT 1', [req.user.sub])).rows[0];
-      if (!user?.password_hash || !(await bcrypt.compare(currentPassword, user.password_hash))) {
-        return res.status(403).json({ error: 'current FYNX password could not be verified' });
-      }
-      const wallet = (await pool.query(
-        "SELECT id,status FROM buyer_wallets WHERE user_id=$1 AND currency='NGN' LIMIT 1",
-        [req.user.sub]
-      )).rows[0];
+      await client.query('BEGIN');
+      const wallet = (await client.query(`
+        SELECT id,status,withdrawal_pin_setup_failed_attempts,withdrawal_pin_setup_locked_until
+          FROM buyer_wallets
+         WHERE user_id=$1 AND currency='NGN'
+         FOR UPDATE
+      `, [req.user.sub])).rows[0];
       if (!wallet || wallet.status !== 'ACTIVE') {
+        await client.query('ROLLBACK');
         return res.status(409).json({ error: 'an active FYNX Wallet is required before setting a withdrawal PIN' });
       }
+      const lockedUntil = wallet.withdrawal_pin_setup_locked_until ? new Date(wallet.withdrawal_pin_setup_locked_until).getTime() : 0;
+      if (lockedUntil > Date.now()) {
+        await client.query('ROLLBACK');
+        return res.status(423).json({ error: 'wallet PIN setup is temporarily locked after repeated password failures' });
+      }
+      const user = (await client.query('SELECT password_hash FROM users WHERE id=$1 LIMIT 1', [req.user.sub])).rows[0];
+      if (!user?.password_hash || !(await bcrypt.compare(currentPassword, user.password_hash))) {
+        const previous = lockedUntil > 0 && lockedUntil <= Date.now() ? 0 : Number(wallet.withdrawal_pin_setup_failed_attempts || 0);
+        const attempts = previous + 1;
+        await client.query(`
+          UPDATE buyer_wallets
+             SET withdrawal_pin_setup_failed_attempts=$1,
+                 withdrawal_pin_setup_locked_until=CASE WHEN $1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE NULL END,
+                 updated_at=NOW()
+           WHERE id=$2
+        `, [attempts, wallet.id]);
+        await client.query('COMMIT');
+        return res.status(403).json({
+          error: attempts >= 5
+            ? 'current password attempts exceeded; wallet PIN setup is locked for 15 minutes'
+            : 'current FYNX password could not be verified'
+        });
+      }
+
       const pinHash = await bcrypt.hash(pin, 12);
-      await pool.query(`
+      await client.query(`
         UPDATE buyer_wallets
            SET withdrawal_pin_hash=$1,
                withdrawal_pin_set_at=NOW(),
                withdrawal_pin_failed_attempts=0,
                withdrawal_pin_locked_until=NULL,
+               withdrawal_pin_setup_failed_attempts=0,
+               withdrawal_pin_setup_locked_until=NULL,
                updated_at=NOW()
          WHERE id=$2
       `, [pinHash, wallet.id]);
+      await client.query('COMMIT');
       return res.json({ hasWithdrawalPin: true, updated: true });
     } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
       console.error('buyer wallet withdrawal PIN setup', error);
       return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
         .json({ error: 'wallet withdrawal PIN could not be saved' });
+    } finally {
+      client.release();
     }
-  });
+  });;
 
   app.get('/api/wallet/payout-banks', auth, async (req, res) => {
     if (!walletProviderApproved('WITHDRAWAL')) return res.status(503).json({ error: 'wallet bank payouts are not enabled for this provider environment yet' });
