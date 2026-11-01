@@ -21,6 +21,9 @@ checks = [
     ("Camera Dialog applies/restores the actual system-bar window and white icon appearance",
      "DialogWindowProvider" in camera and "resolveFynxCameraWindow(cameraWindowView)" in camera
      and "resolveFynxHostActivityWindow(cameraWindowView)" in camera
+     and "hostActivityWindow.decorView.background = ColorDrawable(cameraBackdrop)" in camera
+     and "previousHostDecorBackground" in camera
+     and "hostActivityWindow.decorView.background = previousHostDecorBackground" in camera
      and "hostActivityWindow.statusBarColor = cameraBackdrop" in camera
      and "hostActivityWindow.isStatusBarContrastEnforced = false" in camera
      and "previousHostStatusBarColor" in camera

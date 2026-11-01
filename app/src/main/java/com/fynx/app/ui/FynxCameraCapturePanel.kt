@@ -377,6 +377,7 @@ fun FynxCameraCapturePanel(
         val hostController = hostActivityWindow
             ?.takeIf { it !== window }
             ?.let { WindowInsetsControllerCompat(it, it.decorView) }
+        val previousHostDecorBackground = hostActivityWindow?.takeIf { it !== window }?.decorView?.background
         val previousHostStatusBarColor = hostActivityWindow?.takeIf { it !== window }?.statusBarColor
         val previousHostNavigationBarColor = hostActivityWindow?.takeIf { it !== window }?.navigationBarColor
         val previousHostLightStatusBars = hostController?.isAppearanceLightStatusBars
@@ -401,6 +402,9 @@ fun FynxCameraCapturePanel(
             controller?.isAppearanceLightNavigationBars = false
         }
         if (hostActivityWindow != null && hostActivityWindow !== window) {
+            // Android 15 makes the status bar transparent for edge-to-edge apps and can ignore
+            // statusBarColor. The decor background is the actual surface visible behind it.
+            hostActivityWindow.decorView.background = ColorDrawable(cameraBackdrop)
             hostActivityWindow.statusBarColor = cameraBackdrop
             hostActivityWindow.navigationBarColor = cameraBackdrop
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
@@ -427,6 +431,7 @@ fun FynxCameraCapturePanel(
                 }
             }
             if (hostActivityWindow != null && hostActivityWindow !== window) {
+                hostActivityWindow.decorView.background = previousHostDecorBackground
                 previousHostStatusBarColor?.let { hostActivityWindow.statusBarColor = it }
                 previousHostNavigationBarColor?.let { hostActivityWindow.navigationBarColor = it }
                 hostController?.isAppearanceLightStatusBars = previousHostLightStatusBars ?: false
