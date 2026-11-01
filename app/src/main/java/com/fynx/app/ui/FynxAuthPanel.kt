@@ -31,6 +31,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var username by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val localDebugLoginAvailable = localDebugAccountForLogin(context, username) != null
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -129,6 +130,9 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             FynxAuthField(phone, { phone = it.filter { c -> c.isDigit() || c == '+' } }, "Phone number", keyboardType = KeyboardType.Phone)
                             Spacer(Modifier.height(10.dp))
                             FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                            if (localDebugLoginAvailable) {
+                                Text("Offline preview only. It does not connect to FYNX services or load live account data. Use your password to sign in to your real account.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
+                            }
                             Spacer(Modifier.height(10.dp))
                             FynxAuthField(confirmPassword, { confirmPassword = it }, "Confirm password", keyboardType = KeyboardType.Password, password = true)
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -178,6 +182,20 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
+                            if (localDebugLoginAvailable) {
+                                TextButton(
+                                    onClick = {
+                                        val previewUsername = localDebugAccountForLogin(context, username)
+                                        if (previewUsername != null) {
+                                            FynxAuthStore.saveDebugOfflinePreview(context, previewUsername)
+                                            error = null
+                                            onAuthenticated(previewUsername)
+                                        }
+                                    },
+                                    enabled = !busy,
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .82f))
+                                ) { Text("Preview offline (debug only)") }
+                            }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
                         }
                     }
@@ -218,4 +236,17 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
             cursorColor = Color(0xFF65B6FF)
         )
     )
+}
+
+/** Explicit local UI preview; never used by the normal Sign In action. */
+private fun localDebugAccountForLogin(context: android.content.Context, requestedUsername: String): String? {
+    val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    if (!isDebuggable || requestedUsername.isBlank()) return null
+    val normalizedUsername = requestedUsername.trim().removePrefix("@")
+    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() }
+    return when {
+        saved == null -> normalizedUsername
+        saved.equals(normalizedUsername, ignoreCase = true) -> saved
+        else -> null
+    }
 }
