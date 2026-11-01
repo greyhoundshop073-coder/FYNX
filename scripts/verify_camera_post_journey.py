@@ -91,7 +91,7 @@ checks = [
      and "Who can view this post" in home
      and 'Text(if (posting) "Publishing…" else "Post",' in home),
     ("New post composer reserves navigation safe area at the root and keeps Drafts/Post above it",
-     "Column(Modifier.fillMaxSize().statusBarsPadding())" in home
+     "Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = 64.dp))" in home
      and ".background(MaterialTheme.colorScheme.surface)\n                            .imePadding()\n                            // Keep both button hit targets clear of Android gesture navigation.\n                            .padding(bottom = 32.dp)" in home
      and "def verify_post_details_footer_safe_area(" in runtime
      and "post details first viewport" in runtime

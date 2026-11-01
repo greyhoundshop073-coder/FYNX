@@ -639,7 +639,7 @@ fun FynxHomeSocialHubPanel(
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 // Dialog windows draw edge-to-edge on API 35; reserve a visible footer gap even when
                 // the platform reports a zero navigation inset for the dialog decor.
-                Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = 64.dp)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting) { Icon(Icons.Default.ArrowBack, "Back") }
                         Text("New post", style = MaterialTheme.typography.titleLarge)
