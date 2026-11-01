@@ -30,6 +30,11 @@ checks = [
       and '"Cancel timer"' in camera
       and "for (remaining in seconds downTo 1)" in camera
       and "LaunchedEffect(timerCountingDown)" not in camera),
+    ("Video editor keeps a manual caption field available when on-device speech is unavailable",
+     'label = { Text("Video captions") }' in camera
+     and 'placeholder = { Text("Type captions for your video") }' in camera
+     and "Type captions here, or generate them with a compatible on-device speech model." in camera
+     and "Caption timing is approximate. Review the text before sending." in camera),
     ("On-device captions transcode supported device audio formats to PCM16 WAV before speech recognition",
      'fynx_caption_audio_" + System.currentTimeMillis() + ".wav"' in video_effects
      and "MediaCodec.createDecoderByType(mime)" in video_effects
