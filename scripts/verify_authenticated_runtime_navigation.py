@@ -1607,7 +1607,7 @@ def capture_wallet_from_features(prefix:str):
             (ROOT/"authenticated-wallet-add-money.xml").write_text(add_money_xml+chr(10),encoding="utf-8")
             transfer_xml = tap_control(
                 add_money_xml, ["Dedicated bank transfer"], "wallet-bank-transfer",
-                ["Account number not assigned yet"]
+                ["Your dedicated FYNX funding account", "Dedicated account not ready"]
             )
             if transfer_xml:
                 (ROOT/"authenticated-wallet-bank-transfer.xml").write_text(transfer_xml+chr(10),encoding="utf-8")
@@ -1616,18 +1616,40 @@ def capture_wallet_from_features(prefix:str):
                     ["Dedicated bank transfer"]
                 )
                 if add_money_return:
-                    home_after_add = tap_control(
-                        add_money_return, ["Back to Wallet"], "wallet-add-back-home",
-                        ["Balance details", "Understand your money"]
+                    card_xml = tap_control(
+                        add_money_return, ["Debit card"], "wallet-card-funding",
+                        ["Debit card funding"]
                     )
-                    if home_after_add:
-                        withdraw_xml = tap_control(
-                            home_after_add, ["Withdraw"], "wallet-withdraw",
-                            ["Withdraw Money", "AVAILABLE BALANCE"]
+                    if card_xml:
+                        (ROOT/"authenticated-wallet-card.xml").write_text(card_xml+chr(10),encoding="utf-8")
+                        add_money_after_card = tap_control(
+                            card_xml, ["Back to Wallet"], "wallet-card-back",
+                            ["Dedicated bank transfer"]
                         )
-                        if withdraw_xml:
-                            (ROOT/"authenticated-wallet-withdraw.xml").write_text(withdraw_xml+chr(10),encoding="utf-8")
-                            action_screens_captured = True
+                        if add_money_after_card:
+                            ussd_xml = tap_control(
+                                add_money_after_card, ["USSD and other methods"], "wallet-ussd-funding",
+                                ["USSD funding"]
+                            )
+                            if ussd_xml:
+                                (ROOT/"authenticated-wallet-ussd.xml").write_text(ussd_xml+chr(10),encoding="utf-8")
+                                add_money_after_ussd = tap_control(
+                                    ussd_xml, ["Back to Wallet"], "wallet-ussd-back",
+                                    ["Dedicated bank transfer"]
+                                )
+                                if add_money_after_ussd:
+                                    home_after_add = tap_control(
+                                        add_money_after_ussd, ["Back to Wallet"], "wallet-add-back-home",
+                                        ["Balance details", "Understand your money"]
+                                    )
+                                    if home_after_add:
+                                        withdraw_xml = tap_control(
+                                            home_after_add, ["Withdraw"], "wallet-withdraw",
+                                            ["Withdraw Money", "AVAILABLE BALANCE"]
+                                        )
+                                        if withdraw_xml:
+                                            (ROOT/"authenticated-wallet-withdraw.xml").write_text(withdraw_xml+chr(10),encoding="utf-8")
+                                            action_screens_captured = True
 
     # The runtime runner starts a separate Status creator check immediately after
     # this function. Restore Home on both pass and fail so Wallet/keyboard state
