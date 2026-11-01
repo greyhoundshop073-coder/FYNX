@@ -654,7 +654,7 @@ fun FynxBuyerWalletPanel() {
 }
 
 private fun fynxWalletCurrencyMoney(amount: Double, currency: String): String {
-    val symbol = if (currency.equals("USD", ignoreCase = true)) "$" else "₦"
+    val symbol = if (currency.equals("USD", ignoreCase = true)) "\\$" else "₦"
     return symbol + String.format(Locale.US, "%,.2f", amount)
 }
 
