@@ -281,7 +281,8 @@ private fun WalletAmountStatus(amount: String, availableBalance: Double?, isWith
     }
     val invalid = amount.isNotBlank() && (
         parsed == null || parsed <= java.math.BigDecimal.ZERO ||
-            (availableBalance != null && parsed.toDouble() > availableBalance)
+            (availableBalance != null && parsed.toDouble() > availableBalance) ||
+            (isWithdrawal && availableBalance == null && parsed > java.math.BigDecimal.ZERO)
     )
     Text(
         message,
