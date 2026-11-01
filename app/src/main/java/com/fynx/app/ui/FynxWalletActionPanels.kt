@@ -24,6 +24,10 @@ import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +39,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import java.util.UUID
 import java.util.Locale
 
 private fun walletActionMoney(amount: Double?): String =
@@ -62,6 +68,7 @@ internal fun FynxWalletActionPanel(
     amount: String,
     onAmountChange: (String) -> Unit,
     availableBalance: Double?,
+    canWithdraw: Boolean,
     onBack: () -> Unit,
     onNavigate: (String) -> Unit
 ) {
@@ -149,77 +156,274 @@ internal fun FynxWalletActionPanel(
             }
             "WITHDRAW" -> {
                 item {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("AVAILABLE BALANCE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.8.sp)
-                            Text(walletActionMoney(availableBalance), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            Text("Only cleared funds can be withdrawn.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                item { WalletActionAmountField(amount, onAmountChange, "Amount to withdraw") }
-                item { WalletAmountStatus(amount = amount, availableBalance = availableBalance, isWithdrawal = true) }
-                item {
-                    WalletReadOnlyBankField(
-                        label = "Select bank",
-                        placeholder = "Available after secure provider connection"
+                    FynxWalletWithdrawalPanel(
+                        amount = amount,
+                        onAmountChange = onAmountChange,
+                        availableBalance = availableBalance,
+                        canWithdraw = canWithdraw
                     )
-                }
-                item {
-                    WalletReadOnlyBankField(
-                        label = "Account number",
-                        placeholder = "Enter your 10-digit account number when enabled"
-                    )
-                }
-                item {
-                    WalletReadOnlyBankField(
-                        label = "Verified account name",
-                        placeholder = "Automatically confirmed by the payment provider"
-                    )
-                }
-                item {
-                    WalletActionNotice(
-                        title = "Fees and final amount",
-                        message = "The payment provider must quote the exact withdrawal fee before you approve a payout. FYNX will show the amount, fee and total deduction together; no estimated fee is used on this screen."
-                    )
-                }
-                item {
-                    WalletStepCard(
-                        title = "Your withdrawal destination",
-                        steps = listOf(
-                            "Choose a supported Nigerian bank.",
-                            "Enter your account number.",
-                            "FYNX verifies the account name with the provider.",
-                            "Review the exact fee and total deduction before confirming."
-                        )
-                    )
-                }
-                item {
-                    WalletActionNotice(
-                        title = "Bank payouts are not connected yet",
-                        message = "Your bank details will only be collected through a secure, connected payout flow. FYNX will not save or submit bank details on this preparation screen. No withdrawal has been requested."
-                    )
-                }
-                item {
-                    Button(
-                        onClick = {},
-                        enabled = false,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant, disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ) {
-                        Text("Withdrawals not available yet", fontWeight = FontWeight.SemiBold)
-                    }
                 }
             }
             else -> item { WalletActionNotice("Wallet option unavailable", "Return to your Wallet and choose an available option.") }
         }
         item { Spacer(Modifier.size(10.dp)) }
+    }
+}
+
+
+@Composable
+private fun FynxWalletWithdrawalPanel(
+    amount: String,
+    onAmountChange: (String) -> Unit,
+    availableBalance: Double?,
+    canWithdraw: Boolean
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var banks by remember { mutableStateOf<List<FynxWalletPayoutBank>>(emptyList()) }
+    var selectedBank by remember { mutableStateOf<FynxWalletPayoutBank?>(null) }
+    var bankMenuExpanded by remember { mutableStateOf(false) }
+    var accountNumber by remember { mutableStateOf("") }
+    var verifiedAccountName by remember { mutableStateOf<String?>(null) }
+    var banksLoading by remember { mutableStateOf(false) }
+    var verifying by remember { mutableStateOf(false) }
+    var submitting by remember { mutableStateOf(false) }
+    var showConfirmation by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var result by remember { mutableStateOf<FynxWalletWithdrawalResult?>(null) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+    val idempotencyKey = remember { UUID.randomUUID().toString().replace("-", "") }
+
+    LaunchedEffect(canWithdraw) {
+        if (canWithdraw) {
+            banksLoading = true
+            error = null
+            FynxBuyerWalletClient.loadPayoutBanks(context)
+                .onSuccess { banks = it }
+                .onFailure {
+                    banks = emptyList()
+                    error = "Supported banks could not be loaded. Refresh the page and try again."
+                }
+            banksLoading = false
+        }
+    }
+
+    val parsedAmount = amount.toBigDecimalOrNull()
+    val validAmount = parsedAmount != null && parsedAmount > java.math.BigDecimal.ZERO &&
+        availableBalance != null && parsedAmount.toDouble() <= availableBalance
+    val canVerify = !verifying && selectedBank != null && accountNumber.matches(Regex("^\\d{10}$"))
+    val canSubmit = canWithdraw && validAmount && selectedBank != null &&
+        accountNumber.matches(Regex("^\\d{10}$")) && !verifiedAccountName.isNullOrBlank() &&
+        !submitting && result == null
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("AVAILABLE BALANCE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.8.sp)
+                Text(walletActionMoney(availableBalance), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Only cleared funds can be withdrawn. Reserved and pending funds are excluded.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        if (!canWithdraw) {
+            WalletActionNotice(
+                title = "Bank withdrawals are not enabled yet",
+                message = "This screen will open after FYNX completes provider go-live, payout approval, custody and compliance checks, and confirms secure transfer settings. No bank details are submitted and no withdrawal is requested while this gate is closed."
+            )
+        } else {
+            Text("Choose your bank", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            if (banksLoading) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text("Loading supported Nigerian banks…", style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                androidx.compose.foundation.layout.Box {
+                    OutlinedButton(
+                        onClick = { bankMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        enabled = banks.isNotEmpty()
+                    ) {
+                        Text(selectedBank?.name ?: "Select bank", modifier = Modifier.weight(1f))
+                        Text("⌄")
+                    }
+                    DropdownMenu(
+                        expanded = bankMenuExpanded,
+                        onDismissRequest = { bankMenuExpanded = false }
+                    ) {
+                        banks.forEach { bank ->
+                            DropdownMenuItem(
+                                text = { Text(bank.name) },
+                                onClick = {
+                                    selectedBank = bank
+                                    bankMenuExpanded = false
+                                    verifiedAccountName = null
+                                }
+                            )
+                        }
+                    }
+                }
+                if (banks.isEmpty() && error == null) {
+                    Text("No bank list is available from the provider.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            OutlinedTextField(
+                value = accountNumber,
+                onValueChange = {
+                    accountNumber = it.filter(Char::isDigit).take(10)
+                    verifiedAccountName = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Account number") },
+                placeholder = { Text("Enter your 10-digit account number") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            OutlinedButton(
+                onClick = {
+                    verifying = true
+                    error = null
+                    scope.launch {
+                        FynxBuyerWalletClient.verifyPayoutAccount(
+                            context,
+                            selectedBank?.code.orEmpty(),
+                            accountNumber
+                        ).onSuccess { verifiedAccountName = it }
+                            .onFailure {
+                                verifiedAccountName = null
+                                error = it.message ?: "Bank account could not be verified."
+                            }
+                        verifying = false
+                    }
+                },
+                enabled = canVerify,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                if (verifying) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(8.dp))
+                }
+                Text(if (verifying) "Verifying account…" else "Verify bank account")
+            }
+            verifiedAccountName?.let { verified ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = FynxDesign.ClassicGreen.copy(alpha = 0.09f),
+                    border = BorderStroke(1.dp, FynxDesign.ClassicGreen.copy(alpha = 0.35f))
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Verified account name", color = FynxDesign.ClassicGreen, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text(verified, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text("Account ending in " + accountNumber.takeLast(4), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            WalletActionAmountField(amount, onAmountChange, "Amount to withdraw")
+            WalletAmountStatus(amount = amount, availableBalance = availableBalance, isWithdrawal = true)
+            WalletActionNotice(
+                title = "Withdrawal fees and confirmation",
+                message = "The amount you enter is the amount FYNX requests the provider to transfer. Provider-side fees are not guessed or silently added to your wallet amount. FYNX confirms the provider response before changing the final payout status."
+            )
+
+            Button(
+                onClick = { showConfirmation = true },
+                enabled = canSubmit,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text("Review withdrawal", fontWeight = FontWeight.SemiBold)
+            }
+            result?.let { completed ->
+                WalletActionNotice(
+                    title = when (completed.status) {
+                        "SUCCEEDED" -> "Withdrawal completed"
+                        "FAILED" -> "Withdrawal failed"
+                        "REVERSED" -> "Withdrawal reversed"
+                        "BLOCKED" -> "Withdrawal needs review"
+                        else -> "Withdrawal processing"
+                    },
+                    message = completed.message.ifBlank {
+                        "Reference " + completed.reference + ". Bank " +
+                            completed.bankName + " •••• " + completed.accountLast4 + "."
+                    }
+                )
+            }
+        }
+        error?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        statusMessage?.let {
+            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+        if (canWithdraw) {
+            Text(
+                "Every request is linked to your signed-in account, checked against cleared NGN balance and processed through a unique reference. Unconfirmed transfers remain reserved until the provider gives FYNX a final result.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+
+    if (showConfirmation) {
+        AlertDialog(
+            onDismissRequest = { if (!submitting) showConfirmation = false },
+            title = { Text("Confirm bank withdrawal") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("Amount: ₦" + (parsedAmount?.toPlainString() ?: amount))
+                    Text("Bank: " + selectedBank?.name.orEmpty())
+                    Text("Account name: " + verifiedAccountName.orEmpty())
+                    Text("Account number: •••• " + accountNumber.takeLast(4))
+                    Text(
+                        "FYNX will reserve only this amount. The request will show as processing until Paystack confirms the bank transfer.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !submitting,
+                    onClick = {
+                        submitting = true
+                        error = null
+                        scope.launch {
+                            FynxBuyerWalletClient.requestWithdrawal(
+                                context = context,
+                                amount = parsedAmount?.toDouble() ?: 0.0,
+                                bankCode = selectedBank?.code.orEmpty(),
+                                bankName = selectedBank?.name.orEmpty(),
+                                accountNumber = accountNumber,
+                                idempotencyKey = idempotencyKey
+                            ).onSuccess {
+                                result = it
+                                statusMessage = it.reference.takeIf { ref -> ref.isNotBlank() }?.let { ref -> "Reference: " + ref }
+                                showConfirmation = false
+                                if (it.status in setOf("PENDING", "PROCESSING")) {
+                                    Toast.makeText(context, "Withdrawal request submitted", Toast.LENGTH_SHORT).show()
+                                }
+                            }.onFailure {
+                                error = it.message ?: "Withdrawal could not be submitted."
+                            }
+                            submitting = false
+                        }
+                    }
+                ) { Text(if (submitting) "Submitting…" else "Confirm withdrawal") }
+            },
+            dismissButton = {
+                TextButton(enabled = !submitting, onClick = { showConfirmation = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
