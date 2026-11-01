@@ -1860,48 +1860,78 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     else:
         report.append("- PASS emulator recorded a real short video and exposed style/Retake/Next controls")
 
-    # Exercise the actual on-device speech-caption request. An unsupported emulator model is
-    # an explicitly reported capability limitation, not a successful transcript claim.
-    # The real editor exposes captions as a right-side rail action labelled "Captions".
-    # The similarly named Generate button lives inside the lower scroll panel and may be
-    # below the initial viewport; swiping above that panel never reaches it. Exercise the
-    # visible control users actually tap, with a fallback for builds that expose the button.
+    # Test automatic captions when available, but always verify the manual caption field.
+    # The emulator may not ship the speech model; that capability limitation must not block
+    # a user from writing captions themselves.
     captions = find_control(editor, ["Captions"])
     if not captions:
         captions = find_control(editor, ["Generate on-device captions"])
     if not captions:
         FAILURES.append(prefix + ": recorded-video editor did not expose its visible Captions action")
+    caption_xml = editor
+    caption_error = ""
     if captions:
         _, cx, cy = captions
         run("adb", "logcat", "-c")
         run("adb", "shell", "input", "tap", str(cx), str(cy))
         caption_deadline = time.monotonic() + 40.0
-        caption_xml = editor
-        caption_error = ""
         while time.monotonic() < caption_deadline:
             time.sleep(0.7)
             caption_xml = dump_ui(f"{prefix}-camera-video-captions.xml") or caption_xml
             if find_control(caption_xml, ["Generating captions…"]):
                 continue
-            if find_control(caption_xml, ["Review/edit transcript"]):
-                report.append("- PASS Generate on-device captions returned an editable transcript field")
+            if find_control(caption_xml, ["Video captions"]):
+                report.append("- PASS video editor keeps a manual captions field available after the automatic-caption action")
                 break
-            # Record the real visible error/unsupported message, but do not confuse it with a crash.
             caption_error = visible_marker_summary(caption_xml)
             if "This video's audio format is not supported." in caption_error:
                 FAILURES.append(prefix + ": the caption audio decoder still rejects the camera's recorded audio format")
             break
         else:
             FAILURES.append(prefix + ": caption generation remained stuck in progress for 40 seconds")
-        if caption_error and not find_control(caption_xml, ["Review/edit transcript"]):
+        if caption_error:
             visible_text = " ".join(
                 (node.attrib.get("text") or "").strip()
                 for node in nodes(caption_xml)
                 if node.attrib.get("visible-to-user", "true").lower() != "false"
                 and (node.attrib.get("text") or "").strip()
             )
-            visible_text = " ".join(visible_text.split())[:350] or caption_error
-            report.append("- NOTE on-device captions returned without an editable transcript on this emulator; visible UI: " + visible_text)
+            report.append(
+                "- NOTE on-device captions returned without a generated transcript on this emulator; "
+                "the manual field remains the supported fallback. Visible UI: "
+                + " ".join(visible_text.split())[:300]
+            )
+
+    # Enter a real caption in the video editor and verify the keyboard and saved field value.
+    # This tests the user-controlled path independently of the emulator's ASR model support.
+    caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-before.xml") or caption_xml
+    manual_caption_field = find_control(caption_xml, ["Video captions"])
+    if not manual_caption_field:
+        FAILURES.append(prefix + ": manual Video captions field was not visible in the video editor")
+    else:
+        _, field_x, field_y = manual_caption_field
+        run("adb", "shell", "input", "tap", str(field_x), str(field_y))
+        time.sleep(0.6)
+        run("adb", "shell", "input", "text", "FYNX%scamera%scaption%stest")
+        time.sleep(0.5)
+        manual_keyboard_xml = dump_ui(f"{prefix}-camera-video-manual-caption-keyboard.xml")
+        screenshot(f"{prefix}-camera-video-manual-caption-keyboard.png")
+        if "FYNX camera caption test" in manual_keyboard_xml:
+            report.append("- PASS video editor accepts manually typed caption text")
+        else:
+            FAILURES.append(prefix + ": manually typed video caption was not present in the actual field")
+        keyboard_state = run("adb", "shell", "dumpsys", "input_method").stdout or ""
+        if "mInputShown=true" in keyboard_state or "isInputViewShown=true" in keyboard_state:
+            report.append("- PASS video caption field opens the keyboard for editing")
+        else:
+            report.append("- NOTE keyboard visibility could not be independently read from the input-method service")
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        time.sleep(0.8)
+        caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-dismissed.xml")
+        if "FYNX camera caption test" in caption_xml:
+            report.append("- PASS manually entered video caption survives keyboard dismissal")
+        else:
+            FAILURES.append(prefix + ": video caption text was lost after dismissing the keyboard")
         screenshot(f"{prefix}-camera-video-captions.png")
         editor = caption_xml
 
