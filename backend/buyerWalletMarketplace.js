@@ -116,8 +116,6 @@ export async function refundBuyerWalletMarketplaceOrder(client, {
 }
 
 export function registerBuyerWalletMarketplaceRoutes({ app }) {
-  if (!pool) return;
-
   app.post('/api/wallet/marketplace-orders/:id/pay', auth, async (req, res) => {
     const orderId = parseUuid(req.params.id);
     const idempotencyKey = typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey.trim() : '';
