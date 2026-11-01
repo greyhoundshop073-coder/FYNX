@@ -110,6 +110,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicInteger
 
 private const val FYNX_CAMERA_WINDOW_BACKGROUND_ARGB: Int = 0xFF080A10.toInt()
 
@@ -583,14 +584,14 @@ fun FynxCameraCapturePanel(
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var timerCaptureJob by remember { mutableStateOf<Job?>(null) }
     // A generation token prevents a stale countdown coroutine from capturing after Cancel.
-    var timerCaptureGeneration by remember { mutableIntStateOf(0) }
+    val timerCaptureGeneration = remember { AtomicInteger(0) }
     var showGrid by remember { mutableStateOf(false) }
     var selectedCameraTool by remember { mutableStateOf("Looks") }
     var showEditorToolOptions by remember { mutableStateOf(true) }
     var showAdjustments by remember { mutableStateOf(false) }
     fun cancelCaptureTimer() {
         // Invalidate first so even a coroutine already resuming cannot trigger capture.
-        timerCaptureGeneration += 1
+        timerCaptureGeneration.incrementAndGet()
         timerCaptureJob?.cancel()
         timerCaptureJob = null
         timerCountingDown = 0
@@ -1277,20 +1278,23 @@ fun FynxCameraCapturePanel(
         }
         if (timerCountingDown > 0) {
             Surface(
+                onClick = ::cancelCaptureTimer,
                 modifier = Modifier.align(Alignment.Center).border(
                     1.dp, Color.White.copy(alpha = 0.26f), MaterialTheme.shapes.extraLarge
                 ),
                 shape = MaterialTheme.shapes.extraLarge,
-                color = Color(0xFF25364A).copy(alpha = 0.62f)
+                color = Color(0xFF25364A).copy(alpha = 0.72f)
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                    modifier = Modifier.padding(horizontal = 36.dp, vertical = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge)
-                    TextButton(onClick = ::cancelCaptureTimer) {
-                        Text("Cancel timer", color = Color.White)
-                    }
+                    Text(
+                        "Cancel timer",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
         }
@@ -1624,12 +1628,11 @@ fun FynxCameraCapturePanel(
                         if (captureTimerSeconds > 0) {
                             if (timerCaptureJob?.isActive != true) {
                                 val seconds = captureTimerSeconds
-                                val generation = timerCaptureGeneration + 1
-                                timerCaptureGeneration = generation
+                                val generation = timerCaptureGeneration.incrementAndGet()
                                 showCaptureControls = false
                                 timerCaptureJob = scope.launch {
                                     for (remaining in seconds downTo 1) {
-                                        if (generation != timerCaptureGeneration) return@launch
+                                        if (generation != timerCaptureGeneration.get()) return@launch
                                         timerCountingDown = remaining
                                         delay(1000L)
                                     }
