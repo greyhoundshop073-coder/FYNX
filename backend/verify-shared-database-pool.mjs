@@ -1,3 +1,4 @@
+import "./verify-init-database-query.mjs";
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
