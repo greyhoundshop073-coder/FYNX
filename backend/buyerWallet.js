@@ -368,6 +368,16 @@ async function ensureBuyerWalletSchema() {
 }
 
 
+function walletWithdrawalLimits() {
+  const maximum = Number(process.env.FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT || '');
+  const daily = Number(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT || '');
+  const count = Number.parseInt(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT || '', 10);
+  if (!Number.isFinite(maximum) || maximum <= 0 ||
+      !Number.isFinite(daily) || daily <= 0 ||
+      !Number.isInteger(count) || count <= 0 || daily < maximum) return null;
+  return { maximumPerTransfer: maximum, dailyAmountLimit: daily, dailyCountLimit: count };
+}
+
 function walletProviderApproved(action) {
   const common = process.env.FYNX_WALLET_PROVIDER_APPROVED === 'true' &&
     process.env.FYNX_WALLET_CUSTODY_APPROVED === 'true' &&
@@ -378,7 +388,8 @@ function walletProviderApproved(action) {
     Boolean(process.env.FYNX_PAYSTACK_WALLET_BANK) && Boolean(walletEncryptionKey());
   if (action === 'WITHDRAWAL') return process.env.FYNX_WALLET_WITHDRAWALS_ENABLED === 'true' &&
     process.env.FYNX_WALLET_PAYOUTS_APPROVED === 'true' &&
-    process.env.FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true';
+    process.env.FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true' &&
+    walletWithdrawalLimits() !== null;
   return false;
 }
 
@@ -896,7 +907,8 @@ export function registerBuyerWalletRoutes({ app }) {
       return res.json({
         hasWithdrawalPin: Boolean(wallet?.withdrawal_pin_hash),
         isLocked: locked,
-        lockedUntil: locked ? lockedUntil : null
+        lockedUntil: locked ? lockedUntil : null,
+        limits: walletWithdrawalLimits()
       });
     } catch (error) {
       console.error('buyer wallet security status', error);
@@ -989,6 +1001,11 @@ export function registerBuyerWalletRoutes({ app }) {
         !/^[0-9]{3,10}$/.test(bankCode) || !/^[0-9]{10}$/.test(accountNumber) ||
         !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey) || !/^\d{6}$/.test(pin)) {
       return res.status(400).json({ error: 'valid withdrawal amount, bank, account number, six-digit wallet PIN and idempotency key are required' });
+    }
+    const limits = walletWithdrawalLimits();
+    if (!limits) return res.status(503).json({ error: 'wallet withdrawal limits are not configured for this provider environment yet' });
+    if (amountValue > limits.maximumPerTransfer) {
+      return res.status(400).json({ error: 'withdrawal amount is above the current per-transfer limit' });
     }
     const amount = (amountMinor / 100).toFixed(2);
     try {
@@ -1083,6 +1100,21 @@ export function registerBuyerWalletRoutes({ app }) {
         if (Number(balance?.available || 0) < Number(amount)) {
           await client.query('ROLLBACK');
           return res.status(409).json({ error: 'withdrawal amount is above your cleared available balance' });
+        }
+        const dailyUsage = (await client.query(`
+          SELECT COUNT(*)::int AS request_count,
+                 COALESCE(SUM(amount),0)::numeric(18,2) AS requested_amount
+            FROM buyer_wallet_provider_operations
+           WHERE user_id=$1
+             AND created_at >= date_trunc('day',NOW())
+        `, [req.user.sub])).rows[0];
+        if (Number(dailyUsage?.request_count || 0) >= limits.dailyCountLimit) {
+          await client.query('ROLLBACK');
+          return res.status(429).json({ error: 'daily wallet withdrawal request limit has been reached' });
+        }
+        if (Number(dailyUsage?.requested_amount || 0) + Number(amount) > limits.dailyAmountLimit) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'withdrawal amount would exceed your remaining daily limit' });
         }
         const transactionId = crypto.randomUUID();
         const reference = 'fw_' + crypto.randomUUID().replace(/-/g, '');
