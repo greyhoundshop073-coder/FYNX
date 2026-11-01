@@ -214,7 +214,8 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
     }
     if (eventName !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
     const transaction = eventData, reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
-    if (String(transaction.authorization?.channel || '').toLowerCase() === 'dedicated_nuban') {
+    const walletFundingIntentId = String(transaction.metadata?.fynxWalletFundingIntentId || transaction.metadata?.walletFundingIntentId || '');
+    if (String(transaction.authorization?.channel || '').toLowerCase() === 'dedicated_nuban' || walletFundingIntentId) {
       try {
         const outcome = await handleBuyerWalletPaystackEvent('charge.success', transaction);
         if (outcome.handled) {
