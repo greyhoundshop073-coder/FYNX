@@ -411,8 +411,8 @@ function walletProviderApproved(action) {
   if (!common) return false;
   if (action === 'DEPOSIT') return process.env.FYNX_WALLET_DEPOSITS_ENABLED === 'true' &&
     Boolean(process.env.FYNX_PAYSTACK_WALLET_BANK) && Boolean(walletEncryptionKey());
-  if (action === 'CARD_FUNDING') return process.env.FYNX_WALLET_CARD_FUNDING_ENABLED === 'true';
-  if (action === 'USSD_FUNDING') return process.env.FYNX_WALLET_USSD_FUNDING_ENABLED === 'true';
+  if (action === 'CARD_FUNDING') return process.env.FYNX_WALLET_CARD_FUNDING_ENABLED === 'true' && walletFundingLimits() !== null;
+  if (action === 'USSD_FUNDING') return process.env.FYNX_WALLET_USSD_FUNDING_ENABLED === 'true' && walletFundingLimits() !== null;
   if (action === 'SPENDING') return process.env.FYNX_WALLET_SPENDING_ENABLED === 'true';
   if (action === 'WITHDRAWAL') return process.env.FYNX_WALLET_WITHDRAWALS_ENABLED === 'true' &&
     process.env.FYNX_WALLET_PAYOUTS_APPROVED === 'true' &&
