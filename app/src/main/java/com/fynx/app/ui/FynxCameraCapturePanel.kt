@@ -583,6 +583,7 @@ fun FynxCameraCapturePanel(
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
     var selectedCameraTool by remember { mutableStateOf("Looks") }
+    var showEditorToolOptions by remember { mutableStateOf(true) }
     var showAdjustments by remember { mutableStateOf(false) }
     val galleryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -721,7 +722,7 @@ fun FynxCameraCapturePanel(
     }
     DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
-    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; videoStyle = CameraVideoStyle.NATURAL; videoCaptionText = ""; recordingNotice = null; activeRecordingFile = null; selectedCameraTool = "Looks"; applyingVideoEffects = false; generatingCaptions = false; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
+    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; videoStyle = CameraVideoStyle.NATURAL; videoCaptionText = ""; recordingNotice = null; activeRecordingFile = null; selectedCameraTool = "Looks"; showEditorToolOptions = true; applyingVideoEffects = false; generatingCaptions = false; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
     fun rotatePhoto() {
         val currentUri = pendingUri ?: return
         if (pendingType != "image") return
@@ -931,10 +932,22 @@ fun FynxCameraCapturePanel(
                         .padding(5.dp),
                     verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
-                    CameraEditorRailAction("Looks", Icons.Default.Tune, selectedCameraTool == "Looks") { selectedCameraTool = "Looks" }
-                    CameraEditorRailAction("Face FX", Icons.Default.Face, selectedCameraTool == "Face FX") { selectedCameraTool = "Face FX" }
-                    CameraEditorRailAction("Background", Icons.Default.Layers, selectedCameraTool == "Background") { selectedCameraTool = "Background" }
-                    CameraEditorRailAction("AI Studio", Icons.Default.AutoAwesome, selectedCameraTool == "AI Studio") { selectedCameraTool = "AI Studio" }
+                    CameraEditorRailAction("Looks", Icons.Default.Tune, showEditorToolOptions && selectedCameraTool == "Looks") {
+                        if (selectedCameraTool == "Looks") showEditorToolOptions = !showEditorToolOptions
+                        else { selectedCameraTool = "Looks"; showEditorToolOptions = true }
+                    }
+                    CameraEditorRailAction("Face FX", Icons.Default.Face, showEditorToolOptions && selectedCameraTool == "Face FX") {
+                        if (selectedCameraTool == "Face FX") showEditorToolOptions = !showEditorToolOptions
+                        else { selectedCameraTool = "Face FX"; showEditorToolOptions = true }
+                    }
+                    CameraEditorRailAction("Background", Icons.Default.Layers, showEditorToolOptions && selectedCameraTool == "Background") {
+                        if (selectedCameraTool == "Background") showEditorToolOptions = !showEditorToolOptions
+                        else { selectedCameraTool = "Background"; showEditorToolOptions = true }
+                    }
+                    CameraEditorRailAction("AI Studio", Icons.Default.AutoAwesome, showEditorToolOptions && selectedCameraTool == "AI Studio") {
+                        if (selectedCameraTool == "AI Studio") showEditorToolOptions = !showEditorToolOptions
+                        else { selectedCameraTool = "AI Studio"; showEditorToolOptions = true }
+                    }
                     CameraEditorRailAction("Rotate", Icons.Default.RotateRight, selected = false, enabled = !enhancing && !applyingFilter) { rotatePhoto() }
                 }
             } else {
@@ -964,6 +977,7 @@ fun FynxCameraCapturePanel(
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 if (previewType == "image") {
                     Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (showEditorToolOptions) {
                     Text(
                         selectedCameraTool,
                         style = MaterialTheme.typography.labelLarge,
@@ -1062,6 +1076,7 @@ fun FynxCameraCapturePanel(
                                 }
                             }
                         }
+                    }
                     }
                     if (applyingFilter) {
                         Text("Applying selected effect on this device…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)

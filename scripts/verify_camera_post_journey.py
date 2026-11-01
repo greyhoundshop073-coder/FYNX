@@ -14,6 +14,15 @@ app_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(e
 draft_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt").read_text(encoding="utf-8")
 
 checks = [
+    ("Camera photo editor tool options toggle closed on a second tap and reopen or switch cleanly",
+     'var showEditorToolOptions by remember { mutableStateOf(true) }' in camera
+     and all(f'if (selectedCameraTool == "{tool}") showEditorToolOptions = !showEditorToolOptions' in camera for tool in ["Looks", "Face FX", "Background", "AI Studio"])
+     and all(f'selectedCameraTool = "{tool}"; showEditorToolOptions = true' in camera for tool in ["Looks", "Face FX", "Background", "AI Studio"])
+     and "if (showEditorToolOptions) {" in camera
+     and "showEditorToolOptions && selectedCameraTool == \"Looks\"" in camera
+     and "showEditorToolOptions && selectedCameraTool == \"Face FX\"" in camera
+     and "showEditorToolOptions && selectedCameraTool == \"Background\"" in camera
+     and "showEditorToolOptions && selectedCameraTool == \"AI Studio\"" in camera),
     ("Captured photo preview fills the portrait editor from the top instead of vertically letterboxing the image",
      "scaleType=android.widget.ImageView.ScaleType.CENTER_CROP" in camera
      and "scaleType=android.widget.ImageView.ScaleType.FIT_CENTER" not in camera),
