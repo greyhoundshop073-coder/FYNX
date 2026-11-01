@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
@@ -186,6 +187,13 @@ private fun FynxWalletWithdrawalPanel(
     var accountNumber by remember { mutableStateOf("") }
     var verifiedAccountName by remember { mutableStateOf<String?>(null) }
     var banksLoading by remember { mutableStateOf(false) }
+    var security by remember { mutableStateOf<FynxWalletSecurityStatus?>(null) }
+    var securityLoading by remember { mutableStateOf(false) }
+    var settingPin by remember { mutableStateOf(false) }
+    var currentPassword by remember { mutableStateOf("") }
+    var newPin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var withdrawalPin by remember { mutableStateOf("") }
     var verifying by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var showConfirmation by remember { mutableStateOf(false) }
@@ -196,14 +204,22 @@ private fun FynxWalletWithdrawalPanel(
 
     LaunchedEffect(canWithdraw) {
         if (canWithdraw) {
+            securityLoading = true
             banksLoading = true
             error = null
+            FynxBuyerWalletClient.loadWalletSecurity(context)
+                .onSuccess { security = it }
+                .onFailure {
+                    security = null
+                    error = "Wallet security status could not be loaded. Refresh the page and try again."
+                }
             FynxBuyerWalletClient.loadPayoutBanks(context)
                 .onSuccess { banks = it }
                 .onFailure {
                     banks = emptyList()
                     error = "Supported banks could not be loaded. Refresh the page and try again."
                 }
+            securityLoading = false
             banksLoading = false
         }
     }
@@ -212,7 +228,9 @@ private fun FynxWalletWithdrawalPanel(
     val validAmount = parsedAmount != null && parsedAmount > java.math.BigDecimal.ZERO &&
         availableBalance != null && parsedAmount.toDouble() <= availableBalance
     val canVerify = !verifying && selectedBank != null && accountNumber.matches(Regex("^\\d{10}$"))
-    val canSubmit = canWithdraw && validAmount && selectedBank != null &&
+    val hasUsablePin = security?.hasWithdrawalPin == true && security?.isLocked != true &&
+        withdrawalPin.matches(Regex("^\\d{6}$"))
+    val canSubmit = canWithdraw && hasUsablePin && validAmount && selectedBank != null &&
         accountNumber.matches(Regex("^\\d{10}$")) && !verifiedAccountName.isNullOrBlank() &&
         !submitting && result == null
 
@@ -236,6 +254,100 @@ private fun FynxWalletWithdrawalPanel(
                 message = "This screen will open after FYNX completes provider go-live, payout approval, custody and compliance checks, and confirms secure transfer settings. No bank details are submitted and no withdrawal is requested while this gate is closed."
             )
         } else {
+            if (securityLoading) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text("Checking withdrawal security…", style = MaterialTheme.typography.bodySmall)
+                }
+            } else if (security?.isLocked == true) {
+                WalletActionNotice(
+                    title = "Withdrawals temporarily locked",
+                    message = "FYNX has locked wallet withdrawals after repeated incorrect PIN attempts. Try again after the lock period ends."
+                )
+            } else if (security?.hasWithdrawalPin != true) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Text("Set your wallet withdrawal PIN", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "This six-digit PIN is separate from your login. Confirm your current FYNX password before saving it.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = currentPassword,
+                            onValueChange = { currentPassword = it.take(128) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Current FYNX password") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                        )
+                        OutlinedTextField(
+                            value = newPin,
+                            onValueChange = { newPin = it.filter(Char::isDigit).take(6) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Create six-digit wallet PIN") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                        )
+                        OutlinedTextField(
+                            value = confirmPin,
+                            onValueChange = { confirmPin = it.filter(Char::isDigit).take(6) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Confirm wallet PIN") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                        )
+                        Button(
+                            onClick = {
+                                settingPin = true
+                                error = null
+                                scope.launch {
+                                    FynxBuyerWalletClient.setWithdrawalPin(context, currentPassword, newPin, confirmPin)
+                                        .onSuccess {
+                                            security = it
+                                            currentPassword = ""
+                                            newPin = ""
+                                            confirmPin = ""
+                                            Toast.makeText(context, "Wallet withdrawal PIN saved", Toast.LENGTH_SHORT).show()
+                                        }
+                                        .onFailure { error = it.message ?: "Wallet PIN could not be saved." }
+                                    settingPin = false
+                                }
+                            },
+                            enabled = !settingPin && currentPassword.length >= 8 &&
+                                newPin.matches(Regex("^\\d{6}$")) && newPin == confirmPin,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text(if (settingPin) "Saving PIN…" else "Save wallet PIN")
+                        }
+                    }
+                }
+            } else {
+                OutlinedTextField(
+                    value = withdrawalPin,
+                    onValueChange = { withdrawalPin = it.filter(Char::isDigit).take(6) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Wallet withdrawal PIN") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                )
+                Text(
+                    "Your PIN is checked by FYNX before cleared funds can be reserved for a bank transfer.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             Text("Choose your bank", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             if (banksLoading) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -404,9 +516,11 @@ private fun FynxWalletWithdrawalPanel(
                                 bankCode = selectedBank?.code.orEmpty(),
                                 bankName = selectedBank?.name.orEmpty(),
                                 accountNumber = accountNumber,
-                                idempotencyKey = idempotencyKey
+                                idempotencyKey = idempotencyKey,
+                                pin = withdrawalPin
                             ).onSuccess {
                                 result = it
+                                withdrawalPin = ""
                                 statusMessage = it.reference.takeIf { ref -> ref.isNotBlank() }?.let { ref -> "Reference: " + ref }
                                 showConfirmation = false
                                 if (it.status in setOf("PENDING", "PROCESSING")) {
@@ -414,6 +528,8 @@ private fun FynxWalletWithdrawalPanel(
                                 }
                             }.onFailure {
                                 error = it.message ?: "Withdrawal could not be submitted."
+                                FynxBuyerWalletClient.loadWalletSecurity(context).onSuccess { security = it }
+                                withdrawalPin = ""
                             }
                             submitting = false
                         }
