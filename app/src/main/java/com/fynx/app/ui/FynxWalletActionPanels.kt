@@ -259,6 +259,11 @@ private fun FynxWalletWithdrawalPanel(
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Text("Checking withdrawal security…", style = MaterialTheme.typography.bodySmall)
                 }
+            } else if (security == null) {
+                WalletActionNotice(
+                    title = "Wallet security could not be verified",
+                    message = "FYNX cannot safely continue until it can confirm your wallet PIN status. Go back to Wallet and retry the connection."
+                )
             } else if (security?.isLocked == true) {
                 WalletActionNotice(
                     title = "Withdrawals temporarily locked",
@@ -332,6 +337,16 @@ private fun FynxWalletWithdrawalPanel(
                     }
                 }
             } else {
+                val policy = security
+                if (policy?.maximumPerTransfer != null && policy.dailyAmountLimit != null) {
+                    Text(
+                        "Withdrawal limit: up to " + walletActionMoney(policy.maximumPerTransfer) +
+                            " per transfer · " + walletActionMoney(policy.dailyAmountLimit) +
+                            " per day · " + (policy.dailyCountLimit ?: "—") + " requests per day.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 OutlinedTextField(
                     value = withdrawalPin,
                     onValueChange = { withdrawalPin = it.filter(Char::isDigit).take(6) },
