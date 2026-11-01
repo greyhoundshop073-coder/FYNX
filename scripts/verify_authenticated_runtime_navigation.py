@@ -1609,14 +1609,21 @@ def capture_wallet_from_features(prefix:str):
         else:
             FAILURES.append("Wallet Recent activity section was not reachable by normal scrolling.")
 
-        # Return to the Wallet top before opening another action.
-        for attempt in range(5):
-            if find_control(wallet_lower_xml,["Balance details"]):
+        # Return to the Wallet top before opening Add Money; Balance details may still be below the quick actions.
+        wallet_top_xml=""
+        for attempt in range(6):
+            if find_control(wallet_lower_xml,["Add money"]):
+                wallet_top_xml=wallet_lower_xml
                 break
             run("adb","shell","input","swipe","540","700","540","1800","500")
             time.sleep(.4)
             wallet_lower_xml=dump_ui(prefix+"-wallet-return-top-"+str(attempt)+".xml")
-        wallet_xml=wallet_lower_xml or wallet_xml
+        if not wallet_top_xml:
+            wallet_top_xml=dump_ui(prefix+"-wallet-return-top-final.xml")
+        if find_control(wallet_top_xml,["Add money"]):
+            wallet_xml=wallet_top_xml
+        else:
+            FAILURES.append("Wallet did not return to its top quick-action area after capturing Recent activity.")
     else:
         screenshot(prefix+"-wallet-destination-incomplete.png")
         (ROOT/(prefix+"-wallet-destination-incomplete.xml")).write_text(
