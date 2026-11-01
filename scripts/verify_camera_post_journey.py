@@ -25,7 +25,7 @@ checks = [
       and "val timerCaptureGeneration = remember { AtomicInteger(0) }" in camera
       and "timerCaptureJob?.cancel()" in camera
       and camera.count("timerCaptureGeneration.incrementAndGet()") >= 2
-      and "if (generation != timerCaptureGeneration.get()) return@launch" in camera
+      and camera.count("if (generation != timerCaptureGeneration.get()) return@launch") == 2
       and "onClick = ::cancelCaptureTimer" in camera
       and '"Cancel timer"' in camera
       and "for (remaining in seconds downTo 1)" in camera
