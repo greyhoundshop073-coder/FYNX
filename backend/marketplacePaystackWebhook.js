@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
+import { handleBuyerWalletPaystackEvent, reconcileBuyerWalletTransferEvent } from './buyerWallet.js';
 
 function safeEqualHex(actual, expected) {
   if (!actual || !expected) return false;
@@ -170,6 +171,18 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
     let event;
     try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).json({ error: 'invalid webhook payload' }); }
     const eventName = typeof event?.event === 'string' ? event.event.trim().toLowerCase() : '';
+    const eventData = event.data || {};
+
+    if (eventName === 'customeridentification.failed' || eventName.startsWith('dedicatedaccount.')) {
+      try {
+        const outcome = await handleBuyerWalletPaystackEvent(eventName, eventData);
+        return res.status(200).json({ received: true, ...outcome });
+      } catch (error) {
+        console.error('FYNX wallet account-assignment webhook', error);
+        return res.status(500).json({ error: 'wallet account-assignment reconciliation failed' });
+      }
+    }
+
     if (eventName.startsWith('refund.')) {
       const client = await pool.connect();
       try { await client.query('BEGIN'); const matched = await reconcileRefundEvent(client, eventName, event.data || {}); await client.query('COMMIT'); return res.status(200).json({ received: true, matched, refundEvent: eventName }); }
@@ -178,12 +191,39 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
     }
     if (eventName.startsWith('transfer.')) {
       const client = await pool.connect();
-      try { await client.query('BEGIN'); const matched = await reconcileTransferEvent(client, eventName, event.data || {}); await client.query('COMMIT'); return res.status(200).json({ received: true, matched, transferEvent: eventName }); }
-      catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace Paystack transfer webhook', error); return res.status(500).json({ error: 'transfer webhook processing failed' }); }
-      finally { client.release(); }
+      try {
+        await client.query('BEGIN');
+        const marketplaceMatched = await reconcileTransferEvent(client, eventName, eventData);
+        const walletOutcome = await reconcileBuyerWalletTransferEvent(client, eventName, eventData);
+        await client.query('COMMIT');
+        return res.status(200).json({
+          received: true,
+          matched: marketplaceMatched || Boolean(walletOutcome?.matched),
+          transferEvent: eventName,
+          wallet: walletOutcome
+        });
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch {}
+        console.error('shared FYNX Paystack transfer webhook', error);
+        return res.status(500).json({ error: 'transfer webhook processing failed' });
+      } finally {
+        client.release();
+      }
     }
     if (eventName !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
-    const transaction = event.data || {}, reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
+    const transaction = eventData, reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
+    if (String(transaction.authorization?.channel || '').toLowerCase() === 'dedicated_nuban') {
+      try {
+        const outcome = await handleBuyerWalletPaystackEvent('charge.success', transaction);
+        if (outcome.handled) {
+          const statusCode = Number(outcome.statusCode) || 200;
+          return res.status(statusCode).json({ received: true, ...outcome });
+        }
+      } catch (error) {
+        console.error('FYNX wallet funding webhook', error);
+        return res.status(500).json({ error: 'wallet funding webhook processing failed' });
+      }
+    }
     if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference)) return res.status(400).json({ error: 'invalid payment reference' });
     if (reference.startsWith('FYNX-CHECKOUT-')) {
       if (!/^FYNX-CHECKOUT-[0-9a-f-]{36}$/i.test(reference)) return res.status(400).json({ error: 'invalid checkout payment reference' });
