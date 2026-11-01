@@ -26,8 +26,7 @@ const checks = [
   ['driver evidence media is restricted to buyer or seller on the referencing order', server.includes('JOIN marketplace_delivery_evidence e') && server.includes('o.buyer_id=$2 OR o.seller_id=$2')],
   ['order timeline authorizes order participants and includes delivery evidence', shippingTimeline.includes('deliveryEvidence: deliveryEvidence.rows.map') && shippingTimeline.includes('buyer_id=$2 OR seller_id=$2')],
   ['Android supports driver assignment, acceptance and delivery evidence', socialClient.includes('marketplaceDriverAssignments') && socialClient.includes('acceptMarketplaceDriverAssignment') && socialClient.includes('recordMarketplaceDriverDelivery')],
-  ['Android admin panel can approve and revoke FYNX drivers', adminClient.includes('/api/admin/marketplace/drivers') && adminPanel.includes('Approved delivery drivers')]
-,
+  ['Android admin panel can approve and revoke FYNX drivers', adminClient.includes('/api/admin/marketplace/drivers') && adminPanel.includes('Approved delivery drivers')],
   ['delivery requires validated buyer address', completion.includes("delivery requires name, phone and address") && completion.includes('safeAddress')],
   ['delivery/pickup availability is checked from order snapshot', completion.includes('snapshot.deliveryAvailable') && completion.includes('snapshot.pickupAvailable')],
   ['shipping is seller-only', completion.includes("only the seller can ship this order")],
