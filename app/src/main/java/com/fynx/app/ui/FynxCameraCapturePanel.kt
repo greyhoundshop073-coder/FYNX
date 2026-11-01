@@ -910,29 +910,15 @@ fun FynxCameraCapturePanel(
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
             }
             if (!statusCapture && !liveProofMode) {
+                // Replace the informational preview label with the useful Add music action.
                 CameraMusicChip(
                     selectedMusic = selectedMusic,
                     onChooseMusic = onChooseMusic,
                     onClearMusic = onClearMusic,
-                    // Keep the music action in its own top-right lane, clear of the centered
-                    // Photo preview / Video preview label on narrower phone displays.
-                    modifier = Modifier.align(Alignment.TopEnd)
+                    modifier = Modifier.align(Alignment.TopCenter)
                         .statusBarsPadding()
-                        .padding(end = 12.dp, top = 62.dp)
-                        .widthIn(max = 172.dp)
-                )
-            }
-            Surface(
-                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = Color(0xFF25364A).copy(alpha = 0.42f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
-            ) {
-                Text(
-                    if (previewType == "image") "Photo preview" else "Video preview",
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelLarge
+                        .padding(top = 10.dp)
+                        .widthIn(max = 196.dp)
                 )
             }
             if (previewType == "image") {
