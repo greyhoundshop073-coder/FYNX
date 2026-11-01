@@ -32,7 +32,7 @@ checks = [
     ("single-order ID persists for ambiguous retries and remains while server order is awaiting payment",
      'marketplaceCheckoutOrderId(context, it)' in client and 'onSuccess { order ->' in client and 'val stableOrderId = intentFingerprint?.let' in client and 'val stableOrderId = UUID.randomUUID().toString()' not in client and 'clearMarketplaceCheckoutOrderId(context, it)' not in client),
     ("single-order retry ID is cleared only after an authoritative Paystack or Wallet payment succeeds",
-     'clearMarketplaceCheckoutOrderIdForOrder(context, order.id)' in panel and 'verifyMarketplacePayment(context, payment?.reference.orEmpty())' in panel and '.onSuccess { onPaid() }' in panel and 'FynxBuyerWalletClient.payMarketplaceOrder(' in panel and '}.onSuccess {' in panel and 'only after the authoritative payment-verification path reports success for this order.' in client),
+     'clearMarketplaceCheckoutOrderIdForOrder(context, order.id)' in panel and 'verifyMarketplacePayment(context, payment?.reference.orEmpty())' in panel and '.onSuccess { onPaid() }' in panel and 'FynxBuyerWalletClient.payMarketplaceOrder(' in panel and ').onSuccess {' in panel and 'only after the authoritative payment-verification path reports success for this order.' in client),
     ("stored checkout IDs are bounded and expire without storing raw delivery details",
      'MARKETPLACE_CHECKOUT_ATTEMPT_LIMIT = 50' in client and 'MARKETPLACE_CHECKOUT_ATTEMPT_MAX_AGE_MS' in client and 'preferences.all.keys.filter { it.startsWith(MARKETPLACE_CHECKOUT_ORDER_ID_PREFIX) }' in client and 'putString(idKey, created)' in client),
     ("checkout input fields and delivery/pickup controls are disabled while requests are active",
