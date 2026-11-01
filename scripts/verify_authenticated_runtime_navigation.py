@@ -135,6 +135,77 @@ def nodes(xml_text:str):
     try: return list(ET.fromstring(xml_text).iter("node"))
     except ET.ParseError: return []
 
+def verify_post_details_footer_safe_area(xml_text: str, journey: str) -> bool:
+    """Require the real Drafts/Post click targets to clear Android's bottom navigation area."""
+    if not xml_text:
+        FAILURES.append(journey + ": post details hierarchy was empty; footer safe area could not be checked")
+        return False
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        FAILURES.append(journey + ": post details hierarchy was malformed; footer safe area could not be checked")
+        return False
+
+    display = run("adb", "shell", "wm", "size")
+    size_match = re.search(r"(?:Physical|Override) size:\s*\d+x(\d+)", display.stdout or "")
+    screen_bottom = int(size_match.group(1)) if size_match else None
+    if screen_bottom is None:
+        first = next(iter(root.iter("node")), None)
+        raw = first.attrib.get("bounds", "") if first is not None else ""
+        try:
+            screen_bottom = int(raw.split("][", 1)[1].strip("[]").split(",")[1])
+        except (IndexError, ValueError):
+            FAILURES.append(journey + ": emulator display height could not be determined")
+            return False
+
+    density = run("adb", "shell", "wm", "density")
+    density_matches = re.findall(r"(?:Physical|Override) density:\s*(\d+)", density.stdout or "")
+    if not density_matches:
+        FAILURES.append(journey + ": emulator display density could not be determined for the navigation safe-area check")
+        return False
+    density_scale = int(density_matches[-1]) / 160.0
+    required_clearance = round(24.0 * density_scale)
+
+    parents = {id(child): parent for parent in root.iter("node") for child in list(parent)}
+    footer_bottoms = {}
+    for node in root.iter("node"):
+        label = (node.attrib.get("text") or node.attrib.get("content-desc") or "").strip().lower()
+        key = "drafts" if "drafts" in label else "post" if label == "post" else None
+        if key is None or key in footer_bottoms:
+            continue
+        current = node
+        while current is not None:
+            if current.attrib.get("clickable", "false").lower() == "true":
+                bounds = current.attrib.get("bounds", "")
+                try:
+                    footer_bottoms[key] = int(bounds.split("][", 1)[1].strip("[]").split(",")[1])
+                except (IndexError, ValueError):
+                    pass
+                break
+            current = parents.get(id(current))
+
+    missing = [label for label in ("drafts", "post") if label not in footer_bottoms]
+    if missing:
+        FAILURES.append(journey + ": clickable footer bounds were unavailable for " + ", ".join(missing))
+        return False
+    too_low = {
+        label: bottom for label, bottom in footer_bottoms.items()
+        if bottom > screen_bottom - required_clearance
+    }
+    if too_low:
+        positions = ", ".join(f"{label} bottom={bottom}" for label, bottom in too_low.items())
+        FAILURES.append(
+            journey + f": Drafts/Post footer overlaps the navigation safe area ({positions}; "
+            f"screen bottom={screen_bottom}, required clearance={required_clearance}px)"
+        )
+        return False
+    report.append(
+        f"- PASS {journey}: Drafts and Post click targets clear the Android bottom navigation area "
+        f"by at least 24 dp (measured {screen_bottom - max(footer_bottoms.values())} px)"
+    )
+    return True
+
+
 # Only recognized, non-sensitive UI markers are included in the public CI log.
 DIAGNOSTIC_MARKERS = (
     "Open FYNX camera", "FYNX", "Chat", "Chats", "Friends", "More", "Stories",
@@ -1206,6 +1277,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 ["New post", "Add description...", "Post"]
             )
             if draft_xml:
+                verify_post_details_footer_safe_area(draft_xml, prefix + " post details first viewport")
                 screenshot(f"{prefix}-camera-create-post-caption.png")
                 (ROOT / f"{prefix}-camera-create-post-caption.xml").write_text(
                     draft_xml + chr(10), encoding="utf-8"
@@ -1220,6 +1292,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 run("adb", "shell", "input", "swipe", "540", "1700", "540", "850", "450")
                 time.sleep(0.6)
                 details_xml = dump_ui(f"{prefix}-camera-post-details-options.xml") or draft_xml
+                verify_post_details_footer_safe_area(details_xml, prefix + " post details scrolled viewport")
                 screenshot(f"{prefix}-camera-post-details-options.png")
                 (ROOT / f"{prefix}-camera-post-details-options.xml").write_text(
                     details_xml + chr(10), encoding="utf-8"

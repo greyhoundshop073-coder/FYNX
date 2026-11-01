@@ -82,9 +82,12 @@ checks = [
      and "# Hashtags" in home and "@ Mention" in home
      and "Who can view this post" in home
      and 'Text(if (posting) "Publishing…" else "Post",' in home),
-    ("New post sticky Drafts/Post footer reserves navigation and keyboard insets separately from the status bar",
-     "Column(Modifier.fillMaxSize().statusBarsPadding())" in home
-     and ".background(MaterialTheme.colorScheme.surface)\n                            .navigationBarsPadding()\n                            .imePadding()" in home),
+    ("New post composer reserves navigation safe area at the root and keeps Drafts/Post above it",
+     "Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding())" in home
+     and ".background(MaterialTheme.colorScheme.surface)\n                            .imePadding()" in home
+     and "def verify_post_details_footer_safe_area(" in runtime
+     and "post details first viewport" in runtime
+     and "post details scrolled viewport" in runtime),
     ("Camera dialog draws its dark canvas edge-to-edge while controls apply their own safe-area insets",
      "if (showCamera || showFastCamera)" in home
      and "Surface(Modifier.fillMaxSize(), color = Color(0xFF080A10))" in home
