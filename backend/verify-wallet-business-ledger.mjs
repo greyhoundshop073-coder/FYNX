@@ -12,6 +12,10 @@ const webhook = read('./marketplacePaystackWebhook.js');
 const walletMarketplace = read('./buyerWalletMarketplace.js');
 const protectionResolution = read('./marketplaceProtectionResolution.js');
 const scalability = read('./scalability.js');
+const walletSummaryRoute = wallet.slice(
+  wallet.indexOf("app.get('/api/wallet/summary'"),
+  wallet.indexOf("app.post('/api/wallet/funding/initialize'")
+);
 
 const checks = [
   ['Marketplace fee remains a configurable five-percent default', checkout.includes("FYNX_MARKETPLACE_FEE_BPS || '500'")],
@@ -33,7 +37,7 @@ const checks = [
   ['Wallet Marketplace payment atomically checks order owner, NGN currency, Wallet PIN and available balance', walletMarketplace.includes("String(order.buyer_id) !== String(req.user.sub)") && walletMarketplace.includes("String(order.currency || '').toUpperCase() !== 'NGN'") && walletMarketplace.includes("bcrypt.compare(pin, wallet.withdrawal_pin_hash)") && walletMarketplace.includes("your cleared Wallet balance is not enough")],
   ['Wallet Marketplace payment debits available and credits order escrow before marking the order paid', walletMarketplace.includes("'AVAILABLE','DEBIT'") && walletMarketplace.includes("'MARKETPLACE_ESCROW','CREDIT'") && walletMarketplace.includes("status='PAID',payment_method='FYNX_WALLET'")],
   ['Buyer-favourable protection refunds return Wallet-funded orders to that same buyer Wallet', protectionResolution.includes("paymentMethod === 'FYNX_WALLET'") && protectionResolution.includes("refundBuyerWalletMarketplaceOrder(client") && protectionResolution.includes("refundedTo: resolution === 'BUYER'")],
-  ['Wallet order escrow is included in buyer reserved balance and cleared on successful seller settlement', wallet.includes("e.account_code IN ('AVAILABLE','RESERVED','MARKETPLACE_ESCROW','WITHDRAWAL_PENDING')") && wallet.includes('(balances.RESERVED || 0) + (balances.MARKETPLACE_ESCROW || 0)') && walletMarketplace.includes("'MARKETPLACE_ESCROW','DEBIT'") && payoutWorker.includes('settleBuyerWalletMarketplaceOrder(client, operation.order_id)')],
+  ['Wallet order escrow is included in buyer reserved balance and cleared on successful seller settlement', walletSummaryRoute.includes("e.account_code IN ('AVAILABLE','RESERVED','MARKETPLACE_ESCROW','WITHDRAWAL_PENDING')") && walletSummaryRoute.includes('(balances.RESERVED || 0) + (balances.MARKETPLACE_ESCROW || 0)') && walletMarketplace.includes("'MARKETPLACE_ESCROW','DEBIT'") && payoutWorker.includes('settleBuyerWalletMarketplaceOrder(client, operation.order_id)')],
   ['Seller payout worker and shared Paystack webhook both finalize Wallet Marketplace escrow', payoutWorker.includes("import { settleBuyerWalletMarketplaceOrder } from './buyerWalletMarketplace.js'") && webhook.includes('await settleBuyerWalletMarketplaceOrder(client, operation.order_id)')],
   ['Wallet order refunds reconcile only the original order payment and exact escrow amount', walletMarketplace.includes("metadata->>'orderId'=$3") && walletMarketplace.includes("e.transaction_id=$2") && walletMarketplace.includes("WALLET_REFUND_ESCROW_MISMATCH")],
 
