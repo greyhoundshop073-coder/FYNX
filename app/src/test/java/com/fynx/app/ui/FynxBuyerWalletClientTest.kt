@@ -140,6 +140,28 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun pendingWalletDoesNotAllowWithdrawalPinSetup() {
+        val security = FynxBuyerWalletClient.parseWalletSecurity(
+            """{"walletStatus":"PENDING_PROVIDER","canSetWithdrawalPin":false,"hasWithdrawalPin":false,"isLocked":false}"""
+        )
+        assertEquals("PENDING_PROVIDER", security.walletStatus)
+        assertFalse(security.canSetWithdrawalPin)
+        assertFalse(security.hasWithdrawalPin)
+    }
+
+    @Test
+    fun activeWalletAllowsPinSetupOnlyWhenTheServerExplicitlyApprovesIt() {
+        val approved = FynxBuyerWalletClient.parseWalletSecurity(
+            """{"walletStatus":"ACTIVE","canSetWithdrawalPin":true,"hasWithdrawalPin":false,"isLocked":false}"""
+        )
+        val denied = FynxBuyerWalletClient.parseWalletSecurity(
+            """{"walletStatus":"PENDING_PROVIDER","canSetWithdrawalPin":true,"hasWithdrawalPin":false,"isLocked":false}"""
+        )
+        assertTrue(approved.canSetWithdrawalPin)
+        assertFalse(denied.canSetWithdrawalPin)
+    }
+
+    @Test
     fun walletSecurityReportsTemporaryPinLock() {
         val security = FynxBuyerWalletClient.parseWalletSecurity(
             """{"hasWithdrawalPin":true,"isLocked":true,"lockedUntil":"2026-11-01T10:15:00Z"}"""
