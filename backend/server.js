@@ -158,7 +158,7 @@ async function initDatabase() {
     CREATE UNIQUE INDEX IF NOT EXISTS ai_pending_message_actions_one_pending_idx ON ai_pending_message_actions(user_id) WHERE status='pending';
   `);
   await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);
-  await pool.query(`DO $ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
+  await pool.query(`DO $$ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
 }
 
 function requireConfig(name, value) { if (!value) throw new Error(`${name} is not configured.`); }
