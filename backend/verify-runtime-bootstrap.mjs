@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 const bootstrap = await readFile(new URL("./serverBootstrap.js", import.meta.url), "utf8");
 const packageJson = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
+const buyerWallet = await readFile(new URL("./buyerWallet.js", import.meta.url), "utf8");
+const buyerWalletMarketplace = await readFile(new URL("./buyerWalletMarketplace.js", import.meta.url), "utf8");
 assert.match(bootstrap, /generatedRuntime = await readFile\(runtimePath, "utf8"\)/,
   "bootstrap must read back the generated runtime before importing it");
 for (const contract of [
@@ -26,6 +28,8 @@ for (const contract of [
   "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
   "registerMarketplaceShippingRoutes({ app, pool, auth })",
   "registerMarketplaceCompletionRoutes({ app, pool, auth })",
+  "registerBuyerWalletRoutes({ app })",
+  "registerBuyerWalletMarketplaceRoutes({ app })",
   'app.post("/api/auth/login"',
   'app.get("/api/me", auth',
   'app.get("/api/statuses", auth',
@@ -33,3 +37,7 @@ for (const contract of [
   "/api/social/posts/multi",
   "/api/social/posts/:id/media"
 ]) assert.ok(bootstrap.includes(contract), `runtime bootstrap must protect route contract: ${contract}`);
+assert.match(buyerWallet, /export function registerBuyerWalletRoutes\(\{ app \}\)/,
+  "buyer Wallet API module must expose its authenticated route registration function");
+assert.match(buyerWalletMarketplace, /export function registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/,
+  "buyer Wallet Marketplace module must expose its authenticated route registration function");
