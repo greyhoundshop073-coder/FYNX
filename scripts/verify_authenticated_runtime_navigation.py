@@ -1085,7 +1085,7 @@ def wait_for_my_shop_section_settled(slug: str, timeout: float = 20.0) -> tuple[
 
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
-    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-ai-backend.onrender.com").rstrip("/")
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
     try:
         login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
         login_req=urllib.request.Request(
