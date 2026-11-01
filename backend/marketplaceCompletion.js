@@ -99,9 +99,13 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
   const parseUuid = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
   const isSeller = (order, userId) => String(order.seller_id) === String(userId);
   const isBuyer = (order, userId) => String(order.buyer_id) === String(userId);
+  const officialFynxUsername = (process.env.FYNX_OFFICIAL_USERNAME || 'fynx').trim().toLowerCase();
   const hasMarketplaceAdminAccess = async (db, userId) => {
-    const owner = await db.query('SELECT id FROM users ORDER BY id ASC LIMIT 1');
-    if (owner.rows[0] && String(owner.rows[0].id) === String(userId)) return true;
+    const official = await db.query(
+      'SELECT id FROM users WHERE lower(username)=$1 AND verified=TRUE LIMIT 1',
+      [officialFynxUsername]
+    );
+    if (official.rows[0] && String(official.rows[0].id) === String(userId)) return true;
     const admin = await db.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
     return admin.rowCount > 0;
   };
