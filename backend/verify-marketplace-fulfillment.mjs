@@ -11,7 +11,6 @@ const expiry = read('./marketplaceInspectionExpiry.js');
 const settlement = read('./marketplaceSettlement.js');
 const shippingTimeline = read('./marketplaceShippingTimeline.js');
 const server = read('./server.js');
-const socialClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const adminClient = read('../app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt');
 const adminPanel = read('../app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt');
 
