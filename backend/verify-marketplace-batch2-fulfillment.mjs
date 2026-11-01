@@ -6,6 +6,7 @@ const transactions = read('./marketplaceTransactions.js');
 const expiry = read('./marketplaceInspectionExpiry.js');
 const settlement = read('./marketplaceSettlement.js');
 const shipping = read('./marketplaceShipping.js');
+const shippingTimeline = read('./marketplaceShippingTimeline.js');
 const buyerClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const buyerUi = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt');
 const sellerUi = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt');
@@ -32,7 +33,7 @@ const checks = [
   ['seller Android uses shipping and pickup-handover APIs', sellerUi.includes('/api/marketplace/orders/${order.id}/ship') && sellerUi.includes('/api/marketplace/orders/${order.id}/pickup-handover')],
   ['buyer Android requires product/quantity confirmation before completion', buyerClient.includes('receivedItemMatchesOrder') && buyerClient.includes('quantityMatchesOrder') && buyerUi.includes('confirmOrderMatch') && buyerUi.includes('I confirm the received item and quantity match my order.')],
   ['buyer Android keeps completion server-authoritative', buyerClient.includes('/api/marketplace/orders/$id/complete')],
-  ['shipping timeline remains integrated with marketplace completion', completion.includes('registerMarketplaceShippingTimeline({ app, pool, auth });') && shipping.includes('/api/marketplace')],
+  ['shipping timeline remains integrated with marketplace completion and lazy schema', completion.includes('registerMarketplaceShippingTimeline({ app, pool, auth, ensureSchema });') && shippingTimeline.includes('deliveryEvidence: deliveryEvidence.rows.map') && shippingTimeline.includes('buyer_id=$2 OR seller_id=$2') && shipping.includes('/api/marketplace')],
 ];
 
 for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);

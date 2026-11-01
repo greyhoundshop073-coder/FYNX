@@ -6,12 +6,26 @@ const protection = read('./marketplaceProtection.js');
 const transactions = read('./marketplaceTransactions.js');
 const resolution = read('./marketplaceProtectionResolution.js');
 const scalability = read('./scalability.js');
-const socialClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const expiry = read('./marketplaceInspectionExpiry.js');
 const settlement = read('./marketplaceSettlement.js');
+const shippingTimeline = read('./marketplaceShippingTimeline.js');
+const server = read('./server.js');
+const socialClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 
 const checks = [
   ['fulfillment selection is buyer-only', completion.includes("only the buyer can choose fulfillment")],
+  ['approved driver registry is idempotent and indexed', completion.includes('CREATE TABLE IF NOT EXISTS marketplace_approved_drivers') && completion.includes('marketplace_approved_drivers_active_idx')],
+  ['driver administration is limited to verified official FYNX account or explicit ADMIN role', completion.includes('FYNX_OFFICIAL_USERNAME') && completion.includes('WHERE lower(username)=$1 AND verified=TRUE') && completion.includes("role='ADMIN'") && !completion.includes('SELECT id FROM users ORDER BY id ASC LIMIT 1')],
+  ['driver assignment and custody evidence tables are indexed', completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_assignments') && completion.includes('marketplace_delivery_assignments_driver_idx') && completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_evidence') && completion.includes('marketplace_delivery_evidence_order_idx')],
+  ['admin approval and revocation routes require owner/admin access', completion.includes("app.get('/api/admin/marketplace/drivers'") && completion.includes("app.post('/api/admin/marketplace/drivers/:userId/approval'") && completion.includes('hasMarketplaceAdminAccess')],
+  ['seller-only assignment rejects buyer/seller as the assigned driver', completion.includes("app.post('/api/marketplace/orders/:id/driver-assignment'") && completion.includes('only the seller can assign a delivery driver') && completion.includes('buyer and seller cannot be assigned as the delivery driver')],
+  ['driver must accept before physical handover', completion.includes("app.post('/api/marketplace/orders/:id/driver-acceptance'") && completion.includes('driver must accept the assignment before handover')],
+  ['local phone driver requires contact and agreed pickup point', completion.includes('local driver contact and agreed pickup point are required before handover') && completion.includes('SELLER_LOCAL')],
+  ['seller handover photo validates ownership and image MIME type', completion.includes('handover photo must be uploaded by the signed-in seller') && completion.includes('allowedImageTypes.has') && completion.includes('PHOTO_REFERENCE')],
+  ['driver evidence media is restricted to buyer or seller on the referencing order', server.includes('FROM marketplace_delivery_evidence e') && server.includes('JOIN marketplace_orders o ON o.id=e.order_id') && server.includes('o.buyer_id=$2 OR o.seller_id=$2')],
+  ['order timeline authorizes order participants and includes delivery evidence', shippingTimeline.includes('deliveryEvidence: deliveryEvidence.rows.map') && shippingTimeline.includes('buyer_id=$2 OR seller_id=$2')],
+  ['driver list, acceptance, handover and delivery evidence API routes are registered', completion.includes("app.get('/api/marketplace/driver/assignments'") && completion.includes("app.post('/api/marketplace/orders/:id/driver-acceptance'") && completion.includes("app.post('/api/marketplace/orders/:id/driver-handover'") && completion.includes("app.post('/api/marketplace/orders/:id/driver-delivery'")],
+  ['driver admin list and approval endpoints are registered behind official/admin authorization', completion.includes("app.get('/api/admin/marketplace/drivers'") && completion.includes("app.post('/api/admin/marketplace/drivers/:userId/approval'") && completion.includes('hasMarketplaceAdminAccess')],
   ['delivery requires validated buyer address', completion.includes("delivery requires name, phone and address") && completion.includes('safeAddress')],
   ['delivery/pickup availability is checked from order snapshot', completion.includes('snapshot.deliveryAvailable') && completion.includes('snapshot.pickupAvailable')],
   ['shipping is seller-only', completion.includes("only the seller can ship this order")],

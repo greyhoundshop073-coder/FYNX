@@ -11,6 +11,8 @@ import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
 import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
+import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";
+import { registerMarketplaceListingLifecycleRoutes } from "./marketplaceListingLifecycleRoutes.js";
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
@@ -99,7 +101,6 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
-    UPDATE users SET verified = FALSE;
     CREATE TABLE IF NOT EXISTS messages (
       id BIGSERIAL PRIMARY KEY,
       sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -511,12 +512,33 @@ app.get("/api/media/:id", auth, async (req, res) => {
             WHERE ml.active = TRUE
               AND ml.quantity > 0
               AND UPPER(COALESCE(ml.currency, '')) IN ('NGN', 'USD')
-              AND ml.media_ids @> to_jsonb(ARRAY[mm.id::text])
+              AND (
+                ml.media_ids @> to_jsonb(ARRAY[mm.id::bigint])
+                OR ml.media_ids @> to_jsonb(ARRAY[mm.id::text])
+              )
               AND NOT EXISTS (
                 SELECT 1 FROM blocks b
                 WHERE (b.blocker_id = $2 AND b.blocked_id = ml.seller_id)
                    OR (b.blocker_id = ml.seller_id AND b.blocked_id = $2)
               )
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM marketplace_orders o
+            JOIN marketplace_listings ml ON ml.id=o.listing_id
+            WHERE (o.buyer_id=$2 OR o.seller_id=$2)
+              AND (
+                ml.media_ids @> to_jsonb(ARRAY[mm.id::bigint])
+                OR ml.media_ids @> to_jsonb(ARRAY[mm.id::text])
+              )
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM marketplace_delivery_evidence e
+            JOIN marketplace_orders o ON o.id=e.order_id
+            WHERE e.evidence_type='PHOTO_REFERENCE'
+              AND e.value=CAST(mm.id AS TEXT)
+              AND (o.buyer_id=$2 OR o.seller_id=$2)
           )
           OR EXISTS (
             SELECT 1 FROM statuses s
@@ -861,6 +883,8 @@ if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
 registerMarketplaceReputationRoutes({ app, pool, auth });
 registerMarketplaceCompletionRoutes({ app, pool, auth });
+if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });
+if (pool) registerMarketplaceListingLifecycleRoutes({ app, pool, auth });
 if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
 if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
