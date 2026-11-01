@@ -42,6 +42,33 @@ internal data class FynxBuyerWalletActivityPage(
     val nextCursor: FynxBuyerWalletActivityCursor?
 )
 
+internal data class FynxWalletSellerTotal(
+    val currency: String,
+    val protectedFunds: Double,
+    val availableForPayout: Double,
+    val payoutPending: Double,
+    val paidOut: Double,
+    val grossSales: Double,
+    val marketplaceFees: Double,
+    val netEarnings: Double
+)
+
+internal data class FynxWalletSellerSettlement(
+    val orderId: String,
+    val title: String,
+    val currency: String,
+    val sellerNetAmount: Double,
+    val marketplaceFeeSeller: Double,
+    val funds: String,
+    val payoutStatus: String,
+    val updatedAt: String
+)
+
+internal data class FynxWalletSellerSummary(
+    val totals: List<FynxWalletSellerTotal>,
+    val settlements: List<FynxWalletSellerSettlement>
+)
+
 internal object FynxBuyerWalletClient {
     internal fun normalizeActivityDirection(direction: String): String {
         val normalized = direction.trim().uppercase(Locale.US)
@@ -73,6 +100,67 @@ internal object FynxBuyerWalletClient {
             context,
             "/api/wallet/transactions?limit=" + boundedLimit + query
         ).mapCatching(::parseTransactions)
+    }
+
+    suspend fun loadSellerSummary(context: Context): Result<FynxWalletSellerSummary> =
+        FynxBackendClient.get(context, "/api/marketplace/settlement/seller/summary")
+            .mapCatching(::parseSellerSummary)
+
+    internal fun parseSellerSummary(raw: String): FynxWalletSellerSummary {
+        val response = JSONObject(raw)
+        val totalRows = response.optJSONArray("totals") ?: JSONArray()
+        val settlementRows = response.optJSONArray("settlements") ?: JSONArray()
+        require(totalRows.length() <= 3) { "Seller earnings returned too many currency totals." }
+        require(settlementRows.length() <= 100) { "Seller earnings returned too many settlement rows." }
+
+        fun amount(row: JSONObject, key: String): Double {
+            val value = row.optDouble(key, Double.NaN)
+            require(value.isFinite() && value >= 0.0) { "Seller earnings contain an invalid amount." }
+            return value
+        }
+
+        val totals = buildList {
+            for (index in 0 until totalRows.length()) {
+                val row = totalRows.optJSONObject(index) ?: continue
+                val currency = row.optString("currency").trim().uppercase(Locale.US)
+                require(currency in setOf("NGN", "USD")) { "Seller earnings contain an unsupported currency." }
+                add(
+                    FynxWalletSellerTotal(
+                        currency = currency,
+                        protectedFunds = amount(row, "protectedFunds"),
+                        availableForPayout = amount(row, "availableForPayout"),
+                        payoutPending = amount(row, "payoutPending"),
+                        paidOut = amount(row, "paidOut"),
+                        grossSales = amount(row, "grossSales"),
+                        marketplaceFees = amount(row, "marketplaceFees"),
+                        netEarnings = amount(row, "netEarnings")
+                    )
+                )
+            }
+        }
+        val settlements = buildList {
+            for (index in 0 until settlementRows.length()) {
+                val row = settlementRows.optJSONObject(index) ?: continue
+                val orderId = row.optString("orderId").trim()
+                val title = row.optString("title").trim()
+                val currency = row.optString("currency").trim().uppercase(Locale.US)
+                require(orderId.isNotBlank() && title.isNotBlank()) { "Seller settlement is missing its order identity." }
+                require(currency in setOf("NGN", "USD")) { "Seller settlement contains an unsupported currency." }
+                add(
+                    FynxWalletSellerSettlement(
+                        orderId = orderId,
+                        title = title,
+                        currency = currency,
+                        sellerNetAmount = amount(row, "sellerNetAmount"),
+                        marketplaceFeeSeller = amount(row, "marketplaceFeeSeller"),
+                        funds = row.optString("funds", "UNKNOWN").trim().uppercase(Locale.US),
+                        payoutStatus = row.optString("payoutStatus", "UNKNOWN").trim().uppercase(Locale.US),
+                        updatedAt = row.optString("updatedAt").trim()
+                    )
+                )
+            }
+        }
+        return FynxWalletSellerSummary(totals, settlements)
     }
 
     internal fun parseSummary(raw: String): FynxBuyerWalletSummary {
