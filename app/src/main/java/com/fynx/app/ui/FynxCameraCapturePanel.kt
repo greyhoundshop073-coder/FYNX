@@ -125,6 +125,23 @@ private fun resolveFynxCameraWindow(view: View): Window? {
     return (currentContext as? Activity)?.window
 }
 
+/**
+ * Resolve the Activity window behind the full-screen camera Dialog. On Android 15 the
+ * status-bar strip can remain owned by this host window and be dimmed with the Activity,
+ * even when the Dialog itself draws edge-to-edge. Keep both windows in sync while the
+ * camera is open, then restore the host window exactly when the camera closes.
+ */
+private fun resolveFynxHostActivityWindow(view: View): Window? {
+    var currentContext: android.content.Context = view.context
+    while (currentContext is ContextWrapper) {
+        if (currentContext is Activity) return currentContext.window
+        val baseContext = currentContext.baseContext
+        if (baseContext === currentContext) break
+        currentContext = baseContext
+    }
+    return (currentContext as? Activity)?.window
+}
+
 @Composable
 private fun CameraEditorRailAction(
     label: String,
@@ -343,6 +360,7 @@ fun FynxCameraCapturePanel(
     // The scoped restore prevents camera settings leaking into the rest of FYNX.
     DisposableEffect(cameraWindowView) {
         val window = resolveFynxCameraWindow(cameraWindowView)
+        val hostActivityWindow = resolveFynxHostActivityWindow(cameraWindowView)
         val previousBackground = window?.decorView?.background
         val previousStatusBarColor = window?.statusBarColor
         val previousNavigationBarColor = window?.navigationBarColor
@@ -353,8 +371,25 @@ fun FynxCameraCapturePanel(
         val previousStatusContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isStatusBarContrastEnforced else null
         val previousNavigationContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isNavigationBarContrastEnforced else null
 
+        // A full-screen Dialog does not own the system status-bar surface on every API level.
+        // In particular, API 35 can leave that strip attached to the dimmed Activity window.
+        // Style the host window too; styling only the Dialog leaves a grey strip behind white icons.
+        val hostController = hostActivityWindow
+            ?.takeIf { it !== window }
+            ?.let { WindowInsetsControllerCompat(it, it.decorView) }
+        val previousHostStatusBarColor = hostActivityWindow?.takeIf { it !== window }?.statusBarColor
+        val previousHostNavigationBarColor = hostActivityWindow?.takeIf { it !== window }?.navigationBarColor
+        val previousHostLightStatusBars = hostController?.isAppearanceLightStatusBars
+        val previousHostLightNavigationBars = hostController?.isAppearanceLightNavigationBars
+        val previousHostStatusContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            hostActivityWindow?.takeIf { it !== window }?.isStatusBarContrastEnforced
+        } else null
+        val previousHostNavigationContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            hostActivityWindow?.takeIf { it !== window }?.isNavigationBarContrastEnforced
+        } else null
+
+        val cameraBackdrop = FYNX_CAMERA_WINDOW_BACKGROUND_ARGB
         if (window != null) {
-            val cameraBackdrop = FYNX_CAMERA_WINDOW_BACKGROUND_ARGB
             window.setBackgroundDrawable(ColorDrawable(cameraBackdrop))
             window.statusBarColor = cameraBackdrop
             window.navigationBarColor = cameraBackdrop
@@ -364,6 +399,16 @@ fun FynxCameraCapturePanel(
             }
             controller?.isAppearanceLightStatusBars = false
             controller?.isAppearanceLightNavigationBars = false
+        }
+        if (hostActivityWindow != null && hostActivityWindow !== window) {
+            hostActivityWindow.statusBarColor = cameraBackdrop
+            hostActivityWindow.navigationBarColor = cameraBackdrop
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                hostActivityWindow.isStatusBarContrastEnforced = false
+                hostActivityWindow.isNavigationBarContrastEnforced = false
+            }
+            hostController?.isAppearanceLightStatusBars = false
+            hostController?.isAppearanceLightNavigationBars = false
         }
 
         onDispose {
@@ -379,6 +424,16 @@ fun FynxCameraCapturePanel(
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     previousStatusContrast?.let { window.isStatusBarContrastEnforced = it }
                     previousNavigationContrast?.let { window.isNavigationBarContrastEnforced = it }
+                }
+            }
+            if (hostActivityWindow != null && hostActivityWindow !== window) {
+                previousHostStatusBarColor?.let { hostActivityWindow.statusBarColor = it }
+                previousHostNavigationBarColor?.let { hostActivityWindow.navigationBarColor = it }
+                hostController?.isAppearanceLightStatusBars = previousHostLightStatusBars ?: false
+                hostController?.isAppearanceLightNavigationBars = previousHostLightNavigationBars ?: false
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    previousHostStatusContrast?.let { hostActivityWindow.isStatusBarContrastEnforced = it }
+                    previousHostNavigationContrast?.let { hostActivityWindow.isNavigationBarContrastEnforced = it }
                 }
             }
         }

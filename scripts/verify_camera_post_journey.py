@@ -20,6 +20,11 @@ checks = [
      and "return capture_camera_video_journey(home, prefix)" in runtime),
     ("Camera Dialog applies/restores the actual system-bar window and white icon appearance",
      "DialogWindowProvider" in camera and "resolveFynxCameraWindow(cameraWindowView)" in camera
+     and "resolveFynxHostActivityWindow(cameraWindowView)" in camera
+     and "hostActivityWindow.statusBarColor = cameraBackdrop" in camera
+     and "hostActivityWindow.isStatusBarContrastEnforced = false" in camera
+     and "previousHostStatusBarColor" in camera
+     and "previousHostStatusContrast?.let { hostActivityWindow.isStatusBarContrastEnforced = it }" in camera
      and "window.setBackgroundDrawable(ColorDrawable(cameraBackdrop))" in camera
      and "isAppearanceLightStatusBars = false" in camera
      and "previousStatusBarColor" in camera and "window.setBackgroundDrawable(previousBackground)" in camera),
@@ -148,6 +153,8 @@ checks = [
      and "list_app_cache_videos" in runtime
      and "processed video dropped the source audio stream" in runtime
      and "Generate on-device captions" in runtime
+      and 'captions = find_control(editor, ["Captions"])' in runtime
+      and "visible Captions action" in runtime
      and "camera-video-effect-output.png" in runtime
      and "never tap Next" in runtime),
     ("Home camera starts a fresh session", "capturedUris = emptyList()" in home and "cameraOpenedFromComposer = false" in home),

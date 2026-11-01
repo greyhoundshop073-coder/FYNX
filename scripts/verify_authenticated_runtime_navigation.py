@@ -1408,16 +1408,15 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
 
     # Exercise the actual on-device speech-caption request. An unsupported emulator model is
     # an explicitly reported capability limitation, not a successful transcript claim.
-    captions = find_control(editor, ["Generate on-device captions"])
+    # The real editor exposes captions as a right-side rail action labelled "Captions".
+    # The similarly named Generate button lives inside the lower scroll panel and may be
+    # below the initial viewport; swiping above that panel never reaches it. Exercise the
+    # visible control users actually tap, with a fallback for builds that expose the button.
+    captions = find_control(editor, ["Captions"])
     if not captions:
-        # The video editor's inner content is scrollable; expose the caption action before
-        # declaring the option missing from the runtime UI.
-        run("adb", "shell", "input", "swipe", "540", "1800", "540", "1250", "450")
-        time.sleep(0.5)
-        editor = dump_ui(f"{prefix}-camera-video-caption-control-scroll.xml") or editor
         captions = find_control(editor, ["Generate on-device captions"])
     if not captions:
-        FAILURES.append(prefix + ": recorded-video editor did not expose Generate on-device captions")
+        FAILURES.append(prefix + ": recorded-video editor did not expose its visible Captions action")
     if captions:
         _, cx, cy = captions
         run("adb", "logcat", "-c")
