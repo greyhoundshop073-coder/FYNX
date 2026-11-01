@@ -397,9 +397,10 @@ function walletWithdrawalLimits() {
   const maximum = Number(process.env.FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT || '');
   const daily = Number(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT || '');
   const count = Number.parseInt(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT || '', 10);
-  if (!Number.isFinite(maximum) || maximum <= 0 ||
-      !Number.isFinite(daily) || daily <= 0 ||
-      !Number.isInteger(count) || count <= 0 || daily < maximum) return null;
+  // Paystack Nigeria transfer limits: NGN 50 minimum and NGN 10,000,000 maximum.
+  if (!Number.isFinite(maximum) || maximum < 50 || maximum > 10_000_000 ||
+      !Number.isFinite(daily) || daily < maximum ||
+      !Number.isInteger(count) || count <= 0) return null;
   return { maximumPerTransfer: maximum, dailyAmountLimit: daily, dailyCountLimit: count };
 }
 
@@ -416,6 +417,7 @@ function walletProviderApproved(action) {
   if (action === 'SPENDING') return process.env.FYNX_WALLET_SPENDING_ENABLED === 'true';
   if (action === 'WITHDRAWAL') return process.env.FYNX_WALLET_WITHDRAWALS_ENABLED === 'true' &&
     process.env.FYNX_WALLET_PAYOUTS_APPROVED === 'true' &&
+    process.env.FYNX_WALLET_WITHDRAWAL_FEE_POLICY_APPROVED === 'true' &&
     process.env.FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true' &&
     walletWithdrawalLimits() !== null;
   return false;
