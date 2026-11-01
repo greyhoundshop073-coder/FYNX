@@ -83,6 +83,7 @@ internal fun FynxWalletActionPanel(
                     )
                 }
                 item { WalletActionAmountField(amount, onAmountChange, "Amount to add") }
+                item { WalletAmountStatus(amount = amount, availableBalance = null) }
                 item {
                     WalletMethodCard(
                         icon = "bank",
@@ -182,6 +183,7 @@ internal fun FynxWalletActionPanel(
                     }
                 }
                 item { WalletActionAmountField(amount, onAmountChange, "Amount to withdraw") }
+                item { WalletAmountStatus(amount = amount, availableBalance = availableBalance) }
                 item {
                     WalletReadOnlyBankField(
                         label = "Select bank",
@@ -198,6 +200,12 @@ internal fun FynxWalletActionPanel(
                     WalletReadOnlyBankField(
                         label = "Verified account name",
                         placeholder = "Automatically confirmed by the payment provider"
+                    )
+                }
+                item {
+                    WalletActionNotice(
+                        title = "Fees and final amount",
+                        message = "The payment provider must quote the exact withdrawal fee before you approve a payout. FYNX will show the amount, fee and total deduction together; no estimated fee is used on this screen."
                     )
                 }
                 item {
@@ -256,6 +264,29 @@ private fun WalletActionAmountField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         leadingIcon = { Text("₦", fontWeight = FontWeight.SemiBold) },
         supportingText = { Text("NGN wallet") }
+    )
+}
+
+@Composable
+private fun WalletAmountStatus(amount: String, availableBalance: Double?) {
+    val parsed = amount.toBigDecimalOrNull()
+    val message = when {
+        amount.isBlank() -> "Enter an amount in NGN."
+        parsed == null || parsed <= java.math.BigDecimal.ZERO -> "Enter a valid amount greater than zero."
+        availableBalance != null && parsed.toDouble() > availableBalance ->
+            "This amount is above your verified available balance."
+        availableBalance == null && parsed > java.math.BigDecimal.ZERO ->
+            "Your available balance must be verified before a withdrawal can be submitted."
+        else -> "Amount entered. The payment provider will confirm availability and fees before any money moves."
+    }
+    val invalid = amount.isNotBlank() && (
+        parsed == null || parsed <= java.math.BigDecimal.ZERO ||
+            (availableBalance != null && parsed.toDouble() > availableBalance)
+    )
+    Text(
+        message,
+        color = if (invalid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall
     )
 }
 
