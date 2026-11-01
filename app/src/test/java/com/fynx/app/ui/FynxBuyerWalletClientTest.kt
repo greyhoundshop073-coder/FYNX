@@ -86,6 +86,16 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun walletSecurityParsesServerEnforcedDailyWithdrawalLimits() {
+        val security = FynxBuyerWalletClient.parseWalletSecurity(
+            """{"hasWithdrawalPin":true,"isLocked":false,"limits":{"maximumPerTransfer":50000,"dailyAmountLimit":150000,"dailyCountLimit":3}}"""
+        )
+        assertEquals(50000.0, security.maximumPerTransfer!!, 0.0)
+        assertEquals(150000.0, security.dailyAmountLimit!!, 0.0)
+        assertEquals(3, security.dailyCountLimit)
+    }
+
+    @Test
     fun walletSecurityReportsWhenWithdrawalPinIsNotConfigured() {
         val security = FynxBuyerWalletClient.parseWalletSecurity(
             """{"hasWithdrawalPin":false,"isLocked":false,"lockedUntil":null}"""
