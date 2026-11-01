@@ -1009,25 +1009,21 @@ export function registerBuyerWalletRoutes({ app }) {
     try {
       await ensureBuyerWalletSchema();
       res.set('Cache-Control', 'no-store, private');
+      // Create the customer's empty NGN Wallet record on first authenticated visit.
+      // This is database-only provisioning: it does not contact Paystack, credit
+      // funds, activate the Wallet, or enable deposits, spending, or withdrawals.
+      await pool.query(
+        `INSERT INTO buyer_wallets (id,user_id,currency)
+         VALUES ($1,$2,'NGN')
+         ON CONFLICT (user_id,currency) DO NOTHING`,
+        [crypto.randomUUID(), req.user.sub]
+      );
       const wallet = (await pool.query(
         'SELECT id,status,provider,currency,funding_account_status,created_at,updated_at FROM buyer_wallets WHERE user_id=$1 AND currency=$2 LIMIT 1',
         [req.user.sub, 'NGN']
       )).rows[0];
       if (!wallet) {
-        return res.json({
-          walletStatus: 'NOT_SETUP',
-          currency: 'NGN',
-          availableBalance: null,
-          reservedBalance: null,
-          withdrawalPendingBalance: null,
-          canFund: walletProviderApproved('DEPOSIT') || walletProviderApproved('CARD_FUNDING') || walletProviderApproved('USSD_FUNDING'),
-          canFundByBankTransfer: walletProviderApproved('DEPOSIT'),
-          canFundByCard: walletProviderApproved('CARD_FUNDING'),
-          canFundByUssd: walletProviderApproved('USSD_FUNDING'),
-          canSpend: false,
-          canWithdraw: false,
-          notice: 'Your FYNX Wallet is being prepared. Payment methods appear only after the approved provider connection and required checks are complete.'
-        });
+        throw new Error('wallet provisioning did not return the customer wallet');
       }
       const balanceRows = await pool.query(`
         SELECT e.account_code,
@@ -1412,7 +1408,7 @@ export function registerBuyerWalletRoutes({ app }) {
       await ensureBuyerWalletSchema();
       res.set('Cache-Control', 'no-store, private');
       const wallet = (await pool.query(`
-        SELECT withdrawal_pin_hash,withdrawal_pin_locked_until
+        SELECT status,withdrawal_pin_hash,withdrawal_pin_locked_until
           FROM buyer_wallets
          WHERE user_id=$1 AND currency='NGN'
          LIMIT 1
@@ -1420,6 +1416,8 @@ export function registerBuyerWalletRoutes({ app }) {
       const lockedUntil = wallet?.withdrawal_pin_locked_until || null;
       const locked = Boolean(lockedUntil && new Date(lockedUntil).getTime() > Date.now());
       return res.json({
+        walletStatus: String(wallet?.status || 'NOT_SETUP'),
+        canSetWithdrawalPin: wallet?.status === 'ACTIVE',
         hasWithdrawalPin: Boolean(wallet?.withdrawal_pin_hash),
         isLocked: locked,
         lockedUntil: locked ? lockedUntil : null,

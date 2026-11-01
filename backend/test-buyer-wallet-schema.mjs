@@ -91,10 +91,30 @@ try {
   const userId = 777001;
   const walletId = crypto.randomUUID();
   await client.query("INSERT INTO users(id) VALUES ($1)", [userId]);
+
+  // Mirror the authenticated first-visit Wallet provisioning used by GET /api/wallet/summary.
   await client.query(
-    "INSERT INTO buyer_wallets(id,user_id,currency,status,provider) VALUES ($1,$2,'NGN','PENDING_PROVIDER','TEST_PROVIDER')",
+    "INSERT INTO buyer_wallets(id,user_id,currency) VALUES ($1,$2,'NGN') ON CONFLICT (user_id,currency) DO NOTHING",
     [walletId, userId]
   );
+  const duplicateWalletId = crypto.randomUUID();
+  const duplicateProvision = await client.query(
+    "INSERT INTO buyer_wallets(id,user_id,currency) VALUES ($1,$2,'NGN') ON CONFLICT (user_id,currency) DO NOTHING RETURNING id",
+    [duplicateWalletId, userId]
+  );
+  const provisionedWallet = await client.query(
+    "SELECT id,status,provider,funding_account_status,currency FROM buyer_wallets WHERE user_id=$1 AND currency='NGN'",
+    [userId]
+  );
+  if (duplicateProvision.rowCount !== 0 ||
+      provisionedWallet.rows.length !== 1 ||
+      String(provisionedWallet.rows[0].id) !== walletId ||
+      provisionedWallet.rows[0].status !== "PENDING_PROVIDER" ||
+      provisionedWallet.rows[0].provider !== "PENDING_SELECTION" ||
+      provisionedWallet.rows[0].funding_account_status !== "NOT_CREATED" ||
+      provisionedWallet.rows[0].currency !== "NGN") {
+    throw new Error("First-visit Wallet provisioning must create one provider-pending NGN record without activating funding.");
+  }
 
   const cursorSeedIds = [];
   for (const [index, createdAt] of [
@@ -234,7 +254,7 @@ try {
     );
   }, "buyer wallet transaction owner or currency does not match its wallet");
 
-  console.log("FYNX buyer wallet PostgreSQL schema, ledger, cursor and direction tests GREEN (8 scenarios)");
+  console.log("FYNX buyer wallet PostgreSQL schema, ledger, cursor, direction and first-visit provisioning tests GREEN (9 scenarios)");
 } finally {
   if (schemaCreated) {
     await client.query("SET search_path TO public").catch(() => {});

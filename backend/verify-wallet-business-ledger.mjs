@@ -7,6 +7,10 @@ const checkout = read('./marketplaceTransactions.js');
 const settlement = read('./marketplaceSettlement.js');
 const payoutWorker = read('./marketplaceSettlementWorker.js');
 const wallet = read('./buyerWallet.js');
+const walletSummary = wallet.slice(
+  wallet.indexOf("app.get('/api/wallet/summary', auth"),
+  wallet.indexOf("app.post('/api/wallet/funding/initialize', auth")
+);
 const server = read('./server.js');
 const webhook = read('./marketplacePaystackWebhook.js');
 const walletMarketplace = read('./buyerWalletMarketplace.js');
@@ -45,13 +49,22 @@ const checks = [
   ['Wallet withdrawals require a six-digit PIN verified against a slow password hash', wallet.includes("bcrypt.compare(pin, wallet.withdrawal_pin_hash)") && wallet.includes("bcrypt.hash(pin, 12)") && wallet.includes("currentPassword")],
   ['Repeated wrong wallet PINs create a 15-minute lockout', wallet.includes("withdrawal_pin_failed_attempts") && wallet.includes("INTERVAL '15 minutes'") && wallet.includes("failedAttempts >= 5")],
   ['Wallet PIN setup reauthenticates the current password and locks repeated failures', wallet.includes("bcrypt.compare(currentPassword, user.password_hash)") && wallet.includes("withdrawal_pin_setup_failed_attempts") && wallet.includes("withdrawal_pin_setup_locked_until")],
-  ['Wallet security returns PIN state and configured withdrawal limits', wallet.includes("app.get('/api/wallet/security', auth") && wallet.includes("maximumPerTransfer") && wallet.includes("dailyAmountLimit") && wallet.includes("dailyCountLimit")],
+  ['Wallet security returns PIN state, activation status and server-enforced setup eligibility', wallet.includes("app.get('/api/wallet/security', auth") && wallet.includes("maximumPerTransfer") && wallet.includes("dailyAmountLimit") && wallet.includes("dailyCountLimit") && wallet.includes("walletStatus: String(wallet?.status || 'NOT_SETUP')") && wallet.includes("canSetWithdrawalPin: wallet?.status === 'ACTIVE'")],
   ['Per-transfer and daily wallet withdrawal limits are enforced server-side', wallet.includes("FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT") && wallet.includes("FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT") && wallet.includes("FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT") && wallet.includes("dailyUsage?.requested_amount") && wallet.includes("dailyUsage?.request_count")],
   ['Withdrawal reservations only move cleared funds to the pending bucket', wallet.includes("'AVAILABLE','DEBIT',$4,'NGN'") && wallet.includes("'WITHDRAWAL_PENDING','CREDIT',$4,'NGN'")],
   ['Transfer webhooks reconcile success, failure and reversal with balanced ledger entries', wallet.includes("reconcileWalletTransferEvent(client, eventName, transfer)") && wallet.includes("eventName === 'transfer.success'") && wallet.includes("eventName === 'transfer.failed'") && wallet.includes("eventName === 'transfer.reversed'")],
   ['Customer history hides internal reversal/settlement rows but reports provider payout status', wallet.includes("COALESCE(t.metadata->>'internal','false') <> 'true'") && wallet.includes("LEFT JOIN buyer_wallet_provider_operations op ON op.transaction_id=t.id") && wallet.includes("WHEN op.status='PENDING' THEN 'PROCESSING'")],
   ['Express preserves raw request bytes for Paystack webhook signatures', server.includes('express.json({ limit: "18mb"') && server.includes('verify: (req, _res, buffer) =>') && server.includes('req.rawBody = Buffer.from(buffer)')],
-  ['Paystack webhook validates HMAC SHA-512 before reconciliation', webhook.includes("createHmac('sha512'") && webhook.includes("req.rawBody") && webhook.includes("x-paystack-signature")]
+  ['Paystack webhook validates HMAC SHA-512 before reconciliation', webhook.includes("createHmac('sha512'") && webhook.includes("req.rawBody") && webhook.includes("x-paystack-signature")],
+  ['First authenticated Wallet view provisions an empty provider-pending NGN Wallet without contacting Paystack',
+    walletSummary.includes('INSERT INTO buyer_wallets (id,user_id,currency)') &&
+    walletSummary.includes("VALUES ($1,$2,'NGN')") &&
+    walletSummary.includes('ON CONFLICT (user_id,currency) DO NOTHING') &&
+    walletSummary.includes('crypto.randomUUID(), req.user.sub') &&
+    walletSummary.includes("walletStatus: String(wallet.status || 'PENDING_PROVIDER')") &&
+    walletSummary.includes('canSpend: wallet.status === \'ACTIVE\' && walletProviderApproved(\'SPENDING\')') &&
+    walletSummary.includes('canWithdraw: wallet.status === \'ACTIVE\' && walletProviderApproved(\'WITHDRAWAL\')') &&
+    !walletSummary.includes('walletPaystackRequest')],
 ];
 
 const failed = checks.filter(([, ok]) => !ok);

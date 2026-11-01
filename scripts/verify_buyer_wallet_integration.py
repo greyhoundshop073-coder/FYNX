@@ -3,6 +3,7 @@ ROOT = Path(__file__).resolve().parents[1]
 app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 money = (ROOT / "app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt").read_text()
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletClient.kt").read_text()
+wallet_client_tests = (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletPanel.kt").read_text()
 market = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
 payments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt").read_text()
@@ -27,6 +28,7 @@ checks = [
  ("wallet UI hierarchy artifacts end with a real newline", "write_text(wallet_xml+chr(10)" in runtime and "(wallet_xml or \"\")+chr(10)" in runtime),
  ("visual-only navigation also captures Wallet read-only", 'capture_wallet_from_features("marketplace-visual-wallet")' in runtime and "no listing/order/payment mutations" in runtime),
  ("Wallet runtime gate checks visible balance buckets rather than below-fold explanatory copy", "def wallet_destination_ready(xml_text: str) -> bool:" in runtime and 'find_control(xml_text, ["Reserved"])' in runtime and 'find_control(xml_text, ["Withdrawal pending"])' in runtime and "wallet_shell_opened=wallet_destination_ready(wallet_xml)" in runtime and "not wallet_destination_ready(after)" in runtime),
+ ("server-authenticated Wallet runtime fails on visible summary/activity/seller/funding-account API errors", "authenticated_wallet_error_markers=(" in runtime and 'if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":' in runtime and '"Wallet unavailable"' in runtime and '"Activity could not load"' in runtime and '"Marketplace earnings unavailable"' in runtime and "if authenticated_wallet_errors:" in runtime),
  ("wallet branch receives full emulator and screenshot certification", workflow.count("refs/heads/feat/fynx-wallet-ux-hardening-20261031") == 4),
  ("wallet back navigation", '"Wallet", "Money Tools" -> "Features"' in app),
  ("wallet authenticated summary and activity APIs", '"/api/wallet/summary"' in client and '"/api/wallet/transactions?limit="' in client),
@@ -51,7 +53,7 @@ checks = [
  ("balance visibility masks amounts across the screen", "amountsVisible = balanceVisible" in panel and "if (visible) amount?.let(::fynxWalletMoney)" in panel and "if (amountsVisible) sign + fynxWalletMoney" in panel),
  ("balance buckets explain withdrawal eligibility", "Held for an order or an active review." in panel and "How bank withdrawals will work" in panel and "no money moves from this screen today" in panel),
  ("wallet status has user-readable state labels", "Wallet access is restricted" in panel and "This wallet is closed" in panel),
- ("wallet spending stays disabled and money movement is controlled by explicit provider/custody/compliance gates", "canSpend: false" in wallet_backend and "FYNX_WALLET_PROVIDER_APPROVED" in wallet_backend and "FYNX_WALLET_CUSTODY_APPROVED" in wallet_backend and "FYNX_WALLET_COMPLIANCE_APPROVED" in wallet_backend and "walletProviderApproved('DEPOSIT')" in wallet_backend and "walletProviderApproved('WITHDRAWAL')" in wallet_backend),
+ ("wallet spending stays disabled unless an active wallet and explicit provider/custody/compliance approvals are present", "canSpend: wallet.status === 'ACTIVE' && walletProviderApproved('SPENDING')" in wallet_backend and "canWithdraw: wallet.status === 'ACTIVE' && walletProviderApproved('WITHDRAWAL')" in wallet_backend and "FYNX_WALLET_PROVIDER_APPROVED" in wallet_backend and "FYNX_WALLET_CUSTODY_APPROVED" in wallet_backend and "FYNX_WALLET_COMPLIANCE_APPROVED" in wallet_backend and "walletProviderApproved('DEPOSIT')" in wallet_backend),
  ("existing Marketplace Paystack checkout retained", "initializeMarketplacePayment" in payments and "verifyMarketplacePayment" in payments),
  ("NGN-only launch foundation", 'currency == "NGN"' in client and "currently supports the NGN foundation only" in panel),
  ("Add Money opens a dedicated funding-method screen", 'onClick = { activeAction = "ADD" }' in panel and 'screen = activeAction' in panel and 'FynxWalletActionPanel' in panel and '"ADD" ->' in actions),
@@ -71,7 +73,13 @@ checks = [
  ("default Marketplace fee policy is seller-paid at five percent", "process.env.FYNX_MARKETPLACE_FEE_MODE || 'SELLER'" in transactions and "process.env.FYNX_MARKETPLACE_FEE_BPS || '500'" in transactions and 'const mode = configuredMode;' in transactions),
  ("FYNX revenue report uses the admin-only revenue endpoint", '"/api/admin/revenue"' in admin_client and "if(!(await requireAdmin(req,res)))return" in admin_routes),
  ("owner/admin control center shows separate Marketplace commission totals", '"FYNX Business Revenue"' in admin_panel and '"Marketplace commission ledger"' in admin_panel and 'it.source == "MARKETPLACE_FEE"' in admin_panel),
- ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel)
+ ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel),
+ ("local-only Wallet sessions explain the required server sign-in without making anonymous wallet requests", "if (!FynxBackendClient.hasAccessToken(context))" in panel and "saved-device sign-in" in panel and "Sign in to FYNX to securely load your balance" in panel),
+ ("seller earnings are not requested without a live Wallet session", "Marketplace earnings require a live FYNX sign-in." in panel),
+ ("bank funding account and Wallet PIN screens require a live server session", actions.count("FynxBackendClient.hasAccessToken(context)") >= 2 and "No account request has been sent." in actions and "before viewing or changing Wallet security" in actions),
+ ("Wallet PIN creation is hidden until the server reports an ACTIVE wallet", "canSetWithdrawalPin: Boolean" in client and "walletStatus == \"ACTIVE\"" in client and "current.canSetWithdrawalPin && (!current.hasWithdrawalPin || editing)" in actions and "Wallet PIN setup opens after your NGN Wallet is activated" in actions and "pendingWalletDoesNotAllowWithdrawalPinSetup" in wallet_client_tests and "activeWalletAllowsPinSetupOnlyWhenTheServerExplicitlyApprovesIt" in wallet_client_tests),
+ ("Wallet statement export requires a server-issued session", "enabled = !statementExporting && !loading && FynxBackendClient.hasAccessToken(context)" in panel),
+ ("Railway Wallet PR receives full Android emulator and screenshot certification", workflow.count("github.event.pull_request.head.ref == 'fix/railway-backend-runtime-contract-20261101'") == 4),
 ]
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
