@@ -421,6 +421,14 @@ function walletProviderApproved(action) {
   return false;
 }
 
+function walletFundingLimits() {
+  const minimum = Number(process.env.FYNX_WALLET_FUNDING_MIN_AMOUNT || '');
+  const maximum = Number(process.env.FYNX_WALLET_FUNDING_MAX_AMOUNT || '');
+  if (!Number.isFinite(minimum) || minimum <= 0 ||
+      !Number.isFinite(maximum) || maximum <= 0 || maximum < minimum) return null;
+  return { minimum, maximum };
+}
+
 function walletEncryptionKey() {
   const raw = String(process.env.FYNX_WALLET_ACCOUNT_ENCRYPTION_KEY || '').trim();
   if (/^[0-9a-f]{64}$/i.test(raw)) return Buffer.from(raw, 'hex');
@@ -675,13 +683,154 @@ export async function reconcileBuyerWalletTransferEvent(client, eventName, trans
   return reconcileWalletTransferEvent(client, eventName, transfer);
 }
 
+async function reconcileWalletHostedFunding(reference, userId = null) {
+  const normalizedReference = String(reference || '').trim();
+  if (!/^fwd_[a-f0-9]{32}$/i.test(normalizedReference)) {
+    throw Object.assign(new Error('Wallet funding reference is invalid'), { code: 'WALLET_FUNDING_REFERENCE_INVALID' });
+  }
+  await ensureBuyerWalletSchema();
+  const existing = (await pool.query(`
+    SELECT * FROM buyer_wallet_funding_intents
+     WHERE reference=$1 AND ($2::bigint IS NULL OR user_id=$2)
+     LIMIT 1
+  `, [normalizedReference, userId])).rows[0];
+  if (!existing) return { matched: false, status: 'NOT_FOUND' };
+  if (existing.status === 'SUCCEEDED') {
+    return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(existing.amount), idempotent: true };
+  }
+  if (['FAILED','BLOCKED'].includes(String(existing.status).toUpperCase())) {
+    return { matched: true, status: String(existing.status), reference: normalizedReference, amount: Number(existing.amount) };
+  }
+
+  const verified = await walletPaystackRequest('/transaction/verify/' + encodeURIComponent(normalizedReference));
+  const providerStatus = String(verified?.status || '').trim().toLowerCase();
+  const providerReference = String(verified?.reference || '').trim();
+  const providerCurrency = String(verified?.currency || '').trim().toUpperCase();
+  const providerAmount = Number(verified?.amount);
+  const providerChannel = String(verified?.authorization?.channel || '').trim().toLowerCase();
+  const metadata = verified?.metadata && typeof verified.metadata === 'object' ? verified.metadata : {};
+  const metadataIntentId = String(metadata.fynxWalletFundingIntentId || metadata.walletFundingIntentId || '');
+  const metadataUserId = String(metadata.fynxUserId || metadata.userId || '');
+
+  if (providerStatus !== 'success') {
+    if (providerStatus === 'failed' || providerStatus === 'abandoned') {
+      await pool.query(`
+        UPDATE buyer_wallet_funding_intents
+           SET status='FAILED',failure_reason=$1,updated_at=NOW()
+         WHERE id=$2 AND status IN ('PENDING','PROCESSING')
+      `, [String(verified?.gateway_response || verified?.message || 'Paystack funding transaction failed').slice(0, 240), existing.id]);
+      return { matched: true, status: 'FAILED', reference: normalizedReference, amount: Number(existing.amount) };
+    }
+    return { matched: true, status: 'PENDING', reference: normalizedReference, amount: Number(existing.amount) };
+  }
+
+  const expectedAmount = Math.round(Number(existing.amount) * 100);
+  const expectedChannel = existing.payment_method === 'CARD' ? 'card' : 'ussd';
+  if (!Number.isSafeInteger(providerAmount) || providerAmount !== expectedAmount ||
+      providerCurrency !== 'NGN' || providerReference !== normalizedReference ||
+      metadataIntentId !== String(existing.id) || metadataUserId !== String(existing.user_id) ||
+      providerChannel !== expectedChannel) {
+    await pool.query(`
+      UPDATE buyer_wallet_funding_intents
+         SET status='BLOCKED',failure_reason=$1,updated_at=NOW()
+       WHERE id=$2 AND status IN ('PENDING','PROCESSING')
+    `, ['Paystack funding verification did not match this Wallet funding request', existing.id]);
+    return { matched: true, status: 'BLOCKED', reference: normalizedReference, amount: Number(existing.amount) };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const intent = (await client.query(`
+      SELECT * FROM buyer_wallet_funding_intents
+       WHERE id=$1
+       FOR UPDATE
+    `, [existing.id])).rows[0];
+    if (!intent) {
+      await client.query('ROLLBACK');
+      return { matched: false, status: 'NOT_FOUND' };
+    }
+    if (intent.status === 'SUCCEEDED') {
+      await client.query('COMMIT');
+      return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(intent.amount), idempotent: true };
+    }
+    if (!['PENDING','PROCESSING'].includes(String(intent.status).toUpperCase())) {
+      await client.query('ROLLBACK');
+      return { matched: true, status: String(intent.status), reference: normalizedReference, amount: Number(intent.amount) };
+    }
+
+    const wallet = (await client.query(`
+      SELECT id,status FROM buyer_wallets
+       WHERE id=$1 AND user_id=$2 AND currency='NGN'
+       FOR UPDATE
+    `, [intent.wallet_id, intent.user_id])).rows[0];
+    if (!wallet || wallet.status === 'CLOSED' || wallet.status === 'RESTRICTED') {
+      await client.query("UPDATE buyer_wallet_funding_intents SET status='BLOCKED',failure_reason='Wallet is not eligible for funding',updated_at=NOW() WHERE id=$1", [intent.id]);
+      await client.query('COMMIT');
+      return { matched: true, status: 'BLOCKED', reference: normalizedReference, amount: Number(intent.amount) };
+    }
+
+    const walletTx = (await client.query(
+      'SELECT id,status FROM buyer_wallet_transactions WHERE provider_reference=$1 FOR UPDATE',
+      [normalizedReference]
+    )).rows[0];
+    if (!walletTx) {
+      const transactionId = crypto.randomUUID();
+      const amount = Number(intent.amount).toFixed(2);
+      await client.query(`
+        INSERT INTO buyer_wallet_transactions
+          (id,wallet_id,user_id,transaction_type,status,amount,fee,currency,reference,idempotency_key,provider_reference,description,metadata)
+        VALUES ($1,$2,$3,'FUNDING','PENDING',$4,0,'NGN',$5,$6,$5,'Wallet payment top-up',$7::jsonb)
+      `, [
+        transactionId, intent.wallet_id, intent.user_id, amount, normalizedReference,
+        'PAYSTACK-WALLET-FUND-' + normalizedReference,
+        JSON.stringify({ provider: 'paystack', paymentMethod: intent.payment_method, fundingIntentId: String(intent.id), providerFeeSubunit: Number(verified.fees || 0) })
+      ]);
+      await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [transactionId]);
+      await client.query(`
+        INSERT INTO buyer_wallet_ledger_entries
+          (transaction_id,wallet_id,entry_key,account_code,side,amount,currency)
+        VALUES
+          ($1,$2,$3,'PROVIDER_CLEARING','DEBIT',$4,'NGN'),
+          ($1,$2,$5,'AVAILABLE','CREDIT',$4,'NGN')
+      `, [
+        transactionId, intent.wallet_id, 'PAYSTACK-WALLET-FUND-CLEARING-' + normalizedReference,
+        amount, 'PAYSTACK-WALLET-FUND-AVAILABLE-' + normalizedReference
+      ]);
+      await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [transactionId]);
+    } else if (walletTx.status !== 'SUCCEEDED') {
+      await client.query('ROLLBACK');
+      return { matched: true, status: 'PROCESSING', reference: normalizedReference, amount: Number(intent.amount) };
+    }
+
+    await client.query(`
+      UPDATE buyer_wallets SET status='ACTIVE',provider='paystack',updated_at=NOW()
+       WHERE id=$1 AND status='PENDING_PROVIDER'
+    `, [intent.wallet_id]);
+    await client.query(`
+      UPDATE buyer_wallet_funding_intents
+         SET status='SUCCEEDED',provider_reference=$1,failure_reason=NULL,updated_at=NOW()
+       WHERE id=$2
+    `, [normalizedReference, intent.id]);
+    await client.query('COMMIT');
+    return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(intent.amount), credited: true };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function handleBuyerWalletPaystackEvent(eventName, data = {}) {
   const normalizedEvent = String(eventName || '').trim().toLowerCase();
   const dedicatedAccountEvent = normalizedEvent === 'customeridentification.failed' ||
     normalizedEvent.startsWith('dedicatedaccount.');
-  const dedicatedFundingEvent = normalizedEvent === 'charge.success' &&
-    String(data.authorization?.channel || '').toLowerCase() === 'dedicated_nuban';
-  if (!dedicatedAccountEvent && !dedicatedFundingEvent) return { handled: false };
+  const paymentChannel = String(data.authorization?.channel || '').trim().toLowerCase();
+  const hostedFundingIntentId = String(data.metadata?.fynxWalletFundingIntentId || data.metadata?.walletFundingIntentId || '');
+  const dedicatedFundingEvent = normalizedEvent === 'charge.success' && paymentChannel === 'dedicated_nuban';
+  const hostedFundingEvent = normalizedEvent === 'charge.success' && hostedFundingIntentId.length > 0;
+  if (!dedicatedAccountEvent && !dedicatedFundingEvent && !hostedFundingEvent) return { handled: false };
   await ensureBuyerWalletSchema();
 
   if (normalizedEvent === 'customeridentification.failed' || normalizedEvent === 'dedicatedaccount.assign.failed') {
@@ -712,6 +861,16 @@ export async function handleBuyerWalletPaystackEvent(eventName, data = {}) {
   }
 
   if (normalizedEvent !== 'charge.success') return { handled: false };
+  if (hostedFundingEvent) {
+    const intentId = String(data.metadata?.fynxWalletFundingIntentId || data.metadata?.walletFundingIntentId || '');
+    const reference = typeof data.reference === 'string' ? data.reference.trim() : '';
+    const intent = (await pool.query(
+      'SELECT user_id FROM buyer_wallet_funding_intents WHERE id=$1 AND reference=$2 LIMIT 1',
+      [intentId, reference]
+    )).rows[0];
+    if (!intent) return { handled: true, matched: false };
+    return reconcileWalletHostedFunding(reference, String(intent.user_id));
+  }
   const reference = typeof data.reference === 'string' ? data.reference.trim() : '';
   if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference) ||
       String(data.status || '').toLowerCase() !== 'success') {
@@ -889,6 +1048,178 @@ export function registerBuyerWalletRoutes({ app }) {
     }
   });
 
+
+  app.post('/api/wallet/funding/initialize', auth, async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const paymentMethod = typeof req.body?.paymentMethod === 'string' ? req.body.paymentMethod.trim().toUpperCase() : '';
+    const amountValue = Number(req.body?.amount);
+    const amountMinor = Math.round(amountValue * 100);
+    const idempotencyKey = typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey.trim() : '';
+    const approvalAction = paymentMethod === 'CARD' ? 'CARD_FUNDING' : paymentMethod === 'USSD' ? 'USSD_FUNDING' : '';
+    if (!approvalAction || !walletProviderApproved(approvalAction)) {
+      return res.status(503).json({ error: 'this FYNX Wallet payment method is not enabled for this provider environment yet' });
+    }
+    const limits = walletFundingLimits();
+    if (!limits) return res.status(503).json({ error: 'wallet funding limits are not configured for this provider environment yet' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+        !Number.isFinite(amountValue) || amountValue < limits.minimum || amountValue > limits.maximum ||
+        !Number.isSafeInteger(amountMinor) || !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey)) {
+      return res.status(400).json({ error: 'valid email, permitted funding amount and unique payment reference are required' });
+    }
+
+    let intent;
+    try {
+      await ensureBuyerWalletSchema();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`
+          INSERT INTO buyer_wallets (id,user_id,currency,status,provider)
+          VALUES ($1,$2,'NGN','PENDING_PROVIDER','paystack')
+          ON CONFLICT (user_id,currency) DO NOTHING
+        `, [crypto.randomUUID(), req.user.sub]);
+        const wallet = (await client.query(`
+          SELECT id,status FROM buyer_wallets
+           WHERE user_id=$1 AND currency='NGN'
+           FOR UPDATE
+        `, [req.user.sub])).rows[0];
+        if (!wallet || wallet.status === 'CLOSED' || wallet.status === 'RESTRICTED') {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'your FYNX Wallet is not available for funding' });
+        }
+
+        const existing = (await client.query(`
+          SELECT * FROM buyer_wallet_funding_intents
+           WHERE user_id=$1 AND idempotency_key=$2
+           FOR UPDATE
+        `, [req.user.sub, idempotencyKey])).rows[0];
+        if (existing) {
+          if (Number(existing.amount) !== Number(amountValue.toFixed(2)) || existing.payment_method !== paymentMethod) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'funding reference has already been used for another amount or method' });
+          }
+          if (existing.status === 'SUCCEEDED') {
+            await client.query('COMMIT');
+            return res.json({ status: 'SUCCEEDED', reference: existing.reference, amount: Number(existing.amount), idempotent: true });
+          }
+          if (existing.status === 'PENDING' && existing.authorization_url) {
+            await client.query('COMMIT');
+            return res.status(200).json({
+              status: 'PENDING',
+              reference: existing.reference,
+              amount: Number(existing.amount),
+              authorizationUrl: existing.authorization_url,
+              accessCode: existing.access_code,
+              idempotent: true
+            });
+          }
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'previous funding request is not reusable; check its payment status first' });
+        }
+
+        const intentId = crypto.randomUUID();
+        const reference = 'fwd_' + crypto.randomUUID().replace(/-/g, '');
+        intent = (await client.query(`
+          INSERT INTO buyer_wallet_funding_intents
+            (id,wallet_id,user_id,payment_method,status,amount,currency,reference,idempotency_key)
+          VALUES ($1,$2,$3,$4,'PENDING',$5,'NGN',$6,$7)
+          RETURNING *
+        `, [
+          intentId, wallet.id, req.user.sub, paymentMethod,
+          amountValue.toFixed(2), reference, idempotencyKey
+        ])).rows[0];
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      const channels = paymentMethod === 'CARD' ? ['card'] : ['ussd'];
+      const initialized = await walletPaystackRequest('/transaction/initialize', {
+        method: 'POST',
+        body: {
+          email,
+          amount: amountMinor,
+          currency: 'NGN',
+          reference: intent.reference,
+          channels,
+          metadata: {
+            fynxWalletFundingIntentId: String(intent.id),
+            fynxUserId: String(req.user.sub),
+            walletFunding: true,
+            walletPaymentMethod: paymentMethod
+          }
+        }
+      });
+      const authorizationUrl = String(initialized.authorization_url || '').trim();
+      const accessCode = String(initialized.access_code || '').trim();
+      if (!authorizationUrl.startsWith('https://') || !accessCode) {
+        await pool.query(`
+          UPDATE buyer_wallet_funding_intents
+             SET status='BLOCKED',failure_reason='Paystack initialization did not return a secure hosted authorization URL',updated_at=NOW()
+           WHERE id=$1 AND status='PENDING'
+        `, [intent.id]);
+        return res.status(502).json({ error: 'payment provider did not return a secure checkout session' });
+      }
+      await pool.query(`
+        UPDATE buyer_wallet_funding_intents
+           SET authorization_url=$1,access_code=$2,updated_at=NOW()
+         WHERE id=$3 AND status='PENDING'
+      `, [authorizationUrl, accessCode, intent.id]);
+      return res.status(200).json({
+        status: 'PENDING',
+        reference: intent.reference,
+        amount: Number(intent.amount),
+        paymentMethod,
+        authorizationUrl,
+        accessCode
+      });
+    } catch (error) {
+      console.error('buyer wallet hosted funding initialization', error);
+      if (intent?.id) {
+        await pool.query(`
+          UPDATE buyer_wallet_funding_intents
+             SET status='FAILED',failure_reason=$1,updated_at=NOW()
+           WHERE id=$2 AND status='PENDING'
+        `, [String(error?.message || 'provider initialization failed').slice(0, 240), intent.id]).catch(() => {});
+      }
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 502)
+        .json({ error: 'FYNX Wallet payment could not be initialized' });
+    }
+  });
+
+  app.get('/api/wallet/funding/:reference', auth, async (req, res) => {
+    const reference = typeof req.params.reference === 'string' ? req.params.reference.trim() : '';
+    if (!/^fwd_[a-f0-9]{32}$/i.test(reference)) return res.status(400).json({ error: 'invalid Wallet funding reference' });
+    try {
+      await ensureBuyerWalletSchema();
+      const intent = (await pool.query(`
+        SELECT user_id,amount,status,payment_method
+          FROM buyer_wallet_funding_intents
+         WHERE reference=$1 AND user_id=$2
+         LIMIT 1
+      `, [reference, req.user.sub])).rows[0];
+      if (!intent) return res.status(404).json({ error: 'Wallet funding request was not found' });
+      const outcome = await reconcileWalletHostedFunding(reference, String(req.user.sub));
+      return res.json({
+        status: outcome.status || intent.status,
+        reference,
+        amount: Number(intent.amount),
+        paymentMethod: intent.payment_method,
+        message: outcome.status === 'SUCCEEDED'
+          ? 'Paystack confirmed the payment and FYNX credited your Wallet.'
+          : outcome.status === 'FAILED' || outcome.status === 'BLOCKED'
+            ? 'The payment was not credited. Check the status and try again with a new payment request.'
+            : 'Paystack has not confirmed a successful payment yet. Your Wallet has not been credited.'
+      });
+    } catch (error) {
+      console.error('buyer wallet funding status lookup', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 502)
+        .json({ error: 'Wallet funding status could not be verified' });
+    }
+  });
 
   app.get('/api/wallet/funding-account', auth, async (req, res) => {
     try {
