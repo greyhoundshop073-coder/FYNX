@@ -167,7 +167,8 @@ export async function settleBuyerWalletMarketplaceOrder(client, orderId) {
     return { handled: true, idempotent: true, transactionId: String(existing.id) };
   }
 
-  await ensureBuyerWalletSchema();
+  // A persisted Wallet payment proves these tables already exist. Avoid running
+  // schema DDL on a separate pool connection inside the seller-payout transaction.
   const wallet = (await client.query(`
     SELECT id,status
       FROM buyer_wallets
