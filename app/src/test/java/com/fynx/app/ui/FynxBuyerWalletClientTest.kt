@@ -86,6 +86,26 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun walletSecurityReportsWhenWithdrawalPinIsNotConfigured() {
+        val security = FynxBuyerWalletClient.parseWalletSecurity(
+            """{"hasWithdrawalPin":false,"isLocked":false,"lockedUntil":null}"""
+        )
+        assertFalse(security.hasWithdrawalPin)
+        assertFalse(security.isLocked)
+        assertNull(security.lockedUntil)
+    }
+
+    @Test
+    fun walletSecurityReportsTemporaryPinLock() {
+        val security = FynxBuyerWalletClient.parseWalletSecurity(
+            """{"hasWithdrawalPin":true,"isLocked":true,"lockedUntil":"2026-11-01T10:15:00Z"}"""
+        )
+        assertTrue(security.hasWithdrawalPin)
+        assertTrue(security.isLocked)
+        assertEquals("2026-11-01T10:15:00Z", security.lockedUntil)
+    }
+
+    @Test
     fun payoutBankListKeepsOnlyValidProviderBankRecords() {
         val banks = FynxBuyerWalletClient.parsePayoutBanks(
             """{"banks":[{"name":"Access Bank","code":"044","slug":"access-bank"},{"name":"Invalid","code":"x"}]}"""
