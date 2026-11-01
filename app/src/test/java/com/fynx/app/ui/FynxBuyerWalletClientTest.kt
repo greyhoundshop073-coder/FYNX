@@ -50,6 +50,42 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun sellerSummarySeparatesGrossSalesFeesAndNetEarnings() {
+        val summary = FynxBuyerWalletClient.parseSellerSummary(
+            """{"totals":[{"currency":"NGN","protectedFunds":1000.0,"availableForPayout":500.0,"payoutPending":100.0,"paidOut":2500.0,"grossSales":4500.0,"marketplaceFees":225.0,"netEarnings":4275.0}],"settlements":[{"orderId":"order-1","title":"Leather bag","currency":"NGN","sellerNetAmount":950.0,"marketplaceFeeSeller":50.0,"funds":"HELD","payoutStatus":"HELD","updatedAt":"2026-10-31T10:00:00Z"}]}"""
+        )
+        assertEquals(1, summary.totals.size)
+        assertEquals(4500.0, summary.totals[0].grossSales, 0.0)
+        assertEquals(225.0, summary.totals[0].marketplaceFees, 0.0)
+        assertEquals(4275.0, summary.totals[0].netEarnings, 0.0)
+        assertEquals(50.0, summary.settlements[0].marketplaceFeeSeller, 0.0)
+        assertEquals("HELD", summary.settlements[0].funds)
+    }
+
+    @Test
+    fun sellerSummaryAcceptsUsdAndEmptySellerHistory() {
+        val summary = FynxBuyerWalletClient.parseSellerSummary(
+            """{"totals":[{"currency":"USD","protectedFunds":0,"availableForPayout":0,"payoutPending":0,"paidOut":0,"grossSales":0,"marketplaceFees":0,"netEarnings":0}],"settlements":[]}"""
+        )
+        assertEquals("USD", summary.totals.single().currency)
+        assertTrue(summary.settlements.isEmpty())
+    }
+
+    @Test
+    fun sellerSummaryRejectsNegativeOrUnsupportedAmounts() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseSellerSummary(
+                """{"totals":[{"currency":"NGN","protectedFunds":-1,"availableForPayout":0,"payoutPending":0,"paidOut":0,"grossSales":0,"marketplaceFees":0,"netEarnings":0}]}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseSellerSummary(
+                """{"totals":[{"currency":"EUR","protectedFunds":0,"availableForPayout":0,"payoutPending":0,"paidOut":0,"grossSales":0,"marketplaceFees":0,"netEarnings":0}]}"""
+            )
+        }
+    }
+
+    @Test
     fun activityDirectionIsNormalizedAndAllowlisted() {
         assertEquals("ALL", FynxBuyerWalletClient.normalizeActivityDirection(" all "))
         assertEquals("IN", FynxBuyerWalletClient.normalizeActivityDirection("in"))
