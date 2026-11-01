@@ -52,6 +52,9 @@ checks = [
      and ".widthIn(max = 172.dp)" in camera
      and "overflow = TextOverflow.Ellipsis" in camera
      and "Photo preview" in camera and "Video preview" in camera
+     and "modifier = Modifier.align(Alignment.TopStart)" in camera
+     and ".padding(start = 16.dp, top = 84.dp)" in camera
+     and ".widthIn(max = 184.dp)" in camera
      and "selectedMusic = selectedCatalogueMusic" in home
      and "showMusicPicker = true" in home),
     ("Immersive Status media composer hides the app bottom navigation so caption and Send controls remain reachable",

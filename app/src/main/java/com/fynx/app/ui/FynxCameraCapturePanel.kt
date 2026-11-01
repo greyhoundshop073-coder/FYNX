@@ -1286,7 +1286,12 @@ fun FynxCameraCapturePanel(
                 selectedMusic = selectedMusic,
                 onChooseMusic = onChooseMusic,
                 onClearMusic = onClearMusic,
-                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp)
+                // Keep the music action below the identity row on the left; the right
+                // camera-control rail occupies the opposite side of this area.
+                modifier = Modifier.align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, top = 84.dp)
+                    .widthIn(max = 184.dp)
             )
         }
 
