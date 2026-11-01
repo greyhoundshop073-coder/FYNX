@@ -1161,6 +1161,85 @@ export function registerBuyerWalletRoutes({ app }) {
     }
   });
 
+  app.get('/api/wallet/withdrawals/:reference', auth, async (req, res) => {
+    const reference = typeof req.params.reference === 'string' ? req.params.reference.trim() : '';
+    if (!/^fw_[a-f0-9]{32}$/i.test(reference)) return res.status(400).json({ error: 'invalid wallet withdrawal reference' });
+    try {
+      await ensureBuyerWalletSchema();
+      res.set('Cache-Control', 'no-store, private');
+      let operation = (await pool.query(`
+        SELECT id,wallet_id,user_id,provider_reference,status,amount,currency,bank_name,account_last4
+          FROM buyer_wallet_provider_operations
+         WHERE provider_reference=$1 AND user_id=$2
+         LIMIT 1
+      `, [reference, req.user.sub])).rows[0];
+      if (!operation) return res.status(404).json({ error: 'wallet withdrawal was not found' });
+      const currentStatus = String(operation.status || '').toUpperCase();
+      if (['FAILED','BLOCKED','REVERSED'].includes(currentStatus)) {
+        return res.json({
+          status: currentStatus,
+          reference,
+          amount: Number(operation.amount),
+          bankName: operation.bank_name,
+          accountLast4: operation.account_last4,
+          refreshed: false
+        });
+      }
+
+      // Poll the original Paystack reference. Never create a second transfer or
+      // infer success from a timeout, app restart or client-side request result.
+      const verified = await walletPaystackRequest('/transfer/verify/' + encodeURIComponent(reference));
+      const providerStatus = String(verified?.status || '').trim().toLowerCase();
+      const eventName = providerStatus === 'success' ? 'transfer.success'
+        : providerStatus === 'failed' ? 'transfer.failed'
+        : providerStatus === 'reversed' ? 'transfer.reversed'
+        : null;
+
+      if (eventName) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const locked = (await client.query(`
+            SELECT * FROM buyer_wallet_provider_operations
+             WHERE provider_reference=$1 AND user_id=$2
+             FOR UPDATE
+          `, [reference, req.user.sub])).rows[0];
+          if (!locked) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'wallet withdrawal was not found' });
+          }
+          await reconcileWalletTransferEvent(client, eventName, verified);
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw error;
+        } finally {
+          client.release();
+        }
+      }
+
+      operation = (await pool.query(`
+        SELECT id,status,amount,bank_name,account_last4
+          FROM buyer_wallet_provider_operations
+         WHERE provider_reference=$1 AND user_id=$2
+         LIMIT 1
+      `, [reference, req.user.sub])).rows[0];
+      return res.status(200).json({
+        status: String(operation?.status || 'PENDING'),
+        reference,
+        amount: Number(operation?.amount || 0),
+        bankName: operation?.bank_name || '',
+        accountLast4: operation?.account_last4 || '',
+        refreshed: Boolean(eventName),
+        message: eventName ? 'Wallet withdrawal status was reconciled with Paystack.' : 'Paystack has not confirmed a final transfer result yet. Your funds remain reserved.'
+      });
+    } catch (error) {
+      console.error('buyer wallet withdrawal status refresh', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 502)
+        .json({ error: 'wallet withdrawal status could not be refreshed' });
+    }
+  });
+
   app.post('/api/wallet/withdrawals', auth, async (req, res) => {
     const amountValue = Number(req.body?.amount);
     const amountMinor = Math.round(amountValue * 100);
