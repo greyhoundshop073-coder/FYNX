@@ -143,7 +143,7 @@ DIAGNOSTIC_MARKERS = (
     "New post", "What's on your mind?", "Photo", "Video/Camera",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
-    "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
+    "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
@@ -1522,6 +1522,16 @@ def find_wallet_feature_entry(xml_text:str):
     return None
 
 
+def wallet_destination_ready(xml_text: str) -> bool:
+    """Require the Wallet page and its visible balance buckets, not below-fold copy."""
+    return bool(
+        find_control(xml_text, ["FYNX Wallet"])
+        and find_control(xml_text, ["Balance details"])
+        and find_control(xml_text, ["Reserved"])
+        and find_control(xml_text, ["Withdrawal pending"])
+    )
+
+
 def capture_wallet_from_features(prefix:str):
     """Open the real FYNX Wallet destination, capture it, and restore Home."""
     home_xml=restore_home_after_restart(prefix+"-home")
@@ -1570,12 +1580,7 @@ def capture_wallet_from_features(prefix:str):
     for attempt in range(60):
         time.sleep(.5)
         wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
-        wallet_shell_opened=bool(
-            wallet_xml
-            and find_control(wallet_xml, ["FYNX Wallet"])
-            and find_control(wallet_xml, ["Balance details"])
-            and find_control(wallet_xml, ["Understand your money"])
-        )
+        wallet_shell_opened=wallet_destination_ready(wallet_xml)
         wallet_still_loading=bool(wallet_xml and any(marker in wallet_xml for marker in wallet_loading_markers))
         if wallet_shell_opened and not wallet_still_loading:
             wallet_settled=True
@@ -1594,7 +1599,7 @@ def capture_wallet_from_features(prefix:str):
         if wallet_shell_opened:
             result_message="Wallet sections rendered, but summary or activity was still loading after 30 seconds."
         else:
-            result_message="Wallet result was tapped, but its title, Balance details and money explanation did not appear."
+            result_message="Wallet result opened, but its title and visible balance-detail cards did not appear."
 
     action_screens_captured = False
     if wallet_opened:
@@ -1640,7 +1645,7 @@ def capture_wallet_from_features(prefix:str):
                                 if add_money_after_ussd:
                                     home_after_add = tap_control(
                                         add_money_after_ussd, ["Back to Wallet"], "wallet-add-back-home",
-                                        ["Balance details", "Understand your money"]
+                                        ["Balance details", "Reserved", "Withdrawal pending"]
                                     )
                                     if home_after_add:
                                         withdraw_xml = tap_control(
@@ -2263,7 +2268,7 @@ def open_features(target_labels:list[str]|None=None):
         report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
         journeys=(
             ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
-            ("wallet",["FYNX Wallet"],["FYNX Wallet","Understand your money","Balance details"]),
+            ("wallet",["FYNX Wallet"],["FYNX Wallet","Balance details","Reserved","Withdrawal pending"]),
             ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
         )
         for name,labels,expected in journeys:
@@ -2280,7 +2285,7 @@ def open_features(target_labels:list[str]|None=None):
             if not after:
                 FAILURES.append("authenticated Features -> "+name)
                 continue
-            if name == "wallet" and not all(find_control(after,[marker]) for marker in ["FYNX Wallet","Understand your money","Balance details"]):
+            if name == "wallet" and not wallet_destination_ready(after):
                 FAILURES.append("authenticated Features -> Wallet did not expose the complete wallet summary surface")
                 continue
             if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
