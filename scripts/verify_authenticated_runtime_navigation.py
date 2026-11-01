@@ -2315,13 +2315,89 @@ marketplace_xml = tap_control(
 if marketplace_xml:
     screenshot("authenticated-marketplace.png")
     report.append("- PASS authenticated Home -> Marketplace search/cart surface screenshot/UI hierarchy")
+
+    # Continue in the same real, server-authenticated session into the private
+    # seller control center. This is read-only: do not save a shop profile,
+    # publish a listing, change inventory, assign a driver or create an order.
+    shop_xml = tap_control(
+        marketplace_xml,
+        ["My Shop"],
+        "marketplace-my-shop-overview",
+        ["Your shop at a glance", "Manage your storefront", "Shop profile"]
+    )
+    if shop_xml:
+        shop_xml, overview_settled = wait_for_my_shop_section_settled("overview", timeout=20.0)
+        if shop_xml:
+            screenshot("authenticated-marketplace-my-shop-overview.png")
+            (ROOT/"authenticated-marketplace-my-shop-overview.xml").write_text(
+                shop_xml + chr(10), encoding="utf-8"
+            )
+        if overview_settled:
+            report.append("- PASS authenticated Marketplace -> private My Shop overview settled and captured.")
+        else:
+            FAILURES.append("Authenticated My Shop overview did not settle within 20 seconds.")
+
+        shop_sections = [
+            ("profile", "Shop profile", ["Shop identity"]),
+            ("listings", "Listings", ["Your listings", "You have no active listings yet", "Retry loading listings", "Archived listings"]),
+            ("orders", "Orders", ["Review buyer orders, fulfillment progress, protected payment status"]),
+            ("delivery-drivers", "Delivery & drivers", ["Manage driver assignments and delivery coordination separately from order review and payout settings"]),
+            ("earnings-payouts", "Earnings & payouts", ["Marketplace earnings"]),
+        ]
+        current_shop_xml = shop_xml
+        for slug, label, expected in shop_sections:
+            control = find_control(current_shop_xml, [label])
+            # The tabs form a horizontal row. Reveal off-screen tabs with a real
+            # bounded swipe instead of assuming a coordinate or skipping a section.
+            for attempt in range(4):
+                if control:
+                    break
+                overview_control = find_control(current_shop_xml, ["Overview"])
+                tab_y = overview_control[2] if overview_control else 600
+                run("adb", "shell", "input", "swipe", "1270", str(tab_y), "230", str(tab_y), "450")
+                time.sleep(0.35)
+                current_shop_xml = dump_ui(
+                    "authenticated-marketplace-my-shop-tabs-" + slug + "-" + str(attempt) + ".xml"
+                ) or current_shop_xml
+                control = find_control(current_shop_xml, [label])
+            if not control:
+                FAILURES.append("Authenticated My Shop tab was not reachable: " + label)
+                continue
+            section_xml = tap_control(
+                current_shop_xml, [label], "marketplace-my-shop-" + slug, expected
+            )
+            if not section_xml:
+                FAILURES.append("Authenticated My Shop section did not open: " + label)
+                current_shop_xml = dump_ui(
+                    "authenticated-marketplace-my-shop-" + slug + "-after-attempt.xml"
+                ) or current_shop_xml
+                continue
+            section_xml, section_settled = wait_for_my_shop_section_settled(slug, timeout=20.0)
+            if section_xml:
+                screenshot("authenticated-marketplace-my-shop-" + slug + ".png")
+                (ROOT/("authenticated-marketplace-my-shop-" + slug + ".xml")).write_text(
+                    section_xml + chr(10), encoding="utf-8"
+                )
+                current_shop_xml = section_xml
+            if section_settled:
+                report.append("- PASS authenticated My Shop section settled and captured: " + label + ".")
+            else:
+                FAILURES.append("Authenticated My Shop section did not settle within 20 seconds: " + label)
+    else:
+        FAILURES.append("Authenticated Marketplace -> My Shop did not reach the private seller control center.")
 else:
     FAILURES.append("authenticated Home -> Marketplace")
-    
+
 expected_authenticated_surfaces = [
     "authenticated-home.png", "authenticated-chat.png", "authenticated-friends.png",
     "authenticated-stories.png", "authenticated-features.png", "authenticated-money.png",
     "authenticated-wallet.png", "authenticated-ai.png", "authenticated-marketplace.png",
+    "authenticated-marketplace-my-shop-overview.png",
+    "authenticated-marketplace-my-shop-profile.png",
+    "authenticated-marketplace-my-shop-listings.png",
+    "authenticated-marketplace-my-shop-orders.png",
+    "authenticated-marketplace-my-shop-delivery-drivers.png",
+    "authenticated-marketplace-my-shop-earnings-payouts.png",
 ]
 captured_authenticated_surfaces = [
     name for name in expected_authenticated_surfaces if (ROOT / name).is_file()
