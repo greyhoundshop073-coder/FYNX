@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
@@ -12,6 +13,7 @@ actions = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt")
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
 transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text()
+ast.parse(runtime)
 admin_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt").read_text()
 admin_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text()
 admin_routes = (ROOT / "backend/adminRoutes.js").read_text()
