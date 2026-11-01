@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { settleBuyerWalletMarketplaceOrder } from './buyerWalletMarketplace.js';
 
 const { Pool } = pg;
 
@@ -151,6 +152,7 @@ async function markPayoutSucceeded(client, operation, providerReference, provide
       [escrow.id, operation.order_id, marketplaceFee, escrow.currency, `MARKETPLACE-FEE-${operation.order_id}`, JSON.stringify({ provider: 'paystack', providerReference, feePolicy: operation.metadata?.feePolicy || null, feePolicyVersion: operation.metadata?.feePolicyVersion || null })]
     );
   }
+  await settleBuyerWalletMarketplaceOrder(client, operation.order_id);
 }
 
 async function initiatePayout(payload) {
