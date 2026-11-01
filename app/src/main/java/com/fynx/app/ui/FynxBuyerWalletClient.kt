@@ -84,6 +84,12 @@ internal data class FynxWalletSecurityStatus(
     val dailyCountLimit: Int?
 )
 
+internal data class FynxWalletMarketplacePayment(
+    val orderId: String,
+    val reference: String,
+    val amount: Double
+)
+
 internal data class FynxWalletWithdrawalResult(
     val status: String,
     val reference: String,
@@ -262,6 +268,37 @@ internal object FynxBuyerWalletClient {
             .put("pin", pin)
         return FynxBackendClient.postJson(context, "/api/wallet/withdrawals", body.toString())
             .mapCatching(::parseWithdrawalResult)
+    }
+
+    suspend fun payMarketplaceOrder(
+        context: Context,
+        orderId: String,
+        pin: String,
+        idempotencyKey: String
+    ): Result<FynxWalletMarketplacePayment> {
+        require(orderId.matches(Regex("^[0-9a-fA-F-]{36}$"))) { "Marketplace order reference is invalid." }
+        require(pin.matches(Regex("^\\d{6}$"))) { "Enter your six-digit Wallet PIN." }
+        require(idempotencyKey.matches(Regex("^[A-Za-z0-9_-]{8,100}$"))) { "Wallet payment reference is invalid." }
+        val body = JSONObject()
+            .put("pin", pin)
+            .put("idempotencyKey", idempotencyKey)
+        return FynxBackendClient.postJson(
+            context,
+            "/api/wallet/marketplace-orders/" + Uri.encode(orderId) + "/pay",
+            body.toString()
+        ).mapCatching { raw ->
+            val json = JSONObject(raw)
+            require(json.optString("status").trim().uppercase(Locale.US) == "PAID") {
+                "Marketplace Wallet payment was not confirmed."
+            }
+            val returnedOrderId = json.optString("orderId").trim()
+            val reference = json.optString("reference").trim()
+            val amount = json.optDouble("amount", Double.NaN)
+            require(returnedOrderId == orderId && reference.isNotBlank() && amount.isFinite() && amount > 0.0) {
+                "Marketplace Wallet payment confirmation is invalid."
+            }
+            FynxWalletMarketplacePayment(returnedOrderId, reference, amount)
+        }
     }
 
     suspend fun refreshWithdrawalStatus(
