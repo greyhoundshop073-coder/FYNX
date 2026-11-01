@@ -1065,9 +1065,10 @@ export function registerBuyerWalletRoutes({ app }) {
     if (!/^\d{6}$/.test(pin) || pin !== confirmPin || currentPassword.length < 8 || currentPassword.length > 128) {
       return res.status(400).json({ error: 'enter your current password and matching six-digit wallet PIN' });
     }
-    const client = await pool.connect();
+    let client;
     try {
       await ensureBuyerWalletSchema();
+      client = await pool.connect();
       await client.query('BEGIN');
       const wallet = (await client.query(`
         SELECT id,status,withdrawal_pin_setup_failed_attempts,withdrawal_pin_setup_locked_until
@@ -1123,7 +1124,7 @@ export function registerBuyerWalletRoutes({ app }) {
       return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500)
         .json({ error: 'wallet withdrawal PIN could not be saved' });
     } finally {
-      client.release();
+      client?.release();
     }
   });
 
