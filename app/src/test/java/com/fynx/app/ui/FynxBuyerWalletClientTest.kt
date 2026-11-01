@@ -50,6 +50,42 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun fundingAccountParsesOnlyAssignedProviderAccount() {
+        val account = FynxBuyerWalletClient.parseFundingAccount(
+            """{"status":"ACTIVE","currency":"NGN","canRequest":false,"account":{"bankName":"Wema Bank","accountName":"FYNX / TEST USER","accountNumber":"0123456789","currency":"NGN"}}"""
+        )
+        assertEquals("ACTIVE", account.status)
+        assertEquals("Wema Bank", account.bankName)
+        assertEquals("0123456789", account.accountNumber)
+        assertFalse(account.canRequest)
+    }
+
+    @Test
+    fun pendingFundingAccountDoesNotInventBankDetails() {
+        val account = FynxBuyerWalletClient.parseFundingAccount(
+            """{"status":"ASSIGNING","currency":"NGN","canRequest":false,"account":null}"""
+        )
+        assertEquals("ASSIGNING", account.status)
+        assertNull(account.bankName)
+        assertNull(account.accountName)
+        assertNull(account.accountNumber)
+    }
+
+    @Test
+    fun activeFundingAccountRejectsMissingOrInvalidAccountNumber() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseFundingAccount(
+                """{"status":"ACTIVE","currency":"NGN","account":{"bankName":"Wema","accountName":"FYNX","accountNumber":"123"}}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseFundingAccount(
+                """{"status":"ACTIVE","currency":"USD","account":{"bankName":"Bank","accountName":"FYNX","accountNumber":"0123456789"}}"""
+            )
+        }
+    }
+
+    @Test
     fun sellerSummarySeparatesGrossSalesFeesAndNetEarnings() {
         val summary = FynxBuyerWalletClient.parseSellerSummary(
             """{"totals":[{"currency":"NGN","protectedFunds":1000.0,"availableForPayout":500.0,"payoutPending":100.0,"paidOut":2500.0,"grossSales":4500.0,"marketplaceFees":225.0,"netEarnings":4275.0}],"settlements":[{"orderId":"order-1","title":"Leather bag","currency":"NGN","sellerNetAmount":950.0,"marketplaceFeeSeller":50.0,"funds":"HELD","payoutStatus":"HELD","updatedAt":"2026-10-31T10:00:00Z"}]}"""
