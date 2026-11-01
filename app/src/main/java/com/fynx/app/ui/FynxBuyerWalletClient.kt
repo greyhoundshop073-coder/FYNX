@@ -79,6 +79,8 @@ internal data class FynxWalletPayoutBank(
 )
 
 internal data class FynxWalletSecurityStatus(
+    val walletStatus: String,
+    val canSetWithdrawalPin: Boolean,
     val hasWithdrawalPin: Boolean,
     val isLocked: Boolean,
     val lockedUntil: String?,
@@ -247,7 +249,10 @@ internal object FynxBuyerWalletClient {
         }
         val dailyCount = if (limits == null || !limits.has("dailyCountLimit")) null
             else limits.optInt("dailyCountLimit").takeIf { it > 0 }
+        val walletStatus = json.optString("walletStatus", "NOT_SETUP").trim().uppercase().ifBlank { "NOT_SETUP" }
         return FynxWalletSecurityStatus(
+            walletStatus = walletStatus,
+            canSetWithdrawalPin = json.optBoolean("canSetWithdrawalPin", false) && walletStatus == "ACTIVE",
             hasWithdrawalPin = json.optBoolean("hasWithdrawalPin", false),
             isLocked = isLocked,
             lockedUntil = json.optString("lockedUntil").takeIf { isLocked && it.isNotBlank() && it != "null" },
