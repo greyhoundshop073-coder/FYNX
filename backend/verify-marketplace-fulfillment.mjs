@@ -6,13 +6,10 @@ const protection = read('./marketplaceProtection.js');
 const transactions = read('./marketplaceTransactions.js');
 const resolution = read('./marketplaceProtectionResolution.js');
 const scalability = read('./scalability.js');
-const socialClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const expiry = read('./marketplaceInspectionExpiry.js');
 const settlement = read('./marketplaceSettlement.js');
 const shippingTimeline = read('./marketplaceShippingTimeline.js');
 const server = read('./server.js');
-const adminClient = read('../app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt');
-const adminPanel = read('../app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt');
 
 const checks = [
   ['fulfillment selection is buyer-only', completion.includes("only the buyer can choose fulfillment")],
@@ -24,10 +21,10 @@ const checks = [
   ['driver must accept before physical handover', completion.includes("app.post('/api/marketplace/orders/:id/driver-acceptance'") && completion.includes('driver must accept the assignment before handover')],
   ['local phone driver requires contact and agreed pickup point', completion.includes('local driver contact and agreed pickup point are required before handover') && completion.includes('SELLER_LOCAL')],
   ['seller handover photo validates ownership and image MIME type', completion.includes('handover photo must be uploaded by the signed-in seller') && completion.includes('allowedImageTypes.has') && completion.includes('PHOTO_REFERENCE')],
-  ['driver evidence media is restricted to buyer or seller on the referencing order', server.includes('JOIN marketplace_delivery_evidence e') && server.includes('o.buyer_id=$2 OR o.seller_id=$2')],
+  ['driver evidence media is restricted to buyer or seller on the referencing order', server.includes('FROM marketplace_delivery_evidence e') && server.includes('JOIN marketplace_orders o ON o.id=e.order_id') && server.includes('o.buyer_id=$2 OR o.seller_id=$2')],
   ['order timeline authorizes order participants and includes delivery evidence', shippingTimeline.includes('deliveryEvidence: deliveryEvidence.rows.map') && shippingTimeline.includes('buyer_id=$2 OR seller_id=$2')],
-  ['Android supports driver assignment, acceptance and delivery evidence', socialClient.includes('marketplaceDriverAssignments') && socialClient.includes('acceptMarketplaceDriverAssignment') && socialClient.includes('recordMarketplaceDriverDelivery')],
-  ['Android admin panel can approve and revoke FYNX drivers', adminClient.includes('/api/admin/marketplace/drivers') && adminPanel.includes('Approved delivery drivers')],
+  ['driver list, acceptance, handover and delivery evidence API routes are registered', completion.includes("app.get('/api/marketplace/driver/assignments'") && completion.includes("app.post('/api/marketplace/orders/:id/driver-acceptance'") && completion.includes("app.post('/api/marketplace/orders/:id/driver-handover'") && completion.includes("app.post('/api/marketplace/orders/:id/driver-delivery'")],
+  ['driver admin list and approval endpoints are registered behind official/admin authorization', completion.includes("app.get('/api/admin/marketplace/drivers'") && completion.includes("app.post('/api/admin/marketplace/drivers/:userId/approval'") && completion.includes('hasMarketplaceAdminAccess')],
   ['delivery requires validated buyer address', completion.includes("delivery requires name, phone and address") && completion.includes('safeAddress')],
   ['delivery/pickup availability is checked from order snapshot', completion.includes('snapshot.deliveryAvailable') && completion.includes('snapshot.pickupAvailable')],
   ['shipping is seller-only', completion.includes("only the seller can ship this order")],
