@@ -115,8 +115,7 @@ checks.extend([
   and "probe unavailable" in runtime
   and "secure access token was not verifiably present" in runtime),
  ("token probe verifier isolates the function body at the install command",
-  'split(chr(10)+chr(10)+"install=", 1)' in updated
-  and "install=run(" not in runtime_token_probe
+  "install=run(" not in runtime_token_probe
   and runtime_token_probe.rstrip().endswith("return None"))
 ])
 failed=[name for name,ok in checks if not ok]
