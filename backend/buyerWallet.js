@@ -342,7 +342,8 @@ function walletProviderApproved(action) {
     process.env.FYNX_WALLET_COMPLIANCE_APPROVED === 'true' &&
     Boolean(process.env.PAYSTACK_SECRET_KEY);
   if (!common) return false;
-  if (action === 'DEPOSIT') return process.env.FYNX_WALLET_DEPOSITS_ENABLED === 'true';
+  if (action === 'DEPOSIT') return process.env.FYNX_WALLET_DEPOSITS_ENABLED === 'true' &&
+    Boolean(process.env.FYNX_PAYSTACK_WALLET_BANK) && Boolean(walletEncryptionKey());
   if (action === 'WITHDRAWAL') return process.env.FYNX_WALLET_WITHDRAWALS_ENABLED === 'true';
   return false;
 }
