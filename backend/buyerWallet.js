@@ -1010,10 +1010,13 @@ export function registerBuyerWalletRoutes({ app }) {
           availableBalance: null,
           reservedBalance: null,
           withdrawalPendingBalance: null,
-          canFund: false,
+          canFund: walletProviderApproved('DEPOSIT') || walletProviderApproved('CARD_FUNDING') || walletProviderApproved('USSD_FUNDING'),
+          canFundByBankTransfer: walletProviderApproved('DEPOSIT'),
+          canFundByCard: walletProviderApproved('CARD_FUNDING'),
+          canFundByUssd: walletProviderApproved('USSD_FUNDING'),
           canSpend: false,
           canWithdraw: false,
-          notice: 'Your FYNX Wallet is being prepared. Deposits, payments and withdrawals will open after the secure wallet provider is connected and verified.'
+          notice: 'Your FYNX Wallet is being prepared. Payment methods appear only after the approved provider connection and required checks are complete.'
         });
       }
       const balanceRows = await pool.query(`
@@ -1033,7 +1036,11 @@ export function registerBuyerWalletRoutes({ app }) {
         availableBalance: balances.AVAILABLE || 0,
         reservedBalance: (balances.RESERVED || 0) + (balances.MARKETPLACE_ESCROW || 0),
         withdrawalPendingBalance: balances.WITHDRAWAL_PENDING || 0,
-        canFund: wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT'),
+        canFund: (wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT')) ||
+          walletProviderApproved('CARD_FUNDING') || walletProviderApproved('USSD_FUNDING'),
+        canFundByBankTransfer: walletProviderApproved('DEPOSIT'),
+        canFundByCard: walletProviderApproved('CARD_FUNDING'),
+        canFundByUssd: walletProviderApproved('USSD_FUNDING'),
         canSpend: wallet.status === 'ACTIVE' && walletProviderApproved('SPENDING'),
         canWithdraw: wallet.status === 'ACTIVE' && walletProviderApproved('WITHDRAWAL'),
         notice: wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT')
