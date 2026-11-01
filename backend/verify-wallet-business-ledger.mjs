@@ -5,6 +5,8 @@ const checkout = read('./marketplaceTransactions.js');
 const settlement = read('./marketplaceSettlement.js');
 const payoutWorker = read('./marketplaceSettlementWorker.js');
 const wallet = read('./buyerWallet.js');
+const server = read('./server.js');
+const webhook = read('./marketplacePaystackWebhook.js');
 
 const checks = [
   ['Marketplace fee remains a configurable five-percent default', checkout.includes("FYNX_MARKETPLACE_FEE_BPS || '500'")],
@@ -15,7 +17,9 @@ const checks = [
   ['Pending commission is labelled an estimate and not revenue', settlement.includes('pending_commission_estimate') && settlement.includes('not platform cash revenue')],
   ['Only unsettled active orders contribute to pending commission', settlement.includes("o.status IN ('PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED')")],
   ['Wallet funding, spending and withdrawal remain closed until their real provider workflows are enabled', wallet.includes('canFund: false') && wallet.includes('canSpend: false') && wallet.includes('canWithdraw: false')],
-  ['Wallet ledger is immutable and double-entry balanced', wallet.includes('buyer wallet ledger entries are immutable') && wallet.includes('buyer wallet transaction is not double-entry balanced')]
+  ['Wallet ledger is immutable and double-entry balanced', wallet.includes('buyer wallet ledger entries are immutable') && wallet.includes('buyer wallet transaction is not double-entry balanced')],
+  ['Express preserves raw request bytes for Paystack webhook signatures', server.includes('verify: (req, _res, buffer) =>') && server.includes('req.rawBody = Buffer.from(buffer)')],
+  ['Paystack webhook validates HMAC SHA-512 before reconciliation', webhook.includes("createHmac('sha512'") && webhook.includes("req.rawBody") && webhook.includes("x-paystack-signature")]
 ];
 
 const failed = checks.filter(([, ok]) => !ok);
