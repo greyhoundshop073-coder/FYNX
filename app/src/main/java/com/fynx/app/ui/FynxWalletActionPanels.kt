@@ -79,6 +79,7 @@ internal fun FynxWalletActionPanel(
         "CARD" -> "Debit Card"
         "USSD" -> "USSD Payment"
         "WITHDRAW" -> "Withdraw Money"
+        "SECURITY" -> "Wallet Security"
         else -> "Wallet"
     }
     LazyColumn(
@@ -165,12 +166,169 @@ internal fun FynxWalletActionPanel(
                     )
                 }
             }
+            "SECURITY" -> {
+                item { FynxWalletSecurityPanel() }
+            }
             else -> item { WalletActionNotice("Wallet option unavailable", "Return to your Wallet and choose an available option.") }
         }
         item { Spacer(Modifier.size(10.dp)) }
     }
 }
 
+
+@Composable
+private fun FynxWalletSecurityPanel() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var security by remember { mutableStateOf<FynxWalletSecurityStatus?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var saving by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var currentPassword by remember { mutableStateOf("") }
+    var pin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun refresh() {
+        loading = true
+        error = null
+        scope.launch {
+            FynxBuyerWalletClient.loadWalletSecurity(context)
+                .onSuccess { security = it }
+                .onFailure {
+                    security = null
+                    error = "Wallet security status could not be loaded. Check your connection and retry."
+                }
+            loading = false
+        }
+    }
+
+    LaunchedEffect(Unit) { refresh() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Protect payments and withdrawals with a separate Wallet PIN.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (loading) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text("Checking Wallet security…", style = MaterialTheme.typography.bodySmall)
+            }
+        } else if (security == null) {
+            WalletActionNotice(
+                title = "Wallet security is unavailable",
+                message = error ?: "An active Wallet is required before setting a Wallet PIN."
+            )
+            OutlinedButton(onClick = { refresh() }, enabled = !loading) { Text("Retry") }
+        } else {
+            val current = security
+            WalletActionNotice(
+                title = if (current?.hasWithdrawalPin == true) "Wallet PIN is set" else "Wallet PIN is not set",
+                message = when {
+                    current?.isLocked == true -> "Money movement is temporarily locked after repeated incorrect PIN attempts. The lock expires automatically."
+                    current?.hasWithdrawalPin == true -> "Your PIN is stored as a password hash and is required before approved Wallet money movement."
+                    else -> "Set a six-digit PIN before paying for Marketplace orders or using approved withdrawals."
+                }
+            )
+            if (current?.isLocked == true) {
+                Text("Locked until: " + current.lockedUntil.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            if (!current.hasWithdrawalPin || editing) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Text(
+                            if (current.hasWithdrawalPin) "Change Wallet PIN" else "Create Wallet PIN",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        OutlinedTextField(
+                            value = currentPassword,
+                            onValueChange = { currentPassword = it.take(128) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Current FYNX password") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                        )
+                        OutlinedTextField(
+                            value = pin,
+                            onValueChange = { pin = it.filter(Char::isDigit).take(6) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("New six-digit Wallet PIN") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                        )
+                        OutlinedTextField(
+                            value = confirmPin,
+                            onValueChange = { confirmPin = it.filter(Char::isDigit).take(6) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Confirm new Wallet PIN") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    editing = false
+                                    currentPassword = ""
+                                    pin = ""
+                                    confirmPin = ""
+                                },
+                                enabled = !saving && current.hasWithdrawalPin,
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Cancel") }
+                            Button(
+                                onClick = {
+                                    saving = true
+                                    error = null
+                                    scope.launch {
+                                        FynxBuyerWalletClient.setWithdrawalPin(context,currentPassword,pin,confirmPin)
+                                            .onSuccess {
+                                                editing = false
+                                                currentPassword = ""
+                                                pin = ""
+                                                confirmPin = ""
+                                                Toast.makeText(context,"Wallet PIN saved",Toast.LENGTH_SHORT).show()
+                                                refresh()
+                                            }
+                                            .onFailure { error = it.message ?: "Wallet PIN could not be saved." }
+                                        saving = false
+                                    }
+                                },
+                                enabled = !saving && currentPassword.length >= 8 &&
+                                    pin.matches(Regex("^\\d{6}$")) && pin == confirmPin,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(if (saving) "Saving…" else "Save PIN")
+                            }
+                        }
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { editing = true; error = null },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Change Wallet PIN") }
+            }
+            Text(
+                "Five incorrect PIN attempts trigger a temporary 15-minute lock. Changing your PIN requires your current FYNX password.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        TextButton(onClick = { refresh() }, enabled = !loading && !saving) { Text("Refresh security status") }
+    }
+}
 
 @Composable
 private fun FynxWalletWithdrawalPanel(
