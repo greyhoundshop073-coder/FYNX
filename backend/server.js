@@ -28,7 +28,15 @@ app.use((req, res, next) => {
   if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   next();
 });
-app.use(express.json({ limit: "18mb", strict: true }));
+app.use(express.json({
+  limit: "18mb",
+  strict: true,
+  // Provider webhook signatures must be calculated over the exact raw bytes,
+  // before JSON parsing. Keep this for every route without changing parsed bodies.
+  verify: (req, _res, buffer) => {
+    req.rawBody = Buffer.from(buffer);
+  }
+}));
 app.use((req, res, next) => {
   if (req.method !== "GET" && req.method !== "HEAD") res.setHeader("Cache-Control", "no-store");
   next();
