@@ -643,7 +643,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.post('/api/admin/social/music/catalogue', auth, async (req, res) => {
     try {
       const role = await fynxMusicAdminRole(req.user.sub);
-      if (role !== 'OWNER' && role !== 'ADMIN') return res.status(403).json({ error: 'FYNX owner or admin access required for music management' });
+      if (role !== 'OWNER') return res.status(403).json({ error: 'FYNX owner access required for music management' });
       await ensureSocialSchema();
       const mediaId = Number(req.body?.mediaId);
       const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 120) : '';
@@ -704,7 +704,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.patch('/api/admin/social/music/catalogue/:id', auth, async (req, res) => {
     try {
       const role = await fynxMusicAdminRole(req.user.sub);
-      if (role !== 'OWNER' && role !== 'ADMIN') return res.status(403).json({ error: 'FYNX owner or admin access required for music management' });
+      if (role !== 'OWNER') return res.status(403).json({ error: 'FYNX owner access required for music management' });
       await ensureSocialSchema();
       const id = Number(req.params.id);
       const active = req.body?.active === true;
@@ -721,7 +721,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.delete('/api/admin/social/music/catalogue/:id', auth, async (req, res) => {
     try {
       const role = await fynxMusicAdminRole(req.user.sub);
-      if (role !== 'OWNER' && role !== 'ADMIN') return res.status(403).json({ error: 'FYNX owner or admin access required for music management' });
+      if (role !== 'OWNER') return res.status(403).json({ error: 'FYNX owner access required for music management' });
       await ensureSocialSchema();
       const id = Number(req.params.id);
       if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
