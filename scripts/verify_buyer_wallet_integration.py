@@ -78,7 +78,7 @@ checks = [
  ("owner/admin control center shows separate Marketplace commission totals", '"FYNX Business Revenue"' in admin_panel and '"Marketplace commission ledger"' in admin_panel and 'it.source == "MARKETPLACE_FEE"' in admin_panel),
  ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel)
 ]
-runtime_token_probe = runtime.split("def secure_access_token_persisted()->bool|None:", 1)[1].split("\\n\\ninstall=", 1)[0]
+runtime_token_probe = runtime.split("def secure_access_token_persisted()->bool|None:", 1)[1].split("\n\ninstall=", 1)[0]
 runtime_surface_gate = runtime.split("expected_authenticated_surfaces = [", 1)[1].split("]", 1)[0]
 checks.extend([
  ("runtime token persistence probe uses package-scoped test/grep without nested shell quoting",
@@ -102,6 +102,21 @@ checks.extend([
   and all(name not in runtime_surface_gate for name in [
    '"authenticated-chat.png"', '"authenticated-friends.png"', '"authenticated-stories.png"'
   ]))
+])
+checks.extend([
+ ("server credential is preferred to a visible passwordless debug entry when CI supplies a password",
+  "if debug_entry_visible and not PASSWORD:" in runtime
+  and "if debug_entry_visible:" not in runtime),
+ ("non-visual Wallet runtime certification rejects local-only login mode",
+  'LOGIN_MODE != "server credential login"' in runtime
+  and "Wallet runtime certification requires a server-credential login" in runtime),
+ ("Wallet runtime certification requires a positively verified secure token, not a missing or unavailable probe",
+  "if token_present is not True:" in runtime
+  and "probe unavailable" in runtime
+  and "secure access token was not verifiably present" in runtime),
+ ("token probe verifier isolates the function body using real newlines",
+  'split("\\n\\ninstall=", 1)' in runtime_token_probe
+  and "'\\\\n\\\\ninstall='" not in runtime_token_probe)
 ])
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)

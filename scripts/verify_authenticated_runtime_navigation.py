@@ -1237,7 +1237,9 @@ def login():
         find_control(xml,["Saved-device login for this debug APK"])
         or (VISUALS_ONLY and find_control(xml,["Leave password blank for quick local entry"]))
     )
-    if debug_entry_visible:
+    # A supplied CI password is an explicit request for a server-authenticated
+    # session. Never choose the passwordless debug shortcut ahead of credentials.
+    if debug_entry_visible and not PASSWORD:
         LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
         home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
         if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
@@ -1402,11 +1404,14 @@ if install.returncode!=0:
 # system dialog from intercepting taps intended for the real Marketplace surface.
 prepare_debug_visual_capture_permissions()
 xml,error=login()
+if not error and not VISUALS_ONLY and LOGIN_MODE != "server credential login":
+    error = "Wallet runtime certification requires a server-credential login; debug-only local UI entry does not authenticate with the backend."
+    FAILURES.append(error)
 if not error and not VISUALS_ONLY:
     token_present=secure_access_token_persisted()
     report.append("- Secure encrypted access-token key immediately after app login: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
-    if token_present is False:
-        FAILURES.append("The encrypted access token was not persisted after real account login.")
+    if token_present is not True:
+        FAILURES.append("The encrypted access token was not verifiably persisted after real account login ("+("missing" if token_present is False else "probe unavailable") + ").")
 
 # Capture the Home glass surface in the same system dark mode as the supplied reference.
 # This is a read-only screenshot: preserve the actual feed/error state and never invent posts.
@@ -1794,8 +1799,8 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         if not VISUALS_ONLY:
             token_present=secure_access_token_persisted()
             report.append("- Secure access-token key after Marketplace discovery: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
-            if token_present is False:
-                FAILURES.append("The secure access token disappeared before Marketplace buyer/seller navigation.")
+            if token_present is not True:
+                FAILURES.append("The secure access token was not verifiably present before Marketplace buyer/seller navigation.")
         wallet_shortcut_ok, wallet_shortcut_message, wallet_return_xml = capture_wallet_root_from_marketplace(
             marketplace_xml, "marketplace-visual-wallet-shortcut"
         )
@@ -1868,8 +1873,8 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             if not VISUALS_ONLY:
                 token_present=secure_access_token_persisted()
                 report.append("- Secure access-token key upon entering My Shop: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
-                if token_present is False:
-                    FAILURES.append("The secure access token disappeared before authenticated My Shop overview loaded.")
+                if token_present is not True:
+                    FAILURES.append("The secure access token was not verifiably present before authenticated My Shop overview loaded.")
             shop_xml, overview_settled = wait_for_my_shop_section_settled("overview", timeout=20.0)
             if shop_xml:
                 screenshot("authenticated-marketplace-my-shop-overview.png")
