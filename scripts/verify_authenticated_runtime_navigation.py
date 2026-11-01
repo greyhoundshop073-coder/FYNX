@@ -1369,16 +1369,27 @@ if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     print("\n".join(report)); raise SystemExit(2)
 
 def secure_access_token_persisted()->bool|None:
-    """Check only whether the encrypted access-token key exists; never read or print its value."""
-    result=run(
-        "adb", "shell", "run-as", PACKAGE, "sh", "-c",
-        "grep -q access_token shared_prefs/fynx_secure_auth.xml"
-    )
-    if result.returncode == 0:
-        return True
-    if "run-as: package not debuggable" in (result.stdout or "").lower():
+    """Check the encrypted token preference without ever reading or printing its value."""
+    prefs_file = "shared_prefs/fynx_secure_auth.xml"
+    # Invoke package-scoped commands directly. A nested shell can make adb argument
+    # quoting platform-dependent and cause a false missing-key result.
+    file_check = run("adb", "shell", "run-as", PACKAGE, "test", "-f", prefs_file)
+    file_diagnostic = (file_check.stdout or "").strip()
+    if file_check.returncode == 1 and not file_diagnostic:
+        return False
+    if file_check.returncode != 0:
         return None
-    return False
+
+    key_check = run(
+        "adb", "shell", "run-as", PACKAGE, "grep", "-q", "access_token", prefs_file
+    )
+    key_diagnostic = (key_check.stdout or "").strip()
+    if key_check.returncode == 0:
+        return True
+    if key_check.returncode == 1 and not key_diagnostic:
+        return False
+    # Distinguish an unavailable adb/run-as/grep probe from a genuinely absent key.
+    return None
 
 
 install=run("adb","install","-r","app/build/outputs/apk/debug/app-debug.apk")
@@ -2473,10 +2484,20 @@ if marketplace_xml:
 else:
     FAILURES.append("authenticated Home -> Marketplace")
 
+# This workflow certifies the current Wallet + Marketplace + My Shop phase.
+# Chat, Friends and Stories remain covered by their own workstream gates.
 expected_authenticated_surfaces = [
-    "authenticated-home.png", "authenticated-chat.png", "authenticated-friends.png",
-    "authenticated-stories.png", "authenticated-features.png", "authenticated-money.png",
-    "authenticated-wallet.png", "authenticated-ai.png", "authenticated-marketplace.png",
+    "authenticated-home.png",
+    "authenticated-features.png",
+    "authenticated-money.png",
+    "authenticated-wallet.png",
+    "authenticated-wallet-add-money.png",
+    "authenticated-wallet-bank-transfer.png",
+    "authenticated-wallet-card.png",
+    "authenticated-wallet-ussd.png",
+    "authenticated-wallet-withdraw.png",
+    "authenticated-ai.png",
+    "authenticated-marketplace.png",
     "authenticated-marketplace-my-shop-overview.png",
     "authenticated-marketplace-my-shop-profile.png",
     "authenticated-marketplace-my-shop-listings.png",

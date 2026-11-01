@@ -78,6 +78,31 @@ checks = [
  ("owner/admin control center shows separate Marketplace commission totals", '"FYNX Business Revenue"' in admin_panel and '"Marketplace commission ledger"' in admin_panel and 'it.source == "MARKETPLACE_FEE"' in admin_panel),
  ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel)
 ]
+runtime_token_probe = runtime.split("def secure_access_token_persisted()->bool|None:", 1)[1].split("\\n\\ninstall=", 1)[0]
+runtime_surface_gate = runtime.split("expected_authenticated_surfaces = [", 1)[1].split("]", 1)[0]
+checks.extend([
+ ("runtime token persistence probe uses package-scoped test/grep without nested shell quoting",
+  '"run-as", PACKAGE, "test", "-f", prefs_file' in runtime_token_probe
+  and '"run-as", PACKAGE, "grep", "-q", "access_token", prefs_file' in runtime_token_probe
+  and '"sh", "-c"' not in runtime_token_probe),
+ ("runtime token probe distinguishes a missing preference/key from an unavailable adb probe",
+  "file_check.returncode == 1 and not file_diagnostic" in runtime_token_probe
+  and "key_check.returncode == 1 and not key_diagnostic" in runtime_token_probe
+  and "return None" in runtime_token_probe),
+ ("Wallet runtime evidence requires every captured Wallet and My Shop screen, not unrelated social screenshots",
+  all(name in runtime_surface_gate for name in [
+   '"authenticated-wallet.png"', '"authenticated-wallet-add-money.png"',
+   '"authenticated-wallet-bank-transfer.png"', '"authenticated-wallet-card.png"',
+   '"authenticated-wallet-ussd.png"', '"authenticated-wallet-withdraw.png"',
+   '"authenticated-marketplace.png"', '"authenticated-marketplace-my-shop-overview.png"',
+   '"authenticated-marketplace-my-shop-profile.png"', '"authenticated-marketplace-my-shop-listings.png"',
+   '"authenticated-marketplace-my-shop-orders.png"', '"authenticated-marketplace-my-shop-delivery-drivers.png"',
+   '"authenticated-marketplace-my-shop-earnings-payouts.png"'
+  ])
+  and all(name not in runtime_surface_gate for name in [
+   '"authenticated-chat.png"', '"authenticated-friends.png"', '"authenticated-stories.png"'
+  ]))
+])
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
 if failed: raise SystemExit("FYNX buyer wallet Android integration failed: "+", ".join(failed))
