@@ -1043,15 +1043,15 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         if effects_closed:
             camera_xml = effects_closed
 
-    # The self-timer must be cancellable and must not fire after cancellation.
+    # The self-timer must be cancellable and must not fire after cancellation. Use 30 seconds to leave a safe window for slow CI accessibility dumps.
     timer_panel = tap_control(
         camera_xml, ["Set capture timer"], f"{prefix}-camera-timer-open",
-        ["3 sec", "10 sec"]
+        ["3 sec", "10 sec", "30 sec"]
     )
-    # Cancellation must leave enough time for UIAutomator to observe and tap the action.
+    # Cancellation uses the 30-second preset so UIAutomator has enough time to observe and tap the action.
     # Keep the short 3-second countdown as a separate positive capture test below.
     timer_selected = tap_control(
-        timer_panel, ["10 sec"], f"{prefix}-camera-timer-ten-seconds",
+        timer_panel, ["30 sec"], f"{prefix}-camera-timer-thirty-seconds",
         ["Take photo"]
     ) if timer_panel else ""
     # Selecting a timer leaves the adjustments tray open. Close it deliberately
@@ -1075,7 +1075,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 FAILURES.append(prefix + ": Cancel timer is visible but not exposed as a clickable accessibility action")
             cancelled_xml = tap_control(
                 countdown_xml, ["Cancel timer"], f"{prefix}-camera-timer-cancel",
-                ["Take photo"], wait_attempts=4
+                ["Take photo"], wait_attempts=8
             )
             if cancelled_xml:
                 time.sleep(3.4)
