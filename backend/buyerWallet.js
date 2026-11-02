@@ -326,7 +326,7 @@ export async function ensureBuyerWalletSchema() {
            GROUP BY e.account_code
           HAVING SUM(CASE WHEN e.side = 'CREDIT' THEN e.amount ELSE -e.amount END) < 0
         ) THEN
-          RAISE EXCEPTION 'buyer wallet available, reserved or withdrawal balance cannot be negative'
+          RAISE EXCEPTION 'buyer wallet available, reserved, Marketplace escrow or withdrawal balance cannot be negative'
             USING ERRCODE = '23514';
         END IF;
         RETURN NULL;
@@ -393,15 +393,17 @@ export async function ensureBuyerWalletSchema() {
 }
 
 
+const MINIMUM_WALLET_WITHDRAWAL_NGN = 50;
+
 function walletWithdrawalLimits() {
   const maximum = Number(process.env.FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT || '');
   const daily = Number(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT || '');
   const count = Number.parseInt(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT || '', 10);
   // Paystack Nigeria transfer limits: NGN 50 minimum and NGN 10,000,000 maximum.
-  if (!Number.isFinite(maximum) || maximum < 50 || maximum > 10_000_000 ||
+  if (!Number.isFinite(maximum) || maximum < MINIMUM_WALLET_WITHDRAWAL_NGN || maximum > 10_000_000 ||
       !Number.isFinite(daily) || daily < maximum ||
       !Number.isInteger(count) || count <= 0) return null;
-  return { maximumPerTransfer: maximum, dailyAmountLimit: daily, dailyCountLimit: count };
+  return { minimumPerTransfer: MINIMUM_WALLET_WITHDRAWAL_NGN, maximumPerTransfer: maximum, dailyAmountLimit: daily, dailyCountLimit: count };
 }
 
 function walletProviderApproved(action) {
@@ -415,7 +417,8 @@ function walletProviderApproved(action) {
   if (action === 'CARD_FUNDING') return process.env.FYNX_WALLET_CARD_FUNDING_ENABLED === 'true' && walletFundingLimits() !== null;
   if (action === 'USSD_FUNDING') return process.env.FYNX_WALLET_USSD_FUNDING_ENABLED === 'true' && walletFundingLimits() !== null;
   if (action === 'SPENDING') return process.env.FYNX_WALLET_SPENDING_ENABLED === 'true';
-  if (action === 'WITHDRAWAL') return process.env.FYNX_WALLET_WITHDRAWALS_ENABLED === 'true' &&
+  if (action === 'WITHDRAWAL') return process.env.FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED === 'true' &&
+    process.env.FYNX_WALLET_WITHDRAWALS_ENABLED === 'true' &&
     process.env.FYNX_WALLET_PAYOUTS_APPROVED === 'true' &&
     process.env.FYNX_WALLET_WITHDRAWAL_FEE_POLICY_APPROVED === 'true' &&
     process.env.FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true' &&
@@ -1412,7 +1415,7 @@ export function registerBuyerWalletRoutes({ app }) {
       await ensureBuyerWalletSchema();
       res.set('Cache-Control', 'no-store, private');
       const wallet = (await pool.query(`
-        SELECT withdrawal_pin_hash,withdrawal_pin_locked_until
+        SELECT status,withdrawal_pin_hash,withdrawal_pin_locked_until
           FROM buyer_wallets
          WHERE user_id=$1 AND currency='NGN'
          LIMIT 1
@@ -1420,6 +1423,7 @@ export function registerBuyerWalletRoutes({ app }) {
       const lockedUntil = wallet?.withdrawal_pin_locked_until || null;
       const locked = Boolean(lockedUntil && new Date(lockedUntil).getTime() > Date.now());
       return res.json({
+        walletActive: wallet?.status === 'ACTIVE',
         hasWithdrawalPin: Boolean(wallet?.withdrawal_pin_hash),
         isLocked: locked,
         lockedUntil: locked ? lockedUntil : null,
@@ -1630,6 +1634,9 @@ export function registerBuyerWalletRoutes({ app }) {
     }
     const limits = walletWithdrawalLimits();
     if (!limits) return res.status(503).json({ error: 'wallet withdrawal limits are not configured for this provider environment yet' });
+    if (amountValue < limits.minimumPerTransfer) {
+      return res.status(400).json({ error: 'withdrawal amount must be at least NGN ' + limits.minimumPerTransfer.toFixed(2) });
+    }
     if (amountValue > limits.maximumPerTransfer) {
       return res.status(400).json({ error: 'withdrawal amount is above the current per-transfer limit' });
     }

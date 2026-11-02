@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val deepLinkDestinationState = mutableStateOf<FynxDeepLinkDestination?>(null)
-    private var lastHandledDeepLink: String? = null
+    private val deepLinkRequestId = mutableLongStateOf(0L)
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) registerNotificationTokenIfSignedIn()
     }
@@ -59,7 +59,10 @@ class MainActivity : ComponentActivity() {
                 FynxLaunchScreen()
             } else {
                 FynxTheme {
-                    FynxApp(deepLinkDestination = deepLinkDestinationState.value)
+                    FynxApp(
+                        deepLinkDestination = deepLinkDestinationState.value,
+                        deepLinkRequestId = deepLinkRequestId.longValue
+                    )
                 }
             }
         }
@@ -73,9 +76,11 @@ class MainActivity : ComponentActivity() {
 
     private fun updateDeepLink(rawUri: String?) {
         val normalized = rawUri?.trim()?.takeIf { it.isNotEmpty() }
-        if (normalized == lastHandledDeepLink) return
-        lastHandledDeepLink = normalized
+        // A repeated URI is still a new navigation request. Users can leave Home,
+        // then open the same fynx://home link again. The destination object can compare
+        // equal to the previous value, so advance a request ID for every new intent.
         deepLinkDestinationState.value = FynxDeepLinkParser.parse(normalized?.let(android.net.Uri::parse))
+        deepLinkRequestId.longValue += 1L
     }
 
     override fun onDestroy() {

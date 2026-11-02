@@ -45,12 +45,27 @@ const checks = [
   ['Funding credits are applied to the append-only double-entry wallet ledger', wallet.includes("'PROVIDER_CLEARING','DEBIT'") && wallet.includes("'AVAILABLE','CREDIT'") && wallet.includes('PAYSTACK-DVA-AVAILABLE-')],
   ['Wallet CSV statements are owner-scoped and bounded', wallet.includes('/api/wallet/statement.csv') && wallet.includes('WHERE t.user_id=$1 AND t.wallet_id=$2') && wallet.includes('LIMIT 5001') && wallet.includes('rows.rows.length > 5000')],
   ['CSV export neutralizes spreadsheet formula injection', buildBuyerWalletStatementCsv([{ description: '=HYPERLINK("bad")', reference: '+cmd' }]).includes("'=HYPERLINK") && buildBuyerWalletStatementCsv([{ description: '=HYPERLINK("bad")', reference: '+cmd' }]).includes("'+cmd")],
-  ['Wallet withdrawals are gated by provider, compliance, payout approval, OTP policy and configured limits', wallet.includes("FYNX_WALLET_WITHDRAWALS_ENABLED === 'true'") && wallet.includes("FYNX_WALLET_PAYOUTS_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_WITHDRAWAL_FEE_POLICY_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true'") && wallet.includes("maximum > 10_000_000") && wallet.includes("maximum < 50") && wallet.includes("walletWithdrawalLimits() !== null")],
+  ['Wallet withdrawals are gated by provider, compliance, payout approval, OTP policy and configured limits', wallet.includes("FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_WITHDRAWALS_ENABLED === 'true'") && wallet.includes("FYNX_WALLET_PAYOUTS_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_WITHDRAWAL_FEE_POLICY_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true'") && wallet.includes("maximum > 10_000_000") && wallet.includes("maximum < MINIMUM_WALLET_WITHDRAWAL_NGN") && wallet.includes("const MINIMUM_WALLET_WITHDRAWAL_NGN = 50") && wallet.includes("walletWithdrawalLimits() !== null")],
+  ['Paystack bank withdrawals require an explicit registered-business eligibility approval',
+    wallet.includes("FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED === 'true'")],
+  ['NGN 50 minimum withdrawal is enforced before database writes or provider recipient creation', (() => {
+    const start = wallet.indexOf("app.post('/api/wallet/withdrawals'");
+    const minimum = wallet.indexOf("amountValue < limits.minimumPerTransfer", start);
+    const schema = wallet.indexOf("await ensureBuyerWalletSchema()", start);
+    const recipient = wallet.indexOf("walletPaystackRequest('/transferrecipient'", start);
+    return wallet.includes("minimumPerTransfer: MINIMUM_WALLET_WITHDRAWAL_NGN") &&
+      wallet.includes("const MINIMUM_WALLET_WITHDRAWAL_NGN = 50") &&
+      start >= 0 && minimum > start && schema > minimum && recipient > minimum;
+  })()],
   ['Actual Paystack withdrawal fees and fee breakdown are retained for FYNX cost reconciliation', wallet.includes('providerFeeMinor: Number.isSafeInteger(Number(transfer.fee_charged))') && wallet.includes('providerFeesBreakdown: Array.isArray(transfer.fees_breakdown)')],
   ['Wallet withdrawals require a six-digit PIN verified against a slow password hash', wallet.includes("bcrypt.compare(pin, wallet.withdrawal_pin_hash)") && wallet.includes("bcrypt.hash(pin, 12)") && wallet.includes("currentPassword")],
   ['Repeated wrong wallet PINs create a 15-minute lockout', wallet.includes("withdrawal_pin_failed_attempts") && wallet.includes("INTERVAL '15 minutes'") && wallet.includes("failedAttempts >= 5")],
   ['Wallet PIN setup reauthenticates the current password and locks repeated failures', wallet.includes("bcrypt.compare(currentPassword, user.password_hash)") && wallet.includes("withdrawal_pin_setup_failed_attempts") && wallet.includes("withdrawal_pin_setup_locked_until")],
   ['Wallet security returns PIN state and configured withdrawal limits', wallet.includes("app.get('/api/wallet/security', auth") && wallet.includes("maximumPerTransfer") && wallet.includes("dailyAmountLimit") && wallet.includes("dailyCountLimit")],
+  ['Wallet PIN setup is gated by an active wallet and the security endpoint reports that state',
+    wallet.includes("SELECT status,withdrawal_pin_hash,withdrawal_pin_locked_until") &&
+    wallet.includes("walletActive: wallet?.status === 'ACTIVE'") &&
+    wallet.includes("if (!wallet || wallet.status !== 'ACTIVE')")],
   ['Per-transfer and daily wallet withdrawal limits are enforced server-side', wallet.includes("FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT") && wallet.includes("FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT") && wallet.includes("FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT") && wallet.includes("dailyUsage?.requested_amount") && wallet.includes("dailyUsage?.request_count")],
   ['Withdrawal reservations only move cleared funds to the pending bucket', wallet.includes("'AVAILABLE','DEBIT',$4,'NGN'") && wallet.includes("'WITHDRAWAL_PENDING','CREDIT',$4,'NGN'")],
   ['Transfer webhooks reconcile success, failure and reversal with balanced ledger entries', wallet.includes("reconcileWalletTransferEvent(client, eventName, transfer)") && wallet.includes("eventName === 'transfer.success'") && wallet.includes("eventName === 'transfer.failed'") && wallet.includes("eventName === 'transfer.reversed'")],

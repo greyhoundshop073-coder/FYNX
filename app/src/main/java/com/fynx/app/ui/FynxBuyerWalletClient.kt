@@ -80,8 +80,10 @@ internal data class FynxWalletPayoutBank(
 
 internal data class FynxWalletSecurityStatus(
     val hasWithdrawalPin: Boolean,
+    val walletActive: Boolean,
     val isLocked: Boolean,
     val lockedUntil: String?,
+    val minimumPerTransfer: Double?,
     val maximumPerTransfer: Double?,
     val dailyAmountLimit: Double?,
     val dailyCountLimit: Int?
@@ -121,6 +123,14 @@ internal data class FynxWalletFundingAccount(
 )
 
 internal object FynxBuyerWalletClient {
+    internal const val MINIMUM_WITHDRAWAL_NGN = 50.0
+
+    internal fun validateWithdrawalAmount(amount: Double) {
+        require(amount.isFinite() && amount >= MINIMUM_WITHDRAWAL_NGN) {
+            "The minimum FYNX Wallet withdrawal is NGN 50.00."
+        }
+    }
+
     internal fun normalizeActivityDirection(direction: String): String {
         val normalized = direction.trim().uppercase(Locale.US)
         require(normalized in setOf("ALL", "IN", "OUT")) {
@@ -249,8 +259,10 @@ internal object FynxBuyerWalletClient {
             else limits.optInt("dailyCountLimit").takeIf { it > 0 }
         return FynxWalletSecurityStatus(
             hasWithdrawalPin = json.optBoolean("hasWithdrawalPin", false),
+            walletActive = json.optBoolean("walletActive", false),
             isLocked = isLocked,
             lockedUntil = json.optString("lockedUntil").takeIf { isLocked && it.isNotBlank() && it != "null" },
+            minimumPerTransfer = limit("minimumPerTransfer"),
             maximumPerTransfer = limit("maximumPerTransfer"),
             dailyAmountLimit = limit("dailyAmountLimit"),
             dailyCountLimit = dailyCount
@@ -273,7 +285,16 @@ internal object FynxBuyerWalletClient {
             .mapCatching { raw ->
                 val json = JSONObject(raw)
                 require(json.optBoolean("hasWithdrawalPin", false)) { "Wallet PIN setup was not confirmed." }
-                FynxWalletSecurityStatus(true, false, null, null, null, null)
+                FynxWalletSecurityStatus(
+                    hasWithdrawalPin = true,
+                    walletActive = true,
+                    isLocked = false,
+                    lockedUntil = null,
+                    minimumPerTransfer = MINIMUM_WITHDRAWAL_NGN,
+                    maximumPerTransfer = null,
+                    dailyAmountLimit = null,
+                    dailyCountLimit = null
+                )
             }
     }
 
@@ -323,7 +344,7 @@ internal object FynxBuyerWalletClient {
         idempotencyKey: String,
         pin: String
     ): Result<FynxWalletWithdrawalResult> {
-        require(amount.isFinite() && amount > 0.0) { "Enter a valid withdrawal amount." }
+        validateWithdrawalAmount(amount)
         require(bankCode.matches(Regex("^\\d{3,10}$"))) { "Choose a valid bank." }
         require(accountNumber.filter(Char::isDigit).matches(Regex("^\\d{10}$"))) { "Enter a valid 10-digit account number." }
         require(idempotencyKey.matches(Regex("^[A-Za-z0-9_-]{8,100}$"))) { "Withdrawal request reference is invalid." }
