@@ -368,7 +368,7 @@ private fun validateCameraStatusMedia(uri: Uri, mediaType: String): String? {
 }
 
 @Composable
-fun FynxCameraCapturePanel(
+internal fun FynxCameraCapturePanel(
     onCaptured: (Uri, String) -> Unit,
     fastCapture: Boolean = false,
     initialMode: CameraMode = CameraMode.PHOTO,
