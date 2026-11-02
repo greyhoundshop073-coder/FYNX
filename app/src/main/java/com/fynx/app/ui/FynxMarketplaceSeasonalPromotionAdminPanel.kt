@@ -1,5 +1,8 @@
 package com.fynx.app.ui
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -34,6 +37,69 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+
+private fun marketplaceSeasonalTimeZone(): TimeZone = TimeZone.getTimeZone("Africa/Lagos")
+
+private fun marketplaceSeasonalDateFormat(pattern: String) =
+    SimpleDateFormat(pattern, Locale.US).apply {
+        timeZone = marketplaceSeasonalTimeZone()
+        isLenient = false
+    }
+
+private fun parseMarketplaceSeasonalDateTime(value: String): Date? =
+    runCatching { marketplaceSeasonalDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX").parse(value.trim()) }
+        .getOrNull()
+
+private fun formatMarketplaceSeasonalDateTime(value: String): String =
+    parseMarketplaceSeasonalDateTime(value)?.let {
+        marketplaceSeasonalDateFormat("EEE, dd MMM yyyy  ·  HH:mm").format(it) + " WAT"
+    } ?: "Choose date and time"
+
+private fun marketplaceSeasonalWindowIsValid(startsAt: String, endsAt: String): Boolean {
+    val start = parseMarketplaceSeasonalDateTime(startsAt) ?: return false
+    val end = parseMarketplaceSeasonalDateTime(endsAt) ?: return false
+    val duration = end.time - start.time
+    return duration > 0L && duration <= 45L * 24L * 60L * 60L * 1000L
+}
+
+private fun showMarketplaceSeasonalDateTimePicker(
+    context: Context,
+    currentValue: String,
+    onSelected: (String) -> Unit
+) {
+    val zone = marketplaceSeasonalTimeZone()
+    val calendar = Calendar.getInstance(zone, Locale.US)
+    parseMarketplaceSeasonalDateTime(currentValue)?.let { calendar.time = it }
+    DatePickerDialog(
+        context,
+        { _, year, month, day ->
+            calendar.set(Calendar.YEAR, year)
+            calendar.set(Calendar.MONTH, month)
+            calendar.set(Calendar.DAY_OF_MONTH, day)
+            TimePickerDialog(
+                context,
+                { _, hour, minute ->
+                    calendar.set(Calendar.HOUR_OF_DAY, hour)
+                    calendar.set(Calendar.MINUTE, minute)
+                    calendar.set(Calendar.SECOND, 0)
+                    calendar.set(Calendar.MILLISECOND, 0)
+                    onSelected(marketplaceSeasonalDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX").format(calendar.time))
+                },
+                calendar.get(Calendar.HOUR_OF_DAY),
+                calendar.get(Calendar.MINUTE),
+                true
+            ).show()
+        },
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH),
+        calendar.get(Calendar.DAY_OF_MONTH)
+    ).show()
+}
 
 /** Owner/Admin controls for variable-date holiday and seasonal Marketplace slides. */
 @Composable
@@ -144,24 +210,52 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 )
             }
         }
-        OutlinedTextField(
-            value = startsAt,
-            onValueChange = { startsAt = it.take(40); message = null },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Starts at (ISO 8601)") },
-            supportingText = { Text("Example: 2027-03-10T00:00:00+01:00 — Africa/Lagos time") },
-            singleLine = true,
-            enabled = !saving
+        Text("Campaign timing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Choose the confirmed local date and time. FYNX starts and ends this celebration automatically using Nigeria time (WAT, UTC+01:00).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        OutlinedTextField(
-            value = endsAt,
-            onValueChange = { endsAt = it.take(40); message = null },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Ends at (ISO 8601)") },
-            supportingText = { Text("Use an explicit +01:00 offset for Nigeria. Maximum window: 45 days.") },
-            singleLine = true,
-            enabled = !saving
-        )
+        OutlinedButton(
+            onClick = {
+                showMarketplaceSeasonalDateTimePicker(context, startsAt) {
+                    startsAt = it
+                    message = null
+                    error = null
+                    if (endsAt.isBlank()) endsAt = it
+                }
+            },
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("STARTS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text(formatMarketplaceSeasonalDateTime(startsAt), fontWeight = FontWeight.SemiBold)
+            }
+        }
+        OutlinedButton(
+            onClick = {
+                showMarketplaceSeasonalDateTimePicker(context, endsAt.ifBlank { startsAt }) {
+                    endsAt = it
+                    message = null
+                    error = null
+                }
+            },
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("ENDS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text(formatMarketplaceSeasonalDateTime(endsAt), fontWeight = FontWeight.SemiBold)
+            }
+        }
+        if (startsAt.isNotBlank() && endsAt.isNotBlank() && !marketplaceSeasonalWindowIsValid(startsAt, endsAt)) {
+            Text(
+                "End time must be after the start time. A campaign can run for a maximum of 45 days.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         Button(
             onClick = {
                 saving = true
@@ -199,12 +293,12 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 }
             },
             enabled = !saving && occasionKey.isNotBlank() && headline.trim().length >= 3 &&
-                startsAt.isNotBlank() && endsAt.isNotBlank(),
+                marketplaceSeasonalWindowIsValid(startsAt, endsAt),
             modifier = Modifier.fillMaxWidth()
         ) {
             if (saving) CircularProgressIndicator() else Text("Schedule seasonal promotion")
         }
-        message?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
+        message?.let { Text(it, color = FynxDesign.ClassicGreen, style = MaterialTheme.typography.bodySmall) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -220,6 +314,22 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             Text("No seasonal campaigns have been scheduled.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             campaigns.forEach { campaign ->
+                val now = System.currentTimeMillis()
+                val startDate = parseMarketplaceSeasonalDateTime(campaign.startsAt)
+                val endDate = parseMarketplaceSeasonalDateTime(campaign.endsAt)
+                val campaignStatus = when {
+                    !campaign.active -> "PAUSED"
+                    startDate == null || endDate == null -> "CHECK DATES"
+                    now < startDate.time -> "SCHEDULED"
+                    now >= endDate.time -> "ENDED"
+                    else -> "LIVE"
+                }
+                val campaignStatusColor = when (campaignStatus) {
+                    "LIVE" -> FynxDesign.ClassicGreen.copy(alpha = 0.16f)
+                    "ENDED" -> MaterialTheme.colorScheme.surfaceVariant
+                    "PAUSED", "CHECK DATES" -> MaterialTheme.colorScheme.errorContainer
+                    else -> MaterialTheme.colorScheme.primaryContainer
+                }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -230,18 +340,18 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                             Text(campaign.headline, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                             Surface(
                                 shape = RoundedCornerShape(50),
-                                color = if (campaign.active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                                color = campaignStatusColor
                             ) {
                                 Text(
-                                    if (campaign.active) "SCHEDULED" else "PAUSED",
+                                    campaignStatus,
                                     Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                     style = MaterialTheme.typography.labelSmall
                                 )
                             }
                         }
                         Text(campaign.occasionKey, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                        Text("Starts: ${campaign.startsAt}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Ends: ${campaign.endsAt}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Starts: ${formatMarketplaceSeasonalDateTime(campaign.startsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Ends: ${formatMarketplaceSeasonalDateTime(campaign.endsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = {
