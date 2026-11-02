@@ -2,6 +2,7 @@ import ast
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
+main_activity = (ROOT / "app/src/main/java/com/fynx/app/MainActivity.kt").read_text()
 money = (ROOT / "app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt").read_text()
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletClient.kt").read_text()
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletPanel.kt").read_text()
@@ -21,6 +22,13 @@ admin_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.
 admin_routes = (ROOT / "backend/adminRoutes.js").read_text()
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text()
 checks = [
+ ("new identical deep-link intents advance a navigation request ID instead of being discarded",
+  "deepLinkRequestId = mutableLongStateOf(0L)" in main_activity
+  and "deepLinkRequestId.longValue += 1L" in main_activity
+  and "lastHandledDeepLink" not in main_activity),
+ ("FynxApp reruns route handling for repeated identical destinations",
+  "deepLinkRequestId: Long = 0L" in app
+  and "LaunchedEffect(deepLinkRequestId, deepLinkDestination)" in app),
  ("wallet direct Features entry", '"Wallet" -> key(marketplaceAccountKey) { FynxBuyerWalletPanel() }' in app and 'Triple("Wallet", "FYNX Wallet"' in app),
  ("Marketplace Wallet shortcut", 'onOpenWallet: () -> Unit = {}' in market and 'OutlinedButton(onClick = onOpenWallet' in market and 'onOpenWallet = { selected = "Wallet" }' in app),
  ("wallet Money Center entry", 'MoneySection("Wallet", "FYNX Wallet"' in money and '"Wallet" -> FynxBuyerWalletPanel()' in money),
