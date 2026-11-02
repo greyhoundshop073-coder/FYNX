@@ -75,7 +75,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
   // Materialize the top five from closed Lagos weeks once, so seller recognition remains visible after the live week rolls over.
   const archiveClosedMarketplaceSellerWeeks = async () => {
     await ensureMarketplaceSchemaForPool(pool);
-    await pool.query(\`
+    await pool.query(`
       WITH historical_weeks AS (
         SELECT
           local_week_start AT TIME ZONE 'Africa/Lagos' AS week_start,
@@ -147,7 +147,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
              featured_product_title, featured_product_price, featured_product_currency
       FROM award_rows
       ON CONFLICT (week_start, weekly_rank) DO NOTHING
-    \`);
+    `);
   };
 
   // Weekly recognition counts only orders that reached COMPLETED during the current week.
@@ -251,7 +251,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       if (onlyCurrentSeller && username) return res.status(400).json({ error: 'choose either username or mine' });
       const requestedLimit = Number.parseInt(String(req.query?.limit ?? '24'), 10);
       const limit = Number.isFinite(requestedLimit) ? Math.min(100, Math.max(1, requestedLimit)) : 24;
-      const result = await pool.query(\`
+      const result = await pool.query(`
         SELECT
           week_start, week_end,
           TO_CHAR(week_start AT TIME ZONE 'Africa/Lagos', 'DD Mon YYYY') AS week_label,
@@ -263,7 +263,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           AND (NOT $3::BOOLEAN OR seller_id = $4)
         ORDER BY week_start DESC, weekly_rank ASC
         LIMIT $2
-      \`, [username, limit, onlyCurrentSeller, req.user.sub]);
+      `, [username, limit, onlyCurrentSeller, req.user.sub]);
       return res.json({
         awards: result.rows.map((row) => ({
           weekStart: row.week_start,
