@@ -12,11 +12,14 @@ import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.text.Layout
 import android.text.SpannableString
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.text.style.AlignmentSpan
 import androidx.media3.common.Effect
 import androidx.media3.transformer.Effects
 import androidx.media3.common.MediaItem
@@ -93,7 +96,52 @@ private class TimedCameraTextOverlay(private val cues: List<CameraCaptionCue>) :
     override fun getOverlaySettings(presentationTimeUs: Long) = settings
 }
 
-internal suspend fun applyFynxVideoEdits(context: Context, sourceUri: Uri, style: CameraVideoStyle, captionText: String = ""): Uri =
+
+/** Text added by the creator is encoded into the output video, not left as editor-only decoration. */
+private class FynxMediaTextOverlay(private val item: FynxCameraTextOverlay) : TextOverlay() {
+    private val anchorX = (item.x.coerceIn(0.04f, 0.96f) * 2f) - 1f
+    private val anchorY = (item.y.coerceIn(0.06f, 0.94f) * 2f) - 1f
+    private val settings = StaticOverlaySettings.Builder()
+        .setBackgroundFrameAnchor(anchorX, anchorY)
+        .setOverlayFrameAnchor(anchorX, anchorY)
+        .setScale((0.72f * item.scale).coerceIn(0.42f, 1.7f), (0.72f * item.scale).coerceIn(0.42f, 1.7f))
+        .build()
+
+    override fun getText(presentationTimeUs: Long): SpannableString {
+        val timeMs = presentationTimeUs / 1000L
+        val visible = timeMs >= item.startMs && timeMs < item.endMs
+        val text = SpannableString(if (visible) item.text.trim() else "")
+        if (text.isNotEmpty()) {
+            text.setSpan(ForegroundColorSpan(item.color), 0, text.length, 0)
+            item.backgroundColor?.let { text.setSpan(BackgroundColorSpan(it), 0, text.length, 0) }
+            text.setSpan(RelativeSizeSpan(0.9f), 0, text.length, 0)
+            text.setSpan(TypefaceSpan(when (item.font) {
+                "Serif" -> "serif"
+                "Mono" -> "monospace"
+                "Hand" -> "cursive"
+                else -> "sans-serif"
+            }), 0, text.length, 0)
+            if (item.bold) text.setSpan(StyleSpan(Typeface.BOLD), 0, text.length, 0)
+            val alignment = when (item.alignment) {
+                "LEFT" -> Layout.Alignment.ALIGN_NORMAL
+                "RIGHT" -> Layout.Alignment.ALIGN_OPPOSITE
+                else -> Layout.Alignment.ALIGN_CENTER
+            }
+            text.setSpan(AlignmentSpan.Standard(alignment), 0, text.length, 0)
+        }
+        return text
+    }
+
+    override fun getOverlaySettings(presentationTimeUs: Long) = settings
+}
+
+internal suspend fun applyFynxVideoEdits(
+    context: Context,
+    sourceUri: Uri,
+    style: CameraVideoStyle,
+    captionText: String = "",
+    textOverlays: List<FynxCameraTextOverlay> = emptyList()
+): Uri =
     suspendCancellableCoroutine { continuation ->
         val sourceFile = sourceUri.path?.let(::File)
         if (sourceFile == null || !sourceFile.exists() || sourceFile.length() == 0L) {
@@ -113,6 +161,7 @@ internal suspend fun applyFynxVideoEdits(context: Context, sourceUri: Uri, style
             CameraVideoStyle.BLACK_AND_WHITE -> effects += RgbFilter.createGrayscaleFilter()
             CameraVideoStyle.VIVID -> effects += HslAdjustment.Builder().adjustSaturation(22f).adjustLightness(4f).build()
         }
+        val textEffects = mutableListOf<TextOverlay>()
         val cleanCaption = captionText.trim().replace(Regex("\\s+"), " ")
         if (cleanCaption.isNotBlank()) {
             val retriever = MediaMetadataRetriever()
@@ -121,8 +170,10 @@ internal suspend fun applyFynxVideoEdits(context: Context, sourceUri: Uri, style
                 retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
             } finally { retriever.release() }
             val cues = buildCameraCaptionCues(cleanCaption, duration)
-            if (cues.isNotEmpty()) effects += OverlayEffect(listOf(TimedCameraTextOverlay(cues)))
+            if (cues.isNotEmpty()) textEffects += TimedCameraTextOverlay(cues)
         }
+        textOverlays.filter { it.text.isNotBlank() }.forEach { textEffects += FynxMediaTextOverlay(it) }
+        if (textEffects.isNotEmpty()) effects += OverlayEffect(textEffects)
         try {
             val edited = EditedMediaItem.Builder(MediaItem.fromUri(sourceUri)).setEffects(Effects(emptyList(), effects)).build()
             val transformer = Transformer.Builder(context).addListener(object : Transformer.Listener {
