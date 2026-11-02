@@ -2104,5 +2104,6 @@ export function registerBuyerWalletRoutes({ app }) {
 }
 
 export async function closeBuyerWalletPool() {
-  if (pool) await pool.end();
+  // The backend owns this shared pool's lifecycle. Wallet cleanup must never
+  // close database connections used by Marketplace, Auth, or other route modules.
 }
