@@ -68,10 +68,15 @@ export function registerSupportRoutes({ app, pool, auth }) {
     return schemaPromise;
   };
 
+  const officialOwnerId = async () => {
+    const officialUsername = (process.env.FYNX_OFFICIAL_USERNAME || "fynx").trim().toLowerCase();
+    const result = await pool.query("SELECT id FROM users WHERE lower(username)=$1 LIMIT 1", [officialUsername]);
+    return result.rows[0]?.id == null ? null : String(result.rows[0].id);
+  };
   const resolveRole = async userId => {
-    const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
-    if (first && String(first.id) === String(userId)) return "OWNER";
-    const admin = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1", [userId]);
+    const ownerId = await officialOwnerId();
+    if (ownerId && ownerId === String(userId)) return "OWNER";
+    const admin = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
     return admin.rowCount ? "ADMIN" : null;
   };
   const requireSupport = async (req, res) => {
@@ -139,7 +144,7 @@ export function registerSupportRoutes({ app, pool, auth }) {
       await client.query("COMMIT");
       const full = await pool.query("SELECT id,case_number,category,subject,status,assigned_admin_id,created_at,updated_at FROM fynx_support_cases WHERE id=$1", [row.id]);
       if (inserted.rows[0]) {
-        const owner = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0]?.id;
+        const owner = await officialOwnerId();
         const admins = (await pool.query("SELECT user_id FROM fynx_admin_roles")).rows.map(x => x.user_id);
         await notify([owner, ...admins], { caseId: row.id, eventId: `created-${row.id}`, title: "New FYNX support request", message: `${full.rows[0].case_number}: ${subject}` });
       }
@@ -247,7 +252,7 @@ export function registerSupportRoutes({ app, pool, auth }) {
       if (inserted.rows[0]) await client.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'USER_REPLIED','{}'::jsonb)", [caseId, req.user.sub]);
       await client.query("COMMIT");
       const caseRow = await pool.query("SELECT case_number,assigned_admin_id FROM fynx_support_cases WHERE id=$1", [caseId]);
-      const owner = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0]?.id;
+      const owner = await officialOwnerId();
       const admins = (await pool.query("SELECT user_id FROM fynx_admin_roles")).rows.map(x => x.user_id);
       await notify([owner, ...admins, caseRow.rows[0]?.assigned_admin_id], { caseId, eventId: `user-reply-${inserted.rows[0]?.id || clientMessageId}`, title: "User replied to a support case", message: `${caseRow.rows[0]?.case_number || "FYNX support"} has a new reply.` });
       return res.status(201).json({ ok: true, duplicate: !inserted.rows[0], messageId: inserted.rows[0]?.id == null ? null : String(inserted.rows[0].id) });
