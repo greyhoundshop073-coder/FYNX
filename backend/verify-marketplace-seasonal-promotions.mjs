@@ -30,7 +30,7 @@ const checks = [
   ["paid sponsored campaign approval and payment checks remain separate", advertising.includes("c.payment_status = 'paid'") && advertising.includes("c.approved_at IS NOT NULL")],
   ["Android reads authenticated seasonal schedule feed", client.includes("/api/marketplace/seasonal-feed") && client.includes("FynxMarketplaceSeasonalPromotion")],
   ["Marketplace home loads seasonal campaigns and passes them to the banner", panel.includes("FynxMarketplaceSeasonalPromotionClient.load(context)") && panel.includes("seasonalPromotions = seasonalPromotions")],
-  ["banner rotates server-scheduled variable-date celebrations", banner.includes("seasonalPromotions.take(4)") && banner.includes("scheduled-seasonal-") && banner.includes("promotion.occasionKey")],
+  ["banner rotates server-scheduled variable-date celebrations", banner.includes("seasonalPromotions.take(4)") && banner.includes("scheduled-seasonal-") && banner.includes("it.occasionKey.equals(celebration.first")],
   ["scheduled celebration artwork is displayed from authenticated FYNX media with crop fit", banner.includes("slide.artworkMediaId") && banner.includes('mediaUrl = "/api/media/\u0024{slide.artworkMediaId}"') && banner.includes("contentScale = ContentScale.Crop")],
   ["fixed-date fallback is suppressed when a matching admin schedule is active", banner.includes("seasonalPromotions.none { it.occasionKey.equals(celebration.first")],
   ["Owner/Admin center exposes the seasonal scheduler", adminCenter.includes("FynxMarketplaceSeasonalPromotionAdminPanel()")],
