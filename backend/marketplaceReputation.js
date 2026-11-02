@@ -93,6 +93,15 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
             AND o.completed_at >= w.week_start
             AND o.completed_at < w.week_end
           GROUP BY o.seller_id
+        ), weekly_product_sales AS (
+          SELECT o.seller_id, o.listing_id,
+                 COUNT(*)::INTEGER AS completed_product_orders
+          FROM marketplace_orders o
+          CROSS JOIN week_bounds w
+          WHERE o.status = 'COMPLETED'
+            AND o.completed_at >= w.week_start
+            AND o.completed_at < w.week_end
+          GROUP BY o.seller_id, o.listing_id
         ), eligible_sellers AS (
           SELECT s.seller_id, u.username, u.display_name,
                  s.completed_orders, s.unique_buyers,
@@ -105,10 +114,12 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           JOIN LATERAL (
             SELECT l.id, l.title, l.price, l.currency
             FROM marketplace_listings l
+            LEFT JOIN weekly_product_sales p
+              ON p.seller_id = l.seller_id AND p.listing_id = l.id
             WHERE l.seller_id = s.seller_id
               AND COALESCE(l.active, TRUE) = TRUE
               AND GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0
-            ORDER BY l.created_at DESC, l.id DESC
+            ORDER BY COALESCE(p.completed_product_orders, 0) DESC, l.created_at DESC, l.id DESC
             LIMIT 1
           ) product ON TRUE
         ), ranked_sellers AS (
