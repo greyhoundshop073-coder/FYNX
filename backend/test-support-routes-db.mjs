@@ -168,6 +168,9 @@ try {
   const attach = await request(base, 4, "POST", `/api/support/cases/${created.id}/attachments`, { mediaId: String(media.rows[0].id) });
   await expectStatus(attach, 201, "user attaches owned screenshot");
   const attachment = (await attach.json()).attachment;
+  const duplicateAttach = await request(base, 4, "POST", `/api/support/cases/${created.id}/attachments`, { mediaId: String(media.rows[0].id) });
+  await expectStatus(duplicateAttach, 200, "idempotent screenshot attachment retry");
+  assert.equal((await testPool.query("SELECT COUNT(*)::int AS count FROM fynx_support_case_events WHERE case_id=$1 AND event_type='SCREENSHOT_ATTACHED'", [created.id])).rows[0].count, 1, "screenshot attachment should be audited exactly once");
 
   const userAttachments = await request(base, 4, "GET", `/api/support/cases/${created.id}/attachments`);
   await expectStatus(userAttachments, 200, "user reads own screenshot metadata");
