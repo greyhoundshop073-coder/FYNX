@@ -105,7 +105,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
             FROM marketplace_listings l
             WHERE l.seller_id = s.seller_id
               AND COALESCE(l.active, TRUE) = TRUE
-              AND l.quantity > 0
+              AND GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0
             ORDER BY l.created_at DESC, l.id DESC
             LIMIT 1
           ) product ON TRUE
