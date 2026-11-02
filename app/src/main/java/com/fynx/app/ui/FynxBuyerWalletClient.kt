@@ -520,20 +520,24 @@ internal object FynxBuyerWalletClient {
             "Wallet returned an unsupported status."
         }
         require(currency == "NGN") { "The buyer wallet currently supports NGN only." }
+        val testMode = json.optBoolean("testMode", false)
+        val canFundByCard = json.optBoolean("canFundByCard", false)
         return FynxBuyerWalletSummary(
             walletStatus = status,
             currency = currency,
             availableBalance = nullableAmount(json, "availableBalance"),
             reservedBalance = nullableAmount(json, "reservedBalance"),
             withdrawalPendingBalance = nullableAmount(json, "withdrawalPendingBalance"),
-            canFund = json.optBoolean("canFund", false),
-            canSpend = json.optBoolean("canSpend", false),
-            canWithdraw = json.optBoolean("canWithdraw", false),
-            canFundByBankTransfer = json.optBoolean("canFundByBankTransfer", false),
-            canFundByCard = json.optBoolean("canFundByCard", false),
-            canFundByUssd = json.optBoolean("canFundByUssd", false),
+            // A simulated Wallet may only expose its explicitly approved card checkout.
+            // Do not let a malformed Test Mode response enable real-money capabilities.
+            canFund = json.optBoolean("canFund", false) && (!testMode || canFundByCard),
+            canSpend = json.optBoolean("canSpend", false) && !testMode,
+            canWithdraw = json.optBoolean("canWithdraw", false) && !testMode,
+            canFundByBankTransfer = json.optBoolean("canFundByBankTransfer", false) && !testMode,
+            canFundByCard = canFundByCard,
+            canFundByUssd = json.optBoolean("canFundByUssd", false) && !testMode,
             notice = json.optString("notice").trim(),
-            testMode = json.optBoolean("testMode", false)
+            testMode = testMode
         )
     }
 

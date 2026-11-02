@@ -33,11 +33,27 @@ class FynxBuyerWalletClientTest {
     @Test
     fun testModeWalletShowsSimulatedBalanceWithoutEnablingSpendingOrWithdrawals() {
         val summary = FynxBuyerWalletClient.parseSummary(
-            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":1500.0,"reservedBalance":0,"withdrawalPendingBalance":0,"canFund":true,"canSpend":false,"canWithdraw":false,"canFundByCard":true,"testMode":true,"notice":"TEST MODE ONLY"}"""
+            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":1500.0,"reservedBalance":0,"withdrawalPendingBalance":0,"canFund":true,"canSpend":true,"canWithdraw":true,"canFundByBankTransfer":true,"canFundByCard":true,"canFundByUssd":true,"testMode":true,"notice":"TEST MODE ONLY"}"""
         )
         assertTrue(summary.testMode)
         assertEquals(1500.0, summary.availableBalance!!, 0.0)
+        assertTrue(summary.canFund)
         assertTrue(summary.canFundByCard)
+        assertFalse(summary.canFundByBankTransfer)
+        assertFalse(summary.canFundByUssd)
+        assertFalse(summary.canSpend)
+        assertFalse(summary.canWithdraw)
+    }
+
+    @Test
+    fun testModeDoesNotAdvertiseFundingWhenCardCheckoutIsUnavailable() {
+        val summary = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":0,"canFund":true,"canFundByBankTransfer":true,"canFundByCard":false,"canFundByUssd":true,"canSpend":true,"canWithdraw":true,"testMode":true}"""
+        )
+        assertFalse(summary.canFund)
+        assertFalse(summary.canFundByBankTransfer)
+        assertFalse(summary.canFundByCard)
+        assertFalse(summary.canFundByUssd)
         assertFalse(summary.canSpend)
         assertFalse(summary.canWithdraw)
     }
