@@ -2,7 +2,7 @@ name: FYNX Chat Group Parity + Layout Safety
 
 on:
   push:
-    branches: ["main", "integration/fynx-single-apk-20261013"]
+    branches: ["main", "integration/fynx-single-apk-20261013", "feat/fynx-support-centre-20261102"]
   pull_request:
     branches: ["main", "integration/fynx-single-apk-20261013"]
 
