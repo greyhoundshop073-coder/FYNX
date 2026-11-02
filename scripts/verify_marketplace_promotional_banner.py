@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 BANNER = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt").read_text(encoding="utf-8")
 WEEKLY_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceWeeklySellerClient.kt").read_text(encoding="utf-8")
+SELLER_STORE = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt").read_text(encoding="utf-8")
 SPONSORED_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSponsoredPromotionClient.kt").read_text(encoding="utf-8")
 REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf-8")
 
@@ -25,7 +26,9 @@ checks = [
     ("seasonal calendar banners include Christmas, New Year, Easter and other fixed-date events", "Merry Christmas from FYNX!" in BANNER and "Happy New Year!" in BANNER and "easterSunday(year)" in BANNER and "Happy Independence Day, Nigeria!" in BANNER),
     ("featured product banner labels avoid claiming unsupported discounts or paid status", "FEATURED FROM FYNX SELLERS" in BANNER and "special discount" not in BANNER.lower()),
     ("legacy Marketplace product selector remains in place for regression safety", "private fun MarketplaceSmartDealsHero(" in PANEL and "selectMarketplaceAdvertisingCandidates" in PANEL),
-    ("weekly rank is sourced from completed order records rather than advertising data", "o.status = 'COMPLETED'" in REPUTATION and "o.completed_at >= w.week_start" in REPUTATION and "marketplace_ad_campaigns" not in REPUTATION[REPUTATION.index("app.get('/api/marketplace/sellers/weekly'"):REPUTATION.index("app.get('/api/marketplace/sellers/:username/reputation'")]),
+    ("weekly rank is sourced from completed order records rather than advertising data", "o.status = 'COMPLETED'" in REPUTATION and "o.completed_at >= w.week_start" in REPUTATION and "marketplace_ad_campaigns" not in REPUTATION[REPUTATION.index("app.get('/api/marketplace/sellers/weekly'"):REPUTATION.index("app.get('/api/marketplace/sellers/:username/reputation'")]),,
+    ("weekly history is persisted for closed weeks", "marketplace_weekly_seller_awards" in REPUTATION and "ON CONFLICT (week_start, weekly_rank) DO NOTHING" in REPUTATION),
+    ("seller storefront shows historical weekly recognition without ad-based scoring", "FynxMarketplaceWeeklySellerClient.history(context, username)" in SELLER_STORE and "FYNX Seller Hall of Fame" in SELLER_STORE and "not advertising spend" in SELLER_STORE),
 ]
 
 failed = []
