@@ -71,6 +71,78 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     return { sellerId: String(row.seller_id),username: row.username,displayName: row.display_name,rank: Number(row.seller_rank),sellerCount: Number(row.seller_count),successfulSales: successful,totalOrders: total,completionRate: Number(completionRate.toFixed(2)),successfulSales30d: successful30d,totalOrders30d: total30d,completionRate30d: Number(completionRate30d.toFixed(2)),reviewCount: reviews,averageRating: Number(Number(row.average_rating || 0).toFixed(2)),positiveRating: Number(positiveRating.toFixed(2)),tier };
   };
 
+  // Weekly recognition is based only on orders that reached the protected COMPLETED state
+  // during the current Monday-to-Monday UTC/database week. Paid promotion is never considered.
+  app.get('/api/marketplace/sellers/weekly', auth, async (_req, res) => {
+    try {
+      await ensureSchema();
+      const result = await pool.query(\`\
+        WITH week_bounds AS (
+          SELECT date_trunc('week', NOW()) AS week_start,
+                 date_trunc('week', NOW()) + INTERVAL '1 week' AS week_end
+        ), weekly_sales AS (
+          SELECT o.seller_id,
+                 COUNT(*)::INTEGER AS completed_orders,
+                 COUNT(DISTINCT o.buyer_id)::INTEGER AS unique_buyers
+          FROM marketplace_orders o
+          CROSS JOIN week_bounds w
+          WHERE o.status = 'COMPLETED'
+            AND o.completed_at >= w.week_start
+            AND o.completed_at < w.week_end
+          GROUP BY o.seller_id
+        ), ranked_sellers AS (
+          SELECT s.seller_id, u.username, u.display_name,
+                 s.completed_orders, s.unique_buyers,
+                 ROW_NUMBER() OVER (
+                   ORDER BY s.completed_orders DESC, s.unique_buyers DESC, u.username ASC, s.seller_id ASC
+                 )::INTEGER AS weekly_rank
+          FROM weekly_sales s
+          JOIN users u ON u.id = s.seller_id
+        )
+        SELECT w.week_start, w.week_end,
+               s.seller_id, s.username, s.display_name,
+               s.completed_orders, s.unique_buyers, s.weekly_rank,
+               product.id AS featured_listing_id,
+               product.title AS featured_product_title,
+               product.price AS featured_product_price,
+               product.currency AS featured_product_currency
+        FROM ranked_sellers s
+        CROSS JOIN week_bounds w
+        JOIN LATERAL (
+          SELECT l.id, l.title, l.price, l.currency
+          FROM marketplace_listings l
+          WHERE l.seller_id = s.seller_id
+            AND COALESCE(l.active, TRUE) = TRUE
+            AND l.quantity > 0
+          ORDER BY l.created_at DESC, l.id DESC
+          LIMIT 1
+        ) product ON TRUE
+        ORDER BY s.weekly_rank
+        LIMIT 5
+      \`, []);
+      const first = result.rows[0];
+      return res.json({
+        periodStart: first?.week_start || null,
+        periodEnd: first?.week_end || null,
+        winners: result.rows.map((row) => ({
+          sellerId: String(row.seller_id),
+          username: row.username,
+          displayName: row.display_name || row.username,
+          completedOrders: Number(row.completed_orders || 0),
+          uniqueBuyers: Number(row.unique_buyers || 0),
+          rank: Number(row.weekly_rank || 0),
+          featuredListingId: String(row.featured_listing_id),
+          featuredProductTitle: row.featured_product_title,
+          featuredProductPrice: Number(row.featured_product_price),
+          featuredProductCurrency: row.featured_product_currency
+        }))
+      });
+    } catch (error) {
+      console.error('marketplace weekly seller ranking', error);
+      return res.status(500).json({ error: 'weekly seller ranking unavailable' });
+    }
+  });
+
   app.get('/api/marketplace/sellers/:username/reputation', auth, async (req, res) => {
     try {
       const username = parseSeller(req.params.username);
@@ -178,314 +250,3 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       if (process.env.PAYSTACK_CALLBACK_URL) payload.callback_url = process.env.PAYSTACK_CALLBACK_URL;
       let data;
       try {
-        data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
-      } catch (error) {
-        const duplicateReferenceError = error?.code === 'PAYSTACK_REQUEST_FAILED'
-          && /(duplicate|reference.*already|already.*reference|already\s+used|used\\s+before)/i.test(String(error.message || ''));
-        if (!duplicateReferenceError || staleReferenceToReplace) throw error;
-        let previous;
-        try {
-          previous = await verifyOrderPaymentAttempt(reference, existing);
-        } catch (verificationError) {
-          if (verificationError?.code === 'PAYSTACK_NOT_CONFIGURED') throw verificationError;
-          return res.status(409).json({
-            error: 'provider rejected the existing order reference but its status could not be verified; no new payment was started',
-            reference
-          });
-        }
-        if (!previous.matches) {
-          return res.status(409).json({
-            error: 'existing order payment reference could not be matched safely; no new payment was started',
-            reference
-          });
-        }
-        if (!['failed', 'abandoned', 'reversed'].includes(previous.status)) {
-          return res.status(409).json({
-            error: previous.status === 'success'
-              ? 'previous order payment appears successful; verify the existing reference before retrying'
-              : 'previous order payment is not confirmed failed; retry after the provider reaches a terminal state',
-            reference,
-            providerStatus: previous.status || 'unknown'
-          });
-        }
-        // The deterministic legacy reference is already known to Paystack and
-        // terminally failed. A one-time UUID reference makes the next attempt
-        // distinct while preserving provider recovery for legacy success cases.
-        reference = `FYNX-ORDER-${crypto.randomUUID()}`;
-        payload = { ...payload, reference };
-        data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
-      }
-      const providerReference = String(data.data?.reference || '').trim();
-      const providerAmount = Number(data.data?.amount);
-      const providerCurrency = String(data.data?.currency || '').trim().toUpperCase();
-      const authorizationUrl = data.data?.authorization_url || '', accessCode = data.data?.access_code || null;
-      if (!authorizationUrl || providerReference !== reference || providerAmount !== amount || providerCurrency !== String(existing.currency).toUpperCase()) {
-        return res.status(502).json({ error: 'payment provider returned data that does not match the protected order' });
-      }
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const locked = (await client.query(`SELECT id,buyer_id,status,payment_reference,payment_authorization_url,payment_access_code FROM marketplace_orders WHERE id=$1 FOR UPDATE`, [orderId])).rows[0];
-        if (!locked) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
-        if (String(locked.buyer_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can pay this order' }); }
-        if (locked.status !== 'PAYMENT_PENDING') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'this order is no longer awaiting payment' }); }
-        if (locked.payment_reference && locked.payment_authorization_url) { await client.query('COMMIT'); return res.status(200).json({ orderId: String(locked.id), reference: locked.payment_reference, authorizationUrl: locked.payment_authorization_url, accessCode: locked.payment_access_code || null, idempotent: true, amountSubunit: amount, currency: String(existing.currency).toUpperCase() }); }
-        const updated = await client.query(`UPDATE marketplace_orders SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3,updated_at=NOW() WHERE id=$4 AND buyer_id=$5 AND status='PAYMENT_PENDING' AND (payment_reference IS NULL OR ($6::text IS NOT NULL AND payment_reference=$6 AND payment_authorization_url IS NULL)) RETURNING id`, [reference, authorizationUrl, accessCode, orderId, req.user.sub, staleReferenceToReplace]);
-        if (!updated.rows[0]) { const current = (await client.query(`SELECT payment_reference,payment_authorization_url,payment_access_code FROM marketplace_orders WHERE id=$1`, [orderId])).rows[0]; await client.query('COMMIT'); if (current?.payment_reference && current?.payment_authorization_url) return res.status(200).json({ orderId, reference: current.payment_reference, authorizationUrl: current.payment_authorization_url, accessCode: current.payment_access_code || null, idempotent: true, amountSubunit: amount, currency: String(existing.currency).toUpperCase() }); return res.status(409).json({ error: 'payment initialization could not be committed; retry the order payment request' }); }
-        await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'PAYMENT_INITIALIZED','PAYMENT_PENDING','PAYMENT_PENDING',$3::jsonb)`, [orderId, req.user.sub, JSON.stringify({ reference, provider: 'paystack', amount, currency: String(existing.currency).toUpperCase() })]);
-        await client.query('COMMIT');
-      } catch (error) { try { await client.query('ROLLBACK'); } catch {} throw error; } finally { client.release(); }
-      return res.status(201).json({ orderId, reference, authorizationUrl, accessCode, amountSubunit: amount, currency: String(existing.currency).toUpperCase() });
-    } catch (error) {
-      if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
-      if (error?.code === '23505') return res.status(409).json({ error: 'payment initialization already exists; retry the order payment request' });
-      console.error('marketplace payment initialize', error); return res.status(502).json({ error: 'payment initialization failed' });
-    }
-  });
-
-  app.post('/api/marketplace/checkout-groups/:id/payment', auth, async (req, res) => {
-    const checkoutId = parseOrderId(req.params.id);
-    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    if (!checkoutId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'valid checkout id and customer email are required' });
-    try {
-      await ensureSchema();
-      await pool.query(`ALTER TABLE marketplace_checkout_groups ADD COLUMN IF NOT EXISTS payment_reference TEXT, ADD COLUMN IF NOT EXISTS payment_authorization_url TEXT, ADD COLUMN IF NOT EXISTS payment_access_code TEXT`);
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const group = (await client.query(`SELECT id,buyer_id,buyer_total,currency,status,payment_reference,payment_authorization_url,payment_access_code FROM marketplace_checkout_groups WHERE id=$1 AND buyer_id=$2 FOR UPDATE`, [checkoutId, req.user.sub])).rows[0];
-        if (!group) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'checkout group not found' }); }
-        if (group.status !== 'PAYMENT_PENDING') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group is not awaiting payment' }); }
-        if (group.payment_reference && group.payment_authorization_url) { await client.query('COMMIT'); return res.status(200).json({ checkoutId: String(group.id), reference: group.payment_reference, authorizationUrl: group.payment_authorization_url, accessCode: group.payment_access_code || null, idempotent: true, amountSubunit: amountSubunit(group.buyer_total, group.currency), currency: String(group.currency).toUpperCase() }); }
-
-        // Recover legacy/interrupted rows which have a provider reference but no
-        // durable authorization URL. Never overwrite a reference until Paystack
-        // confirms that exact attempt failed terminally; a successful, pending,
-        // unknown, or mismatched attempt must keep its reference.
-        let staleReferenceToReplace = null;
-        if (group.payment_reference && !group.payment_authorization_url) {
-          let previous;
-          try {
-            previous = await paystackRequest(`/transaction/verify/${encodeURIComponent(group.payment_reference)}`);
-          } catch (error) {
-            await client.query('ROLLBACK');
-            if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
-            return res.status(409).json({
-              error: 'previous checkout payment attempt could not be verified safely; no new payment was started',
-              reference: String(group.payment_reference)
-            });
-          }
-          const previousTransaction = previous.data || {};
-          const previousStatus = String(previousTransaction.status || '').trim().toLowerCase();
-          const previousAmount = amountSubunit(group.buyer_total, group.currency);
-          const previousCurrency = String(previousTransaction.currency || '').trim().toUpperCase();
-          const previousCheckoutId = String(previousTransaction.metadata?.checkoutGroupId || previousTransaction.metadata?.checkout_group_id || '');
-          const previousBuyerId = String(previousTransaction.metadata?.buyerId || previousTransaction.metadata?.buyer_id || '');
-          const previousAttemptMatches = String(previousTransaction.reference || '') === String(group.payment_reference)
-            && previousAmount !== null
-            && Number(previousTransaction.amount) === previousAmount
-            && previousCurrency === String(group.currency).toUpperCase()
-            && previousCheckoutId === String(group.id)
-            && previousBuyerId === String(group.buyer_id);
-          if (!previousAttemptMatches) {
-            await client.query('ROLLBACK');
-            return res.status(409).json({
-              error: 'previous checkout payment attempt does not match this checkout; no new payment was started',
-              reference: String(group.payment_reference)
-            });
-          }
-          if (!['failed', 'abandoned', 'reversed'].includes(previousStatus)) {
-            await client.query('ROLLBACK');
-            return res.status(409).json({
-              error: previousStatus === 'success'
-                ? 'previous checkout payment appears successful; verify the existing reference before retrying'
-                : 'previous checkout payment is not confirmed failed; retry after the provider reaches a terminal state',
-              reference: String(group.payment_reference),
-              providerStatus: previousStatus || 'unknown'
-            });
-          }
-          staleReferenceToReplace = String(group.payment_reference);
-        }
-
-        const amount = amountSubunit(group.buyer_total, group.currency);
-        if (!amount) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'unsupported marketplace payment currency or amount' }); }
-        // A provider init can succeed before the following DB commit fails. The URL is not returned until commit, so retry with a fresh provider reference instead of reusing one Paystack has already seen.
-        const reference = `FYNX-CHECKOUT-${crypto.randomUUID()}`;
-        const payload = { email, amount: String(amount), currency: String(group.currency).toUpperCase(), reference, metadata: { checkoutGroupId: String(group.id), buyerId: String(group.buyer_id), purpose: 'FYNX_MARKETPLACE_CHECKOUT_GROUP' } };
-        if (process.env.PAYSTACK_CALLBACK_URL) payload.callback_url = process.env.PAYSTACK_CALLBACK_URL;
-        const data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
-        const providerReference = String(data.data?.reference || '').trim(), providerAmount = Number(data.data?.amount), providerCurrency = String(data.data?.currency || '').trim().toUpperCase();
-        const authorizationUrl = data.data?.authorization_url || '', accessCode = data.data?.access_code || null;
-        if (!authorizationUrl || providerReference !== reference || providerAmount !== amount || providerCurrency !== String(group.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(502).json({ error: 'payment provider returned data that does not match the checkout group' }); }
-        const updated = await client.query(`UPDATE marketplace_checkout_groups SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3,updated_at=NOW() WHERE id=$4 AND buyer_id=$5 AND status='PAYMENT_PENDING' AND (payment_reference IS NULL OR ($6::text IS NOT NULL AND payment_reference=$6 AND payment_authorization_url IS NULL)) RETURNING id`, [reference, authorizationUrl, accessCode, checkoutId, req.user.sub, staleReferenceToReplace]);
-        if (!updated.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group payment initialization could not be committed; retry' }); }
-        await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) SELECT order_id,$1,'PAYMENT_INITIALIZED','PAYMENT_PENDING','PAYMENT_PENDING',$2::jsonb FROM marketplace_checkout_group_items WHERE checkout_id=$3`, [req.user.sub, JSON.stringify({ reference, provider: 'paystack', amount, currency: String(group.currency).toUpperCase(), checkoutGroupId: String(group.id) }), checkoutId]);
-        await client.query('COMMIT');
-        return res.status(201).json({ checkoutId: String(group.id), reference, authorizationUrl, accessCode, amountSubunit: amount, currency: String(group.currency).toUpperCase() });
-      } catch (error) { try { await client.query('ROLLBACK'); } catch {} throw error; } finally { client.release(); }
-    } catch (error) {
-      if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
-      if (error?.code === '23505') return res.status(409).json({ error: 'checkout group payment initialization already exists; retry the payment request' });
-      console.error('marketplace checkout group payment initialize', error); return res.status(502).json({ error: 'checkout group payment initialization failed' });
-    }
-  });
-
-  app.get('/api/marketplace/checkout-groups/verify/:reference', auth, async (req, res) => {
-    const reference = typeof req.params.reference === 'string' ? req.params.reference.trim() : '';
-    if (!/^FYNX-CHECKOUT-[0-9a-f-]{36}$/i.test(reference)) return res.status(400).json({ error: 'invalid checkout payment reference' });
-    try {
-      await ensureSchema();
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const group = (await client.query(`
-          SELECT id,buyer_id,buyer_total,currency,status,payment_reference
-          FROM marketplace_checkout_groups
-          WHERE payment_reference=$1
-          FOR UPDATE
-        `, [reference])).rows[0];
-        if (!group) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'checkout payment not found' }); }
-        if (String(group.buyer_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'payment unavailable' }); }
-
-        const children = (await client.query(`
-          SELECT o.id,o.buyer_id,o.seller_id,o.total_amount,o.currency,o.status,o.payment_provider_fee
-          FROM marketplace_checkout_group_items gi
-          JOIN marketplace_orders o ON o.id=gi.order_id
-          WHERE gi.checkout_id=$1
-          ORDER BY o.id ASC
-          FOR UPDATE OF o
-        `, [group.id])).rows;
-        if (!children.length) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group has no orders' }); }
-
-        const expectedAmount = amountSubunit(group.buyer_total, group.currency);
-        const childTotal = children.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
-        const childCurrencyValid = children.every((row) => String(row.currency || '').toUpperCase() === String(group.currency || '').toUpperCase());
-        if (!expectedAmount || Math.round(childTotal * 100) / 100 !== Number(group.buyer_total) || !childCurrencyValid) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ error: 'checkout group accounting does not reconcile' });
-        }
-
-        if (group.status === 'PAID' && children.every((row) => row.status === 'PAID')) {
-          await client.query('COMMIT');
-          return res.json({ verified: true, idempotent: true, checkoutId: String(group.id), status: 'PAID', currency: String(group.currency).toUpperCase(), amountSubunit: expectedAmount });
-        }
-
-        const data = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
-        const transaction = data.data || {};
-        const paidAmount = Number(transaction.amount);
-        const paidCurrency = String(transaction.currency || '').trim().toUpperCase();
-        const providerReference = String(transaction.reference || '').trim();
-        const metadataCheckoutId = String(transaction.metadata?.checkoutGroupId || transaction.metadata?.checkout_group_id || '');
-        const metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '');
-        const providerFeeSubunit = Number(transaction.fees);
-        const validProviderFee = Number.isFinite(providerFeeSubunit) && providerFeeSubunit >= 0 ? Math.round((providerFeeSubunit / 100) * 100) / 100 : null;
-        const valid = transaction.status === 'success'
-          && providerReference === reference
-          && expectedAmount === paidAmount
-          && paidCurrency === String(group.currency).toUpperCase()
-          && metadataCheckoutId === String(group.id)
-          && metadataBuyerId === String(group.buyer_id)
-          && validProviderFee !== null;
-        if (!valid) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ error: 'checkout payment could not be verified', status: transaction.status || 'unknown' });
-        }
-
-        const feeCents = Math.round(validProviderFee * 100);
-        const totalCents = expectedAmount;
-        let allocatedFeeCents = 0;
-        for (let index = 0; index < children.length; index += 1) {
-          const child = children[index];
-          const childCents = amountSubunit(child.total_amount, child.currency);
-          if (!childCents) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'child order has invalid payment amount' }); }
-          const feeShare = index === children.length - 1
-            ? feeCents - allocatedFeeCents
-            : Math.floor((feeCents * childCents) / totalCents);
-          allocatedFeeCents += feeShare;
-          if (child.status === 'PAYMENT_PENDING') {
-            await client.query(`
-              UPDATE marketplace_orders
-              SET status='PAID',payment_provider_fee=$2,updated_at=NOW()
-              WHERE id=$1 AND status='PAYMENT_PENDING'
-            `, [child.id, feeShare / 100]);
-            await client.query(`
-              INSERT INTO marketplace_order_events
-                (order_id,actor_id,event_type,from_status,to_status,metadata)
-              VALUES ($1,$2,'PAYMENT_CONFIRMED','PAYMENT_PENDING','PAID',$3::jsonb)
-            `, [child.id, child.buyer_id, JSON.stringify({
-              reference,
-              provider: 'paystack',
-              source: 'checkout-group-verification',
-              checkoutGroupId: String(group.id),
-              amount: childCents,
-              currency: String(child.currency).toUpperCase(),
-              providerFee: feeShare / 100
-            })]);
-          } else if (child.status !== 'PAID') {
-            await client.query('ROLLBACK');
-            return res.status(409).json({ error: `checkout child order ${child.id} is in an incompatible payment state` });
-          }
-        }
-
-        const updatedGroup = (await client.query(`
-          UPDATE marketplace_checkout_groups
-          SET status='PAID',updated_at=NOW()
-          WHERE id=$1 AND status='PAYMENT_PENDING'
-          RETURNING id
-        `, [group.id])).rows[0];
-
-        await client.query('COMMIT');
-        return res.json({
-          verified: true,
-          idempotent: !updatedGroup,
-          checkoutId: String(group.id),
-          status: 'PAID',
-          currency: String(group.currency).toUpperCase(),
-          amountSubunit: expectedAmount,
-          childOrderCount: children.length,
-          providerFee: validProviderFee
-        });
-      } catch (error) {
-        try { await client.query('ROLLBACK'); } catch {}
-        throw error;
-      } finally { client.release(); }
-    } catch (error) {
-      if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
-      console.error('marketplace checkout group payment verify', error);
-      return res.status(502).json({ error: 'checkout group payment verification failed' });
-    }
-  });
-
-  app.get('/api/marketplace/payments/verify/:reference', auth, async (req, res) => {
-    const reference = typeof req.params.reference === 'string' ? req.params.reference.trim() : '';
-    if (!/^[A-Za-z0-9_.=-]{8,100}$/.test(reference)) return res.status(400).json({ error: 'invalid payment reference' });
-    try {
-      await ensureSchema();
-      const orderResult = await pool.query(`SELECT id,buyer_id,listing_id,quantity,total_amount,currency,status,payment_reference FROM marketplace_orders WHERE payment_reference=$1`, [reference]);
-      const order = orderResult.rows[0];
-      if (!order) return res.status(404).json({ error: 'payment order not found' });
-      if (String(order.buyer_id) !== String(req.user.sub)) return res.status(403).json({ error: 'payment unavailable' });
-      const data = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`), transaction = data.data || {};
-      const expectedAmount = amountSubunit(order.total_amount, order.currency), paidAmount = Number(transaction.amount), paidCurrency = String(transaction.currency || '').toUpperCase(), metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || ''), metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || ''), providerReference = String(transaction.reference || '').trim();
-      const valid = transaction.status === 'success' && providerReference === reference && expectedAmount === paidAmount && paidCurrency === String(order.currency).toUpperCase() && metadataOrderId === String(order.id) && metadataBuyerId === String(order.buyer_id);
-      if (!valid) return res.status(409).json({ error: 'payment could not be verified', status: transaction.status || 'unknown' });
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const result = await confirmMarketplacePayment(client, { orderId: order.id, buyerId: req.user.sub, reference, paidAmount, paidCurrency, providerFee: transaction.fees, source: 'verification' });
-        await client.query('COMMIT');
-        const updated = (await pool.query('SELECT * FROM marketplace_orders WHERE id=$1', [order.id])).rows[0];
-        return res.json({ verified: true, idempotent: result.idempotent, order: { id: String(updated.id), status: updated.status, paymentReference: updated.payment_reference, totalAmount: Number(updated.total_amount), currency: updated.currency, buyerTotal: Number(updated.buyer_total), marketplaceFee: Number(updated.marketplace_fee), sellerNetAmount: Number(updated.seller_net_amount), paymentProviderFee: Number(updated.payment_provider_fee) } });
-      } catch (error) {
-        try { await client.query('ROLLBACK'); } catch {}
-        if (error?.code === 'PAYMENT_FORBIDDEN') return res.status(403).json({ error: 'payment unavailable' });
-        if (error?.code === 'PAYMENT_ORDER_NOT_FOUND') return res.status(404).json({ error: 'order not found' });
-        if (error?.code === 'PAYMENT_DATA_MISMATCH' || error?.code === 'PAYMENT_STATE_CONFLICT') return res.status(409).json({ error: error.message });
-        throw error;
-      } finally { client.release(); }
-    } catch (error) {
-      if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
-      console.error('marketplace payment verify', error); return res.status(502).json({ error: 'payment verification failed' });
-    }
-  });
-}
