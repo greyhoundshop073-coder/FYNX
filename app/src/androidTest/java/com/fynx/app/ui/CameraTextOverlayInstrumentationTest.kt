@@ -171,9 +171,10 @@ class CameraTextOverlayInstrumentationTest {
     }
 
     @Test
-    fun photoTextOverlayIsRenderedIntoTheExportedImage() {
+    fun photoTextOverlayIsRenderedAtEachSelectedPositionAndKeepsSourceDimensions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val source = File(context.cacheDir, "fynx-text-overlay-source.jpg")
+        val source = File(context.cacheDir, "fynx-text-overlay-source-${System.currentTimeMillis()}.jpg")
+        var outputFile: File? = null
         val bitmap = Bitmap.createBitmap(480, 720, Bitmap.Config.ARGB_8888)
         try {
             Canvas(bitmap).drawColor(Color.BLACK)
@@ -184,46 +185,78 @@ class CameraTextOverlayInstrumentationTest {
             bitmap.recycle()
         }
 
-        val metrics = readFynxCameraMediaMetrics(Uri.fromFile(source), "image")
-        assertEquals("Overlay geometry uses the source photo aspect ratio", 480f / 720f, metrics.aspectRatio, 0.01f)
+        try {
+            val metrics = readFynxCameraMediaMetrics(Uri.fromFile(source), "image")
+            assertEquals("Overlay geometry uses the source photo aspect ratio", 480f / 720f, metrics.aspectRatio, 0.01f)
 
-        val exported = renderFynxPhotoTextOverlays(
-            context,
-            Uri.fromFile(source),
-            listOf(
-                FynxCameraTextOverlay(
-                    id = "camera-overlay-test",
-                    text = "FYNX TEXT TEST",
-                    x = 0.5f,
-                    y = 0.5f,
-                    color = Color.WHITE,
-                    font = "Modern",
-                    bold = true
+            val exported = renderFynxPhotoTextOverlays(
+                context,
+                Uri.fromFile(source),
+                listOf(
+                    FynxCameraTextOverlay(
+                        id = "camera-overlay-top",
+                        text = "TOP",
+                        x = 0.22f,
+                        y = 0.24f,
+                        color = Color.GREEN,
+                        font = "Serif",
+                        bold = true
+                    ),
+                    FynxCameraTextOverlay(
+                        id = "camera-overlay-bottom",
+                        text = "BOTTOM",
+                        x = 0.78f,
+                        y = 0.76f,
+                        color = Color.MAGENTA,
+                        font = "Mono",
+                        alignment = "RIGHT",
+                        scale = 1.25f
+                    )
                 )
             )
-        )
-        val outputFile = File(exported.path ?: error("Text export returned no file path"))
-        val rendered = BitmapFactory.decodeFile(outputFile.absolutePath)
-            ?: error("Text export could not be decoded")
-        try {
-            var brightPixels = 0
-            var y = 0
-            while (y < rendered.height) {
-                var x = 0
-                while (x < rendered.width) {
-                    if (Color.red(rendered.getPixel(x, y)) > 210 &&
-                        Color.green(rendered.getPixel(x, y)) > 210 &&
-                        Color.blue(rendered.getPixel(x, y)) > 210
-                    ) brightPixels++
-                    x += 2
+            outputFile = File(exported.path ?: error("Text export returned no file path"))
+            val rendered = BitmapFactory.decodeFile(outputFile!!.absolutePath)
+                ?: error("Text export could not be decoded")
+            try {
+                assertEquals("Photo export changed the source width", 480, rendered.width)
+                assertEquals("Photo export changed the source height", 720, rendered.height)
+
+                fun hasOverlayColourNear(xFraction: Float, yFraction: Float, expected: Int): Boolean {
+                    val centerX = (rendered.width * xFraction).toInt()
+                    val centerY = (rendered.height * yFraction).toInt()
+                    val radiusX = (rendered.width * 0.16f).toInt()
+                    val radiusY = (rendered.height * 0.12f).toInt()
+                    val red = Color.red(expected)
+                    val green = Color.green(expected)
+                    val blue = Color.blue(expected)
+                    var matches = 0
+                    for (y in (centerY - radiusY).coerceAtLeast(0)..(centerY + radiusY).coerceAtMost(rendered.height - 1)) {
+                        for (x in (centerX - radiusX).coerceAtLeast(0)..(centerX + radiusX).coerceAtMost(rendered.width - 1)) {
+                            val pixel = rendered.getPixel(x, y)
+                            if (Color.alpha(pixel) > 160 &&
+                                kotlin.math.abs(Color.red(pixel) - red) < 90 &&
+                                kotlin.math.abs(Color.green(pixel) - green) < 90 &&
+                                kotlin.math.abs(Color.blue(pixel) - blue) < 90
+                            ) matches++
+                        }
+                    }
+                    return matches >= 8
                 }
-                y += 2
+
+                assertTrue(
+                    "Photo export did not burn the first overlay colour near its selected top position",
+                    hasOverlayColourNear(0.22f, 0.24f, Color.GREEN)
+                )
+                assertTrue(
+                    "Photo export did not burn the second overlay colour near its selected bottom position",
+                    hasOverlayColourNear(0.78f, 0.76f, Color.MAGENTA)
+                )
+            } finally {
+                rendered.recycle()
             }
-            assertTrue("Photo export did not burn the text overlay into the image", brightPixels > 20)
         } finally {
-            rendered.recycle()
             source.delete()
-            outputFile.delete()
+            outputFile?.delete()
         }
     }
 }
