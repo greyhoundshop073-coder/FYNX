@@ -575,6 +575,8 @@ fun FynxCameraCapturePanel(
     var error by remember { mutableStateOf<String?>(null) }
     var statusShareChecking by remember { mutableStateOf(false) }
     val initialMediaIsLocalFile = initialMediaUri?.scheme == "file"
+    var isPreparingInitialMedia by remember(initialMediaUri) { mutableStateOf(initialMediaUri != null && !initialMediaIsLocalFile) }
+    var initialMediaLoadFailed by remember(initialMediaUri) { mutableStateOf(false) }
     var initialMediaHandedOff by remember(initialMediaUri) { mutableStateOf(false) }
     var copiedInitialMediaFiles by remember(initialMediaUri) { mutableStateOf<List<Uri>>(emptyList()) }
     var pendingUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri.takeIf { initialMediaIsLocalFile }) }
@@ -625,12 +627,26 @@ fun FynxCameraCapturePanel(
     }
     LaunchedEffect(initialMediaUri, initialMediaType) {
         val source = initialMediaUri ?: return@LaunchedEffect
-        if (source.scheme == "file") return@LaunchedEffect
-        val copied = withContext(Dispatchers.IO) { copyCameraGalleryMediaToCache(context, source) }
-        pendingUri = Uri.fromFile(copied.first)
-        pendingOriginalUri = Uri.fromFile(copied.second)
-        copiedInitialMediaFiles = listOf(Uri.fromFile(copied.first), Uri.fromFile(copied.second))
-        pendingType = initialMediaType ?: copied.third
+        if (source.scheme == "file") {
+            isPreparingInitialMedia = false
+            return@LaunchedEffect
+        }
+        isPreparingInitialMedia = true
+        initialMediaLoadFailed = false
+        val result = withContext(Dispatchers.IO) {
+            runCatching { copyCameraGalleryMediaToCache(context, source) }
+        }
+        result.onSuccess { copied ->
+            pendingUri = Uri.fromFile(copied.first)
+            pendingOriginalUri = Uri.fromFile(copied.second)
+            copiedInitialMediaFiles = listOf(Uri.fromFile(copied.first), Uri.fromFile(copied.second))
+            pendingType = initialMediaType ?: copied.third
+            isPreparingInitialMedia = false
+        }.onFailure { failure ->
+            initialMediaLoadFailed = true
+            isPreparingInitialMedia = false
+            error = failure.message ?: "The selected media could not be prepared for editing."
+        }
     }
     LaunchedEffect(pendingUri, pendingType) {
         cameraVideoDurationMs = 0L
@@ -764,13 +780,13 @@ fun FynxCameraCapturePanel(
         }
     }
     // The self-timer uses one cancellable job so the visible countdown and shutter cannot drift apart.
-    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled, galleryRebindRequest) {
+    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled, galleryRebindRequest, isPreparingInitialMedia) {
         val generation = bindGeneration + 1; bindGeneration = generation
         cameraReady = false
-        if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
+        if (!hasCamera || pendingUri != null || isPreparingInitialMedia || initialMediaLoadFailed) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
-            if (generation != bindGeneration || !hasCamera || pendingUri != null) return@addListener
+            if (generation != bindGeneration || !hasCamera || pendingUri != null || isPreparingInitialMedia || initialMediaLoadFailed) return@addListener
             runCatching {
                 val provider = future.get(); val selector = CameraSelector.Builder().requireLensFacing(lens).build()
                 if (!provider.hasCamera(selector)) {
@@ -1134,6 +1150,24 @@ fun FynxCameraCapturePanel(
         })
     }
 
+    if (isPreparingInitialMedia) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF080A10)), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Preparing your media for text editing…", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                TextButton(onClick = onDismiss) { Text("Cancel", color = Color.White) }
+            }
+        }
+        return
+    }
+    if (initialMediaLoadFailed) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF080A10)), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(error ?: "The selected media could not be opened.", color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Button(onClick = onDismiss) { Text("Close") }
+            }
+        }
+        return
+    }
     if (!hasCamera && initialMediaUri == null) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
     val previewVideoView = remember(previewUri) { mutableStateOf<android.widget.VideoView?>(null) }
