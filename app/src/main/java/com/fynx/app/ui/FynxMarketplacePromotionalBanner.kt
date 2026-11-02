@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
@@ -77,7 +79,17 @@ fun MarketplacePromotionalBanner(
             sellerSales
         ).take(4).mapNotNull { index[it.id.trim()] }
     }
-    val celebration = remember { marketplaceCelebrationFor(LocalDate.now(ZoneId.of("Africa/Lagos"))) }
+    val lagosZone = remember { ZoneId.of("Africa/Lagos") }
+    var localDate by remember(lagosZone) { mutableStateOf(LocalDate.now(lagosZone)) }
+    LaunchedEffect(lagosZone) {
+        while (isActive) {
+            val nextMidnight = localDate.plusDays(1).atStartOfDay(lagosZone).toInstant()
+            val untilNextDay = Duration.between(Instant.now(), nextMidnight).toMillis().coerceAtLeast(1_000L)
+            delay(untilNextDay)
+            localDate = LocalDate.now(lagosZone)
+        }
+    }
+    val celebration = remember(localDate) { marketplaceCelebrationFor(localDate) }
     val slides = remember(weeklySeller, weeklySellerListing, featuredListings, celebration) {
         buildList {
             if (weeklySeller != null) {
@@ -177,6 +189,7 @@ fun MarketplacePromotionalBanner(
                         width = bannerWidth,
                         onClick = {
                             when {
+                                slide.isWeeklyWinner && !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
                                 slide.listing != null -> onOpenListing(slide.listing)
                                 !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
                                 else -> onShopNow()
@@ -324,7 +337,7 @@ private fun MarketplacePromotionalSlide(
     }
 }
 
-/** Calendar-based fallback for fixed-date celebrations; lunar dates are admin-scheduled in the campaign layer. */
+/** Local fixed-date fallback. Lunar/religious dates must come from explicitly scheduled campaign records. */
 private fun marketplaceCelebrationFor(date: LocalDate): Pair<String, Pair<String, String>>? {
     fun between(start: LocalDate, end: LocalDate) = !date.isBefore(start) && !date.isAfter(end)
     val year = date.year
