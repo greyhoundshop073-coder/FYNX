@@ -354,6 +354,7 @@ fun FynxBuyerWalletPanel() {
                                 canShowBalance && wallet?.testMode == true -> "TEST MODE — simulated balance; cannot spend or withdraw"
                                 canShowBalance -> "Cleared funds available to use"
                                 summaryError != null -> "Balance unavailable until your connection is restored"
+                                wallet?.testMode == true -> "Complete your first test card payment to display your simulated balance"
                                 else -> "Your wallet balance will appear here after activation"
                             },
                             style = MaterialTheme.typography.bodySmall,
