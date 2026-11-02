@@ -206,7 +206,7 @@ fun MarketplacePromotionalBanner(
     }
     val listState = rememberLazyListState()
     val currentIndex by remember(slides) {
-        derivedStateOf { if (slides.isEmpty()) 0 else listState.firstVisibleItemIndex.coerceIn(0, slides.lastIndex) }
+        derivedStateOf { if (slides.isEmpty()) 0 else listState.firstVisibleItemIndex % slides.size }
     }
     val currentSlide = slides.getOrNull(currentIndex)
 
