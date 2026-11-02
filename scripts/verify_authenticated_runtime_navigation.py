@@ -1629,11 +1629,14 @@ def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple
                 latest+chr(10), encoding="utf-8"
             )
             run("adb","shell","input","keyevent","KEYCODE_BACK")
-            time.sleep(0.7)
-            back_xml=dump_ui(prefix+"-marketplace-return.xml")
-            if back_xml and find_control(back_xml, ["Search products, sellers or categories"]):
-                return True, "Marketplace -> Wallet shortcut opened and Wallet summary sections settled; returned to Marketplace.", back_xml
-            return False, "Wallet screen settled, but Back did not restore the Marketplace surface.", back_xml or marketplace_xml
+            back_xml=""
+            return_deadline=time.monotonic()+8.0
+            while time.monotonic()<return_deadline:
+                time.sleep(0.4)
+                back_xml=dump_ui(prefix+"-marketplace-return.xml") or back_xml
+                if back_xml and find_control(back_xml, ["Search products, sellers or categories"]):
+                    return True, "Marketplace -> Wallet shortcut opened and Wallet summary sections settled; Back returned to Marketplace.", back_xml
+            return False, "Wallet screen settled, but Back did not restore the Marketplace surface within 8 seconds.", back_xml or marketplace_xml
         time.sleep(0.5)
 
     screenshot(prefix+"-marketplace-wallet-incomplete.png")
