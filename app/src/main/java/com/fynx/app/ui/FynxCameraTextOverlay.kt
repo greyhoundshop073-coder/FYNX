@@ -68,6 +68,8 @@ import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.math.roundToInt
 
 /** Media text is stored as normalized coordinates so it renders consistently across screen sizes. */
@@ -85,6 +87,70 @@ internal data class FynxCameraTextOverlay(
     val startMs: Long = 0L,
     val endMs: Long = Long.MAX_VALUE
 )
+
+internal data class FynxCameraMediaDraftEdit(
+    val sourceUri: Uri,
+    val overlays: List<FynxCameraTextOverlay>,
+    val videoStyle: String = "NATURAL",
+    val captionText: String = ""
+)
+
+internal fun encodeFynxCameraMediaDraftEdit(edit: FynxCameraMediaDraftEdit): String =
+    JSONObject().apply {
+        put("videoStyle", edit.videoStyle)
+        put("captionText", edit.captionText)
+        put("overlays", JSONArray().apply {
+            edit.overlays.forEach { overlay ->
+                put(JSONObject().apply {
+                    put("id", overlay.id)
+                    put("text", overlay.text)
+                    put("x", overlay.x.toDouble())
+                    put("y", overlay.y.toDouble())
+                    put("color", overlay.color)
+                    put("font", overlay.font)
+                    put("backgroundColor", overlay.backgroundColor ?: JSONObject.NULL)
+                    put("bold", overlay.bold)
+                    put("alignment", overlay.alignment)
+                    put("scale", overlay.scale.toDouble())
+                    put("startMs", overlay.startMs)
+                    put("endMs", overlay.endMs)
+                })
+            }
+        })
+    }.toString()
+
+internal fun decodeFynxCameraMediaDraftEdit(sourceUri: Uri, rawState: String): FynxCameraMediaDraftEdit? =
+    runCatching {
+        val root = JSONObject(rawState)
+        val overlaysJson = root.optJSONArray("overlays") ?: JSONArray()
+        val overlays = buildList {
+            for (index in 0 until overlaysJson.length()) {
+                val item = overlaysJson.optJSONObject(index) ?: continue
+                add(
+                    FynxCameraTextOverlay(
+                        id = item.optString("id").ifBlank { UUID.randomUUID().toString() },
+                        text = item.optString("text").take(240),
+                        x = item.optDouble("x", 0.5).toFloat().coerceIn(0.04f, 0.96f),
+                        y = item.optDouble("y", 0.43).toFloat().coerceIn(0.06f, 0.94f),
+                        color = item.optInt("color", android.graphics.Color.WHITE),
+                        font = item.optString("font", "Modern"),
+                        backgroundColor = if (item.isNull("backgroundColor")) null else item.optInt("backgroundColor"),
+                        bold = item.optBoolean("bold"),
+                        alignment = item.optString("alignment", "CENTER"),
+                        scale = item.optDouble("scale", 1.0).toFloat().coerceIn(0.55f, 2.4f),
+                        startMs = item.optLong("startMs", 0L).coerceAtLeast(0L),
+                        endMs = item.optLong("endMs", Long.MAX_VALUE).coerceAtLeast(1L)
+                    )
+                )
+            }
+        }
+        FynxCameraMediaDraftEdit(
+            sourceUri = sourceUri,
+            overlays = overlays,
+            videoStyle = root.optString("videoStyle", "NATURAL"),
+            captionText = root.optString("captionText").take(4000)
+        )
+    }.getOrNull()
 
 internal data class FynxCameraMediaMetrics(val durationMs: Long, val aspectRatio: Float)
 
