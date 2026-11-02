@@ -46,7 +46,8 @@ private data class MarketplacePromoSlide(
     val campaignId: String? = null,
     val isWeeklyWinner: Boolean = false,
     val isSponsored: Boolean = false,
-    val celebration: Boolean = false
+    val celebration: Boolean = false,
+    val artworkUrl: String? = null
 )
 
 @Composable
@@ -95,7 +96,7 @@ fun MarketplacePromotionalBanner(
         }
     }
     val celebration = remember(localDate) { marketplaceCelebrationFor(localDate) }
-    val slides = remember(weeklySeller, weeklySellerListing, featuredListings, sponsoredPromotions, celebration) {
+    val slides = remember(weeklySeller, weeklySellerListing, featuredListings, sponsoredPromotions, seasonalPromotions, celebration) {
         buildList {
             if (weeklySeller != null) {
                 add(
@@ -111,7 +112,20 @@ fun MarketplacePromotionalBanner(
                     )
                 )
             }
-            if (celebration != null) {
+            seasonalPromotions.take(4).forEach { promotion ->
+                add(
+                    MarketplacePromoSlide(
+                        key = "scheduled-seasonal-${promotion.id}",
+                        eyebrow = "A CELEBRATION FROM FYNX",
+                        headline = promotion.headline,
+                        body = promotion.body,
+                        actionLabel = promotion.actionLabel,
+                        celebration = true,
+                        artworkUrl = promotion.artworkUrl.takeIf { it.isNotBlank() }
+                    )
+                )
+            }
+            if (celebration != null && seasonalPromotions.none { it.occasionKey.equals(celebration.first, ignoreCase = true) }) {
                 add(
                     MarketplacePromoSlide(
                         key = "seasonal-${celebration.first}",
@@ -295,6 +309,14 @@ private fun MarketplacePromotionalSlide(
                 FynxRemoteMedia(
                     mediaUrl = mediaUrl,
                     type = FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    rounded = false
+                )
+            } else if (!slide.artworkUrl.isNullOrBlank()) {
+                FynxRemoteMedia(
+                    mediaUrl = slide.artworkUrl,
+                    type = "image",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
                     rounded = false
