@@ -141,8 +141,8 @@ checks = [
     ("Your Story and Next are separate real destinations from one captured preview",
      "showYourStoryAction: Boolean = false" in camera
      and 'Text("Your Story",' in camera
-     and "onShareToStatus(previewUri" in camera
-     and "onCaptured(previewUri, previewType)" in camera
+     and "onShareToStatus(finalUri" in camera
+     and "onCaptured(finalUri, mediaType)" in camera
      and "showYourStoryAction = true" in home
      and "onShareToStatus = {" in home
      and "onOpenStatusWithMedia(uri, type)" in home),
@@ -162,7 +162,7 @@ checks = [
      and "Send is never tapped" in runtime
      and "camera-after-status-photo" in runtime),
     ("Camera editor exposes Next and preserves the existing captured-media callback",
-     'Text("Next")' in camera and "onCaptured(previewUri, previewType)" in camera),
+     'Text("Next")' in camera and 'onClick = { finishCameraMedia(toStatus = false) }' in camera and "onCaptured(finalUri, mediaType)" in camera),
     ("Next details composer shows media preview, description, tag helpers and privacy entry",
      "selectedComposerVisual" in home and "Add description..." in home
      and "# Hashtags" in home and "@ Mention" in home
@@ -306,7 +306,7 @@ checks = [
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
     ("Camera dismiss returns to an existing composer draft", "cameraOpenedFromComposer && !posting" in home),
     ("Camera preview supports retake before handoff", 'Text("Retake")' in camera and "retake()" in camera),
-    ("Camera preview sends the captured asset to the composer", 'Text("Next")' in camera and "onCaptured(previewUri, previewType)" in camera),
+    ("Camera preview sends the captured asset to the composer", 'Text("Next")' in camera and 'onClick = { finishCameraMedia(toStatus = false) }' in camera and "onCaptured(finalUri, mediaType)" in camera),
     ("Captured media uses the authoritative media type resolver", "FynxMultiMediaPostClient.mediaKind(context, it)" in home),
     ("Gallery media is deduplicated and capped at four", "uris.distinct().take(4)" in home and ".take(4)" in home),
     ("Combined camera and gallery media remains capped at four", "(capturedUris + uri).distinct().take(4)" in home),
@@ -334,15 +334,16 @@ checks = [
      and "if(previewUri!=null && previewType!=null)" in camera
      and "if (showYourStoryAction && !statusCapture && !liveProofMode)" in camera
      and "showYourStoryAction = true" in home
-     and "onShareToStatus(previewUri" in camera),
+     and "onClick = { finishCameraMedia(toStatus = true) }" in camera
+     and "onShareToStatus(finalUri" in camera),
     ("Status CTA checks the existing upload and video limits before opening the Status composer",
-     "validateCameraStatusMedia(previewUri, previewType)" in camera
+     "validateCameraStatusMedia(finalUri, if (mediaType == \"video_note\") \"video\" else mediaType)" in camera
      and "MAX_STATUS_PHOTO_UPLOAD_BYTES = 12L * 1024L * 1024L" in camera
      and "FYNX_STATUS_MAX_VIDEO_BYTES" in camera
      and "FYNX_STATUS_MAX_VIDEO_DURATION_MS" in camera
      and "MediaMetadataRetriever.METADATA_KEY_DURATION" in camera
      and "if (total > 12 * 1024 * 1024)" in status_client
-     and "onShareToStatus(previewUri" in camera),
+     and "onShareToStatus(finalUri" in camera),
     ("Recorded video opens the existing Status composer and is never sent by the runtime test",
      '["Status"]' in runtime
      and "camera-video-status-composer.png" in runtime
