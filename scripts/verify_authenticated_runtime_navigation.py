@@ -2028,11 +2028,12 @@ def capture_wallet_from_features(prefix:str):
     return True, result_message+" Also captured the real Add Money, bank-transfer readiness and Withdraw screens."
 
 
-# Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an
-# unrelated instrumentation test fails. This branch performs read-only navigation:
-# it never publishes a listing, changes inventory, creates an order, or initiates payment.
+# Run a narrowly scoped Marketplace/My Shop/Wallet capture on CI even when an
+# unrelated instrumentation test fails. Navigation is read-only except when the
+# Wallet-only sandbox E2E flag is explicitly enabled; that path submits at most one
+# NGN 1,000 Paystack test-card payment, never a real-money payment or payout.
 if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
-    report.append("- Capture scope: Marketplace, My Shop and Wallet only; no Home/Profile, Status/Stories, Chat/Groups or camera journeys; no listing/order/payment mutations.")
+    report.append("- Capture scope: Marketplace, My Shop and Wallet only; no Home/Profile, Status/Stories, Chat/Groups or camera journeys; no listing/order mutations. Paystack card funding is exercised only when FYNX_WALLET_SANDBOX_E2E=1, using an isolated test card and never real money.")
     if error:
         report += [
             "",
