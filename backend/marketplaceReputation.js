@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
+import { ensureMarketplaceSchemaForPool } from './marketplaceSchema.js';
 
 export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
   let schemaPromise;
@@ -76,6 +77,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
   // Advertising spend and impressions never influence seller eligibility or rank.
   app.get('/api/marketplace/sellers/weekly', auth, async (_req, res) => {
     try {
+      await ensureMarketplaceSchemaForPool(pool);
       await ensureSchema();
       const result = await pool.query(`
         WITH week_bounds AS (
