@@ -158,7 +158,7 @@ try {
   await expectStatus(otherUserMessages, 404, "other user cannot read support conversation");
 
   const otherUserAttachment = await request(base, 5, "GET", `/api/support/cases/${created.id}/attachments`);
-  await expectStatus(otherUserAttachment, 404, "other user cannot read support evidence");
+  await expectStatus(otherUserAttachment, 403, "other user cannot read support evidence");
 
   const notifications = await testPool.query("SELECT COUNT(*)::int AS count FROM fynx_notifications WHERE type='SUPPORT'");
   assert.ok(notifications.rows[0].count >= 5, "support events should be stored as notifications for the user and support team");
