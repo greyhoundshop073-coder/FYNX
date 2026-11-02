@@ -12,6 +12,8 @@ checks = [
     ("weekly seller ranking is loaded through the authenticated Marketplace client", "FynxMarketplaceWeeklySellerClient.load(context)" in PANEL and "/api/marketplace/sellers/weekly" in WEEKLY_CLIENT),
     ("approved paid product campaigns are loaded into Marketplace", "FynxMarketplaceSponsoredPromotionClient.load(context)" in PANEL and "/api/advertising/marketplace-feed" in SPONSORED_CLIENT),
     ("paid advertisements are visibly marked sponsored", "sponsoredPromotions.take(3)" in BANNER and 'eyebrow = "SPONSORED"' in BANNER),
+    ("FYNX Marketplace brand message is part of the normal rotation", "THE FYNX MARKETPLACE EXPERIENCE" in BANNER and "Discover more with FYNX" in BANNER),
+    ("sponsored impressions and clicks feed campaign metrics", 'recordMetric(context, campaignId, "impression")' in BANNER and 'recordMetric(context, campaignId, "click")' in BANNER and "impression" in SPONSORED_CLIENT and "click" in SPONSORED_CLIENT),
     ("weekly award remains separate from paid campaign ranking", "marketplace_ad_campaigns" not in REPUTATION[REPUTATION.find("app.get('/api/marketplace/sellers/weekly'"):REPUTATION.find("app.get('/api/marketplace/sellers/:username/reputation'")]),
 
     ("weekly winner product is fetched from the exact canonical listing before display", "loadExactMarketplaceListing(context, winner.featuredListingId)" in PANEL and "weeklySellerListing = exact" in PANEL),
