@@ -1116,7 +1116,7 @@ fun FynxCameraCapturePanel(
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.CENTER_CROP}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(
                 factory={ctx->android.widget.VideoView(ctx).apply{tag=previewUri.toString();setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()};previewVideoView.value=this}},
-                update={view->previewVideoView.value=view;if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.setOnPreparedListener{p->p.isLooping=true;this@apply.start()}}},
+                update={view->previewVideoView.value=view;if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.setOnPreparedListener{p->p.isLooping=true;view.start()}}},
                 modifier=Modifier.fillMaxSize()
             )
             if (previewType == "image" || !videoEditsApplied) {
