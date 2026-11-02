@@ -144,7 +144,9 @@ DIAGNOSTIC_MARKERS = (
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
-    "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
+    "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password",
+    "Help & Support", "Report a problem", "Submit support request", "My support requests",
+    "Attach screenshot (optional)", "Contact FYNX Support", "Support Centre"
 )
 
 def visible_marker_summary(xml_text:str)->str:
@@ -388,6 +390,51 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         FAILURES.append(f"{name}: destination marker not found [{expected}]; visible markers: {visible_marker_summary(next_xml)}")
         return ""
     return next_xml
+
+
+def capture_support_center_from_settings(settings_xml: str, prefix: str) -> bool:
+    """Capture the real user Help & Support form without submitting test content."""
+    help_dialog = tap_control(
+        settings_xml, ["Help & Support"], prefix + "-help-support",
+        ["Contact FYNX Support"]
+    )
+    if not help_dialog:
+        FAILURES.append(prefix + ": Settings -> Help & Support dialog did not open")
+        return False
+    support_xml = tap_control(
+        help_dialog, ["Contact FYNX Support"], prefix + "-open-user-support",
+        ["Report a problem", "Attach screenshot (optional)"]
+    )
+    if not support_xml:
+        FAILURES.append(prefix + ": Help & Support -> Contact FYNX Support did not open the request form")
+        return False
+    deadline = time.monotonic() + 12.0
+    latest = support_xml
+    while time.monotonic() < deadline:
+        required = [
+            find_control(latest, ["Report a problem"]),
+            find_control(latest, ["Submit support request"]),
+            find_control(latest, ["My support requests"]),
+            find_control(latest, ["Attach screenshot (optional)"])
+        ]
+        if all(required):
+            break
+        time.sleep(0.5)
+        latest = dump_ui(prefix + "-support-form-wait.xml") or latest
+    screenshot(prefix + "-user-support-centre.png")
+    (ROOT / (prefix + "-user-support-centre.xml")).write_text(latest + chr(10), encoding="utf-8")
+    markers = [
+        ("Report a problem", find_control(latest, ["Report a problem"])),
+        ("Submit support request", find_control(latest, ["Submit support request"])),
+        ("My support requests", find_control(latest, ["My support requests"])),
+        ("Attach screenshot (optional)", find_control(latest, ["Attach screenshot (optional)"))
+    ]
+    missing = [label for label, control in markers if not control]
+    if missing:
+        FAILURES.append(prefix + ": Support form is missing visible controls: " + ", ".join(missing))
+        return False
+    report.append("- PASS captured the real FYNX Help & Support request form, screenshot option and case-history section from the running APK; no request was submitted.")
+    return True
 
 
 def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
@@ -1832,6 +1879,30 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         report.append("- BLOCKED: "+wallet_message)
         FAILURES.append("Read-only Wallet screen capture: "+wallet_message)
 
+    # Navigate the existing Profile -> Settings -> Help & Support route and capture
+    # the real request form. This is read-only: no dummy case is submitted.
+    support_home = dump_ui("support-home-entry.xml")
+    for step in range(5):
+        if (find_control(support_home, ["Open FYNX camera"])
+                and find_control(support_home, ["Chat"])
+                and find_control(support_home, ["Friends"])):
+            break
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.6)
+        support_home = dump_ui("support-return-home-" + str(step) + ".xml")
+    if support_home and find_control(support_home, ["Open FYNX camera"]):
+        support_profile = tap_control(support_home, ["Open FYNX profile"], "support-open-profile", ["Edit profile", "Settings"])
+        if support_profile:
+            support_settings = tap_control(support_profile, ["Settings"], "support-open-settings", ["Search settings", "Account & Profile", "Notifications"])
+            if support_settings:
+                capture_support_center_from_settings(support_settings, "authenticated")
+            else:
+                FAILURES.append("Support Centre visual capture could not open Profile -> Settings")
+        else:
+            FAILURES.append("Support Centre visual capture could not open the existing Profile entry")
+    else:
+        FAILURES.append("Support Centre visual capture could not return to the authenticated Home surface")
+
     report += [
         "",
         "## Evidence boundary",
@@ -1863,6 +1934,7 @@ if not FAILURES:
         settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
         if settings_xml:
             report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
+            capture_support_center_from_settings(settings_xml, "authenticated")
         else:
             FAILURES.append("profile -> Settings home did not open")
     else:
