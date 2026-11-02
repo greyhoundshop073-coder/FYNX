@@ -267,13 +267,17 @@ private fun FynxWalletHostedFundingPanel(
         } else {
             val current = checkNotNull(session)
             WalletActionNotice(
-                title = when (current.status) {
-                    "SUCCEEDED" -> "Payment confirmed"
-                    "FAILED", "BLOCKED" -> "Payment not credited"
+                title = when {
+                    current.testMode && current.status == "SUCCEEDED" -> "Test payment recorded"
+                    current.testMode && current.status != "FAILED" && current.status != "BLOCKED" -> "Test checkout pending"
+                    current.status == "SUCCEEDED" -> "Payment confirmed"
+                    current.status == "FAILED" || current.status == "BLOCKED" -> "Payment not credited"
                     else -> "Payment awaiting confirmation"
                 },
                 message = current.message.ifBlank {
-                    if (current.status == "SUCCEEDED") "The provider confirmed this payment. Your Wallet will refresh."
+                    if (current.testMode && current.status == "SUCCEEDED") "TEST MODE: This simulated payment is recorded in your test Wallet. It is not real money and cannot be spent or withdrawn."
+                    else if (current.status == "SUCCEEDED") "The provider confirmed this payment. Your Wallet will refresh."
+                    else if (current.testMode) "TEST MODE: Finish the simulated Paystack checkout, then check the confirmation status. No balance is credited until Paystack verifies it."
                     else "Do not pay again yet. Check the payment status; FYNX has not credited your Wallet without provider confirmation."
                 }
             )
