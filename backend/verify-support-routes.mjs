@@ -8,6 +8,8 @@ const adminRoutes = await readFile(new URL("./adminRoutes.js", import.meta.url),
 const androidClient = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxSupportRemoteClient.kt", import.meta.url), "utf8");
 const androidUi = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxSupportCenter.kt", import.meta.url), "utf8");
 const androidApp = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxApp.kt", import.meta.url), "utf8");
+const runtimeCapture = await readFile(new URL("../scripts/verify_authenticated_runtime_navigation.py", import.meta.url), "utf8");
+const androidWorkflow = await readFile(new URL("../.github/workflows/android-build.yml", import.meta.url), "utf8");
 const notificationModels = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/NotificationModels.kt", import.meta.url), "utf8");
 const notificationPanel = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/NotificationPanel.kt", import.meta.url), "utf8");
 
@@ -90,6 +92,14 @@ assert.ok(androidUi.includes("Only the Owner can reopen this case"),
   "Resolved requester conversations must not offer a non-Owner reopen path");
 assert.ok(androidApp.includes('"Support" -> FynxUserSupportPanel') && androidApp.includes("onOpenSupport"),
   "Profile Help & Support must route into the case-based support screen");
+assert.ok(runtimeCapture.includes("def capture_support_center_from_settings") &&
+  runtimeCapture.includes("Submit support request") &&
+  runtimeCapture.includes("Attach screenshot (optional)"),
+  "Android emulator certification must capture the real Help & Support request form");
+assert.ok(androidWorkflow.includes("github.event.pull_request.head.ref == 'feat/fynx-support-centre-20261102'") &&
+  androidWorkflow.includes("Run Android instrumentation tests and capture the real FYNX UI") &&
+  androidWorkflow.includes("Upload FYNX runtime screenshots and UI hierarchies"),
+  "Support Centre PR must run emulator UI capture and upload genuine screenshots");
 assert.ok(notificationModels.includes("SUPPORT") && notificationPanel.includes("FynxNotificationType.SUPPORT"),
   "support notifications must be recognised and rendered by Android");
 
