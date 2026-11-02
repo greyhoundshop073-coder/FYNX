@@ -210,11 +210,11 @@ try {
   const summaryQueryMarker = "const balanceRows = await pool.query(" + String.fromCharCode(96);
   const summaryQueryStart = source.indexOf(summaryQueryMarker, summaryRouteStart);
   const summaryQuerySqlStart = summaryQueryStart + summaryQueryMarker.length;
-  const summaryQuerySqlEnd = source.indexOf(String.fromCharCode(96) + ", [wallet.id]", summaryQuerySqlStart);
+  const summaryQuerySqlEnd = source.indexOf(String.fromCharCode(96), summaryQuerySqlStart);
   if (summaryRouteStart < 0 || summaryQueryStart < summaryRouteStart || summaryQuerySqlEnd <= summaryQuerySqlStart) {
     throw new Error("Could not extract the exact Wallet summary balance query for PostgreSQL regression testing.");
   }
-  const summaryBalanceRows = await client.query(source.slice(summaryQuerySqlStart, summaryQuerySqlEnd), [walletId]);
+  const summaryBalanceRows = await client.query(source.slice(summaryQuerySqlStart, summaryQuerySqlEnd), [walletId, 'false']);
   const summaryBalances = Object.fromEntries(summaryBalanceRows.rows.map((row) => [row.account_code, Number(row.balance || 0)]));
   const displayedReservedBalance = (summaryBalances.RESERVED || 0) + (summaryBalances.MARKETPLACE_ESCROW || 0);
   if (summaryBalances.RESERVED !== 25 || summaryBalances.MARKETPLACE_ESCROW !== 100 || displayedReservedBalance !== 125) {
