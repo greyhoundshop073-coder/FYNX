@@ -43,6 +43,7 @@ for (const contract of [
   "assigned_admin_id IS NULL",
   "Only the Owner can reopen a resolved case",
   "Only the Owner can manage a resolved case",
+  "SCREENSHOT_ATTACHED",
   "FOR UPDATE",
   "RETURNING id",
   "verified=TRUE",
