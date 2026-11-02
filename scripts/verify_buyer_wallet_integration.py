@@ -43,7 +43,7 @@ checks = [
  ("wallet branch receives full emulator and screenshot certification", workflow.count("refs/heads/feat/fynx-wallet-ux-hardening-20261031") == 4),
  ("Wallet capture correction receives full emulator and exact-commit APK certification", workflow.count("refs/heads/fix/real-wallet-runtime-screen-capture-20261101") == 4),
  ("authenticated Wallet capture runs outside the feature-search helper and saves real PNGs", runtime.index("def open_features(") < runtime.index("\nfeatures=open_features()") and "capture_wallet_from_features(\"authenticated-runtime-wallet\")" in runtime and all(name in runtime for name in ["authenticated-wallet.png", "authenticated-wallet-add-money.png", "authenticated-wallet-bank-transfer.png", "authenticated-wallet-card.png", "authenticated-wallet-ussd.png", "authenticated-wallet-withdraw.png"]) and "missing_authenticated_surfaces" in runtime),
- ("wallet back navigation", '"Wallet", "Money Tools" -> "Features"' in app),
+ ("wallet back navigation preserves the caller tab", '"Wallet" -> navigationHistory' in app and 'it == "Marketplace" || it == "Features"' in app and '"Money Tools" -> "Features"' in app),
  ("wallet authenticated summary and activity APIs", '"/api/wallet/summary"' in client and '"/api/wallet/transactions?limit="' in client),
  ("no locally fabricated balance", "SharedPreferences" not in client and "125,500" not in panel and "100,000" not in panel),
  ("Azure wallet card with white text", "FynxDesign.AzureBlue" in panel and "contentColor = Color.White" in panel and "Color.White" in panel),
