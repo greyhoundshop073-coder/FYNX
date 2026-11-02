@@ -18,7 +18,8 @@ internal data class FynxBuyerWalletSummary(
     val canFundByBankTransfer: Boolean = false,
     val canFundByCard: Boolean = false,
     val canFundByUssd: Boolean = false,
-    val notice: String
+    val notice: String,
+    val testMode: Boolean = false
 )
 
 internal data class FynxBuyerWalletActivity(
@@ -110,7 +111,8 @@ internal data class FynxWalletFundingSession(
     val amount: Double,
     val authorizationUrl: String?,
     val paymentMethod: String,
-    val message: String
+    val message: String,
+    val testMode: Boolean = false
 )
 
 internal data class FynxWalletFundingAccount(
@@ -216,7 +218,8 @@ internal object FynxBuyerWalletClient {
             amount = amount,
             authorizationUrl = authorizationUrl,
             paymentMethod = paymentMethod,
-            message = json.optString("message").trim()
+            message = json.optString("message").trim(),
+            testMode = json.optBoolean("testMode", false)
         )
     }
 
@@ -529,7 +532,8 @@ internal object FynxBuyerWalletClient {
             canFundByBankTransfer = json.optBoolean("canFundByBankTransfer", false),
             canFundByCard = json.optBoolean("canFundByCard", false),
             canFundByUssd = json.optBoolean("canFundByUssd", false),
-            notice = json.optString("notice").trim()
+            notice = json.optString("notice").trim(),
+            testMode = json.optBoolean("testMode", false)
         )
     }
 
