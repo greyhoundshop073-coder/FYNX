@@ -87,8 +87,9 @@ private fun fynxWalletActivityDate(value: String): String {
     return SimpleDateFormat("dd MMM yyyy · hh:mm a", Locale.US).format(Date.from(instant))
 }
 
-private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String =
-    when (wallet?.walletStatus) {
+private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String {
+    if (wallet?.testMode == true) return "Wallet Test Mode"
+    return when (wallet?.walletStatus) {
         "NOT_SETUP" -> "Wallet setup is not available yet"
         "PENDING_PROVIDER" -> "Your wallet is being prepared"
         "RESTRICTED" -> "Wallet access is restricted"
@@ -96,6 +97,7 @@ private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String =
         "ACTIVE" -> "Some wallet features are not available yet"
         else -> "Your wallet is being prepared"
     }
+}
 
 @Composable
 fun FynxBuyerWalletPanel() {
@@ -229,7 +231,7 @@ fun FynxBuyerWalletPanel() {
     val isWalletReady = wallet != null && wallet.walletStatus == "ACTIVE" &&
         wallet.canFund && wallet.canSpend && wallet.canWithdraw
     val canShowBalance = wallet != null && wallet.availableBalance != null &&
-        wallet.walletStatus == "ACTIVE"
+        (wallet.walletStatus == "ACTIVE" || wallet.testMode)
     // The backend filters the complete history before applying its page cursor.
     val visibleActivity = activity
 
@@ -349,6 +351,7 @@ fun FynxBuyerWalletPanel() {
                         Text(
                             when {
                                 summaryLoading -> "Checking your wallet status securely"
+                                canShowBalance && wallet?.testMode == true -> "TEST MODE — simulated balance; cannot spend or withdraw"
                                 canShowBalance -> "Cleared funds available to use"
                                 summaryError != null -> "Balance unavailable until your connection is restored"
                                 else -> "Your wallet balance will appear here after activation"
