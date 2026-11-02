@@ -435,7 +435,7 @@ def wallet_has_nonzero_available_balance(xml_text: str) -> bool:
     for index, label in enumerate(labels):
         if label.casefold() == "available balance":
             for candidate in labels[index + 1:index + 4]:
-                if re.search(r"(?:₦\\s*|NGN\\s*)[1-9][0-9,]*(?:\\.[0-9]{2})?", candidate):
+                if re.search(r"(?:₦\s*|NGN\s*)[1-9][0-9,]*(?:\.[0-9]{2})?", candidate):
                     return True
             return False
     return False
@@ -449,7 +449,7 @@ def wallet_paystack_sandbox_checkout(card_xml: str, prefix: str, already_funded:
     # Reuse an existing confirmed nonzero Test Mode balance rather than creating repeated credits.
     if already_funded:
         (ROOT / (prefix + "-existing-test-balance.md")).write_text(
-            "A nonzero available balance was already visible; no second sandbox payment was created.\\n",
+            "A nonzero available balance was already visible; no second sandbox payment was created.\n",
             encoding="utf-8"
         )
         return card_xml
@@ -530,7 +530,7 @@ def wallet_paystack_sandbox_checkout(card_xml: str, prefix: str, already_funded:
         for node in root.iter("node"):
             label = ((node.attrib.get("text") or "") + " " + (node.attrib.get("content-desc") or "")).strip().lower()
             center = _center(node)
-            if node.attrib.get("clickable", "false").lower() == "true" and center and re.match(r"^pay(?:\\s|₦)", label):
+            if node.attrib.get("clickable", "false").lower() == "true" and center and re.match(r"^pay(?:\s|₦)", label):
                 pay_button = center
                 break
     except ET.ParseError:
