@@ -11,6 +11,7 @@ const route = advertising.slice(start, end);
 const checks = [
   ["sponsored feed requires an authenticated FYNX session", route.includes("const auth = authenticate(req, res)") && route.includes("if (!auth) return")],
   ["sponsored feed initializes the shared listing schema before reading inventory", route.includes("await ensureMarketplaceSchemaForPool(pool)") && marketplaceSchema.includes("ADD COLUMN IF NOT EXISTS reserved_quantity")],
+  ["impression and click metrics remain limited to active campaigns", advertising.includes("/api/advertising/campaigns/:id/metric") && advertising.includes("c.status='active'") && advertising.includes("impressions = m.impressions + CASE WHEN $1='impression' THEN 1 ELSE 0 END")],
   ["only product campaigns can be displayed in the product banner", route.includes("c.creative_type = 'product'")],
   ["only approved and paid campaigns can be displayed", route.includes("c.status = 'active'") && route.includes("c.payment_status = 'paid'") && route.includes("c.approved_at IS NOT NULL")],
   ["campaign schedule is enforced by the server", route.includes("c.starts_at <= NOW()") && route.includes("c.ends_at > NOW()")],
