@@ -146,11 +146,11 @@ checks.extend([
 ])
 
 
-    (
-        "Python regression verifier uses Python string APIs for runtime-order checks",
-        ("runner." + "indexOf(") not in Path(__file__).read_text(encoding="utf-8")
-        and "runner.index(" in Path(__file__).read_text(encoding="utf-8"),
-    ),
+guard_source = Path(__file__).read_text(encoding="utf-8")
+checks.append((
+    "Python regression verifier uses Python string APIs for runtime-order checks",
+    ("runner." + "indexOf(") not in guard_source and "runner.index(" in guard_source,
+))
 
 failed = 0
 for name, passed in checks:
