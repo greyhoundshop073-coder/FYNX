@@ -149,7 +149,12 @@ fun MarketplacePromotionalBanner(
             while (isActive) {
                 delay(MARKETPLACE_PROMO_ROTATION_MS)
                 if (listState.isScrollInProgress) continue
-                val next = listState.firstVisibleItemIndex + 1
+                val current = listState.firstVisibleItemIndex
+                if (current >= slides.size) {
+                    listState.scrollToItem(0)
+                    continue
+                }
+                val next = current + 1
                 listState.animateScrollToItem(next)
                 if (next >= slides.size) listState.scrollToItem(0)
             }
