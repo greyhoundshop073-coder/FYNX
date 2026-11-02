@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
+import { handleBuyerWalletPaystackEvent } from './buyerWallet.js';
 
 function safeEqualHex(actual, expected) {
   if (!actual || !expected) return false;
@@ -130,7 +131,18 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
       finally { client.release(); }
     }
     if (eventName !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
-    const transaction = event.data || {}, reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
+    const transaction = event.data || {};
+    const walletFundingIntentId = String(transaction.metadata?.fynxWalletFundingIntentId || transaction.metadata?.walletFundingIntentId || '');
+    if (walletFundingIntentId) {
+      try {
+        const outcome = await handleBuyerWalletPaystackEvent('charge.success', transaction);
+        if (outcome.handled) return res.status(Number(outcome.statusCode) || 200).json({ received: true, ...outcome });
+      } catch (error) {
+        console.error('FYNX Wallet funding webhook', error);
+        return res.status(500).json({ error: 'wallet funding webhook processing failed' });
+      }
+    }
+    const reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
     if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference)) return res.status(400).json({ error: 'invalid payment reference' });
     if (reference.startsWith('FYNX-CHECKOUT-')) {
       if (!/^FYNX-CHECKOUT-[0-9a-f-]{36}$/i.test(reference)) return res.status(400).json({ error: 'invalid checkout payment reference' });
