@@ -46,8 +46,8 @@ const providerGate = providerGateStart >= 0 && providerGateEnd > providerGateSta
 checks.push(
   ["first-time Wallet summary is read-only and never auto-creates a wallet row",
     summaryRoute.includes("SELECT id,status,provider,currency") &&
-    !/INSERT\\s+INTO\\s+buyer_wallets/i.test(summaryRoute) &&
-    !/UPDATE\\s+buyer_wallets/i.test(summaryRoute)],
+    !/INSERT\s+INTO\s+buyer_wallets/i.test(summaryRoute) &&
+    !/UPDATE\s+buyer_wallets/i.test(summaryRoute)],
   ["NOT_SETUP returns null balances and keeps spending and withdrawals disabled",
     noWalletBranch.includes("walletStatus: 'NOT_SETUP'") &&
     noWalletBranch.includes("availableBalance: null") &&
