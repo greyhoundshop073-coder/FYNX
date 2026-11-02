@@ -364,7 +364,7 @@ checks.extend([
     ("Media overlay geometry is anchored to intrinsic photo/video dimensions and preview crop mode",
      "readFynxCameraMediaMetrics" in overlay and "mediaAspectRatio" in overlay
      and "mediaWidthPx" in overlay and "mediaHeightPx" in overlay
-     and "centerCrop" in overlay and "centerCrop = previewType == \\"image\\"" in camera),
+     and 'centerCrop = previewType == "image"' in camera),
     ("Video overlay timing uses the same source-of-truth interval in live preview and Media3 export",
      "isFynxCameraTextOverlayVisibleAt" in overlay
      and "playbackPositionMs" in overlay and "playbackPositionMs = if (previewType" in camera
@@ -384,6 +384,8 @@ checks.extend([
      'readFynxCameraMediaMetrics(Uri.fromFile(source), "image")' in overlay_test
      and "Overlay geometry uses the source photo aspect ratio" in overlay_test
      and "Photo export did not burn the text overlay into the image" in overlay_test),
+    ("Photo text export requests a mutable ARGB bitmap before Canvas drawing",
+     "inMutable = true" in overlay and "val canvas = Canvas(bitmap)" in overlay),
     ("Runtime exercises direct-on-media photo/video typing and video timing controls",
      "FYNXoverlaytest" in runtime and "FYNXvideooverlay" in runtime
      and "video text timing controls were not visible" in runtime),
