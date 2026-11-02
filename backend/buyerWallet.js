@@ -763,6 +763,7 @@ async function reconcileWalletHostedFunding(reference, userId = null) {
       await client.query('ROLLBACK');
       return { matched: false, status: 'NOT_FOUND' };
     }
+    const intentIsTestMode = intent.metadata?.testMode === true;
     if (intent.status === 'SUCCEEDED') {
       await client.query('COMMIT');
       return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(intent.amount), idempotent: true };
@@ -797,7 +798,13 @@ async function reconcileWalletHostedFunding(reference, userId = null) {
       `, [
         transactionId, intent.wallet_id, intent.user_id, amount, normalizedReference,
         'PAYSTACK-WALLET-FUND-' + normalizedReference,
-        JSON.stringify({ provider: 'paystack', paymentMethod: intent.payment_method, fundingIntentId: String(intent.id), providerFeeSubunit: Number(verified.fees || 0) })
+        JSON.stringify({
+          provider: 'paystack',
+          paymentMethod: intent.payment_method,
+          fundingIntentId: String(intent.id),
+          providerFeeSubunit: Number(verified.fees || 0),
+          testMode: intentIsTestMode
+        })
       ]);
       await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [transactionId]);
       await client.query(`
@@ -818,8 +825,8 @@ async function reconcileWalletHostedFunding(reference, userId = null) {
 
     await client.query(`
       UPDATE buyer_wallets SET status='ACTIVE',provider='paystack',updated_at=NOW()
-       WHERE id=$1 AND status='PENDING_PROVIDER'
-    `, [intent.wallet_id]);
+       WHERE id=$1 AND status='PENDING_PROVIDER' AND $2::boolean = false
+    `, [intent.wallet_id, intentIsTestMode]);
     await client.query(`
       UPDATE buyer_wallet_funding_intents
          SET status='SUCCEEDED',provider_reference=$1,failure_reason=NULL,updated_at=NOW()
@@ -1042,9 +1049,10 @@ export function registerBuyerWalletRoutes({ app }) {
           JOIN buyer_wallet_transactions t ON t.id=e.transaction_id
          WHERE e.wallet_id=$1
            AND t.status='SUCCEEDED'
+           AND COALESCE(t.metadata->>'testMode','false') = $2
            AND e.account_code IN ('AVAILABLE','RESERVED','MARKETPLACE_ESCROW','WITHDRAWAL_PENDING')
          GROUP BY e.account_code
-      `, [wallet.id]);
+      `, [wallet.id, walletTestModeEnabled() ? 'true' : 'false']);
       const balances = Object.fromEntries(balanceRows.rows.map((row) => [row.account_code, Number(row.balance || 0)]));
       return res.json({
         walletStatus: String(wallet.status || 'PENDING_PROVIDER'),
@@ -1131,8 +1139,8 @@ export function registerBuyerWalletRoutes({ app }) {
               reference: existing.reference,
               amount: Number(existing.amount),
               paymentMethod,
-              testMode: walletTestModeEnabled(),
-              message: walletTestModeEnabled()
+              testMode: existing.metadata?.testMode === true,
+              message: existing.metadata?.testMode === true
                 ? 'TEST MODE: This simulated payment is already recorded in your test Wallet; the balance is not real and cannot be spent or withdrawn.'
                 : 'This payment has already been confirmed.',
               idempotent: true
@@ -1147,8 +1155,8 @@ export function registerBuyerWalletRoutes({ app }) {
               paymentMethod,
               authorizationUrl: existing.authorization_url,
               accessCode: existing.access_code,
-              testMode: walletTestModeEnabled(),
-              message: walletTestModeEnabled()
+              testMode: existing.metadata?.testMode === true,
+              message: existing.metadata?.testMode === true
                 ? 'TEST MODE: This simulated Paystack checkout is still pending. No test balance is credited until provider verification succeeds.'
                 : 'Continue through the secure Paystack checkout.',
               idempotent: true
@@ -1162,12 +1170,13 @@ export function registerBuyerWalletRoutes({ app }) {
         const reference = 'fwd_' + crypto.randomUUID().replace(/-/g, '');
         intent = (await client.query(`
           INSERT INTO buyer_wallet_funding_intents
-            (id,wallet_id,user_id,payment_method,status,amount,currency,reference,idempotency_key)
-          VALUES ($1,$2,$3,$4,'PENDING',$5,'NGN',$6,$7)
+            (id,wallet_id,user_id,payment_method,status,amount,currency,reference,idempotency_key,metadata)
+          VALUES ($1,$2,$3,$4,'PENDING',$5,'NGN',$6,$7,$8::jsonb)
           RETURNING *
         `, [
           intentId, wallet.id, req.user.sub, paymentMethod,
-          amountValue.toFixed(2), reference, idempotencyKey
+          amountValue.toFixed(2), reference, idempotencyKey,
+          JSON.stringify({ testMode: walletTestModeEnabled() })
         ])).rows[0];
         await client.query('COMMIT');
       } catch (error) {
@@ -1241,7 +1250,7 @@ export function registerBuyerWalletRoutes({ app }) {
     try {
       await ensureBuyerWalletSchema();
       const intent = (await pool.query(`
-        SELECT user_id,amount,status,payment_method
+        SELECT user_id,amount,status,payment_method,metadata
           FROM buyer_wallet_funding_intents
          WHERE reference=$1 AND user_id=$2
          LIMIT 1
@@ -1253,9 +1262,9 @@ export function registerBuyerWalletRoutes({ app }) {
         reference,
         amount: Number(intent.amount),
         paymentMethod: intent.payment_method,
-        testMode: walletTestModeEnabled(),
+        testMode: intent.metadata?.testMode === true,
         message: outcome.status === 'SUCCEEDED'
-          ? walletTestModeEnabled()
+          ? intent.metadata?.testMode === true
             ? 'TEST MODE: Paystack confirmed this simulated payment and FYNX recorded it in your test Wallet. The balance is not real and cannot be spent or withdrawn.'
             : 'Paystack confirmed the payment and FYNX credited your Wallet.'
           : outcome.status === 'FAILED' || outcome.status === 'BLOCKED'
@@ -1806,6 +1815,7 @@ export function registerBuyerWalletRoutes({ app }) {
             FROM buyer_wallet_ledger_entries e
             JOIN buyer_wallet_transactions t ON t.id=e.transaction_id
            WHERE e.wallet_id=$1 AND e.account_code='AVAILABLE' AND t.status='SUCCEEDED'
+             AND COALESCE(t.metadata->>'testMode','false') <> 'true'
         `, [wallet.id])).rows[0];
         if (Number(balance?.available || 0) < Number(amount)) {
           await client.query('ROLLBACK');
