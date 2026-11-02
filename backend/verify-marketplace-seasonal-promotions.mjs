@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const advertising = await readFile(new URL("./marketplaceAdvertising.js", import.meta.url), "utf8");
+const mediaPrivacy = await readFile(new URL("./mediaPrivacy.js", import.meta.url), "utf8");
 const banner = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt", import.meta.url), "utf8");
 const panel = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt", import.meta.url), "utf8");
 const client = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionClient.kt", import.meta.url), "utf8");
@@ -21,16 +22,17 @@ const checks = [
   ["seasonal create, update and delete require authenticated Owner/Admin access", advertising.includes("authenticate(req, res)") && advertising.includes("requireMarketplaceAdmin(req, res, auth)")],
   ["campaign creation validates occasion key and headline lengths", advertising.includes("occasion key must use 2-60 letters") && advertising.includes("headline.length < 3")],
   ["campaign schedule requires valid start/end dates and a bounded 45-day window", advertising.includes("endsAt <= startsAt") && advertising.includes("45 * 24 * 60 * 60 * 1000")],
-  ["artwork URLs are HTTPS-only and bounded", advertising.includes("artwork must be an HTTPS image URL") && advertising.includes("artworkUrl.length > 1500")],
+  ["artwork is stored as a FYNX media ID instead of an external URL", advertising.includes("artwork_media_id BIGINT") && advertising.includes("artworkMediaId === null") && !advertising.includes("artwork_url TEXT")],
+  ["active scheduled artwork is authorized through the FYNX media privacy guard", mediaPrivacy.includes("marketplace_seasonal_promotions WHERE artwork_media_id=$1") && mediaPrivacy.includes("active=TRUE AND starts_at <= NOW() AND ends_at > NOW()")],
   ["seasonal public feed only returns active campaigns inside the scheduled window", advertising.includes("active=TRUE AND starts_at <= NOW() AND ends_at > NOW()")],
   ["paid sponsored campaign approval and payment checks remain separate", advertising.includes("c.payment_status = 'paid'") && advertising.includes("c.approved_at IS NOT NULL")],
   ["Android reads authenticated seasonal schedule feed", client.includes("/api/marketplace/seasonal-feed") && client.includes("FynxMarketplaceSeasonalPromotion")],
   ["Marketplace home loads seasonal campaigns and passes them to the banner", panel.includes("FynxMarketplaceSeasonalPromotionClient.load(context)") && panel.includes("seasonalPromotions = seasonalPromotions")],
   ["banner rotates server-scheduled variable-date celebrations", banner.includes("seasonalPromotions.take(4)") && banner.includes("scheduled-seasonal-") && banner.includes("promotion.occasionKey")],
-  ["scheduled celebration artwork is displayed with crop fit when supplied", banner.includes("slide.artworkUrl") && banner.includes("contentScale = ContentScale.Crop")],
+  ["scheduled celebration artwork is displayed from authenticated FYNX media with crop fit", banner.includes("slide.artworkMediaId") && banner.includes('mediaUrl = "/api/media/\u0024{slide.artworkMediaId}"') && banner.includes("contentScale = ContentScale.Crop")],
   ["fixed-date fallback is suppressed when a matching admin schedule is active", banner.includes("seasonalPromotions.none { it.occasionKey.equals(celebration.first")],
   ["Owner/Admin center exposes the seasonal scheduler", adminCenter.includes("FynxMarketplaceSeasonalPromotionAdminPanel()")],
-  ["scheduler exposes date windows, celebration copy and optional artwork URL", adminUi.includes("Starts at (ISO 8601)") && adminUi.includes("Ends at (ISO 8601)") && adminUi.includes("Celebration write-up") && adminUi.includes("Artwork image HTTPS URL")],
+  ["scheduler uploads optional celebration artwork to authenticated FYNX media storage", adminUi.includes("Choose photo") && adminUi.includes("uploadArtwork(context, artworkUri!!)") && client.includes("FynxProductionMessaging.uploadMedia")],
   ["seasonal schedules are independent of Best Seller scoring", !advertising.slice(advertising.indexOf('app.get("/api/marketplace/seasonal-feed"')).includes("marketplace_ad_metrics") && banner.includes("BEST SELLER OF THE WEEK")]
 ];
 
