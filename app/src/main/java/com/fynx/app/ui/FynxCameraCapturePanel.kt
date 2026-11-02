@@ -383,7 +383,15 @@ fun FynxCameraCapturePanel(
     onChooseMusic: () -> Unit = {},
     onClearMusic: () -> Unit = {},
     showYourStoryAction: Boolean = false,
-    onShareToStatus: (Uri, String) -> Unit = { _, _ -> }
+    onShareToStatus: (Uri, String) -> Unit = { _, _ -> },
+    /** Optional initial local media used to reopen an editable media item from a post draft. */
+    initialMediaUri: Uri? = null,
+    initialMediaType: String? = null,
+    initialTextOverlays: List<FynxCameraTextOverlay> = emptyList(),
+    initialVideoStyle: String = "NATURAL",
+    initialVideoCaptionText: String = "",
+    /** Returns both the final shareable file and the clean editable media source/state. */
+    onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -545,7 +553,7 @@ fun FynxCameraCapturePanel(
     val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasAudio = granted || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
-    LaunchedEffect(Unit) { if (!hasCamera) permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) }
+    LaunchedEffect(initialMediaUri) { if (!hasCamera && initialMediaUri == null) permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) }
 
     var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
     var mode by remember(initialMode, videoNoteMode) { mutableStateOf(if (videoNoteMode) CameraMode.VIDEO else initialMode) }
@@ -566,22 +574,24 @@ fun FynxCameraCapturePanel(
     var recordingElapsed by remember { mutableLongStateOf(0L) }
     var error by remember { mutableStateOf<String?>(null) }
     var statusShareChecking by remember { mutableStateOf(false) }
-    var pendingUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingType by remember { mutableStateOf<String?>(null) }
+    var pendingUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri) }
+    var pendingOriginalUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri) }
+    var pendingType by remember(initialMediaUri, initialMediaType) { mutableStateOf(initialMediaType) }
     var cameraReady by remember { mutableStateOf(false) }
-    var cameraTextOverlays by remember { mutableStateOf<List<FynxCameraTextOverlay>>(emptyList()) }
+    var cameraTextOverlays by remember(initialMediaUri) { mutableStateOf(initialTextOverlays) }
     var cameraVideoDurationMs by remember { mutableLongStateOf(0L) }
     var cameraMediaAspectRatio by remember { mutableFloatStateOf(9f / 16f) }
-    var selectedTextOverlayId by remember { mutableStateOf<String?>(null) }
+    var selectedTextOverlayId by remember(initialMediaUri) { mutableStateOf(initialTextOverlays.lastOrNull()?.id) }
     var editingTextOverlayId by remember { mutableStateOf<String?>(null) }
     var videoEditsApplied by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
     var faceEffect by remember { mutableStateOf(CameraFaceEffect.OFF) }
     var backgroundEffect by remember { mutableStateOf(CameraBackgroundEffect.OFF) }
     var studioEffect by remember { mutableStateOf(CameraStudioEffect.OFF) }
-    var videoStyle by remember { mutableStateOf(CameraVideoStyle.NATURAL) }
-    var videoCaptionText by remember { mutableStateOf("") }
+    var videoStyle by remember(initialMediaUri, initialVideoStyle) {
+        mutableStateOf(runCatching { CameraVideoStyle.valueOf(initialVideoStyle) }.getOrDefault(CameraVideoStyle.NATURAL))
+    }
+    var videoCaptionText by remember(initialMediaUri, initialVideoCaptionText) { mutableStateOf(initialVideoCaptionText) }
     var applyingVideoEffects by remember { mutableStateOf(false) }
     var generatingCaptions by remember { mutableStateOf(false) }
     var trackedFaceBounds by remember { mutableStateOf<List<CameraFaceBounds>>(emptyList()) }
@@ -1040,7 +1050,17 @@ fun FynxCameraCapturePanel(
                 } else {
                     statusShareChecking = false
                     recordingNotice = null
-                    onCaptured(finalUri, mediaType)
+                    val editSource = when (mediaType) {
+                        "video", "video_note" -> pendingOriginalUri ?: current
+                        else -> current
+                    }
+                    val editableOverlays = cameraTextOverlays.filter { it.text.isNotBlank() }
+                    val editCallback = onCapturedWithTextEdits
+                    if (editCallback != null) {
+                        editCallback(finalUri, mediaType, editSource, editableOverlays, videoStyle.name, videoCaptionText)
+                    } else {
+                        onCaptured(finalUri, mediaType)
+                    }
                 }
             } catch (failure: Throwable) {
                 exportedPhoto?.let(::deleteUri)
@@ -1090,7 +1110,7 @@ fun FynxCameraCapturePanel(
         })
     }
 
-    if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
+    if (!hasCamera && initialMediaUri == null) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
     val previewVideoView = remember(previewUri) { mutableStateOf<android.widget.VideoView?>(null) }
     var previewVideoPositionMs by remember(previewUri) { mutableLongStateOf(0L) }
@@ -1136,7 +1156,7 @@ fun FynxCameraCapturePanel(
                 )
             }
             IconButton(
-                onClick = { retake(); onDismiss() },
+                onClick = { if (initialMediaUri != null) onDismiss() else { retake(); onDismiss() } },
                 modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 8.dp, top = 4.dp)
             ) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -1444,10 +1464,10 @@ fun FynxCameraCapturePanel(
                     }
                 }
                 TextButton(
-                    onClick = { if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) retake() },
+                    onClick = { if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) { if (initialMediaUri != null) onDismiss() else retake() } },
                     enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
                     modifier = Modifier.align(Alignment.Start).padding(start = 4.dp)
-                ) { Text("Retake") }
+                ) { Text(if (initialMediaUri != null) "Cancel edit" else "Retake") }
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
