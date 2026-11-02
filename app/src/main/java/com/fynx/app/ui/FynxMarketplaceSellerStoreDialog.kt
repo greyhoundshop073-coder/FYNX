@@ -103,7 +103,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 storefrontError = "Products could not load. Check your connection and try again."
             }
         storefrontLoading = false
-        FynxMarketplaceWeeklySellerClient.history(context, username).onSuccess { weeklyAwards = it }
         FynxProfileRemoteClient.get(context, username.removePrefix("@").trim())
             .onSuccess { profile ->
                 profileName = profile.displayName.orEmpty()
@@ -131,6 +130,11 @@ internal fun FynxMarketplaceSellerStoreDialog(
             }
             .onFailure { failure -> shopProfileError = marketplaceSafeError(failure, "Shop details could not load.") }
         profileLoading = false
+    }
+    LaunchedEffect(username) {
+        FynxMarketplaceWeeklySellerClient.history(context, username)
+            .onSuccess { weeklyAwards = it }
+        // Award history is optional reputation content and must not delay profile or product loading.
     }
     val sellerListings = remember(storefrontListings) {
         storefrontListings.orEmpty().filter { it.active && it.quantity > 0 }.distinctBy { it.id }
