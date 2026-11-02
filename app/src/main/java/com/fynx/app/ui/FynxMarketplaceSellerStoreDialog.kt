@@ -85,6 +85,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var storefrontLoading by remember(username) { mutableStateOf(true) }
     var storefrontError by remember(username) { mutableStateOf<String?>(null) }
     var storefrontReloadKey by remember(username) { mutableStateOf(0) }
+    var weeklyAwards by remember(username) { mutableStateOf<List<FynxMarketplaceSellerWeeklyAward>>(emptyList()) }
     LaunchedEffect(username, viewerUsername, storefrontReloadKey) {
         storefrontLoading = true
         storefrontError = null
@@ -101,6 +102,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 storefrontError = "Products could not load. Check your connection and try again."
             }
         storefrontLoading = false
+        FynxMarketplaceWeeklySellerClient.history(context, username).onSuccess { weeklyAwards = it }
         FynxProfileRemoteClient.get(context, username.removePrefix("@").trim())
             .onSuccess { profile ->
                 profileName = profile.displayName.orEmpty()
@@ -239,6 +241,76 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                 Text("Message seller")
                             }
                             Text("Seller details and reputation are shown only when FYNX has real account data.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                if (weeklyAwards.isNotEmpty()) {
+                    item(key = "seller-weekly-awards-$username") {
+                        Card(
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Column(
+                                Modifier.fillMaxWidth().padding(15.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🏆", style = MaterialTheme.typography.titleLarge)
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("FYNX Seller Hall of Fame", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("Verified weekly Marketplace recognition", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Surface(color = Color(0xFFD4AF37), shape = RoundedCornerShape(50)) {
+                                        Text(
+                                            weeklyAwards.size.toString() + if (weeklyAwards.size == 1) " award" else " awards",
+                                            Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                            color = Color(0xFF1C2434),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                weeklyAwards.take(12).forEach { award ->
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Surface(
+                                            color = if (award.rank == 1) Color(0xFFD4AF37) else MaterialTheme.colorScheme.surface,
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Text(
+                                                if (award.rank == 1) "WINNER" else "TOP \${award.rank}",
+                                                Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+                                                color = if (award.rank == 1) Color(0xFF1C2434) else MaterialTheme.colorScheme.onSurface,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                if (award.rank == 1) "Best Seller of the Week" else "Weekly Top Seller",
+                                                fontWeight = FontWeight.SemiBold,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                award.weekLabel.ifBlank { "Weekly award" } + " · " +
+                                                    award.completedOrders + " completed orders · " +
+                                                    award.uniqueBuyers + " buyers",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                                Text(
+                                    "Recognition is based on completed Marketplace orders, not advertising spend.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
