@@ -608,6 +608,8 @@ fun FynxHomeSocialHubPanel(
                 if (!posting) {
                     capturedUris = emptyList()
                     capturedTypes = emptyList()
+                    cameraMediaEdits = emptyMap()
+                    cameraEditingMediaUri = null
                     selectedVisualIndex = 0
                     text = ""
                     textBackground = null
@@ -630,6 +632,8 @@ fun FynxHomeSocialHubPanel(
                 if (!posting) {
                     capturedUris = emptyList()
                     capturedTypes = emptyList()
+                    cameraMediaEdits = emptyMap()
+                    cameraEditingMediaUri = null
                     selectedVisualIndex = 0
                     text = ""
                     textBackground = null
@@ -770,6 +774,21 @@ fun FynxHomeSocialHubPanel(
                                 }
                             }
                         }
+                        }
+                        selectedComposerVisual?.let { media ->
+                            TextButton(
+                                onClick = {
+                                    cameraEditingMediaUri = media.second
+                                    cameraOpenedFromComposer = true
+                                    showComposerPreview = false
+                                    showComposer = false
+                                    showCamera = true
+                                },
+                                enabled = !posting && !draftSaving,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (cameraMediaEdits.containsKey(media.second.toString())) "Edit text on media" else "Add text to media")
+                            }
                         }
 
                         Row(
@@ -1395,6 +1414,7 @@ fun FynxHomeSocialHubPanel(
                 if (cameraOpenedFromComposer && !posting) {
                     showComposer = true
                 }
+                cameraEditingMediaUri = null
                 cameraOpenedFromComposer = false
             },
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
@@ -1406,10 +1426,15 @@ fun FynxHomeSocialHubPanel(
                 Box(Modifier.fillMaxSize().background(Color(0xFF080A10))) {
                     FynxCameraCapturePanel(
                         fastCapture = showFastCamera,
+                        initialMediaUri = cameraEditingMediaUri?.let { cameraMediaEdits[it.toString()]?.sourceUri ?: it },
+                        initialMediaType = cameraEditingMediaUri?.let { uri -> capturedTypes.getOrNull(capturedUris.indexOf(uri)) },
+                        initialTextOverlays = cameraEditingMediaUri?.let { cameraMediaEdits[it.toString()]?.overlays }.orEmpty(),
+                        initialVideoStyle = cameraEditingMediaUri?.let { cameraMediaEdits[it.toString()]?.videoStyle } ?: "NATURAL",
+                        initialVideoCaptionText = cameraEditingMediaUri?.let { cameraMediaEdits[it.toString()]?.captionText }.orEmpty(),
                         selectedMusic = selectedCatalogueMusic,
                         onChooseMusic = { showMusicPicker = true; notice = null },
                         onClearMusic = { selectedCatalogueMusic = null; musicPlaying = false },
-                        showYourStoryAction = true,
+                        showYourStoryAction = cameraEditingMediaUri == null,
                         onShareToStatus = { uri, type ->
                             showCamera = false
                             showFastCamera = false
@@ -1417,10 +1442,39 @@ fun FynxHomeSocialHubPanel(
                             onOpenStatusWithMedia(uri, type)
                         },
                         onCaptured = { uri, type ->
-                            val nextUris = (capturedUris + uri).distinct().take(4)
+                            val editTarget = cameraEditingMediaUri
+                            val nextUris = if (editTarget != null) {
+                                capturedUris.map { if (it == editTarget) uri else it }
+                            } else (capturedUris + uri).distinct().take(4)
+                            cameraMediaEdits = cameraMediaEdits - (editTarget?.toString().orEmpty())
                             capturedUris = nextUris
                             recomputeTypes(nextUris)
-                            selectedVisualIndex = 0
+                            selectedVisualIndex = nextUris.indexOf(uri).coerceAtLeast(0)
+                            cameraEditingMediaUri = null
+                            showCamera = false
+                            showFastCamera = false
+                            showComposer = true
+                        },
+                        onCapturedWithTextEdits = { uri, type, sourceUri, overlays, videoStyle, captionText ->
+                            val editTarget = cameraEditingMediaUri
+                            val nextUris = if (editTarget != null) {
+                                capturedUris.map { if (it == editTarget) uri else it }
+                            } else (capturedUris + uri).distinct().take(4)
+                            var nextEdits = cameraMediaEdits - (editTarget?.toString().orEmpty())
+                            val hasEditableState = overlays.isNotEmpty() || videoStyle != "NATURAL" || captionText.isNotBlank()
+                            if (hasEditableState) {
+                                nextEdits = nextEdits + (uri.toString() to FynxCameraMediaDraftEdit(
+                                    sourceUri = sourceUri,
+                                    overlays = overlays,
+                                    videoStyle = videoStyle,
+                                    captionText = captionText
+                                ))
+                            }
+                            cameraMediaEdits = nextEdits
+                            capturedUris = nextUris
+                            recomputeTypes(nextUris)
+                            selectedVisualIndex = nextUris.indexOf(uri).coerceAtLeast(0)
+                            cameraEditingMediaUri = null
                             showCamera = false
                             showFastCamera = false
                             showComposer = true
@@ -1431,6 +1485,7 @@ fun FynxHomeSocialHubPanel(
                             if (cameraOpenedFromComposer && !posting) {
                                 showComposer = true
                             }
+                            cameraEditingMediaUri = null
                             cameraOpenedFromComposer = false
                         }
                     )
