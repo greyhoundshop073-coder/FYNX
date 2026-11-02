@@ -41,13 +41,14 @@ if [ "$TEST_EXIT" -eq 0 ]; then
     TEST_EXIT="$NAV_EXIT"
   fi
 
-  # Keep Status creator certification independent of Marketplace navigation. A failure in
-  # the Marketplace visual walk must not suppress Status evidence after instrumentation passes.
-  python3 scripts/verify_status_creator_runtime.py
-  STATUS_EXIT=$?
-  if [ "$STATUS_EXIT" -ne 0 ]; then
-    echo "::error::Status creator runtime verification failed (exit $STATUS_EXIT)."
-    if [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$STATUS_EXIT"; fi
+  # The focused Phase 1 walk deliberately excludes the separate Status workstream.
+  if [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" != "1" ]; then
+    python3 scripts/verify_status_creator_runtime.py
+    STATUS_EXIT=$?
+    if [ "$STATUS_EXIT" -ne 0 ]; then
+      echo "::error::Status creator runtime verification failed (exit $STATUS_EXIT)."
+      if [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$STATUS_EXIT"; fi
+    fi
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 else
