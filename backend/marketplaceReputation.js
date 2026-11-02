@@ -246,7 +246,9 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     try {
       await archiveClosedMarketplaceSellerWeeks();
       const username = req.query?.username == null ? null : parseSeller(String(req.query.username));
+      const onlyCurrentSeller = String(req.query?.mine || '').toLowerCase() === 'true';
       if (req.query?.username != null && !username) return res.status(400).json({ error: 'invalid seller username' });
+      if (onlyCurrentSeller && username) return res.status(400).json({ error: 'choose either username or mine' });
       const requestedLimit = Number.parseInt(String(req.query?.limit ?? '24'), 10);
       const limit = Number.isFinite(requestedLimit) ? Math.min(100, Math.max(1, requestedLimit)) : 24;
       const result = await pool.query(\`
@@ -258,9 +260,10 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           featured_product_title, featured_product_price, featured_product_currency
         FROM marketplace_weekly_seller_awards
         WHERE ($1::TEXT IS NULL OR lower(username) = lower($1))
+          AND (NOT $3::BOOLEAN OR seller_id = $4)
         ORDER BY week_start DESC, weekly_rank ASC
         LIMIT $2
-      \`, [username, limit]);
+      \`, [username, limit, onlyCurrentSeller, req.user.sub]);
       return res.json({
         awards: result.rows.map((row) => ({
           weekStart: row.week_start,
