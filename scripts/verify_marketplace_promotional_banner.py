@@ -7,6 +7,9 @@ WEEKLY_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceWeekly
 SELLER_STORE = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt").read_text(encoding="utf-8")
 SELLER_CENTER = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text(encoding="utf-8")
 SPONSORED_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSponsoredPromotionClient.kt").read_text(encoding="utf-8")
+SEASONAL_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionClient.kt").read_text(encoding="utf-8")
+SEASONAL_ADMIN = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8")
+ANNOUNCEMENTS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text(encoding="utf-8")
 REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf-8")
 
 checks = [
@@ -30,7 +33,13 @@ checks = [
     ("weekly rank is sourced from completed order records rather than advertising data", "o.status = 'COMPLETED'" in REPUTATION and "o.completed_at >= w.week_start" in REPUTATION and "marketplace_ad_campaigns" not in REPUTATION[REPUTATION.index("app.get('/api/marketplace/sellers/weekly'"):REPUTATION.index("app.get('/api/marketplace/sellers/:username/reputation'")]),
     ("weekly history is persisted for closed weeks", "marketplace_weekly_seller_awards" in REPUTATION and "ON CONFLICT (week_start, weekly_rank) DO NOTHING" in REPUTATION),
     ("seller storefront shows historical weekly recognition without ad-based scoring", "FynxMarketplaceWeeklySellerClient.history(context, username)" in SELLER_STORE and "FYNX Seller Hall of Fame" in SELLER_STORE and "not advertising spend" in SELLER_STORE),
-    ("private Seller Center shows the signed-in seller weekly awards", "FynxMarketplaceWeeklySellerClient.currentSellerHistory(context)" in SELLER_CENTER and "Weekly seller recognition" in SELLER_CENTER and "Best Seller of the Week" in SELLER_CENTER),
+    ("private Seller Center shows the signed-in seller weekly awards", "FynxMarketplaceWeeklySellerClient.currentSellerHistory(context)" in SELLER_CENTER and "Weekly seller recognition" in SELLER_CENTER and "Best Seller of the Week" in SELLER_CENTER),,
+    ("seasonal feed client is connected to the authenticated API", "/api/marketplace/seasonal-feed" in SEASONAL_CLIENT and "listForAdmin" in SEASONAL_CLIENT),
+    ("Owner/Admin seasonal scheduler is exposed only inside the existing Admin Control Center", "FynxMarketplaceSeasonalPromotionAdminPanel()" in ANNOUNCEMENTS and "d.role == \"OWNER\" || d.role == \"ADMIN\"" in ANNOUNCEMENTS),
+    ("scheduler supports ISO date windows and optional HTTPS artwork", "Starts at (ISO 8601)" in SEASONAL_ADMIN and "Ends at (ISO 8601)" in SEASONAL_ADMIN and "Artwork image HTTPS URL" in SEASONAL_ADMIN),
+    ("scheduled variable-date promotions are passed into the real Marketplace banner", "seasonalPromotions = seasonalPromotions" in PANEL and "seasonalPromotions: List<FynxMarketplaceSeasonalPromotion>" in BANNER),
+    ("scheduled celebration artwork is displayed as a crop-fitted banner image", "FynxRemoteMedia(" in BANNER and "slide.artworkUrl" in BANNER and "contentScale = ContentScale.Crop" in BANNER),
+
 ]
 
 failed = []
