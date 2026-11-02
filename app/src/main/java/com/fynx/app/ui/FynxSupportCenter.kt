@@ -236,6 +236,17 @@ fun FynxAdminSupportPanel(role: String) {
         adminReplyRequestId = UUID.randomUUID().toString()
         scope.launch { FynxSupportRemoteClient.adminMessages(context, item.id).onSuccess { messages = it }.onFailure { notice = it.message ?: "Conversation unavailable." } }
     }
+    fun reloadCase(caseId: String) {
+        scope.launch {
+            FynxSupportRemoteClient.adminCases(context).onSuccess { latest ->
+                cases = latest
+                latest.firstOrNull { it.id == caseId }?.let { selectedCase = it }
+            }
+            FynxSupportRemoteClient.adminMessages(context, caseId).onSuccess { messages = it }
+            FynxSupportRemoteClient.attachments(context, caseId).onSuccess { attachments = it }
+            FynxSupportRemoteClient.events(context, caseId).onSuccess { events = it }
+        }
+    }
     LaunchedEffect(selectedCase?.id) {
         val caseId = selectedCase?.id
         if (caseId == null) {
@@ -292,7 +303,7 @@ fun FynxAdminSupportPanel(role: String) {
                     Text("Problem description", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                     Text(item.description.ifBlank { "No description was supplied." }, style = MaterialTheme.typography.bodyMedium)
                     if (item.assignedAdminId.isNullOrBlank() && item.status != "RESOLVED") OutlinedButton(onClick = {
-                        scope.launch { FynxSupportRemoteClient.claimCase(context, item.id).onSuccess { notice = "Case claimed."; refresh++; openCase(item) }.onFailure { notice = it.message ?: "Could not claim case." } }
+                        scope.launch { FynxSupportRemoteClient.claimCase(context, item.id).onSuccess { notice = "Case claimed."; refresh++; reloadCase(item.id) }.onFailure { notice = it.message ?: "Could not claim case." } }
                     }) { Text("Take responsibility for this case") }
                     if (role == "OWNER") {
                         Box {
@@ -300,7 +311,7 @@ fun FynxAdminSupportPanel(role: String) {
                             DropdownMenu(expanded = assignmentMenu, onDismissRequest = { assignmentMenu = false }) {
                                 admins.forEach { admin -> DropdownMenuItem(text = { Text("@${admin.username}") }, onClick = {
                                     assignmentMenu = false
-                                    scope.launch { FynxSupportRemoteClient.assignCase(context, item.id, admin.id).onSuccess { notice = "Case assigned to @${admin.username}."; refresh++; openCase(item) }.onFailure { notice = it.message ?: "Assignment failed." } }
+                                    scope.launch { FynxSupportRemoteClient.assignCase(context, item.id, admin.id).onSuccess { notice = "Case assigned to @${admin.username}."; refresh++; reloadCase(item.id) }.onFailure { notice = it.message ?: "Assignment failed." } }
                                 }) }
                             }
                         }
@@ -322,7 +333,7 @@ fun FynxAdminSupportPanel(role: String) {
                         sending = true
                         scope.launch {
                             FynxSupportRemoteClient.replyAsAdmin(context, item.id, reply, internalNote, adminReplyRequestId)
-                                .onSuccess { reply = ""; adminReplyRequestId = UUID.randomUUID().toString(); notice = if (internalNote) "Internal note saved." else "Reply sent to user."; openCase(item); refresh++ }
+                                .onSuccess { reply = ""; adminReplyRequestId = UUID.randomUUID().toString(); notice = if (internalNote) "Internal note saved." else "Reply sent to user."; reloadCase(item.id); refresh++ }
                                 .onFailure { notice = it.message ?: "Message could not be sent." }
                             sending = false
                         }
@@ -339,12 +350,12 @@ fun FynxAdminSupportPanel(role: String) {
                     }
                     if (item.status != "RESOLVED" || role == "OWNER") {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "IN_REVIEW").onSuccess { refresh++; notice = "Case moved to review." }.onFailure { notice = it.message ?: "Status update failed." } } }) { Text("Review") }
-                            OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "WAITING_FOR_USER").onSuccess { refresh++; notice = "Waiting for user." }.onFailure { notice = it.message ?: "Status update failed." } } }) { Text("Waiting") }
+                            OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "IN_REVIEW").onSuccess { refresh++; notice = "Case moved to review."; reloadCase(item.id) }.onFailure { notice = it.message ?: "Status update failed." } } }) { Text("Review") }
+                            OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "WAITING_FOR_USER").onSuccess { refresh++; notice = "Waiting for user."; reloadCase(item.id) }.onFailure { notice = it.message ?: "Status update failed." } } }) { Text("Waiting") }
                             Button(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "RESOLVED").onSuccess { refresh++; notice = "Case resolved."; selectedCase = null }.onFailure { notice = it.message ?: "Could not resolve case." } } }) { Text("Resolve") }
                         }
                     }
-                    if (role == "OWNER" && item.status == "RESOLVED") OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "OPEN").onSuccess { refresh++; notice = "Case reopened." }.onFailure { notice = it.message ?: "Could not reopen case." } } }) { Text("Reopen case") }
+                    if (role == "OWNER" && item.status == "RESOLVED") OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "OPEN").onSuccess { refresh++; notice = "Case reopened."; reloadCase(item.id) }.onFailure { notice = it.message ?: "Could not reopen case." } } }) { Text("Reopen case") }
                 }
             }, confirmButton = { TextButton(onClick = { selectedCase = null }) { Text("Close") } })
     }
