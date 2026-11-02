@@ -48,6 +48,67 @@ class CameraTextOverlayInstrumentationTest {
     }
 
     @Test
+    fun mediaDraftCodecPreservesEveryEditableTextOverlayProperty() {
+        val source = Uri.fromFile(File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "draft-edit-source.mp4"))
+        val overlays = listOf(
+            FynxCameraTextOverlay(
+                id = "first-overlay",
+                text = "Top title",
+                x = 0.18f,
+                y = 0.21f,
+                color = Color.YELLOW,
+                font = "Serif",
+                backgroundColor = 0xB8000000.toInt(),
+                bold = true,
+                alignment = "LEFT",
+                scale = 1.35f,
+                startMs = 350L,
+                endMs = 2_450L
+            ),
+            FynxCameraTextOverlay(
+                id = "second-overlay",
+                text = "Bottom note",
+                x = 0.82f,
+                y = 0.88f,
+                color = Color.CYAN,
+                font = "Mono",
+                alignment = "RIGHT",
+                scale = 0.75f,
+                startMs = 1_100L,
+                endMs = 4_900L
+            )
+        )
+        val original = FynxCameraMediaDraftEdit(
+            sourceUri = source,
+            overlays = overlays,
+            videoStyle = CameraVideoStyle.VINTAGE.name,
+            captionText = "A saved manual caption"
+        )
+
+        val encoded = encodeFynxCameraMediaDraftEdit(original)
+        val restored = decodeFynxCameraMediaDraftEdit(source, encoded)
+            ?: error("Saved media edit state could not be restored")
+
+        assertEquals(original.videoStyle, restored.videoStyle)
+        assertEquals(original.captionText, restored.captionText)
+        assertEquals(overlays.size, restored.overlays.size)
+        overlays.zip(restored.overlays).forEach { (expected, actual) ->
+            assertEquals(expected.id, actual.id)
+            assertEquals(expected.text, actual.text)
+            assertEquals(expected.x, actual.x, 0.0001f)
+            assertEquals(expected.y, actual.y, 0.0001f)
+            assertEquals(expected.color, actual.color)
+            assertEquals(expected.font, actual.font)
+            assertEquals(expected.backgroundColor, actual.backgroundColor)
+            assertEquals(expected.bold, actual.bold)
+            assertEquals(expected.alignment, actual.alignment)
+            assertEquals(expected.scale, actual.scale, 0.0001f)
+            assertEquals(expected.startMs, actual.startMs)
+            assertEquals(expected.endMs, actual.endMs)
+        }
+    }
+
+    @Test
     fun photoTextOverlayIsRenderedIntoTheExportedImage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val source = File(context.cacheDir, "fynx-text-overlay-source.jpg")
