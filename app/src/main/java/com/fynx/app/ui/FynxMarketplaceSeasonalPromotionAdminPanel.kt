@@ -1,5 +1,9 @@
 package com.fynx.app.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,7 +44,16 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var headline by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
     var actionLabel by remember { mutableStateOf("Explore Marketplace") }
-    var artworkUrl by remember { mutableStateOf("") }
+    var artworkUri by remember { mutableStateOf<Uri?>(null) }
+    var artworkMediaId by remember { mutableStateOf("") }
+    val artworkPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            artworkUri = uri
+            artworkMediaId = ""
+            message = null
+            error = null
+        }
+    }
     var startsAt by remember { mutableStateOf("") }
     var endsAt by remember { mutableStateOf("") }
     var campaigns by remember { mutableStateOf<List<FynxMarketplaceSeasonalPromotion>>(emptyList()) }
@@ -102,15 +115,35 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             singleLine = true,
             enabled = !saving
         )
-        OutlinedTextField(
-            value = artworkUrl,
-            onValueChange = { artworkUrl = it.take(1500); message = null },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Artwork image HTTPS URL (optional)") },
-            supportingText = { Text("Use a direct HTTPS image address. Without one, FYNX uses its branded seasonal background.") },
-            singleLine = true,
-            enabled = !saving
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("Celebration artwork (optional)", style = MaterialTheme.typography.labelLarge)
+            Text(
+                "Choose a photo from the device. FYNX uploads it through its authenticated media service and displays it only while this scheduled campaign is active.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { artworkPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    enabled = !saving
+                ) { Text(if (artworkUri == null && artworkMediaId.isBlank()) "Choose photo" else "Change photo") }
+                if (artworkUri != null || artworkMediaId.isNotBlank()) {
+                    TextButton(onClick = { artworkUri = null; artworkMediaId = "" }, enabled = !saving) { Text("Remove photo") }
+                }
+            }
+            when {
+                artworkUri != null -> Text(
+                    "Selected photo: ${artworkUri?.lastPathSegment ?: "image"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                artworkMediaId.isNotBlank() -> Text(
+                    "Photo uploaded and ready to attach.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
         OutlinedTextField(
             value = startsAt,
             onValueChange = { startsAt = it.take(40); message = null },
@@ -135,15 +168,27 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 message = null
                 error = null
                 scope.launch {
+                    var savedArtworkId = artworkMediaId
+                    if (artworkUri != null && savedArtworkId.isBlank()) {
+                        val uploaded = FynxMarketplaceSeasonalPromotionClient.uploadArtwork(context, artworkUri!!)
+                        val mediaId = uploaded.getOrElse {
+                            error = marketplaceSafeError(it, "Seasonal artwork upload failed.")
+                            saving = false
+                            return@launch
+                        }
+                        savedArtworkId = mediaId
+                        artworkMediaId = mediaId
+                    }
                     FynxMarketplaceSeasonalPromotionClient.create(
-                        context, occasionKey, headline, body, actionLabel, artworkUrl, startsAt, endsAt
+                        context, occasionKey, headline, body, actionLabel, savedArtworkId, startsAt, endsAt
                     ).onSuccess {
                         message = "Seasonal promotion scheduled. It will appear automatically inside its start/end window."
                         occasionKey = ""
                         headline = ""
                         body = ""
                         actionLabel = "Explore Marketplace"
-                        artworkUrl = ""
+                        artworkUri = null
+                        artworkMediaId = ""
                         startsAt = ""
                         endsAt = ""
                         refresh()
