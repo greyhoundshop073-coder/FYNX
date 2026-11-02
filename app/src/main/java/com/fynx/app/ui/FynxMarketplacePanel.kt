@@ -1263,6 +1263,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onShopNow = { showAllProducts = true },
+                            onOpenOrders = { showOrders = true; reloadOrders() },
+                            onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1362,13 +1364,18 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     item(key = "marketplace-hero") {
-                        MarketplaceSmartDealsHero(
+                        MarketplacePromotionalBanner(
                             listings = listings,
                             sellerReputations = sellerReputations,
+                            weeklySeller = weeklySeller,
+                            weeklySellerListing = weeklySellerListing,
+                            sponsoredPromotions = sponsoredPromotions,
+                            seasonalPromotions = seasonalPromotions,
                             onOpenListing = { selected = it },
+                            onOpenSeller = { sellerStoreUsername = it },
                             onShopNow = { showAllProducts = true },
-                            onOrders = { showOrders = true; reloadOrders() },
-                            onRefresh = { reload() },
+                            onOpenOrders = { showOrders = true; reloadOrders() },
+                            onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
