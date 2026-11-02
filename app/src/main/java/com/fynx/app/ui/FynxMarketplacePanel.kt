@@ -888,6 +888,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var weeklySeller by remember(currentUsername) { mutableStateOf<FynxMarketplaceWeeklySeller?>(null) }
     var weeklySellerListing by remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var weeklySellerLoading by remember(currentUsername) { mutableStateOf(false) }
+    var sponsoredPromotions by remember(currentUsername) { mutableStateOf<List<FynxMarketplaceSponsoredPromotion>>(emptyList()) }
 
     fun reloadOrders() {
         scope.launch {
@@ -897,6 +898,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 .onSuccess { orders = it }
                 .onFailure { ordersError = marketplaceSafeError(it, "Orders could not load.") }
             ordersLoading = false
+        }
+    }
+
+    fun reloadSponsoredPromotions() {
+        scope.launch {
+            FynxMarketplaceSponsoredPromotionClient.load(context)
+                .onSuccess { sponsoredPromotions = it }
+            // Preserve already loaded paid campaigns if the feed request temporarily fails.
         }
     }
 
@@ -1019,7 +1028,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         }
     }
 
-    LaunchedEffect(currentUsername) { reloadWeeklySeller() }
+    LaunchedEffect(currentUsername) {
+        reloadWeeklySeller()
+        reloadSponsoredPromotions()
+    }
 
     LaunchedEffect(cartOwnerKey, cart, cartQuantities) {
         writeFynxMarketplaceCart(context, cartOwnerKey, cart, cartQuantities)
@@ -1239,6 +1251,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             sellerReputations = sellerReputations,
                             weeklySeller = weeklySeller,
                             weeklySellerListing = weeklySellerListing,
+                            sponsoredPromotions = sponsoredPromotions,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onShopNow = { showAllProducts = true },
