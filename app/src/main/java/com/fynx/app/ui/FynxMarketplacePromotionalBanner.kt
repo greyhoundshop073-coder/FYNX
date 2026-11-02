@@ -256,7 +256,7 @@ fun MarketplacePromotionalBanner(
                 state = listState,
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(0.dp),
-                userScrollEnabled = false
+                userScrollEnabled = true
             ) {
                 itemsIndexed(loopSlides, key = { index, slide -> "${slide.key}-$index" }) { _, slide ->
                     MarketplacePromotionalSlide(
