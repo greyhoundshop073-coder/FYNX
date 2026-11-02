@@ -54,7 +54,7 @@ checks = [
 
     ("Marketplace first page is cached per account and exact search scope", "FynxMarketplaceFeedCache.read(context, requestQuery, requestCategory, cacheLocation)" in PANEL and "FynxMarketplaceFeedCache.write(" in PANEL and "FynxAuthStore.accountStorageKey(context)" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceFeedCache.kt").read_text(encoding="utf-8")),
     ("cached Marketplace products render while the live request refreshes", "Showing saved products while FYNX checks for updates." in PANEL and "FynxMarketplaceFeedCache.read(context, requestQuery, requestCategory, cacheLocation)" in PANEL),
-    ("stale Marketplace cache does not revive listings that are no longer active", "val active = row.optBoolean(\\"active\\", true)" in FEED_CACHE and "|| !active) continue" in FEED_CACHE and "active=active" in FEED_CACHE),
+    ("stale Marketplace cache does not revive listings that are no longer active", 'val active = row.optBoolean("active", true)' in FEED_CACHE and "|| !active) continue" in FEED_CACHE and "active=active" in FEED_CACHE),
     ("Marketplace browsing does not request order history until Orders is opened", "reloadOrders()" not in MARKETPLACE_RELOAD and "showOrders = true; reloadOrders()" in PANEL),
     ("failed refresh preserves saved products and warns that availability may have changed", "Showing saved products from your last visit." in PANEL and "product availability may have changed" in PANEL),
     ("filter changes do not show another search's products as matching results", "Never present another search/filter" in PANEL and "listings = listOfNotNull(pinned)" in PANEL),
