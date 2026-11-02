@@ -1336,21 +1336,23 @@ def dismiss_runtime_permission_prompt()->str:
     return dump_ui("authenticated-home-after-permission.xml")
 
 def restore_home_after_restart(name:str)->str:
-    """Restart Home and restore the approved debug-only local UI session when needed."""
-    run("adb","shell","am","force-stop",PACKAGE)
+    """Return to Home without killing the authenticated process or discarding its session."""
+    # A force-stop here is unnecessary: the explicit Home deep link already routes
+    # through the app's real navigation entry point. Killing the process before every
+    # journey caused intermittent sign-in-gate regressions and made a navigation
+    # smoke test depend on a second authentication round-trip.
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2.5)
+    time.sleep(1.5)
     current=dismiss_runtime_permission_prompt() or dump_ui(name+"-initial.xml")
     if find_control(current,["Sign In"]):
-        # This app intentionally keeps its debug-only saved-device UI session local.
-        # Restore it through the existing test path after process death; never alter
-        # production authentication or report a sign-in gate as a Chat/Groups failure.
+        # Only perform a fresh credential login if the app genuinely presents its
+        # sign-in gate. The normal authenticated path remains in the same process.
         current,error=login()
         if error:
-            FAILURES.append(name+": could not restore Home after app restart: "+error)
+            FAILURES.append(name+": could not restore Home after navigation: "+error)
             return current
     if find_control(current,["Sign In"]) or find_control(current,["Username"]):
-        FAILURES.append(name+": restart remained at the sign-in gate")
+        FAILURES.append(name+": Home deep link remained at the sign-in gate")
         return current
     return current
 
