@@ -28,6 +28,7 @@ export function ensureMarketplaceSchemaForPool(pool) {
       "  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),",
       "  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
       ");",
+      "ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0);",
       "CREATE INDEX IF NOT EXISTS marketplace_listings_active_idx ON marketplace_listings (active, created_at DESC);",
       "CREATE INDEX IF NOT EXISTS marketplace_listings_seller_idx ON marketplace_listings (seller_id, active, created_at DESC);",
       "CREATE INDEX IF NOT EXISTS marketplace_listings_category_idx ON marketplace_listings (category, active, created_at DESC);",

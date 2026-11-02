@@ -1,6 +1,7 @@
 import pg from "pg";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -297,8 +298,12 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const data = await response.json().catch(() => ({}));
       const paid = response.ok && data?.status === true && data?.data?.status === "success" && Number(data.data.amount) === Number(campaign.total_budget_kobo) && String(data.data.currency).toUpperCase() === "NGN";
       if (!paid) return res.status(409).json({ error: "payment has not been verified" });
-      await pool.query("UPDATE marketplace_ad_campaigns SET payment_status='paid', updated_at=NOW() WHERE id=$1 AND owner_id=$2", [id, auth.userId]);
-      return res.json({ paid: true, campaignId: String(id) });
+      const updated = await pool.query(
+        "UPDATE marketplace_ad_campaigns SET payment_status='paid', updated_at=NOW() WHERE id=$1 AND owner_id=$2 RETURNING *",
+        [id, auth.userId]
+      );
+      if (!updated.rowCount) return res.status(404).json({ error: "campaign not found" });
+      return res.json({ paid: true, campaign: updated.rows[0] });
     } catch { return res.status(502).json({ error: "advertising payment verification failed" }); }
   });
 
@@ -349,6 +354,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
 
   // Metrics ingestion is deliberately limited to active campaigns. Billing/spend remains server-owned.
   app.post("/api/advertising/campaigns/:id/metric", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
     const metric = req.body?.metric;
     if (!["impression", "click", "engagement", "conversion"].includes(metric)) return res.status(400).json({ error: "invalid metric" });
     const id = positiveInt(req.params.id);
@@ -360,10 +367,78 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         engagements = m.engagements + CASE WHEN $1='engagement' THEN 1 ELSE 0 END,
         conversions = m.conversions + CASE WHEN $1='conversion' THEN 1 ELSE 0 END,
         updated_at=NOW()
-        FROM marketplace_ad_campaigns c WHERE m.campaign_id=$2 AND c.id=m.campaign_id AND c.status='active' RETURNING m.*`, [metric, id]);
+        FROM marketplace_ad_campaigns c WHERE m.campaign_id=$2 AND c.id=m.campaign_id AND c.status='active' AND c.payment_status='paid' AND c.approved_at IS NOT NULL AND (c.starts_at IS NULL OR c.starts_at <= NOW()) AND (c.ends_at IS NULL OR c.ends_at > NOW()) AND c.spent_kobo < c.total_budget_kobo RETURNING m.*`, [metric, id]);
       if (!result.rowCount) return res.status(404).json({ error: "campaign not active" });
       return res.status(204).end();
     } catch { return res.status(500).json({ error: "unable to record metric" });
+    }
+  });
+
+
+  // Feed only approved, paid, active product campaigns. Sponsored ranking is separate
+  // from the organic weekly-seller award and never changes seller reputation.
+  app.get("/api/advertising/marketplace-feed", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      await ensureMarketplaceSchemaForPool(pool);
+      const result = await pool.query(`
+        SELECT c.id AS campaign_id, c.headline, c.body, c.spent_kobo,
+               l.id AS listing_id, l.seller_id, u.username AS seller_username,
+               u.display_name AS seller_display_name, l.store_name, l.title,
+               l.description, l.price, l.currency, l.category, l.condition,
+               GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) AS available_quantity,
+               l.location, l.delivery_available, l.pickup_available, l.delivery_fee,
+               l.media_ids
+        FROM marketplace_ad_campaigns c
+        JOIN marketplace_listings l
+          ON l.id::text = c.creative_ref AND l.seller_id = c.owner_id
+        JOIN users u ON u.id = c.owner_id
+        WHERE c.creative_type = 'product'
+          AND c.status = 'active'
+          AND c.payment_status = 'paid'
+          AND c.approved_at IS NOT NULL
+          AND (c.starts_at IS NULL OR c.starts_at <= NOW())
+          AND (c.ends_at IS NULL OR c.ends_at > NOW())
+          AND c.spent_kobo < c.total_budget_kobo
+          AND NOT (c.targeting ? 'ageMin' OR c.targeting ? 'ageMax')
+          AND COALESCE(jsonb_array_length(c.targeting->'locations'), 0) = 0
+          AND COALESCE(jsonb_array_length(c.targeting->'interests'), 0) = 0
+          AND COALESCE(l.active, TRUE) = TRUE
+          AND GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0
+        ORDER BY c.spent_kobo ASC, c.updated_at ASC, c.id ASC
+        LIMIT 12
+      `, []);
+      const promotions = result.rows.map((row) => ({
+        campaignId: String(row.campaign_id),
+        headline: String(row.headline || '').trim(),
+        body: String(row.body || '').trim(),
+        listing: {
+          id: String(row.listing_id),
+          sellerId: String(row.seller_id),
+          sellerUsername: row.seller_username,
+          sellerDisplayName: row.seller_display_name || row.seller_username,
+          storeName: row.store_name || '',
+          title: row.title,
+          description: row.description || '',
+          price: Number(row.price),
+          currency: row.currency,
+          category: row.category || '',
+          condition: row.condition || 'NEW',
+          quantity: Number(row.available_quantity),
+          location: row.location || '',
+          deliveryAvailable: Boolean(row.delivery_available),
+          pickupAvailable: Boolean(row.pickup_available),
+          deliveryFee: row.delivery_fee == null ? null : Number(row.delivery_fee),
+          mediaIds: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [],
+          active: true,
+          mediaTypes: []
+        }
+      }));
+      return res.json({ promotions });
+    } catch (error) {
+      console.error('[fynx-ads] Marketplace promotional feed unavailable', error);
+      return res.status(500).json({ error: 'Marketplace advertisements unavailable' });
     }
   });
 }

@@ -885,6 +885,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     val categories = listOf("All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other")
     var sellerReputations by remember { mutableStateOf<Map<String, FynxMarketplaceClient.SellerReputation>>(emptyMap()) }
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var weeklySeller by remember(currentUsername) { mutableStateOf<FynxMarketplaceWeeklySeller?>(null) }
+    var weeklySellerListing by remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var sponsoredPromotions by remember(currentUsername) { mutableStateOf<List<FynxMarketplaceSponsoredPromotion>>(emptyList()) }
 
     fun reloadOrders() {
         scope.launch {
@@ -894,6 +897,44 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 .onSuccess { orders = it }
                 .onFailure { ordersError = marketplaceSafeError(it, "Orders could not load.") }
             ordersLoading = false
+        }
+    }
+
+    fun reloadSponsoredPromotions() {
+        scope.launch {
+            FynxMarketplaceSponsoredPromotionClient.load(context)
+                .onSuccess { sponsoredPromotions = it }
+            // Preserve already loaded paid campaigns if the feed request temporarily fails.
+        }
+    }
+
+    fun reloadWeeklySeller() {
+        scope.launch {
+            FynxMarketplaceWeeklySellerClient.load(context).onSuccess { weeklySellers ->
+                val winner = weeklySellers.firstOrNull()
+                weeklySeller = winner
+                weeklySellerListing = null
+                if (winner != null) {
+                    val cached = listings.firstOrNull {
+                        it.id == winner.featuredListingId &&
+                            it.active &&
+                            it.quantity > 0 &&
+                            it.sellerUsername.removePrefix("@").trim().equals(winner.username, ignoreCase = true)
+                    }
+                    if (cached != null) {
+                        weeklySellerListing = cached
+                    } else {
+                        loadExactMarketplaceListing(context, winner.featuredListingId).onSuccess { exact ->
+                            if (exact.active && exact.quantity > 0 &&
+                                exact.sellerUsername.removePrefix("@").trim().equals(winner.username, ignoreCase = true)
+                            ) {
+                                weeklySellerListing = exact
+                            }
+                        }
+                    }
+                }
+            }
+            // Keep the last verified winner visible during a transient backend outage.
         }
     }
 
@@ -982,6 +1023,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 error = "FYNX could not open the seller chat. Please try again."
             }
         }
+    }
+
+    LaunchedEffect(currentUsername) {
+        reloadWeeklySeller()
+        reloadSponsoredPromotions()
     }
 
     LaunchedEffect(cartOwnerKey, cart, cartQuantities) {
@@ -1197,13 +1243,15 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     item(key = "marketplace-offline-hero") {
-                        MarketplaceSmartDealsHero(
+                        MarketplacePromotionalBanner(
                             listings = listings,
                             sellerReputations = sellerReputations,
+                            weeklySeller = weeklySeller,
+                            weeklySellerListing = weeklySellerListing,
+                            sponsoredPromotions = sponsoredPromotions,
                             onOpenListing = { selected = it },
+                            onOpenSeller = { sellerStoreUsername = it },
                             onShopNow = { showAllProducts = true },
-                            onOrders = { showOrders = true; reloadOrders() },
-                            onRefresh = { reload() },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

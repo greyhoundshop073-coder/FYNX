@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
+import { ensureMarketplaceSchemaForPool } from './marketplaceSchema.js';
 
 export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
   let schemaPromise;
@@ -70,6 +71,96 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     else if (successful >= 5 && completionRate >= 80) tier = 'RISING SELLER';
     return { sellerId: String(row.seller_id),username: row.username,displayName: row.display_name,rank: Number(row.seller_rank),sellerCount: Number(row.seller_count),successfulSales: successful,totalOrders: total,completionRate: Number(completionRate.toFixed(2)),successfulSales30d: successful30d,totalOrders30d: total30d,completionRate30d: Number(completionRate30d.toFixed(2)),reviewCount: reviews,averageRating: Number(Number(row.average_rating || 0).toFixed(2)),positiveRating: Number(positiveRating.toFixed(2)),tier };
   };
+
+  // Weekly recognition counts only orders that reached COMPLETED during the current week.
+  // Sellers without a live, in-stock product are excluded before rank assignment.
+  // Advertising spend and impressions never influence seller eligibility or rank.
+  app.get('/api/marketplace/sellers/weekly', auth, async (_req, res) => {
+    try {
+      await ensureMarketplaceSchemaForPool(pool);
+      await ensureSchema();
+      const result = await pool.query(`
+        WITH week_bounds AS (
+          SELECT date_trunc('week', NOW() AT TIME ZONE 'Africa/Lagos') AT TIME ZONE 'Africa/Lagos' AS week_start,
+                 (date_trunc('week', NOW() AT TIME ZONE 'Africa/Lagos') + INTERVAL '1 week') AT TIME ZONE 'Africa/Lagos' AS week_end
+        ), weekly_sales AS (
+          SELECT o.seller_id,
+                 COUNT(*)::INTEGER AS completed_orders,
+                 COUNT(DISTINCT o.buyer_id)::INTEGER AS unique_buyers
+          FROM marketplace_orders o
+          CROSS JOIN week_bounds w
+          WHERE o.status = 'COMPLETED'
+            AND o.completed_at >= w.week_start
+            AND o.completed_at < w.week_end
+          GROUP BY o.seller_id
+        ), weekly_product_sales AS (
+          SELECT o.seller_id, o.listing_id,
+                 COUNT(*)::INTEGER AS completed_product_orders
+          FROM marketplace_orders o
+          CROSS JOIN week_bounds w
+          WHERE o.status = 'COMPLETED'
+            AND o.completed_at >= w.week_start
+            AND o.completed_at < w.week_end
+          GROUP BY o.seller_id, o.listing_id
+        ), eligible_sellers AS (
+          SELECT s.seller_id, u.username, u.display_name,
+                 s.completed_orders, s.unique_buyers,
+                 product.id AS featured_listing_id,
+                 product.title AS featured_product_title,
+                 product.price AS featured_product_price,
+                 product.currency AS featured_product_currency
+          FROM weekly_sales s
+          JOIN users u ON u.id = s.seller_id
+          JOIN LATERAL (
+            SELECT l.id, l.title, l.price, l.currency
+            FROM marketplace_listings l
+            LEFT JOIN weekly_product_sales p
+              ON p.seller_id = l.seller_id AND p.listing_id = l.id
+            WHERE l.seller_id = s.seller_id
+              AND COALESCE(l.active, TRUE) = TRUE
+              AND GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0
+            ORDER BY COALESCE(p.completed_product_orders, 0) DESC, l.created_at DESC, l.id DESC
+            LIMIT 1
+          ) product ON TRUE
+        ), ranked_sellers AS (
+          SELECT eligible_sellers.*,
+                 ROW_NUMBER() OVER (
+                   ORDER BY completed_orders DESC, unique_buyers DESC, username ASC, seller_id ASC
+                 )::INTEGER AS weekly_rank
+          FROM eligible_sellers
+        )
+        SELECT w.week_start, w.week_end,
+               s.seller_id, s.username, s.display_name,
+               s.completed_orders, s.unique_buyers, s.weekly_rank,
+               s.featured_listing_id, s.featured_product_title,
+               s.featured_product_price, s.featured_product_currency
+        FROM ranked_sellers s
+        CROSS JOIN week_bounds w
+        ORDER BY s.weekly_rank
+        LIMIT 5
+      `, []);
+      const first = result.rows[0];
+      return res.json({
+        periodStart: first?.week_start || null,
+        periodEnd: first?.week_end || null,
+        winners: result.rows.map((row) => ({
+          sellerId: String(row.seller_id),
+          username: row.username,
+          displayName: row.display_name || row.username,
+          completedOrders: Number(row.completed_orders || 0),
+          uniqueBuyers: Number(row.unique_buyers || 0),
+          rank: Number(row.weekly_rank || 0),
+          featuredListingId: String(row.featured_listing_id),
+          featuredProductTitle: row.featured_product_title,
+          featuredProductPrice: Number(row.featured_product_price),
+          featuredProductCurrency: row.featured_product_currency
+        }))
+      });
+    } catch (error) {
+      console.error('marketplace weekly seller ranking', error);
+      return res.status(500).json({ error: 'weekly seller ranking unavailable' });
+    }
+  });
 
   app.get('/api/marketplace/sellers/:username/reputation', auth, async (req, res) => {
     try {

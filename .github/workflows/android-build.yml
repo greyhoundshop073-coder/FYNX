@@ -196,6 +196,10 @@ jobs:
         run: python3 scripts/verify_marketplace_runtime_visual_capture.py
       - name: Verify Marketplace seller flow integrity
         run: python3 scripts/verify_marketplace_seller_flow.py
+      - name: Verify Marketplace weekly seller ranking
+        run: node backend/verify-marketplace-weekly-sellers.mjs
+      - name: Verify Marketplace promotional banner and weekly award UI
+        run: python3 scripts/verify_marketplace_promotional_banner.py
       - name: Verify Marketplace integration and security audit
         run: python3 scripts/verify_marketplace_integration_security.py
       - name: Verify FYNX buyer wallet UI and navigation
