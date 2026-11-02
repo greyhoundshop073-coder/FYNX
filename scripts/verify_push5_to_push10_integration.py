@@ -65,7 +65,7 @@ print("COVER/TAKEOVER PHOTO SOURCES:", ", ".join(cover_sources) if cover_sources
 # Push 10
 check("this gate is wired into Android CI", "verify_push5_to_push10_integration.py" in workflow)
 check("Android CI builds APK", "assembleDebug" in workflow)
-artifact_name = "FYNX-Android-Official"
+artifact_name = "FYNX-Android-Official.apk"
 apk_filename = "FYNX-Android-Official.apk"
 artifact_pos = workflow.find("name: FYNX Android Build")
 build_pos = workflow.find("assembleDebug")
