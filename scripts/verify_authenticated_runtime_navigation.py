@@ -1632,6 +1632,46 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     FAILURES.append(prefix + ": could not close the unpublished Status composer after hand-off")
             else:
                 FAILURES.append(prefix + ": Your Story did not open the existing Status composer")
+            # Put real camera text on the photo before Next so the following local Drafts
+            # round trip proves the overlay source/settings survive beyond the live editor.
+            draft_text_xml = tap_control(
+                second_editor, ["Text"], f"{prefix}-camera-post-draft-photo-text-tool",
+                ["Text on media"]
+            )
+            if draft_text_xml:
+                draft_text_field = find_control(draft_text_xml, ["Text on media"])
+                if draft_text_field:
+                    _, draft_text_x, draft_text_y = draft_text_field
+                    run("adb", "shell", "input", "tap", str(draft_text_x), str(draft_text_y))
+                    run("adb", "shell", "input", "text", "FYNXdraftoverlay")
+                    typed_draft_text = ""
+                    draft_overlay_deadline = time.monotonic() + 6.0
+                    while time.monotonic() < draft_overlay_deadline:
+                        typed_draft_text = dump_ui(f"{prefix}-camera-post-draft-photo-text-typing.xml") or typed_draft_text
+                        if "FYNXdraftoverlay" in typed_draft_text:
+                            break
+                        time.sleep(0.4)
+                    screenshot(f"{prefix}-camera-post-draft-photo-text-typing.png")
+                    if "FYNXdraftoverlay" in typed_draft_text:
+                        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                        time.sleep(0.4)
+                        after_draft_text_keyboard = dump_ui(f"{prefix}-camera-post-draft-photo-text-keyboard-dismissed.xml") or typed_draft_text
+                        done_draft_text = tap_control(
+                            after_draft_text_keyboard, ["Done"], f"{prefix}-camera-post-draft-photo-text-done",
+                            ["Next", "FYNXdraftoverlay"]
+                        )
+                        if done_draft_text and "FYNXdraftoverlay" in done_draft_text:
+                            second_editor = done_draft_text
+                            screenshot(f"{prefix}-camera-post-draft-photo-text-ready.png")
+                            report.append("- PASS photo text is embedded in the media editor state before saving the post draft")
+                        else:
+                            FAILURES.append(prefix + ": photo overlay Done did not preserve the draft test text")
+                    else:
+                        FAILURES.append(prefix + ": photo text could not be entered before the local draft round trip")
+                else:
+                    FAILURES.append(prefix + ": photo Text tool did not expose its typing surface for the draft test")
+            else:
+                FAILURES.append(prefix + ": photo Text tool did not open for the draft persistence test")
             draft_xml = tap_control(
                 second_editor, ["Next"], f"{prefix}-camera-send-to-post-draft",
                 ["New post", "Add description...", "Post"]
@@ -1864,6 +1904,24 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                             ["New post", test_caption, "Post"]
                         )
                         if opened_xml:
+                            if find_control(opened_xml, ["Edit text on media"]):
+                                reopened_editor_xml = tap_control(
+                                    opened_xml, ["Edit text on media"], f"{prefix}-camera-post-draft-edit-text-open",
+                                    ["FYNXdraftoverlay", "Text on media"]
+                                )
+                                if reopened_editor_xml and "FYNXdraftoverlay" in reopened_editor_xml:
+                                    screenshot(f"{prefix}-camera-post-draft-edit-text-restored.png")
+                                    report.append("- PASS saved post draft reopened the same media editor with its photo text overlay restored")
+                                    # Back cancels editing and must leave the reopened post draft intact.
+                                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                                    time.sleep(0.5)
+                                    opened_xml = dump_ui(f"{prefix}-camera-post-draft-edit-text-closed.xml") or reopened_editor_xml
+                                    if not find_control(opened_xml, ["Edit text on media"]):
+                                        FAILURES.append(prefix + ": closing the restored text editor did not return to the saved post draft")
+                                else:
+                                    FAILURES.append(prefix + ": saved post draft did not restore the photo overlay in its media editor")
+                            else:
+                                FAILURES.append(prefix + ": saved post draft did not expose Edit text on media");
                             if test_caption in opened_xml:
                                 report.append("- PASS local post Drafts reopened with the entered caption text intact")
                             else:
