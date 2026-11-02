@@ -1,6 +1,7 @@
 import pg from "pg";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -374,6 +375,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     const auth = authenticate(req, res);
     if (!auth) return;
     try {
+      await ensureMarketplaceSchemaForPool(pool);
       const result = await pool.query(`
         SELECT c.id AS campaign_id, c.headline, c.body, c.spent_kobo,
                l.id AS listing_id, l.seller_id, u.username AS seller_username,
