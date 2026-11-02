@@ -72,6 +72,84 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     return { sellerId: String(row.seller_id),username: row.username,displayName: row.display_name,rank: Number(row.seller_rank),sellerCount: Number(row.seller_count),successfulSales: successful,totalOrders: total,completionRate: Number(completionRate.toFixed(2)),successfulSales30d: successful30d,totalOrders30d: total30d,completionRate30d: Number(completionRate30d.toFixed(2)),reviewCount: reviews,averageRating: Number(Number(row.average_rating || 0).toFixed(2)),positiveRating: Number(positiveRating.toFixed(2)),tier };
   };
 
+  // Materialize the top five from closed Lagos weeks once, so seller recognition remains visible after the live week rolls over.
+  const archiveClosedMarketplaceSellerWeeks = async () => {
+    await ensureMarketplaceSchemaForPool(pool);
+    await pool.query(\`
+      WITH historical_weeks AS (
+        SELECT
+          local_week_start AT TIME ZONE 'Africa/Lagos' AS week_start,
+          (local_week_start + INTERVAL '1 week') AT TIME ZONE 'Africa/Lagos' AS week_end
+        FROM generate_series(
+          date_trunc('week', NOW() AT TIME ZONE 'Africa/Lagos') - INTERVAL '52 weeks',
+          date_trunc('week', NOW() AT TIME ZONE 'Africa/Lagos') - INTERVAL '1 week',
+          INTERVAL '1 week'
+        ) AS weeks(local_week_start)
+      ),
+      weekly_sales AS (
+        SELECT w.week_start, w.week_end, o.seller_id,
+               COUNT(*)::INTEGER AS completed_orders,
+               COUNT(DISTINCT o.buyer_id)::INTEGER AS unique_buyers
+        FROM historical_weeks w
+        JOIN marketplace_orders o
+          ON o.completed_at >= w.week_start
+         AND o.completed_at < w.week_end
+         AND o.status = 'COMPLETED'
+        GROUP BY w.week_start, w.week_end, o.seller_id
+      ),
+      weekly_product_sales AS (
+        SELECT w.week_start, w.week_end, o.seller_id, o.listing_id,
+               COUNT(*)::INTEGER AS completed_product_orders
+        FROM historical_weeks w
+        JOIN marketplace_orders o
+          ON o.completed_at >= w.week_start
+         AND o.completed_at < w.week_end
+         AND o.status = 'COMPLETED'
+        GROUP BY w.week_start, w.week_end, o.seller_id, o.listing_id
+      ),
+      ranked_sellers AS (
+        SELECT s.*, u.username, COALESCE(u.display_name, u.username) AS display_name,
+               ROW_NUMBER() OVER (
+                 PARTITION BY s.week_start
+                 ORDER BY s.completed_orders DESC, s.unique_buyers DESC, u.username ASC, s.seller_id ASC
+               )::INTEGER AS weekly_rank
+        FROM weekly_sales s
+        JOIN users u ON u.id = s.seller_id
+      ),
+      award_rows AS (
+        SELECT r.week_start, r.week_end, r.weekly_rank, r.seller_id,
+               r.username, r.display_name, r.completed_orders, r.unique_buyers,
+               product.id AS featured_listing_id,
+               COALESCE(product.title, '') AS featured_product_title,
+               product.price AS featured_product_price,
+               product.currency AS featured_product_currency
+        FROM ranked_sellers r
+        LEFT JOIN LATERAL (
+          SELECT l.id, l.title, l.price, l.currency
+          FROM marketplace_listings l
+          LEFT JOIN weekly_product_sales p
+            ON p.week_start = r.week_start
+           AND p.seller_id = l.seller_id
+           AND p.listing_id = l.id
+          WHERE l.seller_id = r.seller_id
+          ORDER BY COALESCE(p.completed_product_orders, 0) DESC, l.created_at DESC, l.id DESC
+          LIMIT 1
+        ) product ON TRUE
+        WHERE r.weekly_rank <= 5
+      )
+      INSERT INTO marketplace_weekly_seller_awards (
+        week_start, week_end, weekly_rank, seller_id, username, display_name,
+        completed_orders, unique_buyers, featured_listing_id,
+        featured_product_title, featured_product_price, featured_product_currency
+      )
+      SELECT week_start, week_end, weekly_rank, seller_id, username, display_name,
+             completed_orders, unique_buyers, featured_listing_id,
+             featured_product_title, featured_product_price, featured_product_currency
+      FROM award_rows
+      ON CONFLICT (week_start, weekly_rank) DO NOTHING
+    \`);
+  };
+
   // Weekly recognition counts only orders that reached COMPLETED during the current week.
   // Sellers without a live, in-stock product are excluded before rank assignment.
   // Advertising spend and impressions never influence seller eligibility or rank.
@@ -159,6 +237,50 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     } catch (error) {
       console.error('marketplace weekly seller ranking', error);
       return res.status(500).json({ error: 'weekly seller ranking unavailable' });
+    }
+  });
+
+
+  // Historical top-five results are immutable snapshots. Paid advertising never enters this query.
+  app.get('/api/marketplace/sellers/weekly/history', auth, async (req, res) => {
+    try {
+      await archiveClosedMarketplaceSellerWeeks();
+      const username = req.query?.username == null ? null : parseSeller(String(req.query.username));
+      if (req.query?.username != null && !username) return res.status(400).json({ error: 'invalid seller username' });
+      const requestedLimit = Number.parseInt(String(req.query?.limit ?? '24'), 10);
+      const limit = Number.isFinite(requestedLimit) ? Math.min(100, Math.max(1, requestedLimit)) : 24;
+      const result = await pool.query(\`
+        SELECT
+          week_start, week_end,
+          TO_CHAR(week_start AT TIME ZONE 'Africa/Lagos', 'DD Mon YYYY') AS week_label,
+          weekly_rank, seller_id, username, display_name,
+          completed_orders, unique_buyers, featured_listing_id,
+          featured_product_title, featured_product_price, featured_product_currency
+        FROM marketplace_weekly_seller_awards
+        WHERE ($1::TEXT IS NULL OR lower(username) = lower($1))
+        ORDER BY week_start DESC, weekly_rank ASC
+        LIMIT $2
+      \`, [username, limit]);
+      return res.json({
+        awards: result.rows.map((row) => ({
+          weekStart: row.week_start,
+          weekEnd: row.week_end,
+          weekLabel: row.week_label,
+          rank: Number(row.weekly_rank),
+          sellerId: row.seller_id == null ? null : String(row.seller_id),
+          username: row.username,
+          displayName: row.display_name || row.username,
+          completedOrders: Number(row.completed_orders || 0),
+          uniqueBuyers: Number(row.unique_buyers || 0),
+          featuredListingId: row.featured_listing_id == null ? null : String(row.featured_listing_id),
+          featuredProductTitle: row.featured_product_title || '',
+          featuredProductPrice: row.featured_product_price == null ? null : Number(row.featured_product_price),
+          featuredProductCurrency: row.featured_product_currency || ''
+        }))
+      });
+    } catch (error) {
+      console.error('marketplace weekly seller award history', error);
+      return res.status(500).json({ error: 'weekly seller award history unavailable' });
     }
   });
 
