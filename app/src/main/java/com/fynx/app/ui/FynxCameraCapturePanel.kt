@@ -575,6 +575,8 @@ fun FynxCameraCapturePanel(
     var error by remember { mutableStateOf<String?>(null) }
     var statusShareChecking by remember { mutableStateOf(false) }
     val initialMediaIsLocalFile = initialMediaUri?.scheme == "file"
+    var initialMediaHandedOff by remember(initialMediaUri) { mutableStateOf(false) }
+    var copiedInitialMediaFiles by remember(initialMediaUri) { mutableStateOf<List<Uri>>(emptyList()) }
     var pendingUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri.takeIf { initialMediaIsLocalFile }) }
     var pendingOriginalUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri.takeIf { initialMediaIsLocalFile }) }
     var pendingType by remember(initialMediaUri, initialMediaType) { mutableStateOf(initialMediaType.takeIf { initialMediaIsLocalFile }) }
@@ -627,6 +629,7 @@ fun FynxCameraCapturePanel(
         val copied = withContext(Dispatchers.IO) { copyCameraGalleryMediaToCache(context, source) }
         pendingUri = Uri.fromFile(copied.first)
         pendingOriginalUri = Uri.fromFile(copied.second)
+        copiedInitialMediaFiles = listOf(Uri.fromFile(copied.first), Uri.fromFile(copied.second))
         pendingType = initialMediaType ?: copied.third
     }
     LaunchedEffect(pendingUri, pendingType) {
@@ -817,7 +820,17 @@ fun FynxCameraCapturePanel(
             }
         }, ContextCompat.getMainExecutor(context))
     }
-    DisposableEffect(Unit) { onDispose { timerCaptureJob?.cancel(); recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
+    DisposableEffect(Unit) {
+        onDispose {
+            timerCaptureJob?.cancel()
+            recording?.stop()
+            cameraProvider?.unbindAll()
+            faceAnalyzer.close()
+            if (initialMediaUri?.scheme != "file" && !initialMediaHandedOff) {
+                copiedInitialMediaFiles.forEach { uri -> File(uri.path ?: "").delete() }
+            }
+        }
+    }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
     fun retake() {
         // Force a clean CameraX bind instead of depending on a PreviewView detach/attach race.
@@ -1066,8 +1079,10 @@ fun FynxCameraCapturePanel(
                     val editableOverlays = cameraTextOverlays.filter { it.text.isNotBlank() }
                     val editCallback = onCapturedWithTextEdits
                     if (editCallback != null) {
+                        initialMediaHandedOff = true
                         editCallback(finalUri, mediaType, editSource, editableOverlays, videoStyle.name, videoCaptionText)
                     } else {
+                        initialMediaHandedOff = true
                         onCaptured(finalUri, mediaType)
                     }
                 }
