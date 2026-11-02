@@ -887,7 +887,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var weeklySeller by remember(currentUsername) { mutableStateOf<FynxMarketplaceWeeklySeller?>(null) }
     var weeklySellerListing by remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
-    var weeklySellerLoading by remember(currentUsername) { mutableStateOf(false) }
     var sponsoredPromotions by remember(currentUsername) { mutableStateOf<List<FynxMarketplaceSponsoredPromotion>>(emptyList()) }
 
     fun reloadOrders() {
@@ -911,7 +910,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     fun reloadWeeklySeller() {
         scope.launch {
-            weeklySellerLoading = true
             FynxMarketplaceWeeklySellerClient.load(context).onSuccess { weeklySellers ->
                 val winner = weeklySellers.firstOrNull()
                 weeklySeller = winner
@@ -937,7 +935,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
             }
             // Keep the last verified winner visible during a transient backend outage.
-            weeklySellerLoading = false
         }
     }
 
