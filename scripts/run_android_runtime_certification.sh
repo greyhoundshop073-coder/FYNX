@@ -14,6 +14,12 @@ adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
 if [ "$TEST_EXIT" -eq 0 ]; then
+  # The Phase 1 branch opts into a narrow Marketplace/My Shop/Wallet walk. Do not
+  # run unrelated Home/Profile, Status, Chat/Groups or camera journeys in that mode.
+  if [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" = "1" ]; then
+    echo "::notice::Running the Phase 1 Marketplace/My Shop/Wallet visual walk only."
+    FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    NAV_EXIT=$?
   # Use server-authenticated navigation only when both CI credentials exist and the backend is ready.
   # Camera/media visual certification remains useful through the existing read-only debug-local UI
   # entry when secrets are absent, so an unavailable secret does not suppress emulator evidence.
