@@ -209,7 +209,6 @@ class CameraTextOverlayInstrumentationTest {
                         y = 0.76f,
                         color = Color.MAGENTA,
                         font = "Mono",
-                        alignment = "RIGHT",
                         scale = 1.25f
                     )
                 )
