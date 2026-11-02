@@ -1425,7 +1425,7 @@ fun FynxCameraCapturePanel(
                     ) {
                         Icon(Icons.Default.ArrowForward, null)
                         Spacer(Modifier.width(4.dp))
-                        Text(if (statusShareChecking) "Preparing…" else "Next")
+                        Text("Next")
                     }
                 }
             }
