@@ -111,6 +111,12 @@ fun FynxAdminControlCenterPanel() {
             Text("Role: ${d.role}", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Users", d.users); StatCard("Reports", d.openReports) }; Spacer(Modifier.height(8.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Appeals", d.openAppeals); StatCard("Safety / 24h", d.safetyEvents24h) }
 
+            Spacer(Modifier.height(20.dp))
+            Text("FYNX Support Centre", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+            Text("Handle private user complaints and monitor your support team.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            FynxSupportHubPanel(staffOnly = true)
+
             if (d.role == "OWNER" || d.role == "ADMIN") {
                 Spacer(Modifier.height(20.dp))
                 Text("FYNX Business Revenue", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
