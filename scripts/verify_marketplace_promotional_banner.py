@@ -15,6 +15,7 @@ REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf
 
 checks = [
     ("Marketplace home uses the new full-width promotional banner", "MarketplacePromotionalBanner(" in PANEL and "weeklySeller = weeklySeller" in PANEL),
+    ("normal live Marketplace feed uses the new banner instead of the legacy compact tile", 'item(key = "marketplace-hero") {\n                        MarketplacePromotionalBanner(' in PANEL and PANEL.count("MarketplacePromotionalBanner(") >= 2 and PANEL.count("MarketplaceSmartDealsHero(") == 1),
     ("weekly seller ranking is loaded through the authenticated Marketplace client", "FynxMarketplaceWeeklySellerClient.load(context)" in PANEL and "/api/marketplace/sellers/weekly" in WEEKLY_CLIENT),
     ("approved paid product campaigns are loaded into Marketplace", "FynxMarketplaceSponsoredPromotionClient.load(context)" in PANEL and "/api/advertising/marketplace-feed" in SPONSORED_CLIENT),
     ("paid advertisements are visibly marked sponsored", "sponsoredPromotions.take(3)" in BANNER and 'eyebrow = "SPONSORED"' in BANNER),
