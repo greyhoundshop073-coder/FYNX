@@ -97,13 +97,22 @@ private class TimedCameraTextOverlay(private val cues: List<CameraCaptionCue>) :
 }
 
 
+/**
+ * Editor positions use a top-left origin, while Media3 background-frame anchors use NDC:
+ * x=-1 is left, x=+1 is right, y=+1 is top and y=-1 is bottom.
+ */
+internal fun cameraVideoTextOverlayBackgroundAnchor(item: FynxCameraTextOverlay): Pair<Float, Float> {
+    val x = item.x.coerceIn(0.04f, 0.96f) * 2f - 1f
+    val y = 1f - item.y.coerceIn(0.06f, 0.94f) * 2f
+    return x to y
+}
+
 /** Text added by the creator is encoded into the output video, not left as editor-only decoration. */
 private class FynxMediaTextOverlay(private val item: FynxCameraTextOverlay) : TextOverlay() {
-    private val anchorX = (item.x.coerceIn(0.04f, 0.96f) * 2f) - 1f
-    private val anchorY = (item.y.coerceIn(0.06f, 0.94f) * 2f) - 1f
+    private val backgroundAnchor = cameraVideoTextOverlayBackgroundAnchor(item)
     private val settings = StaticOverlaySettings.Builder()
-        .setBackgroundFrameAnchor(anchorX, anchorY)
-        .setOverlayFrameAnchor(anchorX, anchorY)
+        // Use the text overlay's centre as the anchor, matching the on-screen editor element.
+        .setBackgroundFrameAnchor(backgroundAnchor.first, backgroundAnchor.second)
         .setScale((0.72f * item.scale).coerceIn(0.42f, 1.7f), (0.72f * item.scale).coerceIn(0.42f, 1.7f))
         .build()
 
