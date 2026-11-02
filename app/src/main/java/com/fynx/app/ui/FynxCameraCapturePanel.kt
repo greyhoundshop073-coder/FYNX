@@ -595,6 +595,8 @@ fun FynxCameraCapturePanel(
         timerCaptureJob?.cancel()
         timerCaptureJob = null
         timerCountingDown = 0
+        showAdjustments = false
+        showEffectTray = false
         showCaptureControls = true
     }
     BackHandler {
@@ -1312,7 +1314,10 @@ fun FynxCameraCapturePanel(
                     Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge)
                     Button(
                         onClick = ::cancelCaptureTimer,
-                        modifier = Modifier.fillMaxWidth().semantics {
+                        // Merge the label into the Button's own clickable semantics node.
+                        // A separate non-clickable description node caused automated taps
+                        // and assistive-technology activation to miss the countdown cancel.
+                        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
                             contentDescription = "Cancel timer"
                         }
                     ) {
