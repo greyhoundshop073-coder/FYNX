@@ -74,6 +74,7 @@ try {
   await expectStatus(createdResponse, 201, "create support case");
   const created = (await createdResponse.json()).case;
   assert.match(created.case_number, /^FYNX-\d{8}$/);
+  assert.equal(created.description, createBody.description, "support case response must include the submitted problem description");
 
   const duplicateResponse = await request(base, 4, "POST", "/api/support/cases", createBody);
   await expectStatus(duplicateResponse, 200, "idempotent support case retry");
@@ -127,6 +128,14 @@ try {
   await expectStatus(userReply, 201, "user reply");
   let caseRow = (await testPool.query("SELECT status,assigned_admin_id FROM fynx_support_cases WHERE id=$1", [created.id])).rows[0];
   assert.equal(caseRow.status, "WAITING_FOR_SUPPORT");
+  const duplicateUserReply = await request(base, 4, "POST", `/api/support/cases/${created.id}/messages`, {
+    body: "Thank you. My payment reference is TXN-TEST-12345.",
+    clientMessageId: "user-reply-1"
+  });
+  await expectStatus(duplicateUserReply, 200, "idempotent user reply retry");
+  assert.equal((await testPool.query("SELECT COUNT(*)::int AS count FROM fynx_support_messages WHERE case_id=$1 AND sender_id=4 AND client_message_id='user-reply-1'", [created.id])).rows[0].count, 1);
+  const replyNotificationUsers = (await testPool.query("SELECT user_id::text FROM fynx_notifications WHERE type='SUPPORT' AND target_id=$1 AND id LIKE 'support-user-reply-%' ORDER BY user_id", [String(created.id)])).rows.map(row => row.user_id);
+  assert.deepEqual(replyNotificationUsers, ["1", "3"], "assigned case replies notify only the Owner and the assigned Admin");
 
   const resolve = await request(base, 3, "PATCH", `/api/admin/support/cases/${created.id}/status`, { status: "RESOLVED" });
   await expectStatus(resolve, 200, "assigned Admin resolves case");
@@ -135,6 +144,18 @@ try {
   await expectStatus(adminReopen, 403, "Admin cannot reopen resolved case");
   const adminAlternateReopen = await request(base, 3, "PATCH", `/api/admin/support/cases/${created.id}/status`, { status: "IN_REVIEW" });
   await expectStatus(adminAlternateReopen, 403, "Admin cannot reopen a resolved case through another status");
+  const adminResolvedPublicReply = await request(base, 3, "POST", `/api/admin/support/cases/${created.id}/messages`, {
+    body: "This reply must not reopen the case.",
+    visibility: "PUBLIC",
+    clientMessageId: "admin-reopen-by-reply"
+  });
+  await expectStatus(adminResolvedPublicReply, 403, "Admin cannot reopen a resolved case by sending a public reply");
+  const userResolvedReply = await request(base, 4, "POST", `/api/support/cases/${created.id}/messages`, {
+    body: "This follow-up must wait for Owner reopening.",
+    clientMessageId: "user-reopen-by-reply"
+  });
+  await expectStatus(userResolvedReply, 409, "requester cannot bypass Owner-only reopening through a reply");
+  assert.equal((await testPool.query("SELECT status FROM fynx_support_cases WHERE id=$1", [created.id])).rows[0].status, "RESOLVED");
 
   const ownerReopen = await request(base, 1, "PATCH", `/api/admin/support/cases/${created.id}/status`, { status: "OPEN" });
   await expectStatus(ownerReopen, 200, "Owner reopens resolved case");
@@ -164,6 +185,17 @@ try {
 
   const notifications = await testPool.query("SELECT COUNT(*)::int AS count FROM fynx_notifications WHERE type='SUPPORT'");
   assert.ok(notifications.rows[0].count >= 5, "support events should be stored as notifications for the user and support team");
+
+  const unassignedCaseResponse = await request(base, 4, "POST", "/api/support/cases", {
+    category: "OTHER",
+    subject: "App notification issue",
+    description: "Support notifications are not appearing consistently on my device.",
+    clientRequestId: "unassigned-notification-case"
+  });
+  await expectStatus(unassignedCaseResponse, 201, "create second unassigned support case");
+  const unassignedCase = (await unassignedCaseResponse.json()).case;
+  const unassignedNotificationUsers = (await testPool.query("SELECT user_id::text FROM fynx_notifications WHERE type='SUPPORT' AND target_id=$1 AND id LIKE 'support-created-%' ORDER BY user_id", [String(unassignedCase.id)])).rows.map(row => row.user_id);
+  assert.deepEqual(unassignedNotificationUsers, ["1", "2", "3"], "new unassigned cases notify the Owner and all active Admins");
 
   const adminAssignment = await request(base, 1, "POST", `/api/admin/support/cases/${created.id}/assign`, { adminId: "2" });
   await expectStatus(adminAssignment, 200, "Owner reassigns case to another Admin");
