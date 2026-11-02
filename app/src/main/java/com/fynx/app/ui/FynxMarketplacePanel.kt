@@ -1038,6 +1038,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         reloadWeeklySeller()
         reloadSponsoredPromotions()
         reloadSeasonalPromotions()
+        // Keep scheduled and paid campaign slides fresh while Marketplace remains visible.
+        // The last successful data stays on screen when a refresh fails.
+        while (true) {
+            kotlinx.coroutines.delay(15 * 60 * 1000L)
+            reloadWeeklySeller()
+            reloadSponsoredPromotions()
+            reloadSeasonalPromotions()
+        }
     }
 
     LaunchedEffect(cartOwnerKey, cart, cartQuantities) {
