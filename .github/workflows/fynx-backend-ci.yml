@@ -105,6 +105,8 @@ jobs:
           node --check verify-stage15d-jobs.mjs
       - name: Verify backend startup safety and Marketplace My Shop routes
         run: node verify-backend-startup-safety.mjs
+      - name: Verify Marketplace discovery pagination bindings
+        run: node verify-marketplace-discovery-query.mjs
       - name: Verify notification bootstrap is idempotent across retries
         run: node verify-notification-bootstrap-idempotency.mjs
       - name: Verify bounded media payload cache
