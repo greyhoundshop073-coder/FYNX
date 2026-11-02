@@ -98,7 +98,7 @@ export function registerSupportRoutes({ app, pool, auth }) {
     return Number.isSafeInteger(id) && id > 0 ? id : null;
   };
   const adminCanSeeCase = async (role, userId, caseId) => {
-    const result = await pool.query("SELECT requester_id,assigned_admin_id FROM fynx_support_cases WHERE id=$1", [caseId]);
+    const result = await pool.query("SELECT requester_id,assigned_admin_id,status FROM fynx_support_cases WHERE id=$1", [caseId]);
     const row = result.rows[0];
     if (!row) return { row: null, allowed: false };
     return { row, allowed: role === "OWNER" || row.assigned_admin_id == null || String(row.assigned_admin_id) === String(userId) };
@@ -379,7 +379,7 @@ export function registerSupportRoutes({ app, pool, auth }) {
       if (!access.row) return res.status(404).json({ error: "Support case not found." });
       if (!access.allowed) return res.status(403).json({ error: "This case is assigned to another Admin." });
       if (role !== "OWNER" && String(access.row.assigned_admin_id || "") !== String(req.user.sub)) return res.status(409).json({ error: "Claim this case before changing its status." });
-      if (role !== "OWNER" && status === "OPEN") return res.status(403).json({ error: "Only the Owner can reopen a resolved case." });
+      if (role !== "OWNER" && access.row.status === "RESOLVED" && status !== "RESOLVED") return res.status(403).json({ error: "Only the Owner can reopen a resolved case." });
       const result = await pool.query("UPDATE fynx_support_cases SET status=$1,updated_at=NOW(),resolved_at=CASE WHEN $1='RESOLVED' THEN NOW() ELSE NULL END WHERE id=$2 RETURNING id,case_number,status", [status, caseId]);
       await pool.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'STATUS_CHANGED',jsonb_build_object('status',$3::text))", [caseId, req.user.sub, status]);
       if (status === "RESOLVED") {
