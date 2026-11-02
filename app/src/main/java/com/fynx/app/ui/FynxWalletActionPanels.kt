@@ -124,7 +124,11 @@ internal fun FynxWalletActionPanel(
                     WalletMethodCard(
                         icon = "card",
                         title = "Debit card",
-                        description = if (canFundByCard) "Continue through the secure provider-hosted card checkout." else "Secure card checkout will appear after provider approval and funding limits are configured.",
+                        description = when {
+                            testMode && canFundByCard -> "Paystack Test Mode: simulate a card top-up. The balance is not real money and cannot be spent or withdrawn."
+                            canFundByCard -> "Continue through the secure provider-hosted card checkout."
+                            else -> "Secure card checkout will appear after provider approval and funding limits are configured."
+                        },
                         onClick = { onNavigate("CARD") }
                     )
                 }
@@ -138,8 +142,16 @@ internal fun FynxWalletActionPanel(
                 }
                 item {
                     WalletActionNotice(
-                        title = "Funding is being prepared",
-                        message = "Payment methods will become active after FYNX connects an approved provider and verifies payment notifications. No payment is started from this screen."
+                        title = when {
+                            testMode -> "Paystack Test Mode is active"
+                            canFundByCard -> "Card funding is active"
+                            else -> "Funding is being prepared"
+                        },
+                        message = when {
+                            testMode -> "Card top-ups use simulated Paystack payments only. Test balances are not real money and cannot be spent, used for Marketplace purchases, transferred or withdrawn. Amounts must stay within the current server test limits."
+                            canFundByCard -> "Continue through secure provider-hosted card checkout. FYNX credits your Wallet only after a signed provider notification and server-side verification."
+                            else -> "Payment methods will become active after FYNX connects an approved provider and verifies payment notifications. No payment is started from this screen."
+                        }
                     )
                 }
             }
