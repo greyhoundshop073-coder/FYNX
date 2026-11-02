@@ -24,6 +24,8 @@ const checks = [
   ["campaign schedule requires valid start/end dates and a bounded 45-day window", advertising.includes("endsAt <= startsAt") && advertising.includes("45 * 24 * 60 * 60 * 1000")],
   ["artwork is stored as a FYNX media ID instead of an external URL", advertising.includes("artwork_media_id BIGINT") && advertising.includes("artworkMediaId === null") && !advertising.includes("artwork_url TEXT")],
   ["active scheduled artwork is authorized through the FYNX media privacy guard", mediaPrivacy.includes("marketplace_seasonal_promotions WHERE artwork_media_id=$1") && mediaPrivacy.includes("active=TRUE AND starts_at <= NOW() AND ends_at > NOW()")],
+  ["media privacy remains safe before the seasonal campaign table is provisioned", mediaPrivacy.includes("to_regclass('public.marketplace_seasonal_promotions')")],
+  ["Owner/Admin can only attach artwork uploaded by that same account", advertising.includes("message_media WHERE id=$1 AND owner_id=$2") && advertising.includes("seasonal artwork must be uploaded by the current Owner/Admin account")],
   ["seasonal public feed only returns active campaigns inside the scheduled window", advertising.includes("active=TRUE AND starts_at <= NOW() AND ends_at > NOW()")],
   ["paid sponsored campaign approval and payment checks remain separate", advertising.includes("c.payment_status = 'paid'") && advertising.includes("c.approved_at IS NOT NULL")],
   ["Android reads authenticated seasonal schedule feed", client.includes("/api/marketplace/seasonal-feed") && client.includes("FynxMarketplaceSeasonalPromotion")],
