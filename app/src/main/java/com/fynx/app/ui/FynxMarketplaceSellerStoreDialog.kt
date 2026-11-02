@@ -283,7 +283,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                             shape = RoundedCornerShape(10.dp)
                                         ) {
                                             Text(
-                                                if (award.rank == 1) "WINNER" else "TOP \${award.rank}",
+                                                if (award.rank == 1) "WINNER" else "TOP ${award.rank}",
                                                 Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
                                                 color = if (award.rank == 1) Color(0xFF1C2434) else MaterialTheme.colorScheme.onSurface,
                                                 style = MaterialTheme.typography.labelSmall,
