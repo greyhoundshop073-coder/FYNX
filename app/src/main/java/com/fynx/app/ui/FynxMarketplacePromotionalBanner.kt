@@ -306,6 +306,8 @@ private fun MarketplacePromotionalSlide(
     ) {
         Box(Modifier.fillMaxSize()) {
             val listing = slide.listing
+            val hasRemoteArtwork = listing?.mediaIds?.isNotEmpty() == true || !slide.artworkMediaId.isNullOrBlank()
+            val showBrandedFallback = !hasRemoteArtwork && !slide.isWeeklyWinner
             if (listing != null && listing.mediaIds.isNotEmpty()) {
                 val mediaUrl = remember(listing.id, listing.mediaIds.first()) {
                     FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())
@@ -345,12 +347,12 @@ private fun MarketplacePromotionalSlide(
                     Brush.horizontalGradient(
                         0f to Color(0xFF101D31).copy(alpha = 0.97f),
                         0.52f to Color(0xFF101D31).copy(alpha = 0.82f),
-                        1f to Color(0xFF101D31).copy(alpha = if (listing?.mediaIds?.isNotEmpty() == true) 0.18f else 0.58f)
+                        1f to Color(0xFF101D31).copy(alpha = if (hasRemoteArtwork) 0.18f else 0.58f)
                     )
                 )
             )
             Column(
-                modifier = Modifier.fillMaxWidth(0.78f).align(Alignment.CenterStart).padding(horizontal = 18.dp, vertical = 14.dp),
+                modifier = Modifier.fillMaxWidth(if (showBrandedFallback) 0.70f else 0.78f).align(Alignment.CenterStart).padding(horizontal = 18.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 Surface(
@@ -400,6 +402,31 @@ private fun MarketplacePromotionalSlide(
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
+                }
+            }
+            if (showBrandedFallback) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 18.dp)
+                        .size(92.dp)
+                        .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(46.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(10.dp)
+                            .background(Color(0xFF007FFF).copy(alpha = 0.24f), RoundedCornerShape(36.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Storefront,
+                            contentDescription = "FYNX Marketplace",
+                            tint = Color.White,
+                            modifier = Modifier.size(54.dp)
+                        )
+                    }
                 }
             }
             if (slide.listing == null && slide.isWeeklyWinner) {
