@@ -354,6 +354,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
 
   // Metrics ingestion is deliberately limited to active campaigns. Billing/spend remains server-owned.
   app.post("/api/advertising/campaigns/:id/metric", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
     const metric = req.body?.metric;
     if (!["impression", "click", "engagement", "conversion"].includes(metric)) return res.status(400).json({ error: "invalid metric" });
     const id = positiveInt(req.params.id);
@@ -365,7 +367,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         engagements = m.engagements + CASE WHEN $1='engagement' THEN 1 ELSE 0 END,
         conversions = m.conversions + CASE WHEN $1='conversion' THEN 1 ELSE 0 END,
         updated_at=NOW()
-        FROM marketplace_ad_campaigns c WHERE m.campaign_id=$2 AND c.id=m.campaign_id AND c.status='active' RETURNING m.*`, [metric, id]);
+        FROM marketplace_ad_campaigns c WHERE m.campaign_id=$2 AND c.id=m.campaign_id AND c.status='active' AND c.payment_status='paid' AND c.approved_at IS NOT NULL AND (c.starts_at IS NULL OR c.starts_at <= NOW()) AND (c.ends_at IS NULL OR c.ends_at > NOW()) AND c.spent_kobo < c.total_budget_kobo RETURNING m.*`, [metric, id]);
       if (!result.rowCount) return res.status(404).json({ error: "campaign not active" });
       return res.status(204).end();
     } catch { return res.status(500).json({ error: "unable to record metric" });
