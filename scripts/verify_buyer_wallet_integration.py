@@ -193,6 +193,40 @@ checks.extend([
   'sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]' in runtime),
 ])
 
+checks.extend([
+ ("hosted Wallet funding URLs are restricted to the authentic HTTPS Paystack checkout host",
+  'parsed.scheme.equals("https", ignoreCase = true)' in client
+  and 'parsed.host.equals("checkout.paystack.com", ignoreCase = true)' in client
+  and 'parsed.userInfo == null' in client
+  and 'parsed.port == -1 || parsed.port == 443' in client),
+ ("Wallet URL parser tests reject lookalike hosts and user-info URL tricks",
+  "checkout.paystack.com@attacker.example" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
+  and "https://attacker.example/session" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()),
+ ("authenticated emulator no longer leaves the Wallet top-up on an empty form",
+  "wallet_fill_amount_for_sandbox" in runtime
+  and 'input_text("1000")' in runtime
+  and 'input_text("fynx-wallet-ci@example.com")' in runtime
+  and 'control_is_enabled(ready, ["Continue to secure payment"])' in runtime),
+ ("Wallet-only sandbox runtime follows the Paystack-hosted card checkout and verifies the provider reference",
+  "FYNX_WALLET_SANDBOX_E2E" in runtime
+  and "checkout.paystack.com" in runtime
+  and "4084084084084081" in runtime
+  and '"Check payment status"' in runtime
+  and '"Test payment recorded"' in runtime
+  and "wallet_has_nonzero_available_balance" in runtime),
+ ("sandbox Wallet runtime only submits a simulated test card and keeps real money movement unavailable",
+  "TEST MODE" in runtime
+  and "FYNX_WALLET_SANDBOX_E2E=1" in runtime
+  and "no real-money payment or payout" in runtime
+  and "testMode" in client
+  and "canSpend: json.optBoolean(\"canSpend\", false) && !testMode" in client
+  and "canWithdraw: json.optBoolean(\"canWithdraw\", false) && !testMode" in client),
+ ("Wallet sandbox emulator and APK gates are enabled only for the dedicated verification branch",
+  "fix/wallet-sandbox-runtime-verification-20261102" in workflow
+  and workflow.count("github.event.pull_request.head.ref == 'fix/wallet-sandbox-runtime-verification-20261102'") >= 4
+  and "FYNX_WALLET_SANDBOX_E2E" in workflow
+  and "FYNX_MARKETPLACE_VISUALS_ONLY" in workflow)
+])
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
 if failed: raise SystemExit("FYNX buyer wallet Android integration failed: "+", ".join(failed))
