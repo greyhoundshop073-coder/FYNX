@@ -215,7 +215,7 @@ checks.extend([
   and '"Test payment recorded"' in runtime
   and "wallet_has_nonzero_available_balance" in runtime),
  ("sandbox Wallet runtime only submits a simulated test card and keeps real money movement unavailable",
-  "TEST MODE" in runtime
+  "NGN 1,000 Paystack test-card" in runtime
   and "FYNX_WALLET_SANDBOX_E2E=1" in runtime
   and "never a real-money payment or payout" in runtime
   and "testMode" in client
