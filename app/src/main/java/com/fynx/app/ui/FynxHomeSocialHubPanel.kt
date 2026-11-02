@@ -431,8 +431,18 @@ fun FynxHomeSocialHubPanel(
         selectedVisualIndex = selectedVisualIndex.coerceIn(0, (visualCount - 1).coerceAtLeast(0))
     }
 
+    fun cleanupTransientCameraEditSources(edits: Map<String, FynxCameraMediaDraftEdit> = cameraMediaEdits) {
+        val cachePrefix = runCatching { context.cacheDir.canonicalPath + java.io.File.separator }.getOrNull() ?: return
+        edits.values.forEach { edit ->
+            val path = edit.sourceUri.path ?: return@forEach
+            val canonical = runCatching { java.io.File(path).canonicalPath }.getOrNull() ?: return@forEach
+            if (canonical.startsWith(cachePrefix)) runCatching { java.io.File(canonical).delete() }
+        }
+    }
+
     fun removeCapturedUri(uri: Uri) {
         if (posting) return
+        cleanupTransientCameraEditSources(cameraMediaEdits.filterKeys { it == uri.toString() })
         capturedUris = capturedUris.filterNot { it == uri }
         cameraMediaEdits = cameraMediaEdits - uri.toString()
         recomputeTypes()
@@ -440,6 +450,7 @@ fun FynxHomeSocialHubPanel(
 
     fun clearComposer() {
         if (!posting) {
+            cleanupTransientCameraEditSources()
             showComposer = false
             showComposerPreview = false
             capturedUris = emptyList()
@@ -464,6 +475,7 @@ fun FynxHomeSocialHubPanel(
     }
 
     fun finishComposerAfterSuccess() {
+        cleanupTransientCameraEditSources()
         showComposer = false
         showComposerPreview = false
         capturedUris = emptyList()
@@ -487,6 +499,7 @@ fun FynxHomeSocialHubPanel(
     }
 
     fun restoreSavedPostDraft(draft: FynxLocalPostDraft) {
+        cleanupTransientCameraEditSources()
         text = draft.caption
         visibility = runCatching { FynxPostVisibility.valueOf(draft.visibility) }.getOrDefault(FynxPostVisibility.FRIENDS_ONLY)
         audience = runCatching { FynxPostAudience.valueOf(draft.audience) }.getOrDefault(FynxPostAudience.FRIENDS)
@@ -606,6 +619,7 @@ fun FynxHomeSocialHubPanel(
             onOpenAi = onOpenAi,
             onOpenCamera = {
                 if (!posting) {
+                    cleanupTransientCameraEditSources()
                     capturedUris = emptyList()
                     capturedTypes = emptyList()
                     cameraMediaEdits = emptyMap()
@@ -630,6 +644,7 @@ fun FynxHomeSocialHubPanel(
             onCreatePost = { showComposer = true; notice = null },
             onOpenFastCamera = {
                 if (!posting) {
+                    cleanupTransientCameraEditSources()
                     capturedUris = emptyList()
                     capturedTypes = emptyList()
                     cameraMediaEdits = emptyMap()
