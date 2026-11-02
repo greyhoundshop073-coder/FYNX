@@ -46,6 +46,8 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var actionLabel by remember { mutableStateOf("Explore Marketplace") }
     var artworkUri by remember { mutableStateOf<Uri?>(null) }
     var artworkMediaId by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
     val artworkPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             artworkUri = uri
@@ -59,8 +61,6 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var campaigns by remember { mutableStateOf<List<FynxMarketplaceSeasonalPromotion>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
 
     fun refresh() {
         scope.launch {
