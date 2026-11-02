@@ -269,16 +269,10 @@ internal fun verifyFynxVideoEditOutput(
     }
 
     val sourceDurationMs = durationMs(sourceFile)
-    val sampleTimeMs = textOverlays.firstOrNull { item ->
-        item.text.isNotBlank() && item.startMs < sourceDurationMs && item.endMs > 0L
-    }?.let { item ->
-        val start = item.startMs.coerceAtLeast(0L)
-        val end = item.endMs.coerceAtMost(sourceDurationMs)
-        start + ((end - start).coerceAtLeast(1L) / 2L)
-    } ?: sourceDurationMs.coerceAtMost(2_000L) / 2L
-
-    val sourceFrame = frameAt(sourceFile, sampleTimeMs)
-    val outputFrame = frameAt(outputFile, sampleTimeMs)
+    require(sourceDurationMs > 0L) { "Video export could not read the original clip duration." }
+    val styleSampleTimeMs = sourceDurationMs / 2L
+    val sourceFrame = frameAt(sourceFile, styleSampleTimeMs)
+    val outputFrame = frameAt(outputFile, styleSampleTimeMs)
     try {
         require(outputFrame.width > 0 && outputFrame.height > 0) {
             "Video export produced an invalid preview frame."
@@ -309,57 +303,72 @@ internal fun verifyFynxVideoEditOutput(
                 "The selected ${style.label} style did not visibly change the exported video."
             }
         }
-
-        val overlayToVerify = textOverlays.firstOrNull { item ->
-            item.text.isNotBlank() && item.startMs < sourceDurationMs && item.endMs > 0L
-        }
-        if (textOverlays.any { it.text.isNotBlank() }) {
-            require(overlayToVerify != null) {
-                "The selected video text has no visible interval inside this clip."
-            }
-            val item = overlayToVerify!!
-            val frameWidth = minOf(sourceFrame.width, outputFrame.width)
-            val frameHeight = minOf(sourceFrame.height, outputFrame.height)
-            val centerX = (item.x.coerceIn(0.04f, 0.96f) * frameWidth).toInt()
-            val centerY = (item.y.coerceIn(0.06f, 0.94f) * frameHeight).toInt()
-            val radiusX = (frameWidth * 0.42f * item.scale.coerceIn(0.55f, 2.4f)).toInt().coerceAtLeast(12)
-            val radiusY = (frameHeight * 0.16f * item.scale.coerceIn(0.55f, 2.4f)).toInt().coerceAtLeast(10)
-            val targetRed = android.graphics.Color.red(item.color)
-            val targetGreen = android.graphics.Color.green(item.color)
-            val targetBlue = android.graphics.Color.blue(item.color)
-
-            fun matchingTextPixels(frame: android.graphics.Bitmap): Int {
-                var matches = 0
-                val left = (centerX - radiusX).coerceAtLeast(0)
-                val right = (centerX + radiusX).coerceAtMost(frame.width - 1)
-                val top = (centerY - radiusY).coerceAtLeast(0)
-                val bottom = (centerY + radiusY).coerceAtMost(frame.height - 1)
-                var y = top
-                while (y <= bottom) {
-                    var x = left
-                    while (x <= right) {
-                        val pixel = frame.getPixel(x, y)
-                        if (android.graphics.Color.alpha(pixel) > 160 &&
-                            kotlin.math.abs(android.graphics.Color.red(pixel) - targetRed) < 90 &&
-                            kotlin.math.abs(android.graphics.Color.green(pixel) - targetGreen) < 90 &&
-                            kotlin.math.abs(android.graphics.Color.blue(pixel) - targetBlue) < 90
-                        ) matches++
-                        x++
-                    }
-                    y++
-                }
-                return matches
-            }
-
-            val sourceMatches = matchingTextPixels(sourceFrame)
-            val outputMatches = matchingTextPixels(outputFrame)
-            require(outputMatches >= sourceMatches + 8) {
-                "Video export did not visibly burn the text overlay into its selected time and position."
-            }
-        }
     } finally {
         sourceFrame.recycle()
         outputFrame.recycle()
+    }
+
+    val requestedTextOverlays = textOverlays.filter { it.text.isNotBlank() }
+    val verifiableTextOverlays = requestedTextOverlays.filter { item ->
+        val startMs = item.startMs.coerceAtLeast(0L)
+        startMs < sourceDurationMs && item.endMs > startMs
+    }
+    if (requestedTextOverlays.isNotEmpty()) {
+        require(verifiableTextOverlays.size == requestedTextOverlays.size) {
+            "The selected video text has no visible interval inside this clip."
+        }
+
+        verifiableTextOverlays.forEach { item ->
+            val startMs = item.startMs.coerceAtLeast(0L).coerceAtMost(sourceDurationMs - 1L)
+            val endMs = item.endMs.coerceAtMost(sourceDurationMs).coerceAtLeast(startMs + 1L)
+            val sampleTimeMs = startMs + ((endMs - startMs) / 2L)
+            val sourceTextFrame = frameAt(sourceFile, sampleTimeMs)
+            val outputTextFrame = frameAt(outputFile, sampleTimeMs)
+            try {
+                val frameWidth = minOf(sourceTextFrame.width, outputTextFrame.width)
+                val frameHeight = minOf(sourceTextFrame.height, outputTextFrame.height)
+                val centerX = (item.x.coerceIn(0.04f, 0.96f) * frameWidth).toInt()
+                val centerY = (item.y.coerceIn(0.06f, 0.94f) * frameHeight).toInt()
+                val overlayScale = item.scale.coerceIn(0.55f, 2.4f)
+                val radiusX = (frameWidth * 0.42f * overlayScale).toInt().coerceAtLeast(12)
+                val radiusY = (frameHeight * 0.16f * overlayScale).toInt().coerceAtLeast(10)
+                val targetRed = android.graphics.Color.red(item.color)
+                val targetGreen = android.graphics.Color.green(item.color)
+                val targetBlue = android.graphics.Color.blue(item.color)
+
+                fun matchingTextPixels(frame: android.graphics.Bitmap): Int {
+                    var matches = 0
+                    val left = (centerX - radiusX).coerceAtLeast(0)
+                    val right = (centerX + radiusX).coerceAtMost(frame.width - 1)
+                    val top = (centerY - radiusY).coerceAtLeast(0)
+                    val bottom = (centerY + radiusY).coerceAtMost(frame.height - 1)
+                    var y = top
+                    while (y <= bottom) {
+                        var x = left
+                        while (x <= right) {
+                            val pixel = frame.getPixel(x, y)
+                            if (android.graphics.Color.alpha(pixel) > 160 &&
+                                kotlin.math.abs(android.graphics.Color.red(pixel) - targetRed) < 90 &&
+                                kotlin.math.abs(android.graphics.Color.green(pixel) - targetGreen) < 90 &&
+                                kotlin.math.abs(android.graphics.Color.blue(pixel) - targetBlue) < 90
+                            ) matches++
+                            x++
+                        }
+                        y++
+                    }
+                    return matches
+                }
+
+                val sourceMatches = matchingTextPixels(sourceTextFrame)
+                val outputMatches = matchingTextPixels(outputTextFrame)
+                require(outputMatches >= sourceMatches + 8) {
+                    "Video export did not visibly burn the text overlay into its selected time and position."
+                }
+            } finally {
+                sourceTextFrame.recycle()
+                outputTextFrame.recycle()
+            }
+        }
     }
 }
 
