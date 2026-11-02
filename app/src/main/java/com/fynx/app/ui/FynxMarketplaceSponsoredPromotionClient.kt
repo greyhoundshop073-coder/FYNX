@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
 /** A paid campaign paired with its canonical Marketplace product listing. */
 data class FynxMarketplaceSponsoredPromotion(
@@ -13,6 +14,19 @@ data class FynxMarketplaceSponsoredPromotion(
 )
 
 object FynxMarketplaceSponsoredPromotionClient {
+    suspend fun recordMetric(context: Context, campaignId: String, metric: String): Result<Unit> {
+        val id = campaignId.toLongOrNull()
+            ?: return Result.failure(IllegalArgumentException("invalid sponsored campaign id"))
+        if (id <= 0L || metric !in setOf("impression", "click")) {
+            return Result.failure(IllegalArgumentException("invalid sponsored campaign metric"))
+        }
+        return FynxBackendClient.postJson(
+            context,
+            "/api/advertising/campaigns/$id/metric",
+            JSONObject().put("metric", metric).toString()
+        ).map { Unit }
+    }
+
     suspend fun load(context: Context): Result<List<FynxMarketplaceSponsoredPromotion>> =
         FynxBackendClient.get(context, "/api/advertising/marketplace-feed").mapCatching { raw ->
             val root = JSONObject(raw)
@@ -26,7 +40,7 @@ object FynxMarketplaceSponsoredPromotionClient {
                     val sellerUsername = listing.optString("sellerUsername").trim().removePrefix("@")
                     val title = listing.optString("title").trim()
                     val price = listing.optDouble("price", Double.NaN)
-                    val currency = listing.optString("currency").trim().uppercase()
+                    val currency = listing.optString("currency").trim().uppercase(Locale.US)
                     val quantity = listing.optInt("quantity", 0)
                     if (id.toLongOrNull()?.let { it > 0L } != true ||
                         campaignId.toLongOrNull()?.let { it > 0L } != true ||
