@@ -169,14 +169,10 @@ def main() -> int:
         back = find_click_target(current, "Back to Marketplace")
         if back:
             adb("shell", "input", "tap", str(back[0]), str(back[1]))
-            deadline = time.monotonic() + 8.0
-            while time.monotonic() < deadline:
-                time.sleep(0.4)
-                current = dump_ui("status-return-marketplace.xml") or current
-                if is_home(current) or find_click_target(current, "Home"):
-                    break
+            time.sleep(1.0)
+            current = dump_ui("status-return-marketplace.xml") or current
 
-        # Prefer the real visible Home tab when it exists.
+        # Use the visible Home tab, never guessed screen coordinates or app restarts.
         if not is_home(current):
             home = find_click_target(current, "Home")
             if home:
@@ -184,25 +180,9 @@ def main() -> int:
                 deadline = time.monotonic() + 18.0
                 while time.monotonic() < deadline:
                     time.sleep(0.5)
-                    current = dump_ui("status-return-home-tab.xml") or current
+                    current = dump_ui("status-return-home.xml") or current
                     if is_home(current):
                         break
-
-        # Feature panels such as Wallet can hide the bottom navigation. Use the
-        # app's registered Home deep link as the safe fallback; never force-stop
-        # the process or clear the authenticated session.
-        if not is_home(current):
-            adb(
-                "shell", "am", "start", "-W",
-                "-a", "android.intent.action.VIEW",
-                "-d", "fynx://home", PACKAGE
-            )
-            deadline = time.monotonic() + 22.0
-            while time.monotonic() < deadline:
-                time.sleep(0.5)
-                current = dump_ui("status-return-home-deeplink.xml") or current
-                if is_home(current):
-                    break
 
     if not FAILURES and is_home(current):
         screenshot("authenticated-status-home.png")
@@ -236,10 +216,7 @@ def main() -> int:
         if not is_home(returned):
             screenshot("status-after-dismiss-failed.png")
     elif not FAILURES:
-        FAILURES.append(
-            "The existing app session did not return to Home after the visible-tab and fynx://home recovery paths; "
-            "the last screen did not expose both the Status creator control and Home feed."
-        )
+        FAILURES.append("The existing app session could not be returned to Home without restarting it.")
 
     report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
     if FAILURES:
