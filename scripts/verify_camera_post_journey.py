@@ -380,10 +380,14 @@ checks.extend([
      'selectedCameraTool = "Looks"' in camera
      and 'selectedCameraTool = "Captions"' in camera
      and 'contentDescription = "Video captions"' in camera),
-    ("Instrumentation checks photo overlay intrinsic aspect ratio and rendered export pixels",
+    ("Instrumentation checks photo overlay intrinsic aspect ratio, source dimensions, separate positions and colours",
      'readFynxCameraMediaMetrics(Uri.fromFile(source), "image")' in overlay_test
      and "Overlay geometry uses the source photo aspect ratio" in overlay_test
-     and "Photo export did not burn the text overlay into the image" in overlay_test),
+     and "Photo export changed the source width" in overlay_test
+     and "Photo export changed the source height" in overlay_test
+     and "Photo export did not burn the first overlay colour near its selected top position" in overlay_test
+     and "Photo export did not burn the second overlay colour near its selected bottom position" in overlay_test
+     and "photoTextOverlayIsRenderedAtEachSelectedPositionAndKeepsSourceDimensions" in overlay_test),
     ("Photo text export requests a mutable ARGB bitmap before Canvas drawing",
      "inMutable = true" in overlay and "val canvas = Canvas(bitmap)" in overlay),
     ("Runtime exercises direct-on-media photo/video typing and video timing controls",
