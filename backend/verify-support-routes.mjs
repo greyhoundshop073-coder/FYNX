@@ -40,6 +40,10 @@ for (const contract of [
   "role === \"OWNER\"",
   "assigned_admin_id IS NULL",
   "Only the Owner can reopen a resolved case",
+  "Only the Owner can manage a resolved case",
+  "FOR UPDATE",
+  "RETURNING id",
+  "verified=TRUE",
   "FOR UPDATE",
   "owned.rows[0].status === \"RESOLVED\"",
   "owned.rows[0].assigned_admin_id",
@@ -80,6 +84,8 @@ assert.ok(androidUi.includes("Attach screenshot") && androidUi.includes("Support
   "Android must support screenshot attachment and private viewing");
 assert.ok(androidUi.includes("Problem description") && androidUi.includes("Case activity"),
   "Admin support case details must show the reporter's description and activity history");
+assert.ok(androidUi.includes("fun reloadCase(caseId: String)") && androidUi.includes("reloadCase(item.id)"),
+  "Admin case details must refresh after assignment, replies and status changes");
 assert.ok(androidUi.includes("Only the Owner can reopen this case"),
   "Resolved requester conversations must not offer a non-Owner reopen path");
 assert.ok(androidApp.includes('"Support" -> FynxUserSupportPanel') && androidApp.includes("onOpenSupport"),
