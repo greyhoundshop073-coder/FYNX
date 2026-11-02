@@ -65,6 +65,23 @@ async function ensureAdvertisingSchema() {
       UNIQUE (owner_id, idempotency_key, operation_type)
     );
     CREATE INDEX IF NOT EXISTS marketplace_ad_operations_campaign_idx ON marketplace_ad_operations(campaign_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS marketplace_seasonal_promotions (
+      id BIGSERIAL PRIMARY KEY,
+      occasion_key TEXT NOT NULL,
+      headline TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      action_label TEXT NOT NULL DEFAULT 'Explore Marketplace',
+      artwork_url TEXT,
+      starts_at TIMESTAMPTZ NOT NULL,
+      ends_at TIMESTAMPTZ NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_by BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (ends_at > starts_at)
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_seasonal_promotions_active_window_idx
+      ON marketplace_seasonal_promotions(active, starts_at, ends_at);
   `);
 }
 
@@ -95,6 +112,38 @@ function authenticate(req, res) {
     res.status(401).json({ error: "authentication required" });
     return null;
   }
+}
+
+async function marketplaceAdminRole(userId) {
+  if (!pool || !Number.isSafeInteger(Number(userId)) || Number(userId) < 1) return null;
+  const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
+  if (first && String(first.id) === String(userId)) return "OWNER";
+  const admin = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
+  return admin.rowCount ? "ADMIN" : null;
+}
+
+async function requireMarketplaceAdmin(req, res, auth) {
+  const role = await marketplaceAdminRole(auth.userId);
+  if (!role) {
+    res.status(403).json({ error: "Owner/Admin access required", code: "ADMIN_REQUIRED" });
+    return null;
+  }
+  return role;
+}
+
+function seasonalPromotionPayload(row) {
+  return {
+    id: String(row.id),
+    occasionKey: row.occasion_key,
+    headline: row.headline,
+    body: row.body || "",
+    actionLabel: row.action_label || "Explore Marketplace",
+    artworkUrl: row.artwork_url || "",
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    active: Boolean(row.active),
+    createdAt: row.created_at
+  };
 }
 
 function parseTargeting(value) {
@@ -162,6 +211,108 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
 
   app.use("/api/advertising", async (_req, _res, next) => {
     try { await ready(); next(); } catch { next(new Error("advertising service unavailable")); }
+  });
+
+  // Owner/Admin-managed seasonal promos support lunar and other variable-date occasions.
+  // They are separate from paid seller ads and are filtered by the server's live schedule.
+  app.get("/api/admin/marketplace/seasonal-promotions", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const role = await requireMarketplaceAdmin(req, res, auth);
+      if (!role) return;
+      const result = await pool.query("SELECT * FROM marketplace_seasonal_promotions ORDER BY starts_at DESC, id DESC LIMIT 100");
+      return res.json({ promotions: result.rows.map(seasonalPromotionPayload) });
+    } catch (error) {
+      console.error("[fynx-ads] seasonal admin list unavailable", error);
+      return res.status(500).json({ error: "seasonal promotion list unavailable" });
+    }
+  });
+
+  app.post("/api/admin/marketplace/seasonal-promotions", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const role = await requireMarketplaceAdmin(req, res, auth);
+      if (!role) return;
+      const occasionKey = typeof req.body?.occasionKey === "string" ? req.body.occasionKey.trim().toLowerCase() : "";
+      const headline = typeof req.body?.headline === "string" ? req.body.headline.trim() : "";
+      const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
+      const actionLabel = typeof req.body?.actionLabel === "string" ? req.body.actionLabel.trim() : "Explore Marketplace";
+      const artworkUrl = typeof req.body?.artworkUrl === "string" ? req.body.artworkUrl.trim() : "";
+      const startsAt = typeof req.body?.startsAt === "string" ? new Date(req.body.startsAt) : null;
+      const endsAt = typeof req.body?.endsAt === "string" ? new Date(req.body.endsAt) : null;
+      const active = req.body?.active !== false;
+      if (!/^[a-z0-9][a-z0-9_-]{1,59}$/.test(occasionKey)) return res.status(400).json({ error: "occasion key must use 2-60 letters, numbers, dashes or underscores" });
+      if (headline.length < 3 || headline.length > 120 || body.length > 500 || actionLabel.length < 2 || actionLabel.length > 48) {
+        return res.status(400).json({ error: "headline, body or action label is outside the allowed length" });
+      }
+      if (!(startsAt instanceof Date) || !Number.isFinite(startsAt.getTime()) || !(endsAt instanceof Date) || !Number.isFinite(endsAt.getTime()) || endsAt <= startsAt) {
+        return res.status(400).json({ error: "valid start and end dates are required; end must be after start" });
+      }
+      if (endsAt.getTime() - startsAt.getTime() > 45 * 24 * 60 * 60 * 1000) {
+        return res.status(400).json({ error: "seasonal promotion windows cannot exceed 45 days" });
+      }
+      if (artworkUrl && (!/^https:\/\/[^\s]+$/i.test(artworkUrl) || artworkUrl.length > 1500)) {
+        return res.status(400).json({ error: "artwork must be an HTTPS image URL" });
+      }
+      const result = await pool.query(
+        "INSERT INTO marketplace_seasonal_promotions (occasion_key,headline,body,action_label,artwork_url,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
+        [occasionKey, headline, body, actionLabel, artworkUrl || null, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
+      );
+      return res.status(201).json({ promotion: seasonalPromotionPayload(result.rows[0]) });
+    } catch (error) {
+      console.error("[fynx-ads] seasonal promotion create failed", error);
+      return res.status(500).json({ error: "seasonal promotion creation failed" });
+    }
+  });
+
+  app.patch("/api/admin/marketplace/seasonal-promotions/:id", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const role = await requireMarketplaceAdmin(req, res, auth);
+      if (!role) return;
+      const id = positiveInt(req.params.id);
+      if (!id || typeof req.body?.active !== "boolean") return res.status(400).json({ error: "valid promotion id and active flag are required" });
+      const result = await pool.query("UPDATE marketplace_seasonal_promotions SET active=$1, updated_at=NOW() WHERE id=$2 RETURNING *", [req.body.active, id]);
+      if (!result.rowCount) return res.status(404).json({ error: "seasonal promotion not found" });
+      return res.json({ promotion: seasonalPromotionPayload(result.rows[0]) });
+    } catch (error) {
+      console.error("[fynx-ads] seasonal promotion update failed", error);
+      return res.status(500).json({ error: "seasonal promotion update failed" });
+    }
+  });
+
+  app.delete("/api/admin/marketplace/seasonal-promotions/:id", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const role = await requireMarketplaceAdmin(req, res, auth);
+      if (!role) return;
+      const id = positiveInt(req.params.id);
+      if (!id) return res.status(400).json({ error: "invalid seasonal promotion id" });
+      const result = await pool.query("DELETE FROM marketplace_seasonal_promotions WHERE id=$1 RETURNING id", [id]);
+      if (!result.rowCount) return res.status(404).json({ error: "seasonal promotion not found" });
+      return res.status(204).end();
+    } catch (error) {
+      console.error("[fynx-ads] seasonal promotion delete failed", error);
+      return res.status(500).json({ error: "seasonal promotion delete failed" });
+    }
+  });
+
+  app.get("/api/marketplace/seasonal-feed", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const result = await pool.query(
+        "SELECT * FROM marketplace_seasonal_promotions WHERE active=TRUE AND starts_at <= NOW() AND ends_at > NOW() ORDER BY starts_at DESC, id DESC LIMIT 8"
+      );
+      return res.json({ promotions: result.rows.map(seasonalPromotionPayload) });
+    } catch (error) {
+      console.error("[fynx-ads] seasonal feed unavailable", error);
+      return res.status(500).json({ error: "seasonal promotion feed unavailable" });
+    }
   });
 
   app.post("/api/advertising/campaigns", async (req, res) => {
