@@ -229,3 +229,15 @@ This is the approved FYNX media-editor arrangement for the camera text-overlay w
 `Capture / Gallery → Media preview → Text / formatting → Position / resize → Photo or video export → Existing Status / Next post callback`
 
 Photo text is composited into the final image. Video text is rendered into the exported MP4; the editor must not hand off a preview-only overlay. Camera re-entry after Retake forces a fresh CameraX bind. The post-details runtime verifier scrolls the actual content viewport to lower rows rather than testing off-screen controls.
+
+
+## 13. Media text editor continuation — 2026-11-02
+
+- Scope remains photo/video text overlays only. The text-only Status composer is not modified.
+- Corrected the Media3 video overlay position conversion from top-left normalized editor coordinates to background-frame NDC. The editor's top edge maps to positive NDC Y; the media centre maps to zero. Instrumentation covers top-left, centre and bottom-right positions.
+- Added a video export frame check at an active overlay time. The verifier now checks that the MP4 has a readable video track, preserves source audio when present, and contains pixels matching the chosen overlay colour near its selected position/time. The editor passes the actual overlay list into this check.
+- Local post drafts now store both the final shareable media and a separate clean editable source, with JSON for each overlay's ID, text, normalized position, color, font, highlight, bold, alignment, scale and timing, plus the selected video style/manual caption. Draft loading restores the aligned source and edit state; save/update/delete/eviction also handle the source copies.
+- The existing post composer adds an **Add text to media / Edit text on media** action for attached photos/videos. It opens the same media editor with saved state, returns the rendered media to the existing composer, and does not alter the Status text composer.
+- External Gallery media is copied to an app-cache working file before the editor opens. CameraX is held unbound during that copy; a visible preparation state is shown, and a copy failure gives a safe Close path. Cancelled editing deletes temporary copies; successfully handed-off media remains available to the composer.
+- New instrumentation covers the overlay codec round trip and local draft save/list/delete source-and-state preservation. Runtime automation now adds a photo overlay before Next, saves/reopens the local post draft, opens the media text editor again, and checks that the overlay returns. It never presses Post or Status Send.
+- Compiler issues from the first follow-up run were corrected: mutable bitmap decode syntax and VideoView start receiver. Exact-head Android build/instrumentation/emulator certification is still required; do not mark the camera feature green, publish a release APK, or merge until all required checks pass on one head SHA.
