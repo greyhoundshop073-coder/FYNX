@@ -13,6 +13,7 @@ PACKAGE="com.fynx.app"
 USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1"
+FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
 LOGIN_MODE="server credential login"
@@ -1014,7 +1015,7 @@ def marketplace_product_card_target(xml_text: str):
             continue
         width, height = right - left, bottom - top
         # Exclude tiny buttons and full-screen containers; product/deal cards are larger.
-        if not (250 <= width <= 1200 and 220 <= height <= 1450):
+        if not (250 <= width <= 1400 and 220 <= height <= 1450):
             continue
         values = [
             (child.attrib.get("text") or "").strip()
@@ -1209,8 +1210,17 @@ def login():
         screenshot("authenticated-before-login-after-permission.png")
         if (xml and find_control(xml, ["Open FYNX camera"])
                 and find_control(xml, ["Chat"]) and find_control(xml, ["Friends"])):
-            LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
-            return xml, ""
+            if FORCE_LOCAL_VISUALS or not PASSWORD:
+                LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
+                return xml, ""
+            # A Home surface behind Android's permission dialog is not itself proof
+            # of authentication. Accept it for a credentialed run only when the
+            # encrypted server access-token key can be positively verified.
+            token_present=secure_access_token_persisted()
+            if token_present is True:
+                LOGIN_MODE="existing server-authenticated session (encrypted token verified)"
+                return xml, ""
+            return xml, "Home was visible behind the permission dialog, but the encrypted server access token was not verifiably present"
     sign_in_gate=find_control(xml,["Sign In"])
     if not sign_in_gate: return xml,"authentication gate was not visible"
     _,x,y=sign_in_gate; run("adb","shell","input","tap",str(x),str(y))
@@ -1237,14 +1247,16 @@ def login():
         find_control(xml,["Saved-device login for this debug APK"])
         or (VISUALS_ONLY and find_control(xml,["Leave password blank for quick local entry"]))
     )
-    if debug_entry_visible:
+    # A supplied CI password is an explicit request for a server-authenticated
+    # session. Never choose the passwordless debug shortcut ahead of credentials.
+    if debug_entry_visible and (not PASSWORD or FORCE_LOCAL_VISUALS):
         LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
         home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
         if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
             return home_xml,""
         return home_xml or xml,"debug-only UI entry did not reach Home"
-    if VISUALS_ONLY and not PASSWORD:
-        return xml,"the passwordless debug-only entry was not visible; refusing to submit a server login without credentials"
+    if VISUALS_ONLY and (not PASSWORD or FORCE_LOCAL_VISUALS):
+        return xml,"the explicitly selected local visual entry was not visible; refusing to submit server credentials in local-only mode"
     pass_control=find_control(xml,["Password"])
     if not pass_control:
         fields=find_edit_fields(xml)
@@ -1333,23 +1345,67 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
+def is_server_login_gate(xml_text:str)->bool:
+    """Treat a screen as the login gate only when all three login controls are visible."""
+    return bool(
+        find_control(xml_text, ["Sign In"])
+        and find_control(xml_text, ["Username"])
+        and find_control(xml_text, ["Password"])
+    )
+
+
+def is_authenticated_home_surface(xml_text:str)->bool:
+    """Require Home-only content; Friends' 'Search username or name' is not Home."""
+    return bool(
+        find_control(xml_text, ["Open FYNX camera"])
+        and find_control(xml_text, ["Your feed"])
+    )
+
+
 def restore_home_after_restart(name:str)->str:
-    """Restart Home and restore the approved debug-only local UI session when needed."""
-    run("adb","shell","am","force-stop",PACKAGE)
+    """Return to the actual authenticated Home surface without killing the app process."""
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2.5)
-    current=dismiss_runtime_permission_prompt() or dump_ui(name+"-initial.xml")
-    if find_control(current,["Sign In"]):
-        # This app intentionally keeps its debug-only saved-device UI session local.
-        # Restore it through the existing test path after process death; never alter
-        # production authentication or report a sign-in gate as a Chat/Groups failure.
-        current,error=login()
-        if error:
-            FAILURES.append(name+": could not restore Home after app restart: "+error)
+    deadline=time.monotonic()+22.0
+    current=""
+    while time.monotonic()<deadline:
+        current=dump_ui(name+"-wait.xml") or current
+
+        # Never accept a generic Friends/Chat bottom-navigation marker as proof that
+        # the Home route completed. Wait for controls that exist on the Home feed.
+        if is_authenticated_home_surface(current):
             return current
-    if find_control(current,["Sign In"]) or find_control(current,["Username"]):
-        FAILURES.append(name+": restart remained at the sign-in gate")
-        return current
+
+        # A username search field exists on Friends. Require the complete sign-in
+        # form before attempting a fresh credential login.
+        if is_server_login_gate(current):
+            current,error=login()
+            if error:
+                FAILURES.append(name+": credential recovery was required but failed: "+error)
+                return current
+            if is_authenticated_home_surface(current):
+                return current
+            FAILURES.append(
+                name+": credential login returned without the authenticated Home feed; visible markers: "
+                + visible_marker_summary(current)
+            )
+            return current
+
+        # Dismiss only Android's actual notification-permission dialog. Do not return
+        # early just because the currently visible screen contains Chat/Friends tabs.
+        if "com.google.android.permissioncontroller" in current:
+            permission_action=find_control(current,["Don’t allow","Don't allow"])
+            if permission_action:
+                _,px,py=permission_action
+                run("adb","shell","input","tap",str(px),str(py))
+                time.sleep(.5)
+                continue
+
+        time.sleep(.5)
+
+    FAILURES.append(
+        name+": Home deep link did not reach the authenticated Home feed within 22 seconds; last visible markers: "
+        + visible_marker_summary(current)
+    )
     return current
 
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
@@ -1368,6 +1424,30 @@ if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
     print("\n".join(report)); raise SystemExit(2)
 
+def secure_access_token_persisted()->bool|None:
+    """Check the encrypted token preference without ever reading or printing its value."""
+    prefs_file = "shared_prefs/fynx_secure_auth.xml"
+    # Invoke package-scoped commands directly. A nested shell can make adb argument
+    # quoting platform-dependent and cause a false missing-key result.
+    file_check = run("adb", "shell", "run-as", PACKAGE, "test", "-f", prefs_file)
+    file_diagnostic = (file_check.stdout or "").strip()
+    if file_check.returncode == 1 and not file_diagnostic:
+        return False
+    if file_check.returncode != 0:
+        return None
+
+    key_check = run(
+        "adb", "shell", "run-as", PACKAGE, "grep", "-q", "access_token", prefs_file
+    )
+    key_diagnostic = (key_check.stdout or "").strip()
+    if key_check.returncode == 0:
+        return True
+    if key_check.returncode == 1 and not key_diagnostic:
+        return False
+    # Distinguish an unavailable adb/run-as/grep probe from a genuinely absent key.
+    return None
+
+
 install=run("adb","install","-r","app/build/outputs/apk/debug/app-debug.apk")
 report.append(f"- APK install: {'PASS' if install.returncode==0 else 'FAIL'}")
 if install.returncode!=0:
@@ -1378,6 +1458,14 @@ if install.returncode!=0:
 # system dialog from intercepting taps intended for the real Marketplace surface.
 prepare_debug_visual_capture_permissions()
 xml,error=login()
+if not error and not VISUALS_ONLY and LOGIN_MODE != "server credential login":
+    error = "Wallet runtime certification requires a server-credential login; debug-only local UI entry does not authenticate with the backend."
+    FAILURES.append(error)
+if not error and not VISUALS_ONLY:
+    token_present=secure_access_token_persisted()
+    report.append("- Secure encrypted access-token key immediately after app login: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
+    if token_present is not True:
+        FAILURES.append("The encrypted access token was not verifiably persisted after real account login ("+("missing" if token_present is False else "probe unavailable") + ").")
 
 # Capture the Home glass surface in the same system dark mode as the supplied reference.
 # This is a read-only screenshot: preserve the actual feed/error state and never invent posts.
@@ -1532,47 +1620,95 @@ def wallet_destination_ready(xml_text: str) -> bool:
     )
 
 
+def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple[bool,str,str]:
+    """Read-only Wallet entry from the real Marketplace shortcut; return to Marketplace."""
+    wallet_xml=tap_control(
+        marketplace_xml, ["Wallet"], prefix+"-marketplace-wallet", ["FYNX Wallet"]
+    )
+    if not wallet_xml:
+        return False, "Marketplace Wallet shortcut did not open the Wallet destination.", marketplace_xml
+
+    deadline=time.monotonic()+20.0
+    latest=""
+    loading_markers=("Checking…", "Checking your wallet…", "Loading wallet activity…", "Loading…")
+    while time.monotonic()<deadline:
+        latest=dump_ui(prefix+"-marketplace-wallet-settled.xml")
+        if wallet_destination_ready(latest) and not any(marker in latest for marker in loading_markers):
+            screenshot("authenticated-wallet-marketplace-shortcut.png")
+            (ROOT/"authenticated-wallet-marketplace-shortcut.xml").write_text(
+                latest+chr(10), encoding="utf-8"
+            )
+            run("adb","shell","input","keyevent","KEYCODE_BACK")
+            back_xml=""
+            return_deadline=time.monotonic()+8.0
+            while time.monotonic()<return_deadline:
+                time.sleep(0.4)
+                back_xml=dump_ui(prefix+"-marketplace-return.xml") or back_xml
+                if back_xml and find_control(back_xml, ["Search products, sellers or categories"]):
+                    return True, "Marketplace -> Wallet shortcut opened and Wallet summary sections settled; Back returned to Marketplace.", back_xml
+            return False, "Wallet screen settled, but Back did not restore the Marketplace surface within 8 seconds.", back_xml or marketplace_xml
+        time.sleep(0.5)
+
+    screenshot(prefix+"-marketplace-wallet-incomplete.png")
+    (ROOT/(prefix+"-marketplace-wallet-incomplete.xml")).write_text(
+        (latest or "")+chr(10), encoding="utf-8"
+    )
+    run("adb","shell","input","keyevent","KEYCODE_BACK")
+    time.sleep(0.7)
+    back_xml=dump_ui(prefix+"-marketplace-return-after-timeout.xml")
+    return False, "Marketplace Wallet shortcut opened, but Wallet summary sections did not settle within 20 seconds.", back_xml or marketplace_xml
+
+
 def capture_wallet_from_features(prefix:str):
     """Open the real FYNX Wallet destination, capture it, and restore Home."""
     home_xml=restore_home_after_restart(prefix+"-home")
     if not home_xml:
         return False, "Home could not be restored for Wallet navigation."
 
+    # Prefer the existing Features search when it is genuinely reachable. If
+    # that navigation surface is unavailable in this runtime state, use the
+    # already-visible authenticated Marketplace -> Wallet shortcut instead.
     feature_xml=tap_control(
         home_xml, ["More","Features"], prefix+"-features", ["FYNX Features"]
     )
-    if not feature_xml:
-        restore_home_after_restart(prefix+"-return-home")
-        return False, "FYNX Features could not be opened."
+    wallet_entry_opened=False
+    if feature_xml:
+        search=find_control(feature_xml, ["Search FYNX tools"])
+        if search:
+            _,sx,sy=search
+            run("adb","shell","input","tap",str(sx),str(sy))
+            time.sleep(.3)
+            run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+            run("adb","shell","input","keyevent","KEYCODE_DEL")
+            typed=input_text("FYNX Wallet")
+            if typed.returncode == 0:
+                # Dismiss the IME, then re-read the actual UI hierarchy before tapping.
+                run("adb","shell","input","keyevent","KEYCODE_BACK")
+                time.sleep(.45)
+                feature_xml=dump_ui(prefix+"-wallet-search-keyboard-dismissed.xml")
+                target=find_wallet_feature_entry(feature_xml)
+                if target:
+                    wx,wy=target
+                    run("adb","logcat","-c")
+                    run("adb","shell","input","tap",str(wx),str(wy))
+                    wallet_entry_opened=True
 
-    search=find_control(feature_xml, ["Search FYNX tools"])
-    if not search:
-        restore_home_after_restart(prefix+"-return-home")
-        return False, "The FYNX Features search field was not available."
+    if not wallet_entry_opened:
+        marketplace_xml=tap_control(
+            home_xml, ["Marketplace"], prefix+"-marketplace", ["Search products, sellers or categories"]
+        )
+        if not marketplace_xml:
+            restore_home_after_restart(prefix+"-return-home")
+            return False, "Neither Features nor the authenticated Marketplace destination could be opened."
+        wallet_shortcut_xml=tap_control(
+            marketplace_xml, ["Wallet"], prefix+"-marketplace-wallet", ["FYNX Wallet"]
+        )
+        if not wallet_shortcut_xml:
+            screenshot(prefix+"-marketplace-wallet-shortcut-not-found.png")
+            restore_home_after_restart(prefix+"-return-home")
+            return False, "Marketplace opened, but its Wallet shortcut did not open the Wallet destination."
+        run("adb","logcat","-c")
 
-    _,sx,sy=search
-    run("adb","shell","input","tap",str(sx),str(sy))
-    time.sleep(.3)
-    run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
-    run("adb","shell","input","keyevent","KEYCODE_DEL")
-    typed=input_text("FYNX Wallet")
-    if typed.returncode != 0:
-        restore_home_after_restart(prefix+"-return-home")
-        return False, "FYNX Wallet search text could not be entered."
-
-    # Dismiss the IME, then re-read the actual UI hierarchy before tapping.
-    run("adb","shell","input","keyevent","KEYCODE_BACK")
-    time.sleep(.45)
-    feature_xml=dump_ui(prefix+"-wallet-search-keyboard-dismissed.xml")
-    target=find_wallet_feature_entry(feature_xml)
-    if not target:
-        screenshot(prefix+"-wallet-result-not-found.png")
-        restore_home_after_restart(prefix+"-return-home")
-        return False, "The non-editable FYNX Wallet result card was not exposed after dismissing the keyboard."
-
-    wx,wy=target
-    run("adb","logcat","-c")
-    run("adb","shell","input","tap",str(wx),str(wy))
     wallet_xml=""
     wallet_shell_opened=False
     wallet_settled=False
@@ -1610,12 +1746,14 @@ def capture_wallet_from_features(prefix:str):
         )
         if add_money_xml:
             (ROOT/"authenticated-wallet-add-money.xml").write_text(add_money_xml+chr(10),encoding="utf-8")
+            screenshot("authenticated-wallet-add-money.png")
             transfer_xml = tap_control(
                 add_money_xml, ["Dedicated bank transfer"], "wallet-bank-transfer",
                 ["Your dedicated FYNX funding account", "Dedicated account not ready"]
             )
             if transfer_xml:
                 (ROOT/"authenticated-wallet-bank-transfer.xml").write_text(transfer_xml+chr(10),encoding="utf-8")
+                screenshot("authenticated-wallet-bank-transfer.png")
                 add_money_return = tap_control(
                     transfer_xml, ["Back to Wallet"], "wallet-transfer-back",
                     ["Dedicated bank transfer"]
@@ -1627,6 +1765,7 @@ def capture_wallet_from_features(prefix:str):
                     )
                     if card_xml:
                         (ROOT/"authenticated-wallet-card.xml").write_text(card_xml+chr(10),encoding="utf-8")
+                        screenshot("authenticated-wallet-card.png")
                         add_money_after_card = tap_control(
                             card_xml, ["Back to Wallet"], "wallet-card-back",
                             ["Dedicated bank transfer"]
@@ -1638,6 +1777,7 @@ def capture_wallet_from_features(prefix:str):
                             )
                             if ussd_xml:
                                 (ROOT/"authenticated-wallet-ussd.xml").write_text(ussd_xml+chr(10),encoding="utf-8")
+                                screenshot("authenticated-wallet-ussd.png")
                                 add_money_after_ussd = tap_control(
                                     ussd_xml, ["Back to Wallet"], "wallet-ussd-back",
                                     ["Dedicated bank transfer"]
@@ -1654,6 +1794,7 @@ def capture_wallet_from_features(prefix:str):
                                         )
                                         if withdraw_xml:
                                             (ROOT/"authenticated-wallet-withdraw.xml").write_text(withdraw_xml+chr(10),encoding="utf-8")
+                                            screenshot("authenticated-wallet-withdraw.png")
                                             action_screens_captured = True
 
     # The runtime runner starts a separate Status creator check immediately after
@@ -1673,7 +1814,7 @@ def capture_wallet_from_features(prefix:str):
 # unrelated instrumentation test fails. This branch performs read-only navigation:
 # it never publishes a listing, changes inventory, creates an order, or initiates payment.
 if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
-    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace, My Shop and Wallet; no listing/order/payment mutations.")
+    report.append("- Capture scope: Marketplace, My Shop and Wallet only; no Home/Profile, Status/Stories, Chat/Groups or camera journeys; no listing/order/payment mutations.")
     if error:
         report += [
             "",
@@ -1693,12 +1834,11 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
     else:
         report.append("- Session: the existing login flow reached Home; live Marketplace data remains unverified unless its API loads successfully.")
 
-    # Verify the real camera and effect layout before navigating to Marketplace.
-    xml = capture_camera_post_journey(xml, "debug-camera")
-    if not xml or not find_control(xml, ["Open FYNX camera"]):
-        FAILURES.append("read-only camera/photo/video-effects journey did not return to Home")
+    # Keep this Phase 1 walk on its assigned surfaces. Use Home only as the
+    # authenticated entry point; do not launch camera, profile, social or Status journeys.
+    home_xml = dump_ui("marketplace-visual-home.xml") or xml
     marketplace_xml = tap_control(
-        xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
+        home_xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
     )
     if marketplace_xml:
         settled_xml, settle_state = wait_for_marketplace_settled(timeout=20.0)
@@ -1711,6 +1851,23 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             FAILURES.append("Marketplace discovery remained in loading state after 20 seconds")
         else:
             report.append(f"- PASS: captured the real Marketplace surface after it settled to: {settle_state}.")
+
+        if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
+            token_present=secure_access_token_persisted()
+            report.append("- Secure access-token key after Marketplace discovery: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
+            if token_present is not True:
+                FAILURES.append("The secure access token was not verifiably present before Marketplace buyer/seller navigation.")
+        wallet_shortcut_ok, wallet_shortcut_message, wallet_return_xml = capture_wallet_root_from_marketplace(
+            marketplace_xml, "marketplace-visual-wallet-shortcut"
+        )
+        if wallet_shortcut_ok:
+            report.append("- PASS: "+wallet_shortcut_message)
+            marketplace_xml=wallet_return_xml
+        else:
+            report.append("- BLOCKED: "+wallet_shortcut_message)
+            FAILURES.append("Marketplace -> Wallet shortcut: "+wallet_shortcut_message)
+            if wallet_return_xml and find_control(wallet_return_xml, ["Search products, sellers or categories"]):
+                marketplace_xml=wallet_return_xml
 
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
@@ -1735,7 +1892,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
 
         # Scroll the real Marketplace list to its sell action; do not fill or submit the form.
-        sell_labels = ["Sell something", "Start selling", "Sell your first product"]
+        sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]
         for attempt in range(6):
             if find_control(marketplace_xml, sell_labels):
                 break
@@ -1769,6 +1926,11 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             ["Your shop at a glance", "Manage your storefront", "Shop profile"]
         )
         if shop_xml:
+            if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
+                token_present=secure_access_token_persisted()
+                report.append("- Secure access-token key upon entering My Shop: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
+                if token_present is not True:
+                    FAILURES.append("The secure access token was not verifiably present before authenticated My Shop overview loaded.")
             shop_xml, overview_settled = wait_for_my_shop_section_settled("overview", timeout=20.0)
             if shop_xml:
                 screenshot("authenticated-marketplace-my-shop-overview.png")
@@ -2263,35 +2425,40 @@ def open_features(target_labels:list[str]|None=None):
             feature_xml=dump_ui(f"authenticated-features-{direction}.xml")
     return feature_xml if find_feature_entry(feature_xml,target_labels) else ""
 
-    features=open_features()
-    if features:
-        report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
-        journeys=(
-            ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
-            ("wallet",["FYNX Wallet"],["FYNX Wallet","Balance details","Reserved","Withdrawal pending"]),
-            ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
-        )
-        for name,labels,expected in journeys:
-            current=open_features(labels)
-            entry=find_feature_entry(current,labels)
-            if not current or not entry:
-                FAILURES.append("authenticated Features -> "+name)
-                continue
-            _,ex,ey=entry
-            run("adb","shell","input","tap",str(ex),str(ey))
-            time.sleep(1.2)
-            after=dump_ui(f"authenticated-{name}-destination.xml")
-            screenshot(f"authenticated-{name}.png")
-            if not after:
-                FAILURES.append("authenticated Features -> "+name)
-                continue
-            if name == "wallet" and not wallet_destination_ready(after):
-                FAILURES.append("authenticated Features -> Wallet did not expose the complete wallet summary surface")
-                continue
-            if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
-            else: FAILURES.append("authenticated Features -> "+name)
-    else: FAILURES.append("authenticated Home -> Features")
+features=open_features()
+if features:
+    screenshot("authenticated-features.png")
+    report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
+    journeys=(
+        ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
+        ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
+    )
+    for name,labels,expected in journeys:
+        current=open_features(labels)
+        entry=find_feature_entry(current,labels)
+        if not current or not entry:
+            FAILURES.append("authenticated Features -> "+name)
+            continue
+        _,ex,ey=entry
+        run("adb","shell","input","tap",str(ex),str(ey))
+        time.sleep(1.2)
+        after=dump_ui(f"authenticated-{name}-destination.xml")
+        screenshot(f"authenticated-{name}.png")
+        if not after:
+            FAILURES.append("authenticated Features -> "+name)
+            continue
+        if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
+        else: FAILURES.append("authenticated Features -> "+name)
+else: FAILURES.append("authenticated Home -> Features")
 
+# Open Wallet through the real authenticated feature search, wait for the API-backed
+# summary/activity to settle, and capture every read-only funding/withdrawal screen.
+wallet_captured, wallet_message = capture_wallet_from_features("authenticated-runtime-wallet")
+if wallet_captured:
+    report.append("- PASS: " + wallet_message)
+else:
+    report.append("- FAIL: " + wallet_message)
+    FAILURES.append("authenticated Wallet screen/action capture: " + wallet_message)
 # Certify the actual Marketplace destination in the same exact-commit APK.
 # This is a UI/runtime assertion only; the screen must remain navigable when the
 # live service is unavailable, and no sample listing data is fabricated.
@@ -2305,13 +2472,124 @@ marketplace_xml = tap_control(
 if marketplace_xml:
     screenshot("authenticated-marketplace.png")
     report.append("- PASS authenticated Home -> Marketplace search/cart surface screenshot/UI hierarchy")
+
+    # Independently exercise the Marketplace Wallet shortcut and verify Back restores Marketplace.
+    wallet_shortcut_captured, wallet_shortcut_message, marketplace_xml = capture_wallet_root_from_marketplace(
+        marketplace_xml, "authenticated-marketplace-wallet"
+    )
+    if wallet_shortcut_captured:
+        report.append("- PASS: " + wallet_shortcut_message)
+    else:
+        report.append("- FAIL: " + wallet_shortcut_message)
+        FAILURES.append("Authenticated Marketplace -> Wallet shortcut: " + wallet_shortcut_message)
+
+    # Continue in the same real, server-authenticated session into the private
+    # seller control center. This is read-only: do not save a shop profile,
+    # publish a listing, change inventory, assign a driver or create an order.
+    shop_xml = tap_control(
+        marketplace_xml,
+        ["My Shop"],
+        "marketplace-my-shop-overview",
+        ["Your shop at a glance", "Manage your storefront", "Shop profile"]
+    )
+    if shop_xml:
+        shop_xml, overview_settled = wait_for_my_shop_section_settled("overview", timeout=20.0)
+        if shop_xml:
+            screenshot("authenticated-marketplace-my-shop-overview.png")
+            (ROOT/"authenticated-marketplace-my-shop-overview.xml").write_text(
+                shop_xml + chr(10), encoding="utf-8"
+            )
+        if overview_settled:
+            report.append("- PASS authenticated Marketplace -> private My Shop overview settled and captured.")
+        else:
+            FAILURES.append("Authenticated My Shop overview did not settle within 20 seconds.")
+
+        shop_sections = [
+            ("profile", "Shop profile", ["Shop identity"]),
+            ("listings", "Listings", ["Your listings", "You have no active listings yet", "Retry loading listings", "Archived listings"]),
+            ("orders", "Orders", ["Review buyer orders, fulfillment progress, protected payment status"]),
+            ("delivery-drivers", "Delivery & drivers", ["Manage driver assignments and delivery coordination separately from order review and payout settings"]),
+            ("earnings-payouts", "Earnings & payouts", ["Marketplace earnings"]),
+        ]
+        current_shop_xml = shop_xml
+        for slug, label, expected in shop_sections:
+            control = find_control(current_shop_xml, [label])
+            # The tabs form a horizontal row. Reveal off-screen tabs with a real
+            # bounded swipe instead of assuming a coordinate or skipping a section.
+            for attempt in range(4):
+                if control:
+                    break
+                overview_control = find_control(current_shop_xml, ["Overview"])
+                tab_y = overview_control[2] if overview_control else 600
+                run("adb", "shell", "input", "swipe", "1270", str(tab_y), "230", str(tab_y), "450")
+                time.sleep(0.35)
+                current_shop_xml = dump_ui(
+                    "authenticated-marketplace-my-shop-tabs-" + slug + "-" + str(attempt) + ".xml"
+                ) or current_shop_xml
+                control = find_control(current_shop_xml, [label])
+            if not control:
+                FAILURES.append("Authenticated My Shop tab was not reachable: " + label)
+                continue
+            section_xml = tap_control(
+                current_shop_xml, [label], "marketplace-my-shop-" + slug, expected
+            )
+            if not section_xml:
+                FAILURES.append("Authenticated My Shop section did not open: " + label)
+                current_shop_xml = dump_ui(
+                    "authenticated-marketplace-my-shop-" + slug + "-after-attempt.xml"
+                ) or current_shop_xml
+                continue
+            section_xml, section_settled = wait_for_my_shop_section_settled(slug, timeout=20.0)
+            if section_xml:
+                screenshot("authenticated-marketplace-my-shop-" + slug + ".png")
+                (ROOT/("authenticated-marketplace-my-shop-" + slug + ".xml")).write_text(
+                    section_xml + chr(10), encoding="utf-8"
+                )
+                current_shop_xml = section_xml
+            if section_settled:
+                report.append("- PASS authenticated My Shop section settled and captured: " + label + ".")
+            else:
+                FAILURES.append("Authenticated My Shop section did not settle within 20 seconds: " + label)
+    else:
+        FAILURES.append("Authenticated Marketplace -> My Shop did not reach the private seller control center.")
 else:
     FAILURES.append("authenticated Home -> Marketplace")
-    
-report += ["","## Captured authenticated surfaces",
-           "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-wallet.png","- authenticated-ai.png","- authenticated-marketplace.png","",
-           f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+
+# This workflow certifies the current Wallet + Marketplace + My Shop phase.
+# Chat, Friends and Stories remain covered by their own workstream gates.
+expected_authenticated_surfaces = [
+    "authenticated-home.png",
+    "authenticated-features.png",
+    "authenticated-money.png",
+    "authenticated-wallet.png",
+    "authenticated-wallet-marketplace-shortcut.png",
+    "authenticated-wallet-add-money.png",
+    "authenticated-wallet-bank-transfer.png",
+    "authenticated-wallet-card.png",
+    "authenticated-wallet-ussd.png",
+    "authenticated-wallet-withdraw.png",
+    "authenticated-ai.png",
+    "authenticated-marketplace.png",
+    "authenticated-marketplace-my-shop-overview.png",
+    "authenticated-marketplace-my-shop-profile.png",
+    "authenticated-marketplace-my-shop-listings.png",
+    "authenticated-marketplace-my-shop-orders.png",
+    "authenticated-marketplace-my-shop-delivery-drivers.png",
+    "authenticated-marketplace-my-shop-earnings-payouts.png",
+]
+captured_authenticated_surfaces = [
+    name for name in expected_authenticated_surfaces if (ROOT / name).is_file()
+]
+missing_authenticated_surfaces = [
+    name for name in expected_authenticated_surfaces if not (ROOT / name).is_file()
+]
+if missing_authenticated_surfaces:
+    FAILURES.append(
+        "runtime report was missing real screenshot files: " + ", ".join(missing_authenticated_surfaces)
+    )
+report += ["", "## Captured authenticated surfaces"]
+report += [f"- {name}" for name in captured_authenticated_surfaces]
+report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
 print("\n".join(report))
