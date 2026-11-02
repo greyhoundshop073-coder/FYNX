@@ -11,9 +11,10 @@ status_gate = (ROOT / "scripts/verify_r5b_status.py").read_text(encoding="utf-8"
 
 checks = [
     (
-        "runtime check uses the live app session and does not force-stop or cold-start FYNX",
+        "runtime check preserves the live app process and uses only the registered Home VIEW deep link as fallback",
         'pidof' in runtime and 'refusing to cold-start' in runtime
-        and 'force-stop' not in runtime and 'am start' not in runtime,
+        and 'force-stop' not in runtime
+        and '"fynx://home"' in runtime and '"android.intent.action.VIEW"' in runtime,
     ),
     (
         "runtime check navigates from Marketplace/My Shop through visible controls to Home",
