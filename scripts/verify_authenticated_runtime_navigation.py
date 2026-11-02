@@ -429,13 +429,29 @@ def wallet_fill_amount_for_sandbox(add_money_xml: str, prefix: str) -> str:
     return latest
 
 
-def wallet_paystack_sandbox_checkout(card_xml: str, prefix: str) -> str:
+def wallet_has_nonzero_available_balance(xml_text: str) -> bool:
+    """Read the amount immediately following AVAILABLE BALANCE in the real Wallet hierarchy."""
+    labels = [((node.attrib.get("text") or "").strip()) for node in nodes(xml_text)]
+    for index, label in enumerate(labels):
+        if label.casefold() == "available balance":
+            for candidate in labels[index + 1:index + 4]:
+                if re.search(r"(?:₦\\s*|NGN\\s*)[1-9][0-9,]*(?:\\.[0-9]{2})?", candidate):
+                    return True
+            return False
+    return False
+
+
+def wallet_paystack_sandbox_checkout(card_xml: str, prefix: str, already_funded: bool = False) -> str:
     """Run one Paystack test-card journey on the isolated Railway testing backend only."""
     if os.environ.get("FYNX_WALLET_SANDBOX_E2E") != "1":
         return card_xml
 
-    # A test-mode balance already present is reused; do not create repeated test credits.
-    if re.search(r"(?<![0-9])(?:₦|NGN\\s*)1,?000(?:\\.00)?", card_xml):
+    # Reuse an existing confirmed nonzero Test Mode balance rather than creating repeated credits.
+    if already_funded:
+        (ROOT / (prefix + "-existing-test-balance.md")).write_text(
+            "A nonzero available balance was already visible; no second sandbox payment was created.\\n",
+            encoding="utf-8"
+        )
         return card_xml
 
     fields = find_edit_fields(card_xml)
@@ -1948,7 +1964,10 @@ def capture_wallet_from_features(prefix:str):
                     )
                     if card_xml:
                         if os.environ.get("FYNX_WALLET_SANDBOX_E2E") == "1":
-                            card_xml = wallet_paystack_sandbox_checkout(card_xml, "authenticated-wallet-sandbox")
+                            card_xml = wallet_paystack_sandbox_checkout(
+                                card_xml, "authenticated-wallet-sandbox",
+                                already_funded=wallet_has_nonzero_available_balance(wallet_xml)
+                            )
                         (ROOT/"authenticated-wallet-card.xml").write_text((card_xml or "")+chr(10),encoding="utf-8")
                         screenshot("authenticated-wallet-card.png")
                         add_money_after_card = tap_control(
@@ -1980,6 +1999,20 @@ def capture_wallet_from_features(prefix:str):
                                         if withdraw_xml:
                                             (ROOT/"authenticated-wallet-withdraw.xml").write_text(withdraw_xml+chr(10),encoding="utf-8")
                                             screenshot("authenticated-wallet-withdraw.png")
+                                            if os.environ.get("FYNX_WALLET_SANDBOX_E2E") == "1":
+                                                final_wallet_xml = tap_control(
+                                                    withdraw_xml, ["Back to Wallet"], "wallet-after-sandbox-back",
+                                                    ["Balance details", "AVAILABLE BALANCE"]
+                                                )
+                                                if final_wallet_xml:
+                                                    (ROOT/"authenticated-wallet-after-sandbox.xml").write_text(
+                                                        final_wallet_xml+chr(10),encoding="utf-8"
+                                                    )
+                                                    screenshot("authenticated-wallet-after-sandbox.png")
+                                                    if not find_control(final_wallet_xml, ["Wallet Test Mode"]):
+                                                        FAILURES.append("Wallet no longer displays the Test Mode boundary after funding.")
+                                                    if not wallet_has_nonzero_available_balance(final_wallet_xml):
+                                                        FAILURES.append("Wallet did not display a confirmed nonzero available Test Mode balance after funding.")
                                             action_screens_captured = True
 
     # The runtime runner starts a separate Status creator check immediately after
