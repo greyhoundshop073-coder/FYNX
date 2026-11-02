@@ -11,7 +11,7 @@ data class FynxMarketplaceSeasonalPromotion(
     val headline: String,
     val body: String,
     val actionLabel: String,
-    val artworkUrl: String,
+    val artworkMediaId: String,
     val startsAt: String,
     val endsAt: String,
     val active: Boolean
@@ -25,7 +25,7 @@ object FynxMarketplaceSeasonalPromotionClient {
             headline = value.optString("headline").trim(),
             body = value.optString("body").trim(),
             actionLabel = value.optString("actionLabel").trim().ifBlank { "Explore Marketplace" },
-            artworkUrl = value.optString("artworkUrl").trim(),
+            artworkMediaId = value.optString("artworkMediaId").trim(),
             startsAt = value.optString("startsAt"),
             endsAt = value.optString("endsAt"),
             active = value.optBoolean("active")
@@ -59,26 +59,28 @@ object FynxMarketplaceSeasonalPromotionClient {
             }
         }
 
+    suspend fun uploadArtwork(context: Context, uri: Uri): Result<String> {
+        val mime = context.contentResolver.getType(uri)?.trim()?.lowercase().orEmpty()
+        if (!mime.startsWith("image/")) return Result.failure(IllegalArgumentException("Seasonal artwork must be an image."))
+        return FynxProductionMessaging.uploadMedia(context, uri, mime).map { it.id }
+    }
+
     suspend fun create(
         context: Context,
         occasionKey: String,
         headline: String,
         body: String,
         actionLabel: String,
-        artworkUrl: String,
+        artworkMediaId: String,
         startsAt: String,
         endsAt: String
     ): Result<FynxMarketplaceSeasonalPromotion> {
-        val cleanUrl = artworkUrl.trim()
-        if (cleanUrl.isNotEmpty() && !Uri.parse(cleanUrl).scheme.equals("https", ignoreCase = true)) {
-            return Result.failure(IllegalArgumentException("Artwork link must use HTTPS."))
-        }
         val payload = JSONObject()
             .put("occasionKey", occasionKey.trim())
             .put("headline", headline.trim())
             .put("body", body.trim())
             .put("actionLabel", actionLabel.trim())
-            .put("artworkUrl", cleanUrl)
+            .put("artworkMediaId", artworkMediaId.trim().ifBlank { JSONObject.NULL })
             .put("startsAt", startsAt.trim())
             .put("endsAt", endsAt.trim())
             .put("active", true)
