@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const support = await readFile(new URL("./supportRoutes.js", import.meta.url), "utf8");
+const supportDbTests = await readFile(new URL("./test-support-routes-db.mjs", import.meta.url), "utf8");
 const bootstrap = await readFile(new URL("./serverBootstrap.js", import.meta.url), "utf8");
 const adminRoutes = await readFile(new URL("./adminRoutes.js", import.meta.url), "utf8");
 const androidClient = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxSupportRemoteClient.kt", import.meta.url), "utf8");
@@ -39,6 +40,11 @@ for (const contract of [
   "role === \"OWNER\"",
   "assigned_admin_id IS NULL",
   "Only the Owner can reopen a resolved case",
+  "FOR UPDATE",
+  "owned.rows[0].status === \"RESOLVED\"",
+  "owned.rows[0].assigned_admin_id",
+  "status === \"RESOLVED\" && visibility === \"PUBLIC\"",
+  "userIds.filter(value => value != null",
   "queueFynxNotification"
 ]) assert.ok(support.includes(contract), `support security or persistence contract missing: ${contract}`);
 
@@ -55,6 +61,12 @@ assert.ok(adminRoutes.includes("fynx_admin_roles"),
 assert.ok(adminRoutes.includes("FYNX_OFFICIAL_USERNAME") && adminRoutes.includes("lower(username)"),
   "Owner identity must resolve from the official FYNX account, not account creation order");
 for (const contract of [
+  "assigned case replies notify only the Owner and the assigned Admin",
+  "new unassigned cases notify the Owner and all active Admins",
+  "Admin cannot reopen a resolved case by sending a public reply",
+  "requester cannot bypass Owner-only reopening through a reply"
+]) assert.ok(supportDbTests.includes(contract), `missing support API regression test: ${contract}`);
+for (const contract of [
   "/api/support/cases",
   "/api/support/cases/mine",
   "/api/support/cases/",
@@ -66,6 +78,10 @@ assert.ok(androidUi.includes("FynxUserSupportPanel") && androidUi.includes("Fynx
   "Android must provide user and shared Admin support screens");
 assert.ok(androidUi.includes("Attach screenshot") && androidUi.includes("SupportAttachmentViewer"),
   "Android must support screenshot attachment and private viewing");
+assert.ok(androidUi.includes("Problem description") && androidUi.includes("Case activity"),
+  "Admin support case details must show the reporter's description and activity history");
+assert.ok(androidUi.includes("Only the Owner can reopen this case"),
+  "Resolved requester conversations must not offer a non-Owner reopen path");
 assert.ok(androidApp.includes('"Support" -> FynxUserSupportPanel') && androidApp.includes("onOpenSupport"),
   "Profile Help & Support must route into the case-based support screen");
 assert.ok(notificationModels.includes("SUPPORT") && notificationPanel.includes("FynxNotificationType.SUPPORT"),
