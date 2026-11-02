@@ -196,7 +196,7 @@ checks.extend([
  ("hosted Wallet funding URLs are restricted to the authentic HTTPS Paystack checkout host",
   'parsed.scheme.equals("https", ignoreCase = true)' in client
   and 'parsed.host.equals("checkout.paystack.com", ignoreCase = true)' in client
-  and 'parsed.userInfo == null' in client
+  and 'parsed.rawUserInfo == null' in client
   and 'parsed.port == -1 || parsed.port == 443' in client),
  ("Wallet URL parser tests reject lookalike hosts and user-info URL tricks",
   "checkout.paystack.com@attacker.example" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
