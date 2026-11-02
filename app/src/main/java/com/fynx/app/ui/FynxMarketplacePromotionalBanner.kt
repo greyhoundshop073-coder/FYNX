@@ -59,6 +59,7 @@ fun MarketplacePromotionalBanner(
     weeklySeller: FynxMarketplaceWeeklySeller?,
     weeklySellerListing: FynxRemoteSocialClient.MarketplaceListing?,
     sponsoredPromotions: List<FynxMarketplaceSponsoredPromotion>,
+    seasonalPromotions: List<FynxMarketplaceSeasonalPromotion>,
     onOpenListing: (FynxRemoteSocialClient.MarketplaceListing) -> Unit,
     onOpenSeller: (String) -> Unit,
     onShopNow: () -> Unit,
