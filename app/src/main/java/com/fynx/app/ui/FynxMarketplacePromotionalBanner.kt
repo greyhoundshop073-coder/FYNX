@@ -43,6 +43,7 @@ private data class MarketplacePromoSlide(
     val listing: FynxRemoteSocialClient.MarketplaceListing? = null,
     val sellerUsername: String? = null,
     val isWeeklyWinner: Boolean = false,
+    val isSponsored: Boolean = false,
     val celebration: Boolean = false
 )
 
@@ -52,6 +53,7 @@ fun MarketplacePromotionalBanner(
     sellerReputations: Map<String, FynxMarketplaceClient.SellerReputation>,
     weeklySeller: FynxMarketplaceWeeklySeller?,
     weeklySellerListing: FynxRemoteSocialClient.MarketplaceListing?,
+    sponsoredPromotions: List<FynxMarketplaceSponsoredPromotion>,
     onOpenListing: (FynxRemoteSocialClient.MarketplaceListing) -> Unit,
     onOpenSeller: (String) -> Unit,
     onShopNow: () -> Unit,
@@ -90,7 +92,7 @@ fun MarketplacePromotionalBanner(
         }
     }
     val celebration = remember(localDate) { marketplaceCelebrationFor(localDate) }
-    val slides = remember(weeklySeller, weeklySellerListing, featuredListings, celebration) {
+    val slides = remember(weeklySeller, weeklySellerListing, featuredListings, sponsoredPromotions, celebration) {
         buildList {
             if (weeklySeller != null) {
                 add(
@@ -115,6 +117,26 @@ fun MarketplacePromotionalBanner(
                         body = celebration.second.second,
                         actionLabel = "Explore Marketplace",
                         celebration = true
+                    )
+                )
+            }
+            sponsoredPromotions.take(3).forEach { promotion ->
+                val listing = promotion.listing
+                val seller = listing.sellerDisplayName.trim()
+                    .ifBlank { listing.storeName.trim() }
+                    .ifBlank { listing.sellerUsername.removePrefix("@").trim() }
+                val productFacts = "${listing.currency.trim().uppercase(Locale.US)} ${String.format(Locale.US, "%,.2f", listing.price)}  •  Sold by $seller"
+                val copy = promotion.body.ifBlank { productFacts }
+                add(
+                    MarketplacePromoSlide(
+                        key = "sponsored-${promotion.campaignId}",
+                        eyebrow = "SPONSORED",
+                        headline = promotion.headline.ifBlank { listing.title },
+                        body = if (copy == productFacts) copy else "$copy  •  $productFacts",
+                        actionLabel = "Shop now",
+                        listing = listing,
+                        sellerUsername = listing.sellerUsername,
+                        isSponsored = true
                     )
                 )
             }
@@ -277,7 +299,7 @@ private fun MarketplacePromotionalSlide(
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 Surface(
-                    color = if (slide.isWeeklyWinner) Color(0xFFD4AF37) else Color(0xFF007FFF),
+                    color = if (slide.isWeeklyWinner || slide.isSponsored) Color(0xFFD4AF37) else Color(0xFF007FFF),
                     shape = RoundedCornerShape(50)
                 ) {
                     Row(
@@ -288,7 +310,7 @@ private fun MarketplacePromotionalSlide(
                         if (slide.isWeeklyWinner) Icon(Icons.Default.EmojiEvents, null, tint = Color(0xFF172033), modifier = Modifier.size(15.dp))
                         Text(
                             slide.eyebrow,
-                            color = if (slide.isWeeklyWinner) Color(0xFF172033) else Color.White,
+                            color = if (slide.isWeeklyWinner || slide.isSponsored) Color(0xFF172033) else Color.White,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
