@@ -51,6 +51,14 @@ class FynxMarketplaceFeedCacheTest {
         assertNull(FynxMarketplaceFeedCache.read(second, "", "All", ""))
     }
 
+    @Test fun inactiveListingsAreNotRestoredFromTheStaleFeed() {
+        val context = accountContext("buyer-one")
+        FynxMarketplaceFeedCache.write(
+            context, "", "All", "", listOf(listing("inactive-listing").copy(active = false)), false
+        )
+        assertNull(FynxMarketplaceFeedCache.read(context, "", "All", ""))
+    }
+
     @Test fun promotionResponseCacheIsAlsoAccountScoped() {
         val first = accountContext("buyer-one")
         val second = accountContext("buyer-two")

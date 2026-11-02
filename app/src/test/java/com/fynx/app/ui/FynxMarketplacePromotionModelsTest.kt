@@ -2,6 +2,8 @@ package com.fynx.app.ui
 
 import java.time.Instant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -28,6 +30,26 @@ class FynxMarketplacePromotionModelsTest {
         grossDeliveredSales = gross,
         refundedAmount = refunded
     )
+
+    private fun seasonal(
+        startsAt: String,
+        endsAt: String,
+        active: Boolean = true
+    ) = FynxMarketplaceSeasonalPromotion(
+        id = "campaign-1", occasionKey = "test-season", headline = "Test seasonal promotion",
+        body = "Test", actionLabel = "Explore Marketplace", artworkMediaId = "",
+        startsAt = startsAt, endsAt = endsAt, active = active
+    )
+
+    @Test
+    fun seasonalPromotionsMustBeActiveAndInsideAValidTimeWindow() {
+        val now = Instant.parse("2026-11-02T12:00:00Z")
+        assertTrue(isMarketplaceSeasonalPromotionEligible(seasonal("2026-11-02T11:00:00Z", "2026-11-02T13:00:00Z"), now))
+        assertFalse(isMarketplaceSeasonalPromotionEligible(seasonal("2026-11-02T13:00:00Z", "2026-11-02T14:00:00Z"), now))
+        assertFalse(isMarketplaceSeasonalPromotionEligible(seasonal("2026-11-02T10:00:00Z", "2026-11-02T11:00:00Z"), now))
+        assertFalse(isMarketplaceSeasonalPromotionEligible(seasonal("invalid", "2026-11-02T13:00:00Z"), now))
+        assertFalse(isMarketplaceSeasonalPromotionEligible(seasonal("2026-11-02T10:00:00Z", "2026-11-02T13:00:00Z", active = false), now))
+    }
 
     @Test
     fun highestDeliveredPaidOrderCountWinsAndAdsAreNotAnInput() {

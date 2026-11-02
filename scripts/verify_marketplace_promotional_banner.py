@@ -12,6 +12,9 @@ SEASONAL_ADMIN = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeaso
 ANNOUNCEMENTS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text(encoding="utf-8")
 MEDIA_PRIVACY = (ROOT / "backend/mediaPrivacy.js").read_text(encoding="utf-8")
 REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf-8")
+FEED_CACHE = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceFeedCache.kt").read_text(encoding="utf-8")
+MARKETPLACE_RELOAD = PANEL[PANEL.index("    fun reload()"):PANEL.index("    fun loadMoreListings()")]
+PROMOTION_MODELS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionModels.kt").read_text(encoding="utf-8")
 
 checks = [
     ("Marketplace home uses the new full-width promotional banner", "MarketplacePromotionalBanner(" in PANEL and "weeklySeller = weeklySeller" in PANEL),
@@ -50,13 +53,15 @@ checks = [
 
 
     ("Marketplace first page is cached per account and exact search scope", "FynxMarketplaceFeedCache.read(context, requestQuery, requestCategory, cacheLocation)" in PANEL and "FynxMarketplaceFeedCache.write(" in PANEL and "FynxAuthStore.accountStorageKey(context)" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceFeedCache.kt").read_text(encoding="utf-8")),
-    ("cached Marketplace products render while the live request refreshes", "Showing saved products while FYNX checks for updates." in PANEL and "val cachedPage = FynxMarketplaceFeedCache.read(" in PANEL),
+    ("cached Marketplace products render while the live request refreshes", "Showing saved products while FYNX checks for updates." in PANEL and "FynxMarketplaceFeedCache.read(context, requestQuery, requestCategory, cacheLocation)" in PANEL),
+    ("stale Marketplace cache does not revive listings that are no longer active", "val active = row.optBoolean(\\"active\\", true)" in FEED_CACHE and "|| !active) continue" in FEED_CACHE and "active=active" in FEED_CACHE),
+    ("Marketplace browsing does not request order history until Orders is opened", "reloadOrders()" not in MARKETPLACE_RELOAD and "showOrders = true; reloadOrders()" in PANEL),
     ("failed refresh preserves saved products and warns that availability may have changed", "Showing saved products from your last visit." in PANEL and "product availability may have changed" in PANEL),
     ("filter changes do not show another search's products as matching results", "Never present another search/filter" in PANEL and "listings = listOfNotNull(pinned)" in PANEL),
     ("seller card details load in bounded parallel batches", "pending.chunked(4)" in PANEL and "reputationCall = async" in PANEL and "profileCall = async" in PANEL and ".awaitAll()" in PANEL),
     ("temporary seller metadata failures do not erase previously loaded details", "sellerReputations.filterKeys { it in visibleKeys } + reputationUpdates" in PANEL and "sellerPhotoIds.filterKeys { it in visibleKeys } + photoUpdates" in PANEL),
     ("seasonal promotions retain a last-known schedule for offline display", "writeResponse(context" in SEASONAL_CLIENT and "seasonal_promotions" in SEASONAL_CLIENT and "readResponse(" in SEASONAL_CLIENT),
-    ("cached seasonal promotions must still be within their scheduled time window", "val started = starts == null || !now.isBefore(starts)" in SEASONAL_CLIENT and "val notEnded = ends == null || now.isBefore(ends)" in SEASONAL_CLIENT and "promotion.active && started && notEnded" in SEASONAL_CLIENT),
+    ("cached seasonal promotions require valid timestamps and an active, in-window campaign", "isMarketplaceSeasonalPromotionEligible(promotion, now)" in SEASONAL_CLIENT and "starts.isBefore(ends) && !now.isBefore(starts) && now.isBefore(ends)" in PROMOTION_MODELS and "if (!promotion.active" in PROMOTION_MODELS),
 
     ("Marketplace listing cache serialization and parsing run off the UI thread", "withContext(Dispatchers.IO) { FynxMarketplaceFeedCache.read(" in PANEL and "withContext(Dispatchers.IO) {" in PANEL and "FynxMarketplaceFeedCache.write(context" in PANEL),
     ("public seller storefront fetches products, profile and shop identity concurrently", "coroutineScope {" in SELLER_STORE and "FynxProfileRemoteClient.get(context" in SELLER_STORE and "/api/marketplace/shops/" in SELLER_STORE),

@@ -1024,7 +1024,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
             }
             loading = false
-            reloadOrders()
         }
     }
 

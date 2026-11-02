@@ -57,8 +57,9 @@ internal object FynxMarketplaceFeedCache {
                 val seller = row.optString("sellerUsername").trim()
                 val price = row.optDouble("price", Double.NaN)
                 val currency = row.optString("currency").trim().uppercase(Locale.US)
+                val active = row.optBoolean("active", true)
                 if (id.isBlank() || title.isBlank() || seller.isBlank() || !price.isFinite() ||
-                    price <= 0.0 || currency !in setOf("NGN", "USD")) continue
+                    price <= 0.0 || currency !in setOf("NGN", "USD") || !active) continue
                 val media = row.optJSONArray("mediaIds") ?: JSONArray()
                 val mediaIds = buildList {
                     for (i in 0 until media.length()) media.optString(i).trim()
@@ -75,7 +76,7 @@ internal object FynxMarketplaceFeedCache {
                     location=row.optString("location"), deliveryAvailable=row.optBoolean("deliveryAvailable"),
                     pickupAvailable=row.optBoolean("pickupAvailable", true),
                     deliveryFee=if (row.isNull("deliveryFee")) null else row.optDouble("deliveryFee"),
-                    mediaIds=mediaIds, active=row.optBoolean("active", true), mediaTypes=mediaTypes
+                    mediaIds=mediaIds, active=active, mediaTypes=mediaTypes
                 ))
             }
         }

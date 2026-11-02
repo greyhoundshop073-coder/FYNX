@@ -25,6 +25,23 @@ internal data class MarketplaceWeeklySellerPerformance(
 }
 
 /**
+ * Rejects malformed or out-of-window seasonal promotions, including campaigns
+ * with missing timestamps. Cached campaign data must never revive an expired,
+ * not-yet-started or administratively disabled banner.
+ */
+internal fun isMarketplaceSeasonalPromotionEligible(
+    promotion: FynxMarketplaceSeasonalPromotion,
+    now: Instant
+): Boolean {
+    if (!promotion.active || promotion.id.isBlank() || promotion.occasionKey.isBlank() || promotion.headline.isBlank()) {
+        return false
+    }
+    val starts = runCatching { Instant.parse(promotion.startsAt) }.getOrNull() ?: return false
+    val ends = runCatching { Instant.parse(promotion.endsAt) }.getOrNull() ?: return false
+    return starts.isBefore(ends) && !now.isBefore(starts) && now.isBefore(ends)
+}
+
+/**
  * Returns a single winner only when the supplied reports describe the same
  * week and currency. Ranking is deterministic and uses delivered paid orders,
  * distinct buyers, then net delivered sales as tie-breakers.

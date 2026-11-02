@@ -56,13 +56,7 @@ object FynxMarketplaceSeasonalPromotionClient {
                 for (index in 0 until rows.length()) {
                     val row = rows.optJSONObject(index) ?: continue
                     val promotion = parsePromotion(row)
-                    val starts = runCatching { Instant.parse(promotion.startsAt) }.getOrNull()
-                    val ends = runCatching { Instant.parse(promotion.endsAt) }.getOrNull()
-                    val started = starts == null || !now.isBefore(starts)
-                    val notEnded = ends == null || now.isBefore(ends)
-                    if (promotion.active && started && notEnded &&
-                        promotion.id.isNotBlank() && promotion.occasionKey.isNotBlank() && promotion.headline.isNotBlank()
-                    ) add(promotion)
+                    if (isMarketplaceSeasonalPromotionEligible(promotion, now)) add(promotion)
                 }
             }
         }
