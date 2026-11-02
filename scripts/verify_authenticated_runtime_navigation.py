@@ -1824,12 +1824,11 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
     else:
         report.append("- Session: the existing login flow reached Home; live Marketplace data remains unverified unless its API loads successfully.")
 
-    # Verify the real camera and effect layout before navigating to Marketplace.
-    xml = capture_camera_post_journey(xml, "debug-camera")
-    if not xml or not find_control(xml, ["Open FYNX camera"]):
-        FAILURES.append("read-only camera/photo/video-effects journey did not return to Home")
+    # Keep this Phase 1 walk on its assigned surfaces. Use Home only as the
+    # authenticated entry point; do not launch camera, profile, social or Status journeys.
+    home_xml = dump_ui("marketplace-visual-home.xml") or xml
     marketplace_xml = tap_control(
-        xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
+        home_xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]
     )
     if marketplace_xml:
         settled_xml, settle_state = wait_for_marketplace_settled(timeout=20.0)
