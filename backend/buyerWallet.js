@@ -1136,7 +1136,17 @@ export function registerBuyerWalletRoutes({ app }) {
           }
           if (existing.status === 'SUCCEEDED') {
             await client.query('COMMIT');
-            return res.json({ status: 'SUCCEEDED', reference: existing.reference, amount: Number(existing.amount), idempotent: true });
+            return res.json({
+              status: 'SUCCEEDED',
+              reference: existing.reference,
+              amount: Number(existing.amount),
+              paymentMethod,
+              testMode: walletTestModeEnabled(),
+              message: walletTestModeEnabled()
+                ? 'TEST MODE: This simulated payment is already recorded in your test Wallet; the balance is not real and cannot be spent or withdrawn.'
+                : 'This payment has already been confirmed.',
+              idempotent: true
+            });
           }
           if (existing.status === 'PENDING' && existing.authorization_url) {
             await client.query('COMMIT');
@@ -1144,8 +1154,13 @@ export function registerBuyerWalletRoutes({ app }) {
               status: 'PENDING',
               reference: existing.reference,
               amount: Number(existing.amount),
+              paymentMethod,
               authorizationUrl: existing.authorization_url,
               accessCode: existing.access_code,
+              testMode: walletTestModeEnabled(),
+              message: walletTestModeEnabled()
+                ? 'TEST MODE: This simulated Paystack checkout is still pending. No test balance is credited until provider verification succeeds.'
+                : 'Continue through the secure Paystack checkout.',
               idempotent: true
             });
           }
