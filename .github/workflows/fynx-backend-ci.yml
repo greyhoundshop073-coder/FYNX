@@ -135,6 +135,8 @@ jobs:
         run: node test-buyer-wallet-schema.mjs
       - name: Verify Wallet runtime registration and webhook wiring
         run: node verify-wallet-runtime-registration.mjs
+      - name: Verify authenticated Marketplace seller earnings summary route
+        run: node verify-marketplace-seller-summary-route.mjs
       - name: Verify notification bootstrap is idempotent across retries
         run: node verify-notification-bootstrap-idempotency.mjs
       - name: Verify bounded media payload cache
