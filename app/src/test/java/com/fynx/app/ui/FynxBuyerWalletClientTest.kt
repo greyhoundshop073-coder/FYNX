@@ -115,12 +115,35 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
-    fun hostedWalletFundingSessionRejectsInvalidReferenceAndUnsafeUrl() {
+    fun hostedWalletFundingSessionAcceptsOnlyCanonicalHttpsPaystackCheckoutUrls() {
+        val session = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"https://checkout.paystack.com/session"}"""
+        )
+        assertEquals("https://checkout.paystack.com/session", session.authorizationUrl)
         assertThrows(IllegalArgumentException::class.java) {
             FynxBuyerWalletClient.parseWalletFundingSession(
-                """{"status":"PENDING","reference":"bad-ref","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"http://checkout.invalid"}"""
+                """{"status":"PENDING","reference":"bad-ref","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"http://checkout.paystack.com/session"}"""
             )
         }
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWalletFundingSession(
+                """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"https://checkout.paystack.com@attacker.example/session"}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWalletFundingSession(
+                """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"https://attacker.example/session"}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWalletFundingSession(
+                """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"https://checkout.paystack.com:8443/session"}"""
+            )
+        }
+    }
+
+    @Test
+    fun hostedWalletFundingSessionRejectsInvalidPaymentMethod() {
         assertThrows(IllegalArgumentException::class.java) {
             FynxBuyerWalletClient.parseWalletFundingSession(
                 """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":100.0,"paymentMethod":"WIRE"}"""
