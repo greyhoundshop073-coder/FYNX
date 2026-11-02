@@ -3,6 +3,9 @@ import { readFile } from "node:fs/promises";
 
 const reputation = await readFile(new URL("./marketplaceReputation.js", import.meta.url), "utf8");
 const marketplaceSchema = await readFile(new URL("./marketplaceSchema.js", import.meta.url), "utf8");
+const sellerStore = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt", import.meta.url), "utf8");
+const weeklyClient = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplaceWeeklySellerClient.kt", import.meta.url), "utf8");
+const panel = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt", import.meta.url), "utf8");
 const routeStart = reputation.indexOf("app.get('/api/marketplace/sellers/weekly'");
 const routeEnd = reputation.indexOf("app.get('/api/marketplace/sellers/:username/reputation'", routeStart);
 assert.ok(routeStart >= 0 && routeEnd > routeStart, "weekly seller endpoint must be registered before the username reputation route");
@@ -20,7 +23,13 @@ const checks = [
   ["paid advertising cannot influence weekly seller ranking", !route.includes("marketplace_ad_campaigns") && !route.includes("spent_kobo") && !route.includes("impressions")],
   ["existing individual seller reputation route remains registered", reputation.includes("app.get('/api/marketplace/sellers/:username/reputation'")],
   ["existing completed-order-only review guard remains intact", reputation.includes("if (order.status !== 'COMPLETED')")],
-  ["existing order/payment handler code remains in the reputation module", reputation.includes("verifyOrderPaymentAttempt") && reputation.includes("paystackRequest('/transaction/initialize'")]
+  ["existing order/payment handler code remains in the reputation module", reputation.includes("verifyOrderPaymentAttempt") && reputation.includes("paystackRequest('/transaction/initialize'")],
+  ["weekly awards have a persistent snapshot table and unique week/rank identity", marketplaceSchema.includes("CREATE TABLE IF NOT EXISTS marketplace_weekly_seller_awards") && marketplaceSchema.includes("PRIMARY KEY (week_start, weekly_rank)")],
+  ["history snapshots only cover closed Lagos weeks and only completed orders", reputation.includes("archiveClosedMarketplaceSellerWeeks") && reputation.includes("INTERVAL '1 week'") && reputation.includes("o.status = 'COMPLETED'") && reputation.includes("ON CONFLICT (week_start, weekly_rank) DO NOTHING")],
+  ["history endpoint is authenticated, username-filtered and limit-bounded", reputation.includes("app.get('/api/marketplace/sellers/weekly/history', auth") && reputation.includes("parseSeller(String(req.query.username))") && reputation.includes("Math.min(100, Math.max(1, requestedLimit))")],
+  ["Android weekly award history client calls the authenticated history route", weeklyClient.includes("/api/marketplace/sellers/weekly/history?username=") && weeklyClient.includes("FynxMarketplaceSellerWeeklyAward")],
+  ["seller storefront displays past verified weekly awards", sellerStore.includes("FynxMarketplaceWeeklySellerClient.history(context, username)") && sellerStore.includes("FYNX Seller Hall of Fame") && sellerStore.includes("Recognition is based on completed Marketplace orders")],
+  ["weekly history snapshots never use paid campaign metrics", !reputation.slice(reputation.indexOf("const archiveClosedMarketplaceSellerWeeks"), reputation.indexOf("app.get('/api/marketplace/sellers/:username/reputation'")).includes("marketplace_ad_campaigns")]
 ];
 
 for (const [name, ok] of checks) {
