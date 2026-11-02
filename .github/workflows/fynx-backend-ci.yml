@@ -109,6 +109,8 @@ jobs:
         run: node verify-marketplace-discovery-query.mjs
       - name: Verify hosted Wallet funding and Paystack sandbox gate
         run: node verify-wallet-hosted-funding.mjs
+      - name: Verify buyer Wallet ledger, ownership and capability gates
+        run: node verify-buyer-wallet-core.mjs
       - name: Verify Wallet runtime registration and webhook wiring
         run: node verify-wallet-runtime-registration.mjs
       - name: Verify notification bootstrap is idempotent across retries
