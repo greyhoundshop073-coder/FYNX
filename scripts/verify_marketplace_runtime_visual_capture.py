@@ -116,7 +116,7 @@ checks.extend([
         "live camera shutter and captured-photo editor controls reserve Android navigation-bar space",
         camera_source.count(".navigationBarsPadding()") >= 2
         and ".heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)" in camera_source
-        and ".heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.44f)" in camera_source
+        and '.heightIn(max = if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp else LocalConfiguration.current.screenHeightDp.dp * 0.44f)' in camera_source
         and camera_source.count("bottom = 84.dp") == 2
         and ".weight(1f).verticalScroll(rememberScrollState())" in camera_source
         and camera_source.count("onClick = ::applyVideoEdits") == 1
