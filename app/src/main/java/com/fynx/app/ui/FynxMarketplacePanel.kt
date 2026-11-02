@@ -888,6 +888,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var weeklySeller by remember(currentUsername) { mutableStateOf<FynxMarketplaceWeeklySeller?>(null) }
     var weeklySellerListing by remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var sponsoredPromotions by remember(currentUsername) { mutableStateOf<List<FynxMarketplaceSponsoredPromotion>>(emptyList()) }
+    var seasonalPromotions by remember(currentUsername) { mutableStateOf<List<FynxMarketplaceSeasonalPromotion>>(emptyList()) }
 
     fun reloadOrders() {
         scope.launch {
@@ -905,6 +906,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             FynxMarketplaceSponsoredPromotionClient.load(context)
                 .onSuccess { sponsoredPromotions = it }
             // Preserve already loaded paid campaigns if the feed request temporarily fails.
+        }
+    }
+
+    fun reloadSeasonalPromotions() {
+        scope.launch {
+            FynxMarketplaceSeasonalPromotionClient.load(context)
+                .onSuccess { seasonalPromotions = it }
+            // Retain the current schedule on transient failures; fixed-date fallbacks remain available.
         }
     }
 
@@ -1028,6 +1037,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     LaunchedEffect(currentUsername) {
         reloadWeeklySeller()
         reloadSponsoredPromotions()
+        reloadSeasonalPromotions()
     }
 
     LaunchedEffect(cartOwnerKey, cart, cartQuantities) {
@@ -1249,6 +1259,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             weeklySeller = weeklySeller,
                             weeklySellerListing = weeklySellerListing,
                             sponsoredPromotions = sponsoredPromotions,
+                            seasonalPromotions = seasonalPromotions,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onShopNow = { showAllProducts = true },
