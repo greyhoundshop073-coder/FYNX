@@ -8,6 +8,11 @@ const panel = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxM
 const client = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionClient.kt", import.meta.url), "utf8");
 const adminUi = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt", import.meta.url), "utf8");
 const adminCenter = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt", import.meta.url), "utf8");
+const seasonalFeedStart = advertising.indexOf('app.get("/api/marketplace/seasonal-feed"');
+const seasonalFeedEnd = advertising.indexOf('app.post("/api/advertising/campaigns"', seasonalFeedStart);
+const seasonalFeedRoute = seasonalFeedStart >= 0 && seasonalFeedEnd > seasonalFeedStart
+  ? advertising.slice(seasonalFeedStart, seasonalFeedEnd)
+  : "";
 
 const routes = [
   'app.get("/api/admin/marketplace/seasonal-promotions"',
@@ -35,7 +40,7 @@ const checks = [
   ["fixed-date fallback is suppressed when a matching admin schedule is active", banner.includes("seasonalPromotions.none { it.occasionKey.equals(celebration.first")],
   ["Owner/Admin center exposes the seasonal scheduler", adminCenter.includes("FynxMarketplaceSeasonalPromotionAdminPanel()")],
   ["scheduler uploads optional celebration artwork to authenticated FYNX media storage", adminUi.includes("Choose photo") && adminUi.includes("uploadArtwork(context, artworkUri!!)") && client.includes("FynxProductionMessaging.uploadMedia")],
-  ["seasonal schedules are independent of Best Seller scoring", !advertising.slice(advertising.indexOf('app.get("/api/marketplace/seasonal-feed"')).includes("marketplace_ad_metrics") && banner.includes("BEST SELLER OF THE WEEK")]
+  ["seasonal schedules are independent of Best Seller scoring", seasonalFeedRoute.length > 0 && !seasonalFeedRoute.includes("marketplace_ad_metrics") && banner.includes("BEST SELLER OF THE WEEK")]
 ];
 
 for (const [name, ok] of checks) {
