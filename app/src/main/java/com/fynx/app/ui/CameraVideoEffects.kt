@@ -161,7 +161,7 @@ internal suspend fun applyFynxVideoEdits(
             CameraVideoStyle.BLACK_AND_WHITE -> effects += RgbFilter.createGrayscaleFilter()
             CameraVideoStyle.VIVID -> effects += HslAdjustment.Builder().adjustSaturation(22f).adjustLightness(4f).build()
         }
-        val textEffects = mutableListOf<TextOverlay>()
+        val textEffects = mutableListOf<androidx.media3.effect.TextureOverlay>()
         val cleanCaption = captionText.trim().replace(Regex("\\s+"), " ")
         if (cleanCaption.isNotBlank()) {
             val retriever = MediaMetadataRetriever()

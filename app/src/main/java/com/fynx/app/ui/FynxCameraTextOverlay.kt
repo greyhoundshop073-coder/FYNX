@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -119,6 +120,7 @@ internal fun CameraTextOverlayLayer(
     BoxWithConstraints(modifier = modifier) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val heightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
+        val overlayTextMaxWidth = maxWidth * 0.84f
         overlays.forEach { overlay ->
             val editing = overlay.id == editingId
             if (overlay.text.isNotBlank() || editing) {
@@ -151,7 +153,7 @@ internal fun CameraTextOverlayLayer(
                             textStyle = textStyle,
                             cursorBrush = SolidColor(ComposeColor(overlay.color)),
                             modifier = Modifier
-                                .widthIn(min = 24.dp, max = maxWidth * 0.84f)
+                                .widthIn(min = 24.dp, max = overlayTextMaxWidth)
                                 .focusRequester(focusRequester)
                                 .then(
                                     if (overlay.backgroundColor != null) {
