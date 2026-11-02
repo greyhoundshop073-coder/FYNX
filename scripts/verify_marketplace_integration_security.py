@@ -13,12 +13,17 @@ seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeller
 privacy = (ROOT / "backend/mediaPrivacy.js").read_text()
 marketplace_privacy = (ROOT / "backend/marketplaceMediaPrivacy.js").read_text()
 discovery_routes = (ROOT / "backend/discoveryRoutes.js").read_text()
+social_routes = (ROOT / "backend/socialRoutes.js").read_text()
+ai_tools = (ROOT / "backend/fynxAiToolRegistry.js").read_text()
+r6g_routes = (ROOT / "backend/r6gIntegrationRoutes.js").read_text()
 completion = (ROOT / "backend/marketplaceCompletion.js").read_text()
 protection = (ROOT / "backend/marketplaceProtection.js").read_text()
 transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 
 checks = [
     ("Marketplace discovery pagination has a unique deterministic listing tie-breaker", "ORDER BY discovery_score DESC,l.created_at DESC,l.id DESC" in discovery_routes),
+    ("Marketplace discovery and fallback/storefront results exclude fully reserved products", "GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0" in discovery_routes and "GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) > 0" in social_routes),
+    ("Marketplace AI search and seller social-sharing exclude fully reserved products", "GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0" in ai_tools and "GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0" in r6g_routes),
 
     ("Marketplace uses the paginated backend discovery flow with nearby fallback", "FynxRemoteSocialClient.marketplaceDiscoveryPage" in panel and "FynxRemoteSocialClient.nearbyMarketplaceListings" in panel and "FynxRemoteSocialClient.listings" in panel),
     ("Marketplace keeps stable listing IDs in UI keys", ("items(listings, key = { it.id })" in panel or "gridItems(listings, key = { it.id })" in panel)),
