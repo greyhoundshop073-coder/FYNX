@@ -16,6 +16,7 @@ const checks = [
   ["seller ranking uses completed orders and unique buyers with deterministic tie-breakers", route.includes("COUNT(*)::INTEGER AS completed_orders") && route.includes("COUNT(DISTINCT o.buyer_id)") && route.includes("completed_orders DESC, unique_buyers DESC")],
   ["sellers without a live in-stock listing are excluded before rank assignment", route.includes("eligible_sellers AS") && route.includes("COALESCE(l.active, TRUE) = TRUE") && route.includes("GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0") && route.indexOf("eligible_sellers AS") < route.indexOf("ranked_sellers AS")],
   ["weekly response includes the real featured listing identity and product data", route.includes("featured_listing_id") && route.includes("featured_product_title") && route.includes("featured_product_price")],
+  ["weekly winner features the product with the strongest completed-order count that remains in stock", route.includes("weekly_product_sales AS") && route.includes("COUNT(*)::INTEGER AS completed_product_orders") && route.includes("ORDER BY COALESCE(p.completed_product_orders, 0) DESC")],
   ["paid advertising cannot influence weekly seller ranking", !route.includes("marketplace_ad_campaigns") && !route.includes("spent_kobo") && !route.includes("impressions")],
   ["existing individual seller reputation route remains registered", reputation.includes("app.get('/api/marketplace/sellers/:username/reputation'")],
   ["existing completed-order-only review guard remains intact", reputation.includes("if (order.status !== 'COMPLETED')")],
