@@ -3,6 +3,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 home = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt").read_text(encoding="utf-8")
 camera = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
+overlay = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraTextOverlay.kt").read_text(encoding="utf-8")
+overlay_test = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/CameraTextOverlayInstrumentationTest.kt").read_text(encoding="utf-8")
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt").read_text(encoding="utf-8")
 refresh = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt").read_text(encoding="utf-8")
 backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")
@@ -300,7 +302,8 @@ checks = [
      and 'Text("Take photo or video")' in home
      and "cameraOpenedFromComposer = true" in home and "showCamera = true" in home
      and "required_top = [\"Add description...\", \"# Hashtags\", \"@ Mention\", \"Edit cover\"]" in runtime
-     and "required_options = [\"Content disclosure and ads\", \"Location\", \"Add link\", \"More options\", \"Share to\", \"Post\"]" in runtime
+     and "camera_scroll_until_control" in runtime
+     and "post-details scroll area" in runtime
      and "local post Drafts saved captured media" in runtime
      and "no post was published" in runtime),
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
@@ -350,6 +353,45 @@ checks = [
      and "recorded video opened the existing Status composer with Send available; Send was not tapped" in runtime
      and "camera-video-status-close" in runtime),
 ]
+
+checks.extend([
+    ("While typing, the large media sheet collapses and a compact glass formatting toolbar sits above the keyboard",
+     "compact = true" in camera
+     and 'if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp' in camera
+     and "imePadding()" in camera
+     and "if (!compact) Row(" in overlay
+     and "if (!compact && isVideo && selected != null && videoDurationMs > 1L)" in overlay),
+    ("Media overlay geometry is anchored to intrinsic photo/video dimensions and preview crop mode",
+     "readFynxCameraMediaMetrics" in overlay and "mediaAspectRatio" in overlay
+     and "mediaWidthPx" in overlay and "mediaHeightPx" in overlay
+     and "centerCrop" in overlay and "centerCrop = previewType == \\"image\\"" in camera),
+    ("Video overlay timing uses the same source-of-truth interval in live preview and Media3 export",
+     "isFynxCameraTextOverlayVisibleAt" in overlay
+     and "playbackPositionMs" in overlay and "playbackPositionMs = if (previewType" in camera
+     and "Show from" in overlay and "Show until" in overlay),
+    ("Retake explicitly releases and rebinds CameraX and gates the shutter on ready use cases",
+     "Force a clean CameraX bind" in camera and "cameraReady = false" in camera
+     and "galleryRebindRequest += 1" in camera
+     and "cameraReady && (if (mode == CameraMode.PHOTO)" in camera),
+    ("Text editor provides a live accessible media typing surface and readable colour names",
+     'contentDescription = "Text on media"' in overlay and "Text colour" in overlay
+     and "cameraTextColorName" in overlay),
+    ("Video entry restores the separate manual captions field and Done returns from the overlay tools",
+     'selectedCameraTool = "Looks"' in camera
+     and 'selectedCameraTool = "Captions"' in camera
+     and 'contentDescription = "Video captions"' in camera),
+    ("Instrumentation checks photo overlay intrinsic aspect ratio and rendered export pixels",
+     'readFynxCameraMediaMetrics(Uri.fromFile(source), "image")' in overlay_test
+     and "Overlay geometry uses the source photo aspect ratio" in overlay_test
+     and "Photo export did not burn the text overlay into the image" in overlay_test),
+    ("Runtime exercises direct-on-media photo/video typing and video timing controls",
+     "FYNXoverlaytest" in runtime and "FYNXvideooverlay" in runtime
+     and "video text timing controls were not visible" in runtime),
+    ("More options is an accessible clickable row with viewport-aware runtime navigation",
+     'contentDescription = "More options"' in home
+     and "camera_scroll_until_control" in runtime
+     and "camera-post-more-options-row" in runtime),
+])
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

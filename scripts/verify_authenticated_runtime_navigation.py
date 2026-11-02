@@ -135,6 +135,54 @@ def nodes(xml_text:str):
     try: return list(ET.fromstring(xml_text).iter("node"))
     except ET.ParseError: return []
 
+
+def camera_scroll_until_control(xml_text: str, labels: list[str], prefix: str, max_swipes: int = 10) -> str:
+    """Scroll the real content viewport until a requested details row is on screen.
+
+    The post footer stays fixed while details rows move. Prefer accessibility scroll
+    bounds; use display-relative coordinates only when no scroll node exists.
+    """
+    latest = xml_text
+    previous_summary = None
+    stagnant = 0
+    for attempt in range(max_swipes):
+        if find_control(latest, labels):
+            return latest
+        candidates = []
+        for node in nodes(latest):
+            if node.attrib.get("scrollable", "false").lower() != "true":
+                continue
+            bounds = _node_bounds(node)
+            if not bounds:
+                continue
+            left, top, right, bottom = bounds
+            if right > left and bottom - top >= 180:
+                candidates.append(((right - left) * (bottom - top), left, top, right, bottom))
+        if candidates:
+            _, left, top, right, bottom = max(candidates, key=lambda item: item[0])
+            x = (left + right) // 2
+            inset = max(28, min(56, (bottom - top) // 12))
+            start_y, end_y = bottom - inset, top + inset
+        else:
+            size = run("adb", "shell", "wm", "size").stdout or ""
+            match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
+            if not match:
+                break
+            width, height = int(match.group(1)), int(match.group(2))
+            x = width // 2
+            start_y, end_y = int(height * 0.78), int(height * 0.36)
+        if start_y <= end_y:
+            break
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "450")
+        time.sleep(0.45)
+        latest = dump_ui(f"{prefix}-scroll-{attempt + 1}.xml") or latest
+        summary = visible_marker_summary(latest)
+        stagnant = stagnant + 1 if summary == previous_summary else 0
+        previous_summary = summary
+        if stagnant >= 2:
+            break
+    return latest
+
 def verify_post_details_footer_safe_area(xml_text: str, journey: str) -> bool:
     """Require the real Drafts/Post click targets to clear Android's bottom navigation area."""
     if not xml_text:
@@ -523,10 +571,10 @@ def camera_wait_for_video_export_idle(
         ]))
         editor_ready = (
             not processing
-            and find_control(latest, ["Apply style / captions"])
+            and find_control(latest, ["Apply text / effects"])
             and find_control(latest, ["Retake"])
             and find_control(latest, ["Next"])
-            and control_is_enabled(latest, ["Apply style / captions"])
+            and control_is_enabled(latest, ["Apply text / effects"])
         )
         if visible_error:
             return latest, False
@@ -1492,6 +1540,45 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 prefix + " photo editor before post handoff"
             )
 
+            # Direct-on-media text journey: the typing field is invisible apart from the cursor.
+            photo_text_xml = tap_control(
+                second_editor, ["Text"], f"{prefix}-camera-photo-text-tool", ["Text on media"]
+            )
+            if photo_text_xml:
+                text_field = find_control(photo_text_xml, ["Text on media"])
+                if text_field:
+                    _, tx, ty = text_field
+                    run("adb", "shell", "input", "tap", str(tx), str(ty))
+                    run("adb", "shell", "input", "text", "FYNXoverlaytest")
+                    typed_xml = ""
+                    overlay_deadline = time.monotonic() + 6.0
+                    while time.monotonic() < overlay_deadline:
+                        typed_xml = dump_ui(f"{prefix}-camera-photo-text-typing.xml") or typed_xml
+                        if "FYNXoverlaytest" in typed_xml:
+                            break
+                        time.sleep(0.4)
+                    screenshot(f"{prefix}-camera-photo-text-overlay-typing.png")
+                    if "FYNXoverlaytest" in typed_xml:
+                        report.append("- PASS photo text is typed directly over the media without a caption input box")
+                        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                        time.sleep(0.5)
+                        after_keyboard = dump_ui(f"{prefix}-camera-photo-text-keyboard-dismissed.xml") or typed_xml
+                        done_xml = tap_control(
+                            after_keyboard, ["Done"], f"{prefix}-camera-photo-text-done", ["Next"]
+                        )
+                        if done_xml and "FYNXoverlaytest" in done_xml:
+                            second_editor = done_xml
+                            report.append("- PASS photo overlay text remains on the media after Done")
+                            screenshot(f"{prefix}-camera-photo-text-overlay-ready.png")
+                        else:
+                            FAILURES.append(prefix + ": Done did not preserve the photo text overlay")
+                    else:
+                        FAILURES.append(prefix + ": direct-on-media photo typing did not retain the entered text")
+                else:
+                    FAILURES.append(prefix + ": photo Text tool did not expose the live typing surface")
+            else:
+                FAILURES.append(prefix + ": photo Text tool did not open")
+
             # Verify the left CTA enters the existing Status composer with this captured
             # asset preselected. This is a navigation hand-off only: Send is never tapped.
             story_xml = tap_control(
@@ -1627,19 +1714,22 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 else:
                     FAILURES.append(prefix + ": # Hashtags helper chip was not clickable")
 
-                # Scroll the same real details page to inspect the TikTok-style settings order.
-                run("adb", "shell", "input", "swipe", "540", "1700", "540", "850", "450")
-                time.sleep(0.6)
-                details_xml = dump_ui(f"{prefix}-camera-post-details-options.xml") or draft_xml
+                # The Add link test returns to the caption area. Scroll the real details
+                # viewport before checking its lower rows instead of tapping stale coordinates.
+                details_xml = camera_scroll_until_control(
+                    draft_xml, ["Location"], f"{prefix}-camera-post-location-row"
+                )
+                location_verified = bool(find_control(details_xml, ["Location"]))
+                details_xml = camera_scroll_until_control(
+                    details_xml, ["More options"], f"{prefix}-camera-post-more-options-row"
+                )
                 verify_post_details_footer_safe_area(details_xml, prefix + " post details scrolled viewport")
                 screenshot(f"{prefix}-camera-post-details-options.png")
                 (ROOT / f"{prefix}-camera-post-details-options.xml").write_text(
                     details_xml + chr(10), encoding="utf-8"
                 )
-                required_options = ["Content disclosure and ads", "Location", "Add link", "More options", "Share to", "Post"]
-                missing_options = [label for label in required_options if not find_control(details_xml, [label])]
-                if missing_options:
-                    FAILURES.append(prefix + ": post details options are missing " + ", ".join(missing_options))
+                if not location_verified:
+                    FAILURES.append(prefix + ": Location row was not reachable in the post-details scroll area")
 
                 disclosure_xml = tap_control(
                     details_xml, ["Content disclosure and ads"], f"{prefix}-camera-post-disclosure-open",
@@ -1726,6 +1816,9 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 else:
                     FAILURES.append(prefix + ": Add link row did not open its URL dialog")
 
+                details_xml = camera_scroll_until_control(
+                    details_xml, ["More options"], f"{prefix}-camera-post-more-options-reveal"
+                )
                 more_options_xml = tap_control(
                     details_xml, ["More options"], f"{prefix}-camera-post-more-options-open",
                     ["Tag people", "Feeling / Activity"]
@@ -1746,6 +1839,13 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                         FAILURES.append(prefix + ": More options dialog did not close on Done")
                 else:
                     FAILURES.append(prefix + ": More options dialog did not open from the post composer")
+                details_xml = camera_scroll_until_control(
+                    details_xml, ["Share to"], f"{prefix}-camera-post-share-to-row"
+                )
+                if not find_control(details_xml, ["Share to"]):
+                    FAILURES.append(prefix + ": Share to row was not reachable in the post-details scroll area")
+                if not find_control(details_xml, ["Post"]):
+                    FAILURES.append(prefix + ": sticky Post action was not visible after scrolling the details page")
                 # Drafts are local-only. Save once, reopen to prove persistence, then delete the
                 # test draft. The workflow never taps Post and never creates a remote social post.
                 drafts_xml = tap_control(
@@ -2064,8 +2164,13 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         run("adb", "shell", "input", "tap", str(field_x), str(field_y))
         time.sleep(0.6)
         run("adb", "shell", "input", "text", "FYNXcamcaptiontest")
-        time.sleep(0.5)
-        manual_keyboard_xml = dump_ui(f"{prefix}-camera-video-manual-caption-keyboard.xml")
+        manual_keyboard_xml = ""
+        caption_deadline = time.monotonic() + 6.0
+        while time.monotonic() < caption_deadline:
+            time.sleep(0.4)
+            manual_keyboard_xml = dump_ui(f"{prefix}-camera-video-manual-caption-keyboard.xml") or manual_keyboard_xml
+            if "FYNXcamcaptiontest" in manual_keyboard_xml:
+                break
         screenshot(f"{prefix}-camera-video-manual-caption-keyboard.png")
         if "FYNXcamcaptiontest" in manual_keyboard_xml:
             report.append("- PASS video editor accepts manually typed caption text")
@@ -2077,14 +2182,67 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         else:
             report.append("- NOTE keyboard visibility could not be independently read from the input-method service")
         run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-        time.sleep(0.8)
-        caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-dismissed.xml")
+        time.sleep(0.5)
+        caption_xml = ""
+        caption_deadline = time.monotonic() + 5.0
+        while time.monotonic() < caption_deadline:
+            caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-dismissed.xml") or caption_xml
+            if "FYNXcamcaptiontest" in caption_xml:
+                break
+            time.sleep(0.4)
         if "FYNXcamcaptiontest" in caption_xml:
             report.append("- PASS manually entered video caption survives keyboard dismissal")
         else:
             FAILURES.append(prefix + ": video caption text was lost after dismissing the keyboard")
         screenshot(f"{prefix}-camera-video-captions.png")
         editor = caption_xml
+
+    # Exercise video overlay typing and verify its duration-aware Show from/Show until controls.
+    video_text_xml = tap_control(
+        editor, ["Text"], f"{prefix}-camera-video-text-tool", ["Text on media"]
+    )
+    if video_text_xml:
+        video_text_xml = camera_wait_for_control(
+            video_text_xml, ["Text timing"], enabled=None, timeout=20.0,
+            prefix=f"{prefix}-camera-video-text-timing-ready"
+        )
+        if find_control(video_text_xml, ["Show from"]) and find_control(video_text_xml, ["Show until"]):
+            report.append("- PASS video text editor exposes Show from and Show until timing controls")
+        else:
+            FAILURES.append(prefix + ": video text timing controls were not visible after clip metadata loaded")
+        video_text_field = find_control(video_text_xml, ["Text on media"])
+        if video_text_field:
+            _, vx, vy = video_text_field
+            run("adb", "shell", "input", "tap", str(vx), str(vy))
+            run("adb", "shell", "input", "text", "FYNXvideooverlay")
+            typed_video = ""
+            overlay_deadline = time.monotonic() + 6.0
+            while time.monotonic() < overlay_deadline:
+                typed_video = dump_ui(f"{prefix}-camera-video-text-typing.xml") or typed_video
+                if "FYNXvideooverlay" in typed_video:
+                    break
+                time.sleep(0.4)
+            screenshot(f"{prefix}-camera-video-text-overlay-typing.png")
+            if "FYNXvideooverlay" in typed_video:
+                report.append("- PASS video text is typed directly over the clip")
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.5)
+                after_video_keyboard = dump_ui(f"{prefix}-camera-video-text-keyboard-dismissed.xml") or typed_video
+                done_video = tap_control(
+                    after_video_keyboard, ["Done"], f"{prefix}-camera-video-text-done",
+                    ["Apply text / effects"]
+                )
+                if done_video:
+                    editor = done_video
+                    report.append("- PASS video overlay remains editable after Done and is ready for export")
+                else:
+                    FAILURES.append(prefix + ": video text Done did not return to the editor export controls")
+            else:
+                FAILURES.append(prefix + ": direct-on-media video typing did not retain the entered text")
+        else:
+            FAILURES.append(prefix + ": video Text tool did not expose its live typing surface")
+    else:
+        FAILURES.append(prefix + ": video Text tool did not open")
 
     # Scroll vertically inside the actual video-editor viewport until the style row
     # is visible. A horizontal swipe at the caption field's old screen coordinate does
@@ -2126,13 +2284,13 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         editor = dump_ui(f"{prefix}-camera-video-style-selected.xml") or editor
 
     editor = camera_wait_for_control(
-        editor, ["Apply style / captions"], enabled=True, timeout=30.0,
+        editor, ["Apply text / effects"], enabled=True, timeout=30.0,
         prefix=prefix + "-camera-video-initial-apply"
     )
-    apply_button = find_control(editor, ["Apply style / captions"])
+    apply_button = find_control(editor, ["Apply text / effects"])
     processed_xml = ""
     export_completed = False
-    if not apply_button or not control_is_enabled(editor, ["Apply style / captions"]):
+    if not apply_button or not control_is_enabled(editor, ["Apply text / effects"]):
         FAILURES.append(prefix + ": enabled video style apply action was not reachable")
     else:
         _, ax, ay = apply_button
@@ -2192,7 +2350,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     ]:
         # Do not select another style while the previous export is still processing.
         current_editor = camera_wait_for_control(
-            editor, ["Apply style / captions"], enabled=True, timeout=150.0,
+            editor, ["Apply text / effects"], enabled=True, timeout=150.0,
             prefix=prefix + f"-camera-video-{slug}-ready"
         )
         style_node = find_control(current_editor, [style_label])
@@ -2210,11 +2368,11 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         time.sleep(0.6)
         current_editor = dump_ui(f"{prefix}-camera-video-{slug}-selected.xml") or current_editor
         current_editor = camera_wait_for_control(
-            current_editor, ["Apply style / captions"], enabled=True, timeout=20.0,
+            current_editor, ["Apply text / effects"], enabled=True, timeout=20.0,
             prefix=prefix + f"-camera-video-{slug}-apply-ready"
         )
-        apply_node = find_control(current_editor, ["Apply style / captions"])
-        if not apply_node or not control_is_enabled(current_editor, ["Apply style / captions"]):
+        apply_node = find_control(current_editor, ["Apply text / effects"])
+        if not apply_node or not control_is_enabled(current_editor, ["Apply text / effects"]):
             FAILURES.append(prefix + f": video style {style_label} did not expose an enabled Apply action: " + visible_marker_summary(current_editor))
             break
         _, apply_x, apply_y = apply_node

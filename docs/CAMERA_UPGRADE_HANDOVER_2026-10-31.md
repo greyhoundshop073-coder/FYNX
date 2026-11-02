@@ -145,6 +145,10 @@ Capture genuine emulator/device screenshots and UI hierarchy for:
 - The last successful/failed runtime outcomes are not evidence for the newest commits. Fresh exact-head CI and emulator screenshots are required before marking the camera flow green.
 
 ## 10. Change log
+- 2026-11-02: The Stage 2 editor layout gate now checks the conditional zero-height editor sheet during typing, the compact toolbar above the IME, and the extra navigation-inset surface instead of assuming one static editor-sheet height.
+- 2026-11-02: During live text entry, the large media-editor sheet collapses and a compact glass formatting toolbar sits above the keyboard. Video timing controls return after Done so the media remains visible while typing.
+
+- 2026-11-02: Grouped camera text-editor and runtime reliability pass: intrinsic-media overlay coordinates for crop/fit previews; playback-time visibility for video overlays; explicit CameraX readiness and forced rebind after Retake; manual video captions restored on video entry; accessible More options and caption controls; viewport-aware post-details scrolling; and real photo/video text-overlay runtime journeys. The Stage 2 Face FX source gate now locates the multiline shutter structurally and verifies the readiness gate rather than requiring the old one-line lambda syntax. Exact-head Android verification remains required.
 - 2026-10-31: Captured-media preview now uses a vertical translucent right-side tool rail for photo categories and Rotate, a glass Photo/Video preview chip, a shorter scrollable effect panel and a two-action Retake / Next footer. The Stage 2 verifier asserts the rail controls and safe-area layout; runtime screenshots must still prove the result.\n- 2026-10-31: Meaningful camera UI push: system-bar presentation on the actual Compose camera Dialog Window; translucent camera/editor panels, right control rail, effects tray and self-timer surface; Retake/Rotate/Next hand-off; redesigned existing post-details composer with attached-media preview, caption helpers, audience entry and sticky Post action; runtime selectors updated for Next. Follow-up root-cause correction removes parent-level `safeDrawing` padding from the camera Dialog canvas so its dark backdrop draws behind the status bar; controls keep their individual safe-area insets. Added a regression guard against reintroducing parent padding. CI and genuine emulator proof remain required. The existing composer/API does not yet provide persistent Drafts storage, content-disclosure fields, external-link fields or share-target routing, so those reference controls were not added as nonfunctional UI.
 - 2026-10-31: Initial investigation and handover map created from PR #403 changed-file list, camera source patches, workflow job logs and runtime report. Compared existing Status composer system-bar lifecycle as a camera fix lead.
 - 2026-10-31: Camera reference-style details flow, local account-scoped draft store, caption URL action, native caption sharing, honest unsupported disclosure/cover states, camera music chip and runtime/static guards implemented on PR #403. Source-guard compatibility fixes were added after Batch 5 and Batch 7 checks exposed expectations tied to the previous quick-action row. Do not treat these as green until fresh exact-head Actions and runtime evidence complete.
@@ -182,3 +186,46 @@ Capture genuine emulator/device screenshots and UI hierarchy for:
 - Add link runtime rejects malformed URL input, adds a valid HTTPS test URL, checks it remains in the caption and in the saved local draft, then deletes the test draft. The test URL and test caption are local-only and no Post/Send action is tapped.
 - Content disclosure information and More options are opened and dismissed in the runtime journey.
 - The current automation still does not exercise the native location picker or final audience changes, because those paths invoke live location or friends services; the runtime must not claim those interactions as passed without a usable test account and explicit fixtures.
+
+
+## Media text overlay layout and interaction map — 2026-11-02
+
+This is the approved FYNX media-editor arrangement for the camera text-overlay work. It is an original FYNX layout using current short-video editor interaction patterns, not a copied brand screen.
+
+```text
+┌──────────────────────────────────────────┐
+│ Back                                Done  │  safe-area header
+│                                          │
+│                                          │
+│              PHOTO / VIDEO               │
+│                                          │
+│          live text + insertion cursor    │  no input rectangle
+│                                          │
+│                               Looks      │
+│                               Face FX    │  compact right rail
+│                               Background │
+│                               AI Studio  │
+│                               Text       │
+│                                          │
+├──────────────────────────────────────────┤
+│ TEXT EDIT TOOLS                           │  compact bottom tray
+│ colour swatches · font family             │
+│ highlight · bold · alignment · delete     │
+│                                          │
+│ VIDEO ONLY: Show from / Show until        │
+├──────────────────────────────────────────┤
+│ Android keyboard (typing state)           │
+└──────────────────────────────────────────┘
+```
+
+### State and behaviour contract
+- The media itself is the canvas. Text entry is a decoration-free field with only the text and insertion cursor; the feed description field is not reused.
+- Overlay x/y are normalized against the intrinsic photo/video frame. Preview mapping accounts for photo center-crop and video fit/letterbox geometry so text does not shift between preview and export.
+- While a video plays, each overlay is shown only inside its configured start-inclusive/end-exclusive time interval. The same timing helper drives preview visibility and Media3 export.
+- Done closes the keyboard but retains the overlay. Tapping a saved overlay edits it; dragging moves it; pinch gestures resize it; Add text creates an independent overlay; Delete removes only the selected overlay.
+- Media preview and editor tools remain separate from the post description, Status text composer, and text-only Status publishing flow.
+
+### Navigation and publish flow
+`Capture / Gallery → Media preview → Text / formatting → Position / resize → Photo or video export → Existing Status / Next post callback`
+
+Photo text is composited into the final image. Video text is rendered into the exported MP4; the editor must not hand off a preview-only overlay. Camera re-entry after Retake forces a fresh CameraX bind. The post-details runtime verifier scrolls the actual content viewport to lower rows rather than testing off-screen controls.

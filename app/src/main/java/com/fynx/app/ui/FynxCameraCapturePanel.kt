@@ -569,8 +569,10 @@ fun FynxCameraCapturePanel(
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
     var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
     var pendingType by remember { mutableStateOf<String?>(null) }
+    var cameraReady by remember { mutableStateOf(false) }
     var cameraTextOverlays by remember { mutableStateOf<List<FynxCameraTextOverlay>>(emptyList()) }
     var cameraVideoDurationMs by remember { mutableLongStateOf(0L) }
+    var cameraMediaAspectRatio by remember { mutableFloatStateOf(9f / 16f) }
     var selectedTextOverlayId by remember { mutableStateOf<String?>(null) }
     var editingTextOverlayId by remember { mutableStateOf<String?>(null) }
     var videoEditsApplied by remember { mutableStateOf(false) }
@@ -610,19 +612,13 @@ fun FynxCameraCapturePanel(
     }
     LaunchedEffect(pendingUri, pendingType) {
         cameraVideoDurationMs = 0L
+        cameraMediaAspectRatio = 9f / 16f
         val uri = pendingUri
-        if (uri != null && (pendingType == "video" || pendingType == "video_note")) {
-            cameraVideoDurationMs = withContext(Dispatchers.IO) {
-                val retriever = MediaMetadataRetriever()
-                try {
-                    retriever.setDataSource(uri.path ?: error("Video file unavailable"))
-                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
-                } catch (_: Exception) {
-                    0L
-                } finally {
-                    runCatching { retriever.release() }
-                }
-            }
+        val type = pendingType
+        if (uri != null && type != null) {
+            val metrics = withContext(Dispatchers.IO) { readFynxCameraMediaMetrics(uri, type) }
+            cameraVideoDurationMs = metrics.durationMs
+            cameraMediaAspectRatio = metrics.aspectRatio
         }
     }
     fun updateCameraTextOverlay(updated: FynxCameraTextOverlay) {
@@ -748,6 +744,7 @@ fun FynxCameraCapturePanel(
     // The self-timer uses one cancellable job so the visible countdown and shutter cannot drift apart.
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled, galleryRebindRequest) {
         val generation = bindGeneration + 1; bindGeneration = generation
+        cameraReady = false
         if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
@@ -788,16 +785,56 @@ fun FynxCameraCapturePanel(
                 if (faceAnalysisEnabled && mode == CameraMode.PHOTO) useCases += faceImageAnalysis
                 val camera = provider.bindToLifecycle(lifecycleOwner, selector, *useCases.toTypedArray())
                 cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
+                cameraReady = true
                 cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 4f)); val range = cameraInfo?.exposureState?.exposureCompensationRange
                 exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2); cameraControl?.setExposureCompensationIndex(exposure)
                 if (torchEnabled && cameraInfo?.hasFlashUnit() == true) cameraControl?.enableTorch(true) else if (torchEnabled) torchEnabled = false
                 error = null
-            }.onFailure { if (generation == bindGeneration) error = it.message ?: "Camera could not start" }
+            }.onFailure {
+                if (generation == bindGeneration) {
+                    cameraReady = false
+                    error = it.message ?: "Camera could not start"
+                }
+            }
         }, ContextCompat.getMainExecutor(context))
     }
     DisposableEffect(Unit) { onDispose { timerCaptureJob?.cancel(); recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
-    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; cameraTextOverlays = emptyList(); selectedTextOverlayId = null; editingTextOverlayId = null; videoEditsApplied = false; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; videoStyle = CameraVideoStyle.NATURAL; videoCaptionText = ""; recordingNotice = null; activeRecordingFile = null; selectedCameraTool = "Looks"; showEditorToolOptions = true; applyingVideoEffects = false; generatingCaptions = false; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
+    fun retake() {
+        // Force a clean CameraX bind instead of depending on a PreviewView detach/attach race.
+        cameraReady = false
+        cameraProvider?.unbindAll()
+        imageCapture = null
+        videoCapture = null
+        cameraControl = null
+        cameraInfo = null
+        galleryRebindRequest += 1
+        deleteUri(pendingUri)
+        deleteUri(pendingOriginalUri)
+        pendingUri = null
+        pendingOriginalUri = null
+        pendingType = null
+        cameraTextOverlays = emptyList()
+        selectedTextOverlayId = null
+        editingTextOverlayId = null
+        videoEditsApplied = false
+        filter = CameraFilter.NATURAL
+        faceEffect = CameraFaceEffect.OFF
+        backgroundEffect = CameraBackgroundEffect.OFF
+        studioEffect = CameraStudioEffect.OFF
+        videoStyle = CameraVideoStyle.NATURAL
+        videoCaptionText = ""
+        recordingNotice = null
+        activeRecordingFile = null
+        selectedCameraTool = "Looks"
+        showEditorToolOptions = true
+        applyingVideoEffects = false
+        generatingCaptions = false
+        filterIntensity = 1f
+        enhancing = false
+        applyingFilter = false
+        error = null
+    }
     fun rotatePhoto() {
         val currentUri = pendingUri ?: return
         if (pendingType != "image") return
@@ -810,6 +847,11 @@ fun FynxCameraCapturePanel(
                 .distinctBy { it.absolutePath }
                 .forEach(::rotateCameraPhotoFile)
         }.onFailure { error = it.message ?: "Photo rotation failed" }
+        scope.launch {
+            cameraMediaAspectRatio = withContext(Dispatchers.IO) {
+                readFynxCameraMediaMetrics(currentUri, "image").aspectRatio
+            }
+        }
     }
     fun applyFilterToPhoto(
         selected: CameraFilter,
@@ -1050,6 +1092,16 @@ fun FynxCameraCapturePanel(
 
     if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
+    val previewVideoView = remember(previewUri) { mutableStateOf<android.widget.VideoView?>(null) }
+    var previewVideoPositionMs by remember(previewUri) { mutableLongStateOf(0L) }
+    LaunchedEffect(previewUri, previewType, videoEditsApplied) {
+        if ((previewType == "video" || previewType == "video_note") && !videoEditsApplied) {
+            while (true) {
+                previewVideoPositionMs = previewVideoView.value?.currentPosition?.toLong() ?: 0L
+                delay(100L)
+            }
+        }
+    }
     if(previewUri!=null && previewType!=null){
         MaterialTheme(
             colorScheme = darkColorScheme(
@@ -1062,7 +1114,11 @@ fun FynxCameraCapturePanel(
         ) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
-            if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.CENTER_CROP}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
+            if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.CENTER_CROP}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(
+                factory={ctx->android.widget.VideoView(ctx).apply{tag=previewUri.toString();setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()};previewVideoView.value=this}},
+                update={view->previewVideoView.value=view;if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.setOnPreparedListener{p->p.isLooping=true;start()}}},
+                modifier=Modifier.fillMaxSize()
+            )
             if (previewType == "image" || !videoEditsApplied) {
                 CameraTextOverlayLayer(
                     overlays = cameraTextOverlays,
@@ -1073,6 +1129,9 @@ fun FynxCameraCapturePanel(
                         editingTextOverlayId = id
                         selectedCameraTool = "Text"
                     },
+                    mediaAspectRatio = cameraMediaAspectRatio,
+                    centerCrop = previewType == "image",
+                    playbackPositionMs = if (previewType == "video" || previewType == "video_note") previewVideoPositionMs else null,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -1140,7 +1199,7 @@ fun FynxCameraCapturePanel(
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.44f)
+                    .heightIn(max = if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp else LocalConfiguration.current.screenHeightDp.dp * 0.44f)
                     .navigationBarsPadding()
                     .imePadding()
                     .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
@@ -1181,6 +1240,7 @@ fun FynxCameraCapturePanel(
                             },
                             onDone = {
                                 finishCameraTextEditing()
+                                selectedCameraTool = "Looks"
                                 if (cameraTextOverlays.none { it.text.isNotBlank() }) {
                                     cameraTextOverlays = emptyList()
                                     selectedTextOverlayId = null
@@ -1324,6 +1384,7 @@ fun FynxCameraCapturePanel(
                         },
                         onDone = {
                             finishCameraTextEditing()
+                            selectedCameraTool = "Captions"
                             if (cameraTextOverlays.none { it.text.isNotBlank() }) {
                                 cameraTextOverlays = emptyList()
                                 selectedTextOverlayId = null
@@ -1352,7 +1413,7 @@ fun FynxCameraCapturePanel(
                         minLines = 2,
                         maxLines = 4,
                         enabled = !applyingVideoEffects,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Video captions" }
                     )
                     OutlinedButton(onClick = ::generateCaptionsForVideo, enabled = !generatingCaptions && !applyingVideoEffects, modifier = Modifier.fillMaxWidth()) {
                         Text(if (generatingCaptions) "Generating captions…" else "✦ Generate on-device captions")
@@ -1449,6 +1510,53 @@ fun FynxCameraCapturePanel(
                         Spacer(Modifier.width(4.dp))
                         Text("Next")
                     }
+                }
+            }
+            if (editingTextOverlayId != null && selectedCameraTool == "Text") {
+                val selectedOverlay = cameraTextOverlays.firstOrNull { it.id == selectedTextOverlayId }
+                Column(
+                    Modifier.align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .imePadding()
+                        .background(Color(0xFF172438).copy(alpha = 0.76f), RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.26f), RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    CameraTextOverlayTools(
+                        selected = selectedOverlay,
+                        overlayCount = cameraTextOverlays.size,
+                        isVideo = previewType == "video" || previewType == "video_note",
+                        compact = true,
+                        onAdd = ::addCameraTextOverlay,
+                        onColor = { color -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(color = color)) } },
+                        onFont = { font -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(font = font)) } },
+                        onToggleBackground = { selectedOverlay?.let { updateCameraTextOverlay(it.copy(backgroundColor = if (it.backgroundColor == null) 0xB8000000.toInt() else null)) } },
+                        onToggleBold = { selectedOverlay?.let { updateCameraTextOverlay(it.copy(bold = !it.bold)) } },
+                        onAlignment = { selectedOverlay?.let {
+                            updateCameraTextOverlay(it.copy(alignment = when (it.alignment) {
+                                "CENTER" -> "LEFT"
+                                "LEFT" -> "RIGHT"
+                                else -> "CENTER"
+                            }))
+                        } },
+                        onDelete = {
+                            selectedOverlay?.let { removed ->
+                                cameraTextOverlays = cameraTextOverlays.filterNot { it.id == removed.id }
+                                selectedTextOverlayId = cameraTextOverlays.lastOrNull()?.id
+                                editingTextOverlayId = null
+                                keyboardController?.hide()
+                            }
+                        },
+                        onDone = {
+                            finishCameraTextEditing()
+                            selectedCameraTool = if (previewType == "image") "Looks" else "Captions"
+                            if (cameraTextOverlays.none { it.text.isNotBlank() }) {
+                                cameraTextOverlays = emptyList()
+                                selectedTextOverlayId = null
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -1826,6 +1934,9 @@ fun FynxCameraCapturePanel(
                     onClick = {
                         if (recording == null) {
                             mode = CameraMode.VIDEO
+                            selectedCameraTool = "Looks"
+                            selectedTextOverlayId = null
+                            editingTextOverlayId = null
                             showEffectTray = false
                             filter = CameraFilter.NATURAL
                             filterIntensity = 1f
@@ -1857,7 +1968,9 @@ fun FynxCameraCapturePanel(
                         Text(if (mode == CameraMode.VIDEO) "Video FX" else "Effects", style = MaterialTheme.typography.labelSmall, color = Color.White)
                     }
                 } else Spacer(Modifier.size(width = 64.dp, height = 64.dp))
-                FilledIconButton(onClick = {
+                FilledIconButton(
+                    enabled = recording != null || (cameraReady && (if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null)),
+                    onClick = {
                     if (mode == CameraMode.PHOTO) {
                         if (captureTimerSeconds > 0) {
                             if (timerCaptureJob?.isActive != true) {
@@ -1901,6 +2014,9 @@ fun FynxCameraCapturePanel(
                                         pendingUri = Uri.fromFile(file)
                                         pendingOriginalUri = Uri.fromFile(file)
                                         pendingType = if (videoNoteMode) "video_note" else "video"
+                                        selectedCameraTool = "Looks"
+                                        selectedTextOverlayId = null
+                                        editingTextOverlayId = null
                                         error = null
                                     } else {
                                         file.delete()

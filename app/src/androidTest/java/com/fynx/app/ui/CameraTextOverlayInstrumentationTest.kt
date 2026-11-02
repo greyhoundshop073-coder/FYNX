@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,6 +39,9 @@ class CameraTextOverlayInstrumentationTest {
         } finally {
             bitmap.recycle()
         }
+
+        val metrics = readFynxCameraMediaMetrics(Uri.fromFile(source), "image")
+        assertEquals("Overlay geometry uses the source photo aspect ratio", 480f / 720f, metrics.aspectRatio, 0.01f)
 
         val exported = renderFynxPhotoTextOverlays(
             context,

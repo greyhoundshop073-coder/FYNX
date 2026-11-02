@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.media.MediaMetadataRetriever
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
@@ -53,6 +54,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -81,6 +85,54 @@ internal data class FynxCameraTextOverlay(
     val startMs: Long = 0L,
     val endMs: Long = Long.MAX_VALUE
 )
+
+internal data class FynxCameraMediaMetrics(val durationMs: Long, val aspectRatio: Float)
+
+/** Read intrinsic media geometry, including encoded video rotation, away from the UI thread. */
+internal fun readFynxCameraMediaMetrics(uri: Uri, mediaType: String): FynxCameraMediaMetrics {
+    val fallback = FynxCameraMediaMetrics(0L, 9f / 16f)
+    val path = uri.path?.takeIf { it.isNotBlank() } ?: return fallback
+    val file = File(path)
+    if (!file.isFile || file.length() <= 0L) return fallback
+    if (mediaType == "image") {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return fallback
+        return FynxCameraMediaMetrics(0L, (bounds.outWidth.toFloat() / bounds.outHeight.toFloat()).coerceIn(0.2f, 5f))
+    }
+    if (mediaType != "video" && mediaType != "video_note") return fallback
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(file.absolutePath)
+        val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 0f
+        val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 0f
+        val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+        val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+        if (width <= 0f || height <= 0f) FynxCameraMediaMetrics(duration, fallback.aspectRatio)
+        else {
+            val aspect = if (rotation == 90 || rotation == 270) height / width else width / height
+            FynxCameraMediaMetrics(duration, aspect.coerceIn(0.2f, 5f))
+        }
+    } catch (_: Exception) {
+        fallback
+    } finally {
+        runCatching { retriever.release() }
+    }
+}
+
+private fun cameraTextColorName(color: Int): String = when (color) {
+    android.graphics.Color.WHITE -> "White"
+    android.graphics.Color.YELLOW -> "Yellow"
+    android.graphics.Color.CYAN -> "Cyan"
+    android.graphics.Color.MAGENTA -> "Magenta"
+    android.graphics.Color.RED -> "Red"
+    android.graphics.Color.GREEN -> "Green"
+    0xFFFF8A00.toInt() -> "Orange"
+    0xFFFF5C8A.toInt() -> "Pink"
+    0xFF8B75FF.toInt() -> "Violet"
+    android.graphics.Color.BLACK -> "Black"
+    else -> "Custom"
+}
 
 private fun cameraTextFontFamily(name: String): FontFamily = when (name) {
     "Serif" -> FontFamily.Serif
@@ -113,6 +165,9 @@ internal fun CameraTextOverlayLayer(
     editingId: String?,
     onChange: (FynxCameraTextOverlay) -> Unit,
     onSelect: (String) -> Unit,
+    mediaAspectRatio: Float = 9f / 16f,
+    centerCrop: Boolean = false,
+    playbackPositionMs: Long? = null,
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -129,10 +184,37 @@ internal fun CameraTextOverlayLayer(
     BoxWithConstraints(modifier = modifier) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val heightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
-        val overlayTextMaxWidth = maxWidth * 0.84f
+        val viewAspect = widthPx / heightPx
+        val mediaAspect = mediaAspectRatio.takeIf { it.isFinite() && it > 0f } ?: viewAspect
+        // Overlay coordinates stay normalized against source media. Map that frame into the
+        // viewport using the same crop/fit mode as the underlying ImageView/VideoView.
+        val mediaWidthPx: Float
+        val mediaHeightPx: Float
+        if (centerCrop) {
+            if (mediaAspect >= viewAspect) {
+                mediaHeightPx = heightPx
+                mediaWidthPx = heightPx * mediaAspect
+            } else {
+                mediaWidthPx = widthPx
+                mediaHeightPx = widthPx / mediaAspect
+            }
+        } else {
+            if (mediaAspect >= viewAspect) {
+                mediaWidthPx = widthPx
+                mediaHeightPx = widthPx / mediaAspect
+            } else {
+                mediaHeightPx = heightPx
+                mediaWidthPx = heightPx * mediaAspect
+            }
+        }
+        val mediaLeftPx = (widthPx - mediaWidthPx) / 2f
+        val mediaTopPx = (heightPx - mediaHeightPx) / 2f
+        val density = LocalDensity.current
+        val overlayTextMaxWidth = with(density) { (mediaWidthPx * 0.84f).toDp() }
         overlays.forEach { overlay ->
             val editing = overlay.id == editingId
-            if (overlay.text.isNotBlank() || editing) {
+            val visibleAtPlayback = playbackPositionMs == null || isFynxCameraTextOverlayVisibleAt(overlay, playbackPositionMs)
+            if ((overlay.text.isNotBlank() && visibleAtPlayback) || editing) {
                 val textStyle = TextStyle(
                     color = ComposeColor(overlay.color),
                     fontSize = 36.sp,
@@ -145,10 +227,9 @@ internal fun CameraTextOverlayLayer(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .offset {
-                            IntOffset(
-                                ((overlay.x.coerceIn(0.04f, 0.96f) - 0.5f) * widthPx).roundToInt(),
-                                ((overlay.y.coerceIn(0.06f, 0.94f) - 0.5f) * heightPx).roundToInt()
-                            )
+                            val mediaX = mediaLeftPx + overlay.x.coerceIn(0.04f, 0.96f) * mediaWidthPx
+                            val mediaY = mediaTopPx + overlay.y.coerceIn(0.06f, 0.94f) * mediaHeightPx
+                            IntOffset((mediaX - widthPx / 2f).roundToInt(), (mediaY - heightPx / 2f).roundToInt())
                         }
                         .graphicsLayer {
                             scaleX = overlay.scale.coerceIn(0.55f, 2.4f)
@@ -164,6 +245,7 @@ internal fun CameraTextOverlayLayer(
                             modifier = Modifier
                                 .widthIn(min = 24.dp, max = overlayTextMaxWidth)
                                 .focusRequester(focusRequester)
+                                .semantics { contentDescription = "Text on media" }
                                 .then(
                                     if (overlay.backgroundColor != null) {
                                         Modifier.background(
@@ -189,12 +271,12 @@ internal fun CameraTextOverlayLayer(
                                     } else Modifier
                                 )
                                 .clickable { onSelect(overlay.id) }
-                                .pointerInput(overlay.id, overlay.x, overlay.y, overlay.scale, widthPx, heightPx) {
+                                .pointerInput(overlay.id, overlay.x, overlay.y, overlay.scale, widthPx, heightPx, mediaAspect, centerCrop) {
                                     detectTransformGestures { _, pan, zoom, _ ->
                                         onChange(
                                             overlay.copy(
-                                                x = (overlay.x + pan.x / widthPx).coerceIn(0.04f, 0.96f),
-                                                y = (overlay.y + pan.y / heightPx).coerceIn(0.06f, 0.94f),
+                                                x = (overlay.x + pan.x / mediaWidthPx.coerceAtLeast(1f)).coerceIn(0.04f, 0.96f),
+                                                y = (overlay.y + pan.y / mediaHeightPx.coerceAtLeast(1f)).coerceIn(0.06f, 0.94f),
                                                 scale = (overlay.scale * zoom).coerceIn(0.55f, 2.4f)
                                             )
                                         )
@@ -221,6 +303,7 @@ internal fun CameraTextOverlayTools(
     onAlignment: () -> Unit,
     videoDurationMs: Long = 0L,
     onTiming: (Long, Long) -> Unit = { _, _ -> },
+    compact: Boolean = false,
     onDelete: () -> Unit,
     onDone: () -> Unit
 ) {
@@ -236,8 +319,8 @@ internal fun CameraTextOverlayTools(
         0xFF8B75FF.toInt(),
         android.graphics.Color.BLACK
     )
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        Row(
+    Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 7.dp)) {
+        if (!compact) Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -254,13 +337,13 @@ internal fun CameraTextOverlayTools(
         }
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             swatches.forEach { swatch ->
                 Surface(
                     onClick = { onColor(swatch) },
-                    modifier = Modifier.size(29.dp),
+                    modifier = Modifier.size(if (compact) 25.dp else 29.dp).semantics { contentDescription = "Text colour ${cameraTextColorName(swatch)}" },
                     shape = CircleShape,
                     color = ComposeColor(swatch),
                     border = androidx.compose.foundation.BorderStroke(
@@ -280,7 +363,7 @@ internal fun CameraTextOverlayTools(
                 )
             }
         }
-        if (isVideo && selected != null && videoDurationMs > 1L) {
+        if (!compact && isVideo && selected != null && videoDurationMs > 1L) {
             val duration = videoDurationMs.coerceAtLeast(2L)
             val start = selected.startMs.coerceIn(0L, duration - 1L)
             val end = selected.endMs.coerceIn(start + 1L, duration)
