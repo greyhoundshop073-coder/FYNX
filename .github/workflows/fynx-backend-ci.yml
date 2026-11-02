@@ -225,6 +225,8 @@ jobs:
         run: node verify-marketplace-ad-creative-identity.mjs
       - name: Run Marketplace paid sponsored feed verification
         run: node verify-marketplace-sponsored-feed.mjs
+      - name: Run Marketplace scheduled seasonal promotion verification
+        run: node verify-marketplace-seasonal-promotions.mjs
       - name: Run R6-I ledger invariant verification
         run: node verify-marketplace-ledger-invariants.mjs
       - name: Run R6-I financial security verification
