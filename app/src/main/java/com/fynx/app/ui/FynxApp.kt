@@ -57,7 +57,11 @@ private fun fynxBackDestination(
     "Privacy" -> "Profile"
     "Notifications" -> if (notificationPreferencesOnly) "Profile" else "Home"
     "Calendar" -> "Extra Tools"
-    "Wallet", "Money Tools" -> "Features"
+    "Wallet" -> navigationHistory
+        .getOrNull(navigationHistory.lastIndex - 1)
+        ?.takeIf { it == "Marketplace" || it == "Features" }
+        ?: "Features"
+    "Money Tools" -> "Features"
     "Stories", "Calls" -> "Home"
     "Groups" -> "Chats"
     "Business Account" -> "Features"
@@ -69,7 +73,7 @@ private fun fynxBackDestination(
 }
 
 @Composable
-fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
+fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkRequestId: Long = 0L) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val appConnectionManager = remember(context) { FynxAppConnectionManager(context.applicationContext) }
@@ -181,7 +185,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    LaunchedEffect(deepLinkDestination) {
+    LaunchedEffect(deepLinkRequestId, deepLinkDestination) {
         when (val destination = deepLinkDestination) {
             is FynxDeepLinkDestination.Invite -> { inviteCode = destination.code; selected = "Invite" }
             FynxDeepLinkDestination.Home -> {
