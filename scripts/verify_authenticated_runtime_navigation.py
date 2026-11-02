@@ -2005,6 +2005,10 @@ def capture_wallet_from_features(prefix:str):
                                                     ["Balance details", "AVAILABLE BALANCE"]
                                                 )
                                                 if final_wallet_xml:
+                                                    balance_deadline = time.monotonic() + 45.0
+                                                    while time.monotonic() < balance_deadline and not wallet_has_nonzero_available_balance(final_wallet_xml):
+                                                        time.sleep(0.8)
+                                                        final_wallet_xml = dump_ui("wallet-after-sandbox-balance-refresh.xml") or final_wallet_xml
                                                     (ROOT/"authenticated-wallet-after-sandbox.xml").write_text(
                                                         final_wallet_xml+chr(10),encoding="utf-8"
                                                     )
