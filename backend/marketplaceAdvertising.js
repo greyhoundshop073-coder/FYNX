@@ -17,6 +17,11 @@ const CREATIVE_TYPES = new Set(["post", "product", "business"]);
 async function ensureAdvertisingSchema() {
   if (!pool) return;
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS fynx_admin_roles (
+      user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK(role IN ('ADMIN')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS marketplace_ad_campaigns (
       id BIGSERIAL PRIMARY KEY,
       owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -123,6 +128,7 @@ async function marketplaceAdminRole(userId) {
 }
 
 async function requireMarketplaceAdmin(req, res, auth) {
+  await ready();
   const role = await marketplaceAdminRole(auth.userId);
   if (!role) {
     res.status(403).json({ error: "Owner/Admin access required", code: "ADMIN_REQUIRED" });
@@ -305,6 +311,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     const auth = authenticate(req, res);
     if (!auth) return;
     try {
+      await ready();
       const result = await pool.query(
         "SELECT * FROM marketplace_seasonal_promotions WHERE active=TRUE AND starts_at <= NOW() AND ends_at > NOW() ORDER BY starts_at DESC, id DESC LIMIT 8"
       );
