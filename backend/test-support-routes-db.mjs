@@ -145,6 +145,8 @@ try {
   await expectStatus(adminReopen, 403, "Admin cannot reopen resolved case");
   const adminAlternateReopen = await request(base, 3, "PATCH", `/api/admin/support/cases/${created.id}/status`, { status: "IN_REVIEW" });
   await expectStatus(adminAlternateReopen, 403, "Admin cannot reopen a resolved case through another status");
+  const adminClaimResolved = await request(base, 2, "POST", `/api/admin/support/cases/${created.id}/assign`, {});
+  await expectStatus(adminClaimResolved, 403, "Admin cannot claim a resolved case");
   const adminResolvedPublicReply = await request(base, 3, "POST", `/api/admin/support/cases/${created.id}/messages`, {
     body: "This reply must not reopen the case.",
     visibility: "PUBLIC",
@@ -204,6 +206,9 @@ try {
   await expectStatus(previousAdmin, 403, "previous Admin loses access after reassignment");
   const newAdmin = await request(base, 2, "GET", `/api/admin/support/cases/${created.id}/messages`);
   await expectStatus(newAdmin, 200, "newly assigned Admin gains case access");
+  const assignmentEvent = (await testPool.query("SELECT id FROM fynx_support_case_events WHERE case_id=$1 AND event_type='ASSIGNED' ORDER BY id DESC LIMIT 1", [created.id])).rows[0];
+  const assignmentNotificationUsers = (await testPool.query("SELECT user_id::text FROM fynx_notifications WHERE type='SUPPORT' AND target_id=$1 AND id LIKE $2 ORDER BY user_id", [String(created.id), `support-assigned-${assignmentEvent.id}-%`])).rows.map(row => row.user_id);
+  assert.deepEqual(assignmentNotificationUsers, ["1", "2"], "Owner and newly assigned Admin receive reassignment notification; old Admin does not");
 
   console.log("FYNX support database/API integration passed: case creation, idempotency, Owner/Admin access, assignment, private notes, replies, statuses, screenshot privacy and notifications.");
 } finally {
