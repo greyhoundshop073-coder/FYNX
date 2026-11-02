@@ -472,7 +472,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            else -> weeklySellerAwards.take(8).forEach { award ->
+                            else -> {
+                                weeklySellerAwards.take(8).forEach { award ->
                                 Row(
                                     Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -499,8 +500,9 @@ fun FynxMarketplaceSellerCenterPanel() {
                                         )
                                     }
                                 }
+                                }
+                                if (weeklyAwardsError != null) Text(weeklyAwardsError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             }
-                            if (weeklyAwardsError != null) Text(weeklyAwardsError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
