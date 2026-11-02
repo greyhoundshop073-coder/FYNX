@@ -51,7 +51,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: (() -> Unit)? = null, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}, onOpenNotifications: () -> Unit = {}) {
+fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: (() -> Unit)? = null, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}, onOpenNotifications: () -> Unit = {}, onOpenSupport: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
@@ -144,7 +144,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }
 
     if (settingsOpen) {
-        SettingsPanel(profile = profile, settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onSignOut = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, onOpenAccountProfile = { settingsOpen = false; editing = true })
+        SettingsPanel(profile = profile, settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onOpenSupport = onOpenSupport, onSignOut = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, onOpenAccountProfile = { settingsOpen = false; editing = true })
         return
     }
 
@@ -381,6 +381,7 @@ fun SettingsPanel(
     onAccentChanged: (FynxAccent) -> Unit = {},
     onOpenPrivacy: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
+    onOpenSupport: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onOpenAccountProfile: () -> Unit = {}
 ) {
@@ -711,13 +712,12 @@ fun SettingsPanel(
         title = { Text(infoTitle!!) },
         text = { Text(infoDescription) },
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(horizontalAlignment = Alignment.End) {
                 if (infoTitle == "Help & Support") {
-                    TextButton(onClick = { infoTitle = null; onOpenPrivacy() }) {
-                        Text("Open Privacy & Security")
-                    }
+                    TextButton(onClick = { infoTitle = null; onOpenSupport() }) { Text("Contact FYNX Support") }
+                    TextButton(onClick = { infoTitle = null; onOpenPrivacy() }) { Text("Open Privacy & Security") }
                 }
-                TextButton(onClick = { infoTitle = null }) { Text("OK") }
+                TextButton(onClick = { infoTitle = null }) { Text("Close") }
             }
         }
     )

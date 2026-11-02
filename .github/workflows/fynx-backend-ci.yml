@@ -129,6 +129,10 @@ jobs:
             [ -f "$file" ] || continue
             node --check "$file"
           done
+      - name: Verify FYNX support case authorization and Android integration
+        run: node verify-support-routes.mjs
+      - name: Test FYNX support case API and PostgreSQL permissions
+        run: node test-support-routes-db.mjs
       - name: Verify Marketplace media authorization contract
         run: |
           node verify-media-route.mjs
