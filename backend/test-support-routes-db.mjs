@@ -37,7 +37,8 @@ try {
     CREATE TABLE users (
       id BIGSERIAL PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
-      display_name TEXT NOT NULL
+      display_name TEXT NOT NULL,
+      verified BOOLEAN NOT NULL DEFAULT FALSE
     );
     CREATE TABLE message_media (
       id BIGSERIAL PRIMARY KEY,
@@ -47,7 +48,7 @@ try {
       byte_size INTEGER NOT NULL
     );
   `);
-  await testPool.query("INSERT INTO users(id,username,display_name) VALUES (1,'fynx','FYNX Owner'),(2,'admin-one','Support Admin One'),(3,'admin-two','Support Admin Two'),(4,'reporter','Test Reporter'),(5,'other-user','Other User')");
+  await testPool.query("INSERT INTO users(id,username,display_name,verified) VALUES (1,'fynx','FYNX Owner',TRUE),(2,'admin-one','Support Admin One',FALSE),(3,'admin-two','Support Admin Two',FALSE),(4,'reporter','Test Reporter',FALSE),(5,'other-user','Other User',FALSE)");
   await testPool.query("SELECT setval(pg_get_serial_sequence('users','id'),5,true)");
 
   const app = express();
