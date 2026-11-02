@@ -557,10 +557,11 @@ internal fun renderFynxPhotoTextOverlays(
                 .setIncludePad(false)
                 .setMaxLines(8)
                 .build()
-            val x = (item.x.coerceIn(0.04f, 0.96f) * bitmap.width - layout.width / 2f)
-                .coerceIn(0f, (bitmap.width - layout.width).coerceAtLeast(0).toFloat())
-            val y = (item.y.coerceIn(0.06f, 0.94f) * bitmap.height - layout.height / 2f)
-                .coerceIn(0f, (bitmap.height - layout.height).coerceAtLeast(0).toFloat())
+            // Keep the selected media point as the text block's centre. Clamping the
+            // layout origin to the bitmap edges moves edge-positioned text away from the
+            // position the creator chose in the live editor; Canvas clips only the overflow.
+            val x = item.x.coerceIn(0.04f, 0.96f) * bitmap.width - layout.width / 2f
+            val y = item.y.coerceIn(0.06f, 0.94f) * bitmap.height - layout.height / 2f
             canvas.save()
             canvas.translate(x, y)
             layout.draw(canvas)
