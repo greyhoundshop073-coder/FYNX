@@ -483,7 +483,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                         color = if (award.rank == 1) FynxDesign.PremiumGold.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant
                                     ) {
                                         Text(
-                                            if (award.rank == 1) "WINNER" else "TOP \${award.rank}",
+                                            if (award.rank == 1) "WINNER" else "TOP ${award.rank}",
                                             Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
                                             color = MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.labelSmall,
