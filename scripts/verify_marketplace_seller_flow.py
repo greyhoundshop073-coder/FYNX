@@ -553,6 +553,27 @@ checks.append(
      and "mediaTypes = mediaTypes" in deep_link_client)
 )
 
+shop_profile_ui_start = seller_center.index('if (activeSection == "Shop profile") item {')
+shop_profile_ui_end = seller_center.index('if (activeSection == "Earnings & payouts") item {', shop_profile_ui_start)
+shop_profile_ui = seller_center[shop_profile_ui_start:shop_profile_ui_end]
+
+checks.append(
+    ("public seller storefront never retains or displays the private shop contact phone while My Shop keeps its own contact field",
+     "contactPhone" not in storefront
+     and "shopContactPhone" not in storefront
+     and "Shop contact:" not in storefront
+     and 'put("contactPhone", shopContactPhone.trim())' in seller_center
+     and 'label = { Text("Private shop contact (optional)") }' in shop_profile_ui)
+)
+
+checks.append(
+    ("My Shop profile fields remain locked while saved shop details load, preventing an in-progress edit from being overwritten",
+     shop_profile_ui.count("enabled = !shopLoading && !shopSaving") == 5
+     and shop_profile_ui.count("OutlinedTextField(") == 4
+     and all("enabled = !shopLoading && !shopSaving)" in line for line in shop_profile_ui.splitlines() if "OutlinedTextField(" in line)
+     and "enabled = !shopLoading && !shopSaving && shopName.trim().length >= 2" in shop_profile_ui)
+)
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
