@@ -67,6 +67,7 @@ private fun walletActionMoney(amount: Double?): String =
 @Composable
 internal fun FynxWalletActionPanel(
     screen: String,
+    testMode: Boolean,
     amount: String,
     onAmountChange: (String) -> Unit,
     availableBalance: Double?,
@@ -146,6 +147,14 @@ internal fun FynxWalletActionPanel(
                 item { FynxWalletFundingAccountPanel(amount = amount) }
             }
             "CARD" -> {
+                if (testMode) {
+                    item {
+                        WalletActionNotice(
+                            title = "Paystack Test Mode",
+                            message = "This checkout uses simulated payments only. Test balances are not real money and cannot be spent, used for Marketplace purchases or withdrawn. Your server controls the permitted test amount."
+                        )
+                    }
+                }
                 item {
                     FynxWalletHostedFundingPanel(
                         method = "CARD",
