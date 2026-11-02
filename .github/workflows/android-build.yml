@@ -325,12 +325,22 @@ jobs:
           sha256sum app/build/outputs/apk/debug/app-debug.apk
       - name: Prepare exact-commit debug APK filename
         if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
-        run: cp app/build/outputs/apk/debug/app-debug.apk "FYNX-debug-${GITHUB_SHA}.apk"
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk "FYNX-Android-Official.apk"
+          {
+            echo "branch=${GITHUB_REF_NAME}"
+            echo "commit=${GITHUB_SHA}"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "apk_sha256=$(sha256sum FYNX-Android-Official.apk | awk '{print $1}')"
+            echo "build_result=success"
+          } > "FYNX-Android-Official-build.txt"
       - name: Upload exact-commit debug APK
         if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
         uses: actions/upload-artifact@v4
         with:
-          name: FYNX-debug-apk-${{ github.sha }}
-          path: FYNX-debug-${{ github.sha }}.apk
+          name: FYNX-Android-Official
+          path: |
+            FYNX-Android-Official.apk
+            FYNX-Android-Official-build.txt
           if-no-files-found: error
           retention-days: 14
