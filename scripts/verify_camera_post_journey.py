@@ -145,7 +145,7 @@ checks = [
      and 'Text("Your Story",' in camera
      and "onShareToStatus(finalUri" in camera
      and "onCaptured(finalUri, mediaType)" in camera
-     and "showYourStoryAction = true" in home
+     and "showYourStoryAction = cameraEditingMediaUri == null" in home
      and "onShareToStatus = {" in home
      and "onOpenStatusWithMedia(uri, type)" in home),
     ("Your Story reuses the existing Status composer media hand-off without changing Status publishing",
@@ -308,7 +308,7 @@ checks = [
      and "no post was published" in runtime),
     ("Camera capture hands media to the post composer", "showCamera = false" in home and "showComposer = true" in home),
     ("Camera dismiss returns to an existing composer draft", "cameraOpenedFromComposer && !posting" in home),
-    ("Camera preview supports retake before handoff", 'Text("Retake")' in camera and "retake()" in camera),
+    ("Camera preview supports retake or cancel-edit before handoff", 'Text(if (initialMediaUri != null) "Cancel edit" else "Retake")' in camera and "fun retake()" in camera),
     ("Camera preview sends the captured asset to the composer", 'Text("Next")' in camera and 'onClick = { finishCameraMedia(toStatus = false) }' in camera and "onCaptured(finalUri, mediaType)" in camera),
     ("Captured media uses the authoritative media type resolver", "FynxMultiMediaPostClient.mediaKind(context, it)" in home),
     ("Gallery media is deduplicated and capped at four", "uris.distinct().take(4)" in home and ".take(4)" in home),
@@ -426,7 +426,7 @@ checks.extend([
      and "did not visibly burn the text overlay" in video_effects
      and "cameraVideoTextOverlayBackgroundAnchor" in video_effects
      and "verifiableTextOverlays.forEach" in video_effects
-     and "requestedTextOverlays.size == verifiableTextOverlays.size" in video_effects),
+     and "verifiableTextOverlays.size == requestedTextOverlays.size" in video_effects),
     ("More options is an accessible clickable row with viewport-aware runtime navigation",
      'contentDescription = "More options"' in home
      and "camera_scroll_until_control" in runtime
