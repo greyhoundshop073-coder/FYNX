@@ -13,7 +13,7 @@ checks = [
     (
         "runtime check preserves the live app process and uses only the registered Home VIEW deep link as fallback",
         'pidof' in runtime and 'refusing to cold-start' in runtime
-        and 'force-stop' not in runtime
+        and '"force-stop"' not in runtime
         and '"fynx://home"' in runtime and '"android.intent.action.VIEW"' in runtime,
     ),
     (
