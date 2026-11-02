@@ -394,8 +394,16 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
 
 def capture_support_center_from_settings(settings_xml: str, prefix: str) -> bool:
     """Capture the real user Help & Support form without submitting test content."""
+    # Help & Support appears lower in the Settings list on a phone-sized viewport.
+    latest_settings = settings_xml
+    for attempt in range(6):
+        if find_control(latest_settings, ["Help & Support"]):
+            break
+        run("adb", "shell", "input", "swipe", "700", "2200", "700", "900", "400")
+        time.sleep(0.35)
+        latest_settings = dump_ui(prefix + "-settings-scroll-" + str(attempt) + ".xml") or latest_settings
     help_dialog = tap_control(
-        settings_xml, ["Help & Support"], prefix + "-help-support",
+        latest_settings, ["Help & Support"], prefix + "-help-support",
         ["Contact FYNX Support"]
     )
     if not help_dialog:
