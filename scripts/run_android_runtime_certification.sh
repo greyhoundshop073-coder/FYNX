@@ -59,10 +59,12 @@ else
   if [ "$VISUAL_EXIT" -ne 0 ]; then
     echo "::warning::Marketplace/My Shop visual capture did not complete (exit $VISUAL_EXIT); the instrumentation result remains $TEST_EXIT."
   fi
-  python3 scripts/verify_status_creator_runtime.py
-  STATUS_EXIT=$?
-  if [ "$STATUS_EXIT" -ne 0 ]; then
-    echo "::warning::Status creator diagnostic capture did not complete (exit $STATUS_EXIT); the instrumentation result remains $TEST_EXIT."
+  if [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" != "1" ]; then
+    python3 scripts/verify_status_creator_runtime.py
+    STATUS_EXIT=$?
+    if [ "$STATUS_EXIT" -ne 0 ]; then
+      echo "::warning::Status creator diagnostic capture did not complete (exit $STATUS_EXIT); the instrumentation result remains $TEST_EXIT."
+    fi
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 fi
