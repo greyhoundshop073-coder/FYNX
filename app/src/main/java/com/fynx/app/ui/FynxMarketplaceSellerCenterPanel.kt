@@ -165,6 +165,9 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyTotalsFromBackend by remember { mutableStateOf(false) }
     var showDriverAssignments by remember { mutableStateOf(false) }
     var activeSection by rememberSaveable { mutableStateOf("Overview") }
+    var weeklySellerAwards by remember { mutableStateOf<List<FynxMarketplaceSellerWeeklyAward>>(emptyList()) }
+    var weeklyAwardsLoading by remember { mutableStateOf(false) }
+    var weeklyAwardsError by remember { mutableStateOf<String?>(null) }
     val selectedChipColors = fynxMarketplaceSelectedChipColors()
     val standardMarketplaceCategories = listOf(
         "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property",
@@ -267,6 +270,18 @@ fun FynxMarketplaceSellerCenterPanel() {
         shopContactPhone = ""
         // Hide stale amounts/history immediately; earnings manage their own request lifetime.
         loadMoney()
+        weeklyAwardsLoading = true
+        weeklyAwardsError = null
+        scope.launch {
+            FynxMarketplaceWeeklySellerClient.currentSellerHistory(context)
+                .onSuccess { awards ->
+                    if (requestGeneration == refreshGeneration) weeklySellerAwards = awards
+                }
+                .onFailure { failure ->
+                    if (requestGeneration == refreshGeneration) weeklyAwardsError = marketplaceSafeError(failure, "Weekly seller awards could not load.")
+                }
+            if (requestGeneration == refreshGeneration) weeklyAwardsLoading = false
+        }
 
         // Inventory owns the Listings loading state. Profile/payout requests must not keep
         // the Listings screen spinning after its inventory request has already finished.
@@ -430,6 +445,62 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 CircularProgressIndicator(Modifier.size(16.dp))
                                 Text("Refreshing your shop information…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                        }
+                    }
+                }
+            }
+            item(key = "seller-weekly-recognition") {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🏆", style = MaterialTheme.typography.titleLarge)
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("Weekly seller recognition", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text("Your verified FYNX Marketplace awards", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = { refresh() }, enabled = !weeklyAwardsLoading) { Text("Refresh") }
+                        }
+                        when {
+                            weeklyAwardsLoading && weeklySellerAwards.isEmpty() -> CircularProgressIndicator(Modifier.size(20.dp))
+                            weeklyAwardsError != null && weeklySellerAwards.isEmpty() -> {
+                                Text(weeklyAwardsError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = { refresh() }, enabled = !weeklyAwardsLoading) { Text("Retry") }
+                            }
+                            weeklySellerAwards.isEmpty() -> Text(
+                                "Your Best Seller of the Week or Top Seller recognition will appear here when your completed orders qualify.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            else -> weeklySellerAwards.take(8).forEach { award ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (award.rank == 1) FynxDesign.PremiumGold.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Text(
+                                            if (award.rank == 1) "WINNER" else "TOP \${award.rank}",
+                                            Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(if (award.rank == 1) "Best Seller of the Week" else "Weekly Top Seller", fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            award.weekLabel + " · " + award.completedOrders + " completed orders · " + award.uniqueBuyers + " buyers",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                            if (weeklyAwardsError != null) Text(weeklyAwardsError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
