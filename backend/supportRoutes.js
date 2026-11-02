@@ -70,7 +70,7 @@ export function registerSupportRoutes({ app, pool, auth }) {
 
   const officialOwnerId = async () => {
     const officialUsername = (process.env.FYNX_OFFICIAL_USERNAME || "fynx").trim().toLowerCase();
-    const result = await pool.query("SELECT id FROM users WHERE lower(username)=$1 LIMIT 1", [officialUsername]);
+    const result = await pool.query("SELECT id FROM users WHERE lower(username)=$1 AND verified=TRUE LIMIT 1", [officialUsername]);
     return result.rows[0]?.id == null ? null : String(result.rows[0].id);
   };
   const resolveRole = async userId => {
