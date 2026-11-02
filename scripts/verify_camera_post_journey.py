@@ -388,8 +388,13 @@ checks.extend([
      and "Photo export did not burn the first overlay colour near its selected top position" in overlay_test
      and "Photo export did not burn the second overlay colour near its selected bottom position" in overlay_test
      and "photoTextOverlayIsRenderedAtEachSelectedPositionAndKeepsSourceDimensions" in overlay_test),
-    ("Photo text export requests a mutable ARGB bitmap before Canvas drawing",
-     "inMutable = true" in overlay and "val canvas = Canvas(bitmap)" in overlay),
+    ("Photo text export requests a mutable ARGB bitmap and preserves normalized overlay centres",
+     "inMutable = true" in overlay
+     and "val canvas = Canvas(bitmap)" in overlay
+     and "val x = item.x.coerceIn(0.04f, 0.96f) * bitmap.width - layout.width / 2f" in overlay
+     and "val y = item.y.coerceIn(0.06f, 0.94f) * bitmap.height - layout.height / 2f" in overlay
+     and ".coerceIn(0f, (bitmap.width - layout.width)" not in overlay
+     and ".coerceIn(0f, (bitmap.height - layout.height)" not in overlay),
     ("Runtime exercises direct-on-media photo/video typing and video timing controls",
      "FYNXoverlaytest" in runtime and "FYNXvideooverlay" in runtime
      and "FYNXdraftoverlay" in runtime
