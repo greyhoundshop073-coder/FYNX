@@ -82,6 +82,13 @@ checks = [
  ("withdrawal transfers reserve only available funds and await signed provider outcome", "'AVAILABLE','DEBIT'" in wallet_backend and "'WITHDRAWAL_PENDING','CREDIT'" in wallet_backend and "reconcileWalletTransferEvent" in wallet_backend and "transfer.success" in wallet_backend and "transfer.failed" in wallet_backend and "transfer.reversed" in wallet_backend),
  ("withdrawals require a password-reauthenticated wallet PIN with temporary lockout", '"Set your wallet withdrawal PIN"' in actions and '"/api/wallet/security/pin"' in client and "bcrypt.compare(pin, wallet.withdrawal_pin_hash)" in wallet_backend and "INTERVAL '15 minutes'" in wallet_backend),
  ("withdrawal amount and daily-count limits are backend-enforced", "FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT" in wallet_backend and "FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT" in wallet_backend and "FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT" in wallet_backend and "dailyUsage?.requested_amount" in wallet_backend and "dailyUsage?.request_count" in wallet_backend),
+ ("NGN 50 withdrawal minimum is displayed and blocks review before submission",
+  "minimumPerTransfer" in actions and "MINIMUM_WITHDRAWAL_NGN" in actions
+  and "minimumWithdrawalAmount" in actions and "parsedAmount >= minimumWithdrawalAmount" in actions
+  and "The minimum FYNX Wallet withdrawal is" in actions
+  and "isWithdrawal && parsed < java.math.BigDecimal.valueOf(FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN)" in actions
+  and "validateWithdrawalAmount(amount)" in client),
+
  ("wallet statements download an owner-scoped formula-safe CSV", "rememberLauncherForActivityResult" in panel and "CreateDocument(\"text/csv\")" in panel and "/api/wallet/statement.csv" in client and "buildBuyerWalletStatementCsv" in wallet_backend),
  ("seller earnings explicitly disclose default five-percent Marketplace commission", '"FYNX Marketplace commission · default 5%"' in seller_center and 'record.marketplaceFee' in seller_center),
  ("Marketplace commission is not charged on wallet top-ups or withdrawals", 'wallet top-ups and bank withdrawals are not charged this fee' in seller_center),

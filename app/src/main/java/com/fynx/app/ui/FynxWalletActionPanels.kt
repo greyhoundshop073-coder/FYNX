@@ -535,7 +535,8 @@ private fun FynxWalletWithdrawalPanel(
     }
 
     val parsedAmount = amount.toBigDecimalOrNull()
-    val validAmount = parsedAmount != null && parsedAmount > java.math.BigDecimal.ZERO &&
+    val minimumWithdrawalAmount = java.math.BigDecimal.valueOf(FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN)
+    val validAmount = parsedAmount != null && parsedAmount >= minimumWithdrawalAmount &&
         availableBalance != null && parsedAmount.toDouble() <= availableBalance
     val canVerify = !verifying && selectedBank != null && accountNumber.matches(Regex("^\\d{10}$"))
     val hasUsablePin = security?.hasWithdrawalPin == true && security?.isLocked != true &&
@@ -1143,6 +1144,8 @@ private fun WalletAmountStatus(amount: String, availableBalance: Double?, isWith
     val message = when {
         amount.isBlank() -> "Enter an amount in NGN."
         parsed == null || parsed <= java.math.BigDecimal.ZERO -> "Enter a valid amount greater than zero."
+        isWithdrawal && parsed < java.math.BigDecimal.valueOf(FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN) ->
+            "The minimum FYNX Wallet withdrawal is " + walletActionMoney(FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN) + "."
         availableBalance != null && parsed.toDouble() > availableBalance ->
             "This amount is above your verified available balance."
         isWithdrawal && availableBalance == null && parsed > java.math.BigDecimal.ZERO ->
@@ -1151,6 +1154,7 @@ private fun WalletAmountStatus(amount: String, availableBalance: Double?, isWith
     }
     val invalid = amount.isNotBlank() && (
         parsed == null || parsed <= java.math.BigDecimal.ZERO ||
+            (isWithdrawal && parsed < java.math.BigDecimal.valueOf(FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN)) ||
             (availableBalance != null && parsed.toDouble() > availableBalance) ||
             (isWithdrawal && availableBalance == null && parsed > java.math.BigDecimal.ZERO)
     )
