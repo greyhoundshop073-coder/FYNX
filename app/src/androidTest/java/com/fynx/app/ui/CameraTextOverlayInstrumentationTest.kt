@@ -109,6 +109,68 @@ class CameraTextOverlayInstrumentationTest {
     }
 
     @Test
+    fun localPostDraftKeepsEditableMediaSourceAndOverlayStateUntilDelete() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val finalMedia = File(context.cacheDir, "fynx-draft-final-${System.currentTimeMillis()}.jpg")
+        val editableSource = File(context.cacheDir, "fynx-draft-source-${System.currentTimeMillis()}.jpg")
+        var draftId: String? = null
+        try {
+            finalMedia.writeBytes(byteArrayOf(1, 2, 3, 4))
+            editableSource.writeBytes(byteArrayOf(5, 6, 7, 8))
+            val finalUri = Uri.fromFile(finalMedia)
+            val overlay = FynxCameraTextOverlay(
+                id = "saved-draft-overlay",
+                text = "Continue editing me",
+                x = 0.24f,
+                y = 0.71f,
+                color = Color.CYAN,
+                font = "Hand",
+                backgroundColor = 0xA8000000.toInt(),
+                bold = true,
+                alignment = "RIGHT",
+                scale = 1.4f,
+                startMs = 640L,
+                endMs = 4_800L
+            )
+            val saved = FynxLocalPostDraftStore.save(
+                context = context,
+                existingId = null,
+                caption = "Draft with editable text",
+                visibility = FynxPostVisibility.FRIENDS_ONLY,
+                audience = FynxPostAudience.FRIENDS,
+                selectedAudienceIds = emptySet(),
+                location = null,
+                textBackground = null,
+                media = listOf(finalUri to "image"),
+                music = null,
+                mediaEdits = mapOf(
+                    finalUri.toString() to FynxCameraMediaDraftEdit(
+                        sourceUri = Uri.fromFile(editableSource),
+                        overlays = listOf(overlay)
+                    )
+                )
+            ).getOrThrow()
+            draftId = saved.id
+
+            val stored = FynxLocalPostDraftStore.list(context).firstOrNull { it.id == saved.id }
+                ?: error("The locally saved media draft could not be reopened")
+            assertTrue("Final media copy must be durable", File(stored.mediaPaths.single()).isFile)
+            val storedSource = stored.mediaEditSourcePaths.single()
+                ?: error("The editable source media was not preserved")
+            assertTrue("Editable source copy must be durable", File(storedSource).isFile)
+            val stateJson = stored.mediaEditStates.single()
+                ?: error("The text overlay settings were not preserved")
+            val restored = decodeFynxCameraMediaDraftEdit(Uri.fromFile(File(storedSource)), stateJson)
+                ?: error("Editable text state could not be decoded from the saved draft")
+            assertEquals(overlay, restored.overlays.single())
+        } finally {
+            draftId?.let { FynxLocalPostDraftStore.delete(context, it) }
+            finalMedia.delete()
+            editableSource.delete()
+        }
+    }
+
+    @Test
     fun photoTextOverlayIsRenderedIntoTheExportedImage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val source = File(context.cacheDir, "fynx-text-overlay-source.jpg")
