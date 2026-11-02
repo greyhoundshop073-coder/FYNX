@@ -73,7 +73,7 @@ private fun fynxBackDestination(
 }
 
 @Composable
-fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
+fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkRequestId: Long = 0L) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val appConnectionManager = remember(context) { FynxAppConnectionManager(context.applicationContext) }
@@ -184,7 +184,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    LaunchedEffect(deepLinkDestination) {
+    LaunchedEffect(deepLinkRequestId, deepLinkDestination) {
         when (val destination = deepLinkDestination) {
             is FynxDeepLinkDestination.Invite -> { inviteCode = destination.code; selected = "Invite" }
             FynxDeepLinkDestination.Home -> {
