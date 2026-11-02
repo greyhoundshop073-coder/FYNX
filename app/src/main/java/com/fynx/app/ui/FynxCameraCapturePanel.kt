@@ -1132,7 +1132,7 @@ fun FynxCameraCapturePanel(
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 if (previewType == "image") {
-                    Text(if (selectedCameraTool == "Text") "Add text to your media" else "Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     if (selectedCameraTool == "Text") {
                         val selectedOverlay = cameraTextOverlays.firstOrNull { it.id == selectedTextOverlayId }
                         CameraTextOverlayTools(
