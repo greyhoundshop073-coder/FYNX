@@ -133,6 +133,8 @@ try {
 
   const adminReopen = await request(base, 3, "PATCH", `/api/admin/support/cases/${created.id}/status`, { status: "OPEN" });
   await expectStatus(adminReopen, 403, "Admin cannot reopen resolved case");
+  const adminAlternateReopen = await request(base, 3, "PATCH", `/api/admin/support/cases/${created.id}/status`, { status: "IN_REVIEW" });
+  await expectStatus(adminAlternateReopen, 403, "Admin cannot reopen a resolved case through another status");
 
   const ownerReopen = await request(base, 1, "PATCH", `/api/admin/support/cases/${created.id}/status`, { status: "OPEN" });
   await expectStatus(ownerReopen, 200, "Owner reopens resolved case");
