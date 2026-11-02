@@ -653,11 +653,12 @@ private fun FynxWalletWithdrawalPanel(
                 }
             } else {
                 security?.let { policy ->
+                    val minimum = policy.minimumPerTransfer ?: FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN
                     val maximum = policy.maximumPerTransfer
                     val daily = policy.dailyAmountLimit
                     if (maximum != null && daily != null) {
                         Text(
-                            "Withdrawal limit: up to " + walletActionMoney(maximum) +
+                            "Withdrawal limit: " + walletActionMoney(minimum) + "–" + walletActionMoney(maximum) +
                                 " per transfer · " + walletActionMoney(daily) +
                                 " per day · " + (policy.dailyCountLimit?.toString() ?: "—") + " requests per day.",
                             style = MaterialTheme.typography.bodySmall,

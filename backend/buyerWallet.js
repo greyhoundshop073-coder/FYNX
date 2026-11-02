@@ -393,15 +393,17 @@ export async function ensureBuyerWalletSchema() {
 }
 
 
+const MINIMUM_WALLET_WITHDRAWAL_NGN = 50;
+
 function walletWithdrawalLimits() {
   const maximum = Number(process.env.FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT || '');
   const daily = Number(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT || '');
   const count = Number.parseInt(process.env.FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT || '', 10);
   // Paystack Nigeria transfer limits: NGN 50 minimum and NGN 10,000,000 maximum.
-  if (!Number.isFinite(maximum) || maximum < 50 || maximum > 10_000_000 ||
+  if (!Number.isFinite(maximum) || maximum < MINIMUM_WALLET_WITHDRAWAL_NGN || maximum > 10_000_000 ||
       !Number.isFinite(daily) || daily < maximum ||
       !Number.isInteger(count) || count <= 0) return null;
-  return { maximumPerTransfer: maximum, dailyAmountLimit: daily, dailyCountLimit: count };
+  return { minimumPerTransfer: MINIMUM_WALLET_WITHDRAWAL_NGN, maximumPerTransfer: maximum, dailyAmountLimit: daily, dailyCountLimit: count };
 }
 
 function walletProviderApproved(action) {
@@ -1630,6 +1632,9 @@ export function registerBuyerWalletRoutes({ app }) {
     }
     const limits = walletWithdrawalLimits();
     if (!limits) return res.status(503).json({ error: 'wallet withdrawal limits are not configured for this provider environment yet' });
+    if (amountValue < limits.minimumPerTransfer) {
+      return res.status(400).json({ error: 'withdrawal amount must be at least NGN ' + limits.minimumPerTransfer.toFixed(2) });
+    }
     if (amountValue > limits.maximumPerTransfer) {
       return res.status(400).json({ error: 'withdrawal amount is above the current per-transfer limit' });
     }

@@ -122,11 +122,23 @@ class FynxBuyerWalletClientTest {
     @Test
     fun walletSecurityParsesServerEnforcedDailyWithdrawalLimits() {
         val security = FynxBuyerWalletClient.parseWalletSecurity(
-            """{"hasWithdrawalPin":true,"isLocked":false,"limits":{"maximumPerTransfer":50000,"dailyAmountLimit":150000,"dailyCountLimit":3}}"""
+            """{"hasWithdrawalPin":true,"isLocked":false,"limits":{"minimumPerTransfer":50,"maximumPerTransfer":50000,"dailyAmountLimit":150000,"dailyCountLimit":3}}"""
         )
+        assertEquals(50.0, security.minimumPerTransfer!!, 0.0)
         assertEquals(50000.0, security.maximumPerTransfer!!, 0.0)
         assertEquals(150000.0, security.dailyAmountLimit!!, 0.0)
         assertEquals(3, security.dailyCountLimit)
+    }
+
+    @Test
+    fun walletWithdrawalRejectsAmountsBelowNairaMinimumBeforeRequestingProvider() {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.validateWithdrawalAmount(49.99)
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.validateWithdrawalAmount(Double.NaN)
+        }
+        FynxBuyerWalletClient.validateWithdrawalAmount(50.0)
     }
 
     @Test

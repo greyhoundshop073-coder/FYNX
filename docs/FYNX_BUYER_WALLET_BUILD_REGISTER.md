@@ -105,3 +105,5 @@ The Railway service exposes the database/auth/runtime variable names, but its vi
 The foundation verifier now explicitly protects the first-time Wallet path: summary reads cannot auto-create a wallet, the NOT_SETUP response must return null balance buckets with spending and withdrawals disabled, balances must come only from succeeded ledger postings, reserved funds must include Marketplace escrow, and provider/custody/compliance/Paystack gates remain mandatory.
 
 - Added explicit PostgreSQL negative-balance regression scenarios for AVAILABLE, RESERVED, MARKETPLACE_ESCROW and WITHDRAWAL_PENDING. The database guard's error now names Marketplace escrow as one of the protected buckets.
+
+- Withdrawal initiation now enforces the NGN 50 Paystack transfer minimum before opening the database transaction, resolving a bank account or creating a provider recipient. The same minimum is returned by the security endpoint, shown with the configured limits and checked by the Android client before it sends the request.
