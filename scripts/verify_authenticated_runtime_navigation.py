@@ -472,6 +472,17 @@ def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
     node = _find_control_node(root, [label.lower() for label in labels])
     return bool(node) and node.attrib.get("enabled", "true").lower() != "false"
 
+def control_is_clickable(xml_text: str, labels: list[str]) -> bool:
+    """Require an accessibility node that can actually receive the intended tap."""
+    if not xml_text:
+        return False
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    node = _find_control_node(root, [label.lower() for label in labels])
+    return bool(node) and node.attrib.get("clickable", "false").lower() == "true"
+
 def camera_wait_for_control(
     initial_xml: str, labels: list[str], *, enabled: bool | None = None,
     timeout: float = 30.0, prefix: str = "camera-control"
@@ -1058,6 +1069,10 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         )
         if countdown_xml:
             screenshot(f"{prefix}-camera-timer-countdown.png")
+            if control_is_clickable(countdown_xml, ["Cancel timer"]):
+                report.append("- PASS Cancel timer is exposed as a clickable accessibility action")
+            else:
+                FAILURES.append(prefix + ": Cancel timer is visible but not exposed as a clickable accessibility action")
             cancelled_xml = tap_control(
                 countdown_xml, ["Cancel timer"], f"{prefix}-camera-timer-cancel",
                 ["Take photo"], wait_attempts=4
@@ -1914,28 +1929,49 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # This tests the user-controlled path independently of the emulator's ASR model support.
     # The video editor keeps its style and caption controls in a scrollable bottom panel.
     # Scroll that panel itself so the manual field is genuinely visible before querying it.
-    display_size = run("adb", "shell", "wm", "size").stdout or ""
-    size_match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", display_size)
-    if size_match:
-        display_width, display_height = int(size_match.group(1)), int(size_match.group(2))
-        scroll_x = str(display_width // 2)
-        # The editor panel is bottom-anchored and its scroll viewport can be shorter
-        # than the panel. Repeat short upward swipes and re-read accessibility after
-        # each one instead of assuming one screen-relative gesture reached the field.
-        scroll_from = str(int(display_height * 0.88))
-        scroll_to = str(int(display_height * 0.62))
-        for scroll_attempt in range(5):
-            run("adb", "shell", "input", "swipe", scroll_x, scroll_from, scroll_x, scroll_to, "350")
-            time.sleep(0.35)
+    # The editor panel is a bottom-anchored ScrollView. Read its actual bounds
+    # from UIAutomator and keep the full swipe inside that viewport; screen-relative
+    # swipes can start in the footer and finish above the panel without scrolling it.
+    vertical_viewports = []
+    for node in nodes(caption_xml):
+        if node.attrib.get("class") != "android.widget.ScrollView":
+            continue
+        if node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        bounds = node.attrib.get("bounds", "")
+        try:
+            left_top, right_bottom = bounds.split("][", 1)
+            left, top = map(int, left_top.strip("[]").split(","))
+            right, bottom = map(int, right_bottom.strip("[]").split(","))
+        except (ValueError, IndexError):
+            continue
+        if right > left and bottom - top >= 120:
+            vertical_viewports.append((left, top, right, bottom))
+
+    if vertical_viewports:
+        left, top, right, bottom = max(
+            vertical_viewports, key=lambda viewport: viewport[3] - viewport[1]
+        )
+        scroll_x = str((left + right) // 2)
+        inset = max(24, min(48, (bottom - top) // 10))
+        scroll_from = str(bottom - inset)
+        scroll_to = str(top + inset)
+        for scroll_attempt in range(8):
+            if find_control(caption_xml, ["Video captions"]):
+                break
+            run("adb", "shell", "input", "swipe", scroll_x, scroll_from, scroll_x, scroll_to, "450")
+            time.sleep(0.45)
             caption_xml = dump_ui(
                 f"{prefix}-camera-video-manual-caption-scroll-{scroll_attempt + 1}.xml"
             ) or caption_xml
-            if find_control(caption_xml, ["Video captions"]):
-                break
+    else:
+        FAILURES.append(prefix + ": video editor did not expose a vertical scroll viewport for manual captions")
+
     manual_caption_field = find_control(caption_xml, ["Video captions"])
     if not manual_caption_field:
         FAILURES.append(prefix + ": manual Video captions field was not visible in the video editor")
     else:
+        report.append("- PASS manual Video captions field became visible inside the scrolled video-editor viewport")
         _, field_x, field_y = manual_caption_field
         run("adb", "shell", "input", "tap", str(field_x), str(field_y))
         time.sleep(0.6)
