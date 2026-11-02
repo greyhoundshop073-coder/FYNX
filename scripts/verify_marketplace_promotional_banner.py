@@ -4,11 +4,16 @@ ROOT = Path(__file__).resolve().parents[1]
 PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 BANNER = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt").read_text(encoding="utf-8")
 WEEKLY_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceWeeklySellerClient.kt").read_text(encoding="utf-8")
+SPONSORED_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSponsoredPromotionClient.kt").read_text(encoding="utf-8")
 REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf-8")
 
 checks = [
     ("Marketplace home uses the new full-width promotional banner", "MarketplacePromotionalBanner(" in PANEL and "weeklySeller = weeklySeller" in PANEL),
     ("weekly seller ranking is loaded through the authenticated Marketplace client", "FynxMarketplaceWeeklySellerClient.load(context)" in PANEL and "/api/marketplace/sellers/weekly" in WEEKLY_CLIENT),
+    ("approved paid product campaigns are loaded into Marketplace", "FynxMarketplaceSponsoredPromotionClient.load(context)" in PANEL and "/api/advertising/marketplace-feed" in SPONSORED_CLIENT),
+    ("paid advertisements are visibly marked sponsored", "sponsoredPromotions.take(3)" in BANNER and 'eyebrow = "SPONSORED"' in BANNER),
+    ("weekly award remains separate from paid campaign ranking", "marketplace_ad_campaigns" not in REPUTATION[REPUTATION.find("app.get('/api/marketplace/sellers/weekly'"):REPUTATION.find("app.get('/api/marketplace/sellers/:username/reputation'")]),
+
     ("weekly winner product is fetched from the exact canonical listing before display", "loadExactMarketplaceListing(context, winner.featuredListingId)" in PANEL and "weeklySellerListing = exact" in PANEL),
     ("banner uses a full-width fixed-height photographic slide", "Modifier.width(width).height(MARKETPLACE_PROMO_BANNER_HEIGHT_DP.dp)" in BANNER and "MARKETPLACE_PROMO_BANNER_HEIGHT_DP = 224" in BANNER),
     ("banner uses real FYNX media with a crop fit", "FynxRemoteMedia(" in BANNER and "contentScale = ContentScale.Crop" in BANNER),
