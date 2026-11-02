@@ -23,7 +23,7 @@ checks = [
         and 'body?.database !== "ready"' in runner
         and 'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
         and 'if [ -z "${FYNX_E2E_USERNAME:-}" ] || [ -z "${FYNX_E2E_PASSWORD:-}" ]; then' in runner
-        and runner.indexOf('elif node --input-type=module -e') < runner.indexOf('if [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" = "1" ]; then')
+        and runner.index('elif node --input-type=module -e') < runner.index('if [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" = "1" ]; then')
         and 'E2E credentials are not configured; running read-only camera/Marketplace UI certification' in runner
         and 'Live backend is unavailable; running read-only camera/Marketplace UI certification' in runner
         and 'FYNX_LOCAL_VISUALS_ONLY=1' in runner
@@ -144,6 +144,13 @@ checks.extend([
         and "BorderStroke(1.dp, dealsGlassBorder)" in hero_source,
     ),
 ])
+
+
+    (
+        "Python regression verifier uses Python string APIs for runtime-order checks",
+        "runner.indexOf(" not in Path(__file__).read_text(encoding="utf-8")
+        and "runner.index(" in Path(__file__).read_text(encoding="utf-8"),
+    ),
 
 failed = 0
 for name, passed in checks:
