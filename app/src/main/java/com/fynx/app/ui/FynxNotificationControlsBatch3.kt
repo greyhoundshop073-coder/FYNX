@@ -39,6 +39,7 @@ object FynxNotificationControlsBatch3 {
             FynxNotificationType.STORY -> preferences.storiesEnabled
             FynxNotificationType.REMINDER -> preferences.remindersEnabled
             FynxNotificationType.SAFETY -> true
+            FynxNotificationType.SUPPORT -> true
             FynxNotificationType.GROUP -> preferences.groupEnabled
             FynxNotificationType.MARKETPLACE_ORDER, FynxNotificationType.MARKETPLACE_PRICE -> preferences.marketplaceEnabled
             FynxNotificationType.WALLET_ACTIVITY -> preferences.walletEnabled
