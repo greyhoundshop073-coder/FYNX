@@ -574,9 +574,10 @@ fun FynxCameraCapturePanel(
     var recordingElapsed by remember { mutableLongStateOf(0L) }
     var error by remember { mutableStateOf<String?>(null) }
     var statusShareChecking by remember { mutableStateOf(false) }
-    var pendingUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri) }
-    var pendingOriginalUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri) }
-    var pendingType by remember(initialMediaUri, initialMediaType) { mutableStateOf(initialMediaType) }
+    val initialMediaIsLocalFile = initialMediaUri?.scheme == "file"
+    var pendingUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri.takeIf { initialMediaIsLocalFile }) }
+    var pendingOriginalUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri.takeIf { initialMediaIsLocalFile }) }
+    var pendingType by remember(initialMediaUri, initialMediaType) { mutableStateOf(initialMediaType.takeIf { initialMediaIsLocalFile }) }
     var cameraReady by remember { mutableStateOf(false) }
     var cameraTextOverlays by remember(initialMediaUri) { mutableStateOf(initialTextOverlays) }
     var cameraVideoDurationMs by remember { mutableLongStateOf(0L) }
@@ -619,6 +620,14 @@ fun FynxCameraCapturePanel(
             }
         }
         videoEditsApplied = false
+    }
+    LaunchedEffect(initialMediaUri, initialMediaType) {
+        val source = initialMediaUri ?: return@LaunchedEffect
+        if (source.scheme == "file") return@LaunchedEffect
+        val copied = withContext(Dispatchers.IO) { copyCameraGalleryMediaToCache(context, source) }
+        pendingUri = Uri.fromFile(copied.first)
+        pendingOriginalUri = Uri.fromFile(copied.second)
+        pendingType = initialMediaType ?: copied.third
     }
     LaunchedEffect(pendingUri, pendingType) {
         cameraVideoDurationMs = 0L
