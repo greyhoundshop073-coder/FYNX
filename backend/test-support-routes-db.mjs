@@ -47,7 +47,7 @@ try {
       byte_size INTEGER NOT NULL
     );
   `);
-  await testPool.query("INSERT INTO users(id,username,display_name) VALUES (1,'owner','FYNX Owner'),(2,'admin-one','Support Admin One'),(3,'admin-two','Support Admin Two'),(4,'reporter','Test Reporter'),(5,'other-user','Other User')");
+  await testPool.query("INSERT INTO users(id,username,display_name) VALUES (1,'fynx','FYNX Owner'),(2,'admin-one','Support Admin One'),(3,'admin-two','Support Admin Two'),(4,'reporter','Test Reporter'),(5,'other-user','Other User')");
   await testPool.query("SELECT setval(pg_get_serial_sequence('users','id'),5,true)");
 
   const app = express();
