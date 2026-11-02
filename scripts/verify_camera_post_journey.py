@@ -411,11 +411,13 @@ checks.extend([
      and "onCapturedWithTextEdits" in camera
      and "mediaDraftCodecPreservesEveryEditableTextOverlayProperty" in overlay_test
      and "localPostDraftKeepsEditableMediaSourceAndOverlayStateUntilDelete" in overlay_test),
-    ("Video export validation checks overlay pixels at the selected time and media position",
+    ("Video export validation checks every overlay at its own selected time and media position",
      "verifyFynxVideoEditOutput(source, output, videoStyle, visibleText)" in camera
      and "selected video text has no visible interval" in video_effects
      and "did not visibly burn the text overlay" in video_effects
-     and "cameraVideoTextOverlayBackgroundAnchor" in video_effects),
+     and "cameraVideoTextOverlayBackgroundAnchor" in video_effects
+     and "verifiableTextOverlays.forEach" in video_effects
+     and "requestedTextOverlays.size == verifiableTextOverlays.size" in video_effects),
     ("More options is an accessible clickable row with viewport-aware runtime navigation",
      'contentDescription = "More options"' in home
      and "camera_scroll_until_control" in runtime
