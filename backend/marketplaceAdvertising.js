@@ -263,6 +263,13 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       if (req.body?.artworkMediaId != null && req.body.artworkMediaId !== "" && artworkMediaId === null) {
         return res.status(400).json({ error: "artwork must be an uploaded FYNX image media ID" });
       }
+      if (artworkMediaId !== null) {
+        const ownedMedia = await pool.query(
+          "SELECT 1 FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",
+          [artworkMediaId, auth.userId]
+        );
+        if (!ownedMedia.rowCount) return res.status(403).json({ error: "seasonal artwork must be uploaded by the current Owner/Admin account" });
+      }
       const result = await pool.query(
         "INSERT INTO marketplace_seasonal_promotions (occasion_key,headline,body,action_label,artwork_media_id,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
         [occasionKey, headline, body, actionLabel, artworkMediaId, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
