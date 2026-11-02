@@ -207,7 +207,12 @@ internal suspend fun applyFynxVideoEdits(
  * Verify the finished MP4 before the editor accepts the export. The check decodes frames, keeps
  * the source video track and any source audio track, and confirms a non-Natural look changed pixels.
  */
-internal fun verifyFynxVideoEditOutput(sourceUri: Uri, outputUri: Uri, style: CameraVideoStyle) {
+internal fun verifyFynxVideoEditOutput(
+    sourceUri: Uri,
+    outputUri: Uri,
+    style: CameraVideoStyle,
+    textOverlays: List<FynxCameraTextOverlay> = emptyList()
+) {
     val sourceFile = sourceUri.path?.let(::File) ?: error("The original video file is unavailable.")
     val outputFile = outputUri.path?.let(::File) ?: error("The edited video file is unavailable.")
     require(sourceFile.isFile && sourceFile.length() > 1024L) { "The original video file is unavailable." }
@@ -240,14 +245,22 @@ internal fun verifyFynxVideoEditOutput(sourceUri: Uri, outputUri: Uri, style: Ca
         "Video export did not preserve the original audio track."
     }
 
-    fun firstUsableFrame(file: File): android.graphics.Bitmap {
+    fun durationMs(file: File): Long {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(file.absolutePath)
-            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
-            val atUs = durationMs.coerceAtMost(2_000L) * 500L
-            retriever.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        } finally {
+            retriever.release()
+        }
+    }
+
+    fun frameAt(file: File, atMs: Long): android.graphics.Bitmap {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            retriever.getFrameAtTime(atMs.coerceAtLeast(0L) * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
                 ?: retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 ?: error("Video export could not decode a preview frame.")
         } finally {
@@ -255,8 +268,17 @@ internal fun verifyFynxVideoEditOutput(sourceUri: Uri, outputUri: Uri, style: Ca
         }
     }
 
-    val sourceFrame = firstUsableFrame(sourceFile)
-    val outputFrame = firstUsableFrame(outputFile)
+    val sourceDurationMs = durationMs(sourceFile)
+    val sampleTimeMs = textOverlays.firstOrNull { item ->
+        item.text.isNotBlank() && item.startMs < sourceDurationMs && item.endMs > 0L
+    }?.let { item ->
+        val start = item.startMs.coerceAtLeast(0L)
+        val end = item.endMs.coerceAtMost(sourceDurationMs)
+        start + ((end - start).coerceAtLeast(1L) / 2L)
+    } ?: sourceDurationMs.coerceAtMost(2_000L) / 2L
+
+    val sourceFrame = frameAt(sourceFile, sampleTimeMs)
+    val outputFrame = frameAt(outputFile, sampleTimeMs)
     try {
         require(outputFrame.width > 0 && outputFrame.height > 0) {
             "Video export produced an invalid preview frame."
@@ -285,6 +307,54 @@ internal fun verifyFynxVideoEditOutput(sourceUri: Uri, outputUri: Uri, style: Ca
             val meanDifference = if (samples == 0) 0.0 else totalDifference.toDouble() / (samples * 3.0)
             require(meanDifference > 0.5) {
                 "The selected ${style.label} style did not visibly change the exported video."
+            }
+        }
+
+        val overlayToVerify = textOverlays.firstOrNull { item ->
+            item.text.isNotBlank() && item.startMs < sourceDurationMs && item.endMs > 0L
+        }
+        if (textOverlays.any { it.text.isNotBlank() }) {
+            require(overlayToVerify != null) {
+                "The selected video text has no visible interval inside this clip."
+            }
+            val item = overlayToVerify!!
+            val frameWidth = minOf(sourceFrame.width, outputFrame.width)
+            val frameHeight = minOf(sourceFrame.height, outputFrame.height)
+            val centerX = (item.x.coerceIn(0.04f, 0.96f) * frameWidth).toInt()
+            val centerY = (item.y.coerceIn(0.06f, 0.94f) * frameHeight).toInt()
+            val radiusX = (frameWidth * 0.42f * item.scale.coerceIn(0.55f, 2.4f)).toInt().coerceAtLeast(12)
+            val radiusY = (frameHeight * 0.16f * item.scale.coerceIn(0.55f, 2.4f)).toInt().coerceAtLeast(10)
+            val targetRed = android.graphics.Color.red(item.color)
+            val targetGreen = android.graphics.Color.green(item.color)
+            val targetBlue = android.graphics.Color.blue(item.color)
+
+            fun matchingTextPixels(frame: android.graphics.Bitmap): Int {
+                var matches = 0
+                val left = (centerX - radiusX).coerceAtLeast(0)
+                val right = (centerX + radiusX).coerceAtMost(frame.width - 1)
+                val top = (centerY - radiusY).coerceAtLeast(0)
+                val bottom = (centerY + radiusY).coerceAtMost(frame.height - 1)
+                var y = top
+                while (y <= bottom) {
+                    var x = left
+                    while (x <= right) {
+                        val pixel = frame.getPixel(x, y)
+                        if (android.graphics.Color.alpha(pixel) > 160 &&
+                            kotlin.math.abs(android.graphics.Color.red(pixel) - targetRed) < 90 &&
+                            kotlin.math.abs(android.graphics.Color.green(pixel) - targetGreen) < 90 &&
+                            kotlin.math.abs(android.graphics.Color.blue(pixel) - targetBlue) < 90
+                        ) matches++
+                        x++
+                    }
+                    y++
+                }
+                return matches
+            }
+
+            val sourceMatches = matchingTextPixels(sourceFrame)
+            val outputMatches = matchingTextPixels(outputFrame)
+            require(outputMatches >= sourceMatches + 8) {
+                "Video export did not visibly burn the text overlay into its selected time and position."
             }
         }
     } finally {
