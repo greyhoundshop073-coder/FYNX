@@ -54,6 +54,14 @@ checks = [
  ("summary and activity use independent loading states", "summaryLoading" in panel and "activityLoading" in panel and "Checking your wallet" in panel and "Loading wallet activity" in panel),
  ("preparation notice never appears while summary is loading", "if (!summaryLoading && !isWalletReady && summaryError == null)" in panel and "summaryError != null -> \"Unavailable\"" in panel),
  ("loading, retry and empty states", "Loading wallet activity" in panel and "refreshVersion += 1" in panel and "No wallet activity yet" in panel),
+ ("authenticated Wallet runtime fails capture when real summary/activity APIs visibly return errors",
+  "authenticated_wallet_error_markers=(" in runtime
+  and 'if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":' in runtime
+  and '"Wallet unavailable"' in runtime
+  and '"Your wallet could not be loaded"' in runtime
+  and '"Activity could not load"' in runtime
+  and "if authenticated_wallet_errors:" in runtime
+  and "wallet_opened=False" in runtime),
  ("summary and activity failures are distinct", "summaryError" in panel and "activityError" in panel and "Wallet unavailable" in panel and "Activity could not load" in panel),
  ("Wallet explains local-only and expired-token sign-in recovery", "FynxBackendClient.hasAccessToken(context)" in panel and "FynxBackendClient.isUnauthorizedFailure(failure)" in panel and "leaving it blank only opens local mode" in panel and "online FYNX session has expired" in panel),
  ("failed history never appears as a successful empty state", 'visibleActivity.isEmpty() && !loading && summaryError == null && activityError == null' in panel),
