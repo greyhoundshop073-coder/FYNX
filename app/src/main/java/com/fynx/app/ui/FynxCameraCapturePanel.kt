@@ -1305,14 +1305,16 @@ fun FynxCameraCapturePanel(
                 color = Color(0xFF25364A).copy(alpha = 0.88f)
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 18.dp),
+                    modifier = Modifier.width(240.dp).padding(horizontal = 20.dp, vertical = 18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge)
                     Button(
                         onClick = ::cancelCaptureTimer,
-                        modifier = Modifier.semantics { contentDescription = "Cancel timer" }
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Cancel timer"
+                        }
                     ) {
                         Text("Cancel timer")
                     }
