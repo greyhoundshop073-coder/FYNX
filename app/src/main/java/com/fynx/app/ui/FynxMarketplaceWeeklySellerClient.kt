@@ -29,8 +29,13 @@ data class FynxMarketplaceSellerWeeklyAward(
 )
 
 object FynxMarketplaceWeeklySellerClient {
-    suspend fun load(context: Context): Result<List<FynxMarketplaceWeeklySeller>> =
-        FynxBackendClient.get(context, "/api/marketplace/sellers/weekly").mapCatching { raw ->
+    suspend fun load(context: Context): Result<List<FynxMarketplaceWeeklySeller>> {
+        val response = FynxBackendClient.get(context, "/api/marketplace/sellers/weekly")
+        val raw = response.getOrNull() ?: FynxMarketplaceFeedCache.readResponse(
+            context, "weekly_sellers", 6L * 60L * 60L * 1000L
+        ) ?: return Result.failure(response.exceptionOrNull() ?: IllegalStateException("Weekly seller awards are unavailable."))
+        if (response.isSuccess) FynxMarketplaceFeedCache.writeResponse(context, "weekly_sellers", raw)
+        return runCatching {
             val root = JSONObject(raw)
             val rows = root.optJSONArray("winners")
                 ?: throw IllegalStateException("Weekly seller response is incomplete.")
@@ -56,6 +61,8 @@ object FynxMarketplaceWeeklySellerClient {
                 )
             }
         }
+    }
+
     suspend fun history(context: Context, username: String, limit: Int = 24): Result<List<FynxMarketplaceSellerWeeklyAward>> {
         val cleanUsername = username.trim().removePrefix("@")
         if (cleanUsername.isBlank()) return Result.failure(IllegalArgumentException("Seller username is required."))

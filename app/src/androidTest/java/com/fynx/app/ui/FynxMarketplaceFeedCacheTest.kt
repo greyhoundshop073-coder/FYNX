@@ -59,6 +59,14 @@ class FynxMarketplaceFeedCacheTest {
         assertNull(FynxMarketplaceFeedCache.read(context, "", "All", ""))
     }
 
+    @Test fun cachedListingsWithNoAvailableStockAreNotRestored() {
+        val context = accountContext("buyer-one")
+        FynxMarketplaceFeedCache.write(
+            context, "", "All", "", listOf(listing("out-of-stock").copy(quantity = 0)), false
+        )
+        assertNull(FynxMarketplaceFeedCache.read(context, "", "All", ""))
+    }
+
     @Test fun promotionResponseCacheIsAlsoAccountScoped() {
         val first = accountContext("buyer-one")
         val second = accountContext("buyer-two")
