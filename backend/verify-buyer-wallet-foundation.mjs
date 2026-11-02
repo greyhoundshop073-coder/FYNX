@@ -15,6 +15,9 @@ const checks = [
   ["success cannot finalize without balanced entries", source.includes("buyer_wallet_transaction_success_balanced") && source.includes("successful buyer wallet transaction must have balanced ledger entries")],
   ["ledger is append-only and double-entry balanced", source.includes("fynx_buyer_wallet_reject_ledger_mutation") && source.includes("BEFORE UPDATE OR DELETE ON buyer_wallet_ledger_entries") && source.includes("buyer wallet transaction is not double-entry balanced") && source.includes("DEFERRABLE INITIALLY DEFERRED")],
   ["no negative spendable/reserved/pending buckets", source.includes("buyer wallet available, reserved or withdrawal balance cannot be negative")],
+  ["deferred balance guard covers AVAILABLE, RESERVED, MARKETPLACE_ESCROW and WITHDRAWAL_PENDING",
+    source.includes("e.account_code IN ('AVAILABLE','RESERVED','MARKETPLACE_ESCROW','WITHDRAWAL_PENDING')") &&
+    source.includes("buyer wallet available, reserved, Marketplace escrow or withdrawal balance cannot be negative")],
   ["authenticated private summary", source.includes("app.get('/api/wallet/summary', auth") && source.includes("Cache-Control', 'no-store, private")],
   ["authenticated buyer-scoped activity", source.includes("app.get('/api/wallet/transactions', auth") && source.includes("WHERE t.user_id=$1 AND t.wallet_id=$2")],
   ["activity cursor validates paired timestamp and UUID values", source.includes("parseBuyerWalletActivityCursor") && source.includes("activity cursor fields must be single strings") && source.includes("activity cursor date is invalid") && source.includes("activity cursor id is invalid")],

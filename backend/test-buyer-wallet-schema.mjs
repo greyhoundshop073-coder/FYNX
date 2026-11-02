@@ -236,19 +236,21 @@ try {
     await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [id]);
   }, "balanced");
 
-  await expectTransactionFailure(async () => {
-    const id = await insertPendingTransaction(walletId, userId, 600, "NEGATIVE");
-    await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [id]);
-    await client.query(
-      "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,'AVAILABLE','DEBIT',600,'NGN')",
-      [id, walletId, "LEG-" + id + "-AVAILABLE"]
-    );
-    await client.query(
-      "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,'PROVIDER_CLEARING','CREDIT',600,'NGN')",
-      [id, walletId, "LEG-" + id + "-CLEARING"]
-    );
-    await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [id]);
-  }, "buyer wallet available, reserved or withdrawal balance cannot be negative");
+  for (const accountCode of ["AVAILABLE", "RESERVED", "MARKETPLACE_ESCROW", "WITHDRAWAL_PENDING"]) {
+    await expectTransactionFailure(async () => {
+      const id = await insertPendingTransaction(walletId, userId, 600, "NEGATIVE_" + accountCode);
+      await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [id]);
+      await client.query(
+        "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,$4,'DEBIT',600,'NGN')",
+        [id, walletId, "LEG-" + id + "-" + accountCode, accountCode]
+      );
+      await client.query(
+        "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,'PROVIDER_CLEARING','CREDIT',600,'NGN')",
+        [id, walletId, "LEG-" + id + "-CLEARING"]
+      );
+      await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [id]);
+    }, "buyer wallet available");
+  }
 
   await expectTransactionFailure(async () => {
     await client.query("UPDATE buyer_wallet_transactions SET description='rewrite' WHERE id=$1", [validTransactionId]);
@@ -266,7 +268,7 @@ try {
     );
   }, "buyer wallet transaction owner or currency does not match its wallet");
 
-  console.log("FYNX buyer wallet PostgreSQL schema, ledger, cursor, direction and summary-balance tests GREEN (9 scenarios)");
+  console.log("FYNX buyer wallet PostgreSQL schema, ledger, cursor, direction and summary-balance tests GREEN (12 scenarios)");
 } finally {
   if (schemaCreated) {
     await client.query("SET search_path TO public").catch(() => {});

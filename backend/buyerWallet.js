@@ -326,7 +326,7 @@ export async function ensureBuyerWalletSchema() {
            GROUP BY e.account_code
           HAVING SUM(CASE WHEN e.side = 'CREDIT' THEN e.amount ELSE -e.amount END) < 0
         ) THEN
-          RAISE EXCEPTION 'buyer wallet available, reserved or withdrawal balance cannot be negative'
+          RAISE EXCEPTION 'buyer wallet available, reserved, Marketplace escrow or withdrawal balance cannot be negative'
             USING ERRCODE = '23514';
         END IF;
         RETURN NULL;

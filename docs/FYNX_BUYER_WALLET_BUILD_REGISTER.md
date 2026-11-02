@@ -73,7 +73,7 @@ Google Merchant Center and virtual cards are outside this release.
 - Marketplace → Wallet → Back returns to Marketplace.
 - Wallet summary, activity, Add Money, bank-transfer readiness and Withdraw surfaces were captured from the installed APK using Android UIAutomator and adb screenshots.
 - The first-time screen shows no available balance rather than a sample or locally fabricated amount.
-- Backend and PostgreSQL CI checks passed for wallet owner/currency validation, balanced double-entry postings, append-only transaction/ledger history, non-negative available/reserved/withdrawal buckets, keyset activity pagination, and the reserved-balance inclusion of Marketplace escrow.
+- Backend and PostgreSQL CI checks passed for wallet owner/currency validation, balanced double-entry postings, append-only transaction/ledger history, non-negative available/reserved/Marketplace-escrow/withdrawal buckets, keyset activity pagination, and the reserved-balance inclusion of Marketplace escrow, and rejection of negative postings in each of the four buyer balance buckets.
 
 ### Read-only environment observations
 
@@ -103,3 +103,5 @@ The Railway service exposes the database/auth/runtime variable names, but its vi
 ### Added regression coverage
 
 The foundation verifier now explicitly protects the first-time Wallet path: summary reads cannot auto-create a wallet, the NOT_SETUP response must return null balance buckets with spending and withdrawals disabled, balances must come only from succeeded ledger postings, reserved funds must include Marketplace escrow, and provider/custody/compliance/Paystack gates remain mandatory.
+
+- Added explicit PostgreSQL negative-balance regression scenarios for AVAILABLE, RESERVED, MARKETPLACE_ESCROW and WITHDRAWAL_PENDING. The database guard's error now names Marketplace escrow as one of the protected buckets.
