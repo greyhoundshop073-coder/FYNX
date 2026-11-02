@@ -8,11 +8,15 @@ const start = advertising.indexOf('app.get("/api/advertising/marketplace-feed"')
 const end = advertising.lastIndexOf("\\n}");
 assert.ok(start >= 0 && end > start, "Marketplace sponsored feed route must be registered");
 const route = advertising.slice(start, end);
+const metricStart = advertising.indexOf('app.post("/api/advertising/campaigns/:id/metric"', 0);
+const metricEnd = advertising.indexOf('app.get("/api/advertising/marketplace-feed"', metricStart);
+assert.ok(metricStart >= 0 && metricEnd > metricStart, "campaign metrics route must be registered");
+const metricRoute = advertising.slice(metricStart, metricEnd);
 
 const checks = [
   ["sponsored feed requires an authenticated FYNX session", route.includes("const auth = authenticate(req, res)") && route.includes("if (!auth) return")],
   ["sponsored feed initializes the shared listing schema before reading inventory", route.includes("await ensureMarketplaceSchemaForPool(pool)") && marketplaceSchema.includes("ADD COLUMN IF NOT EXISTS reserved_quantity")],
-  ["impression and click metrics remain limited to active campaigns", advertising.includes("/api/advertising/campaigns/:id/metric") && advertising.includes("c.status='active'") && advertising.includes("impressions = m.impressions + CASE WHEN $1='impression' THEN 1 ELSE 0 END")],
+  ["impression and click metrics require authentication and a currently eligible paid campaign", metricRoute.includes("const auth = authenticate(req, res)") && metricRoute.includes("c.status='active'") && metricRoute.includes("c.payment_status='paid'") && metricRoute.includes("c.approved_at IS NOT NULL") && metricRoute.includes("c.starts_at <= NOW()") && metricRoute.includes("c.ends_at > NOW()") && metricRoute.includes("c.spent_kobo < c.total_budget_kobo")],
   ["successful ad payment returns the campaign shape consumed by Android", advertising.includes("return res.json({ paid: true, campaign: updated.rows[0] });") && advertisingClient.includes("optJSONObject(\"campaign\")")],
   ["only product campaigns can be displayed in the product banner", route.includes("c.creative_type = 'product'")],
   ["only approved and paid campaigns can be displayed", route.includes("c.status = 'active'") && route.includes("c.payment_status = 'paid'") && route.includes("c.approved_at IS NOT NULL")],
