@@ -443,7 +443,7 @@ internal fun renderFynxPhotoTextOverlays(
         source.absolutePath,
         BitmapFactory.Options().apply {
             inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.ARGB_8888,
+            inPreferredConfig = Bitmap.Config.ARGB_8888
             // Canvas(bitmap) draws the text directly into the decoded photo.
             inMutable = true
         }
