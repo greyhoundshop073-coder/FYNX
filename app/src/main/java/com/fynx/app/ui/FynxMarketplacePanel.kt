@@ -1385,23 +1385,49 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         OutlinedButton(onClick = { showSell = true }, modifier = Modifier.fillMaxWidth()) { Text("Sell something") }
                     }
                 }
-                listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
-                    val filtered = query.isNotBlank() || category != "All" || nearbyMode
-                    if (filtered) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
-                            Spacer(Modifier.height(10.dp))
-                            Text("No matching products", style = MaterialTheme.typography.titleLarge)
-                            Text("Try another search or clear the current filters.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(8.dp))
-                            TextButton(onClick = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }) { Text("Clear filters") }
-                        }
-                    } else {
-                        MarketplaceReferenceEmptyState(
-                            title = "No products yet",
-                            message = "Be the first seller on FYNX",
-                            onSell = { showSell = true }
+                listings.isEmpty() -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    // The empty catalogue is still the Marketplace home: keep the promo card visible here too.
+                    item(key = "marketplace-empty-hero") {
+                        MarketplacePromotionalBanner(
+                            listings = listings,
+                            sellerReputations = sellerReputations,
+                            weeklySeller = weeklySeller,
+                            weeklySellerListing = weeklySellerListing,
+                            sponsoredPromotions = sponsoredPromotions,
+                            seasonalPromotions = seasonalPromotions,
+                            onOpenListing = { selected = it },
+                            onOpenSeller = { sellerStoreUsername = it },
+                            onShopNow = { showAllProducts = true },
+                            onOpenOrders = { showOrders = true; reloadOrders() },
+                            onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
+                            modifier = Modifier.fillMaxWidth()
                         )
+                    }
+                    item(key = "marketplace-empty-state") {
+                        val filtered = query.isNotBlank() || category != "All" || nearbyMode
+                        if (filtered) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
+                                Spacer(Modifier.height(10.dp))
+                                Text("No matching products", style = MaterialTheme.typography.titleLarge)
+                                Text("Try another search or clear the current filters.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.height(8.dp))
+                                TextButton(onClick = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }) { Text("Clear filters") }
+                            }
+                        } else {
+                            MarketplaceReferenceEmptyState(
+                                title = "No products yet",
+                                message = "Be the first seller on FYNX",
+                                onSell = { showSell = true }
+                            )
+                        }
                     }
                 }
                 else -> if (showAllProducts || query.isNotBlank() || category != "All" || nearbyMode) {
