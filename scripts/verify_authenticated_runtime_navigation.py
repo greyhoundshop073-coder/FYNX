@@ -1911,8 +1911,8 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     if size_match:
         display_width, display_height = int(size_match.group(1)), int(size_match.group(2))
         scroll_x = str(display_width // 2)
-        scroll_from = str(int(display_height * 0.82))
-        scroll_to = str(int(display_height * 0.56))
+        scroll_from = str(int(display_height * 0.90))
+        scroll_to = str(int(display_height * 0.68))
         run("adb", "shell", "input", "swipe", scroll_x, scroll_from, scroll_x, scroll_to, "500")
         time.sleep(0.8)
     caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-before.xml") or caption_xml
