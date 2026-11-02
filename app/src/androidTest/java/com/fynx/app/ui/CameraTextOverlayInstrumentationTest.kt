@@ -27,6 +27,27 @@ class CameraTextOverlayInstrumentationTest {
     }
 
     @Test
+    fun videoOverlayCoordinatesPreserveTopCentreAndBottomMediaPositions() {
+        val topLeft = cameraVideoTextOverlayBackgroundAnchor(
+            FynxCameraTextOverlay(x = 0.04f, y = 0.06f)
+        )
+        assertEquals("Left edge maps to negative NDC X", -0.92f, topLeft.first, 0.001f)
+        assertEquals("Top edge maps to positive NDC Y", 0.88f, topLeft.second, 0.001f)
+
+        val center = cameraVideoTextOverlayBackgroundAnchor(
+            FynxCameraTextOverlay(x = 0.5f, y = 0.5f)
+        )
+        assertEquals("Media centre maps to NDC centre X", 0f, center.first, 0.001f)
+        assertEquals("Media centre maps to NDC centre Y", 0f, center.second, 0.001f)
+
+        val bottomRight = cameraVideoTextOverlayBackgroundAnchor(
+            FynxCameraTextOverlay(x = 0.96f, y = 0.94f)
+        )
+        assertEquals("Right edge maps to positive NDC X", 0.92f, bottomRight.first, 0.001f)
+        assertEquals("Bottom edge maps to negative NDC Y", -0.88f, bottomRight.second, 0.001f)
+    }
+
+    @Test
     fun photoTextOverlayIsRenderedIntoTheExportedImage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val source = File(context.cacheDir, "fynx-text-overlay-source.jpg")
