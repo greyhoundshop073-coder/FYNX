@@ -72,6 +72,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
   };
 
   // Weekly recognition counts only orders that reached COMPLETED during the current week.
+  // Sellers without a live, in-stock product are excluded before rank assignment.
   // Advertising spend and impressions never influence seller eligibility or rank.
   app.get('/api/marketplace/sellers/weekly', auth, async (_req, res) => {
     try {
@@ -90,33 +91,38 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
             AND o.completed_at >= w.week_start
             AND o.completed_at < w.week_end
           GROUP BY o.seller_id
-        ), ranked_sellers AS (
+        ), eligible_sellers AS (
           SELECT s.seller_id, u.username, u.display_name,
                  s.completed_orders, s.unique_buyers,
-                 ROW_NUMBER() OVER (
-                   ORDER BY s.completed_orders DESC, s.unique_buyers DESC, u.username ASC, s.seller_id ASC
-                 )::INTEGER AS weekly_rank
+                 product.id AS featured_listing_id,
+                 product.title AS featured_product_title,
+                 product.price AS featured_product_price,
+                 product.currency AS featured_product_currency
           FROM weekly_sales s
           JOIN users u ON u.id = s.seller_id
+          JOIN LATERAL (
+            SELECT l.id, l.title, l.price, l.currency
+            FROM marketplace_listings l
+            WHERE l.seller_id = s.seller_id
+              AND COALESCE(l.active, TRUE) = TRUE
+              AND l.quantity > 0
+            ORDER BY l.created_at DESC, l.id DESC
+            LIMIT 1
+          ) product ON TRUE
+        ), ranked_sellers AS (
+          SELECT eligible_sellers.*,
+                 ROW_NUMBER() OVER (
+                   ORDER BY completed_orders DESC, unique_buyers DESC, username ASC, seller_id ASC
+                 )::INTEGER AS weekly_rank
+          FROM eligible_sellers
         )
         SELECT w.week_start, w.week_end,
                s.seller_id, s.username, s.display_name,
                s.completed_orders, s.unique_buyers, s.weekly_rank,
-               product.id AS featured_listing_id,
-               product.title AS featured_product_title,
-               product.price AS featured_product_price,
-               product.currency AS featured_product_currency
+               s.featured_listing_id, s.featured_product_title,
+               s.featured_product_price, s.featured_product_currency
         FROM ranked_sellers s
         CROSS JOIN week_bounds w
-        JOIN LATERAL (
-          SELECT l.id, l.title, l.price, l.currency
-          FROM marketplace_listings l
-          WHERE l.seller_id = s.seller_id
-            AND COALESCE(l.active, TRUE) = TRUE
-            AND l.quantity > 0
-          ORDER BY l.created_at DESC, l.id DESC
-          LIMIT 1
-        ) product ON TRUE
         ORDER BY s.weekly_rank
         LIMIT 5
       `, []);
