@@ -268,6 +268,7 @@ fun FynxBuyerWalletPanel() {
     if (activeAction != "HOME") {
         FynxWalletActionPanel(
             screen = activeAction,
+            testMode = wallet?.testMode == true,
             amount = fundingAmount,
             onAmountChange = { fundingAmount = it },
             availableBalance = wallet?.availableBalance,
