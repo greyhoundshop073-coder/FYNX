@@ -27,6 +27,52 @@ const checks = [
   ["dedicated-account and wallet funding events use shared Paystack webhook helpers", source.includes("export async function handleBuyerWalletPaystackEvent") && source.includes("export async function reconcileBuyerWalletTransferEvent") && !source.includes("app.post('/api/wallet/paystack/webhook'")],
   ["named PL/pgSQL dollar quotes are paired", source.split("RETURNS trigger AS $fynxwallet$").length - 1 >= 7 && source.split("$fynxwallet$ LANGUAGE plpgsql;").length - 1 === source.split("RETURNS trigger AS $fynxwallet$").length - 1]
 ];
+
+const summaryStart = source.indexOf("app.get('/api/wallet/summary', auth");
+const summaryEnd = source.indexOf("app.post('/api/wallet/funding/initialize', auth", summaryStart);
+const summaryRoute = summaryStart >= 0 && summaryEnd > summaryStart
+  ? source.slice(summaryStart, summaryEnd)
+  : "";
+const noWalletStart = summaryRoute.indexOf("if (!wallet)");
+const noWalletEnd = summaryRoute.indexOf("const balanceRows", noWalletStart);
+const noWalletBranch = noWalletStart >= 0 && noWalletEnd > noWalletStart
+  ? summaryRoute.slice(noWalletStart, noWalletEnd)
+  : "";
+const providerGateStart = source.indexOf("function walletProviderApproved(action)");
+const providerGateEnd = source.indexOf("function walletFundingLimits()", providerGateStart);
+const providerGate = providerGateStart >= 0 && providerGateEnd > providerGateStart
+  ? source.slice(providerGateStart, providerGateEnd)
+  : "";
+checks.push(
+  ["first-time Wallet summary is read-only and never auto-creates a wallet row",
+    summaryRoute.includes("SELECT id,status,provider,currency") &&
+    !/INSERT\\s+INTO\\s+buyer_wallets/i.test(summaryRoute) &&
+    !/UPDATE\\s+buyer_wallets/i.test(summaryRoute)],
+  ["NOT_SETUP returns null balances and keeps spending and withdrawals disabled",
+    noWalletBranch.includes("walletStatus: 'NOT_SETUP'") &&
+    noWalletBranch.includes("availableBalance: null") &&
+    noWalletBranch.includes("reservedBalance: null") &&
+    noWalletBranch.includes("withdrawalPendingBalance: null") &&
+    noWalletBranch.includes("canSpend: false") &&
+    noWalletBranch.includes("canWithdraw: false")],
+  ["wallet balances are derived only from succeeded append-only ledger postings",
+    summaryRoute.includes("t.status='SUCCEEDED'") &&
+    summaryRoute.includes("FROM buyer_wallet_ledger_entries e") &&
+    summaryRoute.includes("JOIN buyer_wallet_transactions t ON t.id=e.transaction_id")],
+  ["buyer reserved balance includes both reserved funds and Marketplace escrow",
+    summaryRoute.includes("(balances.RESERVED || 0) + (balances.MARKETPLACE_ESCROW || 0)")],
+  ["uninitialised-wallet payment methods stay closed unless all provider, custody, compliance and Paystack gates are present",
+    providerGate.includes("FYNX_WALLET_PROVIDER_APPROVED === 'true'") &&
+    providerGate.includes("FYNX_WALLET_CUSTODY_APPROVED === 'true'") &&
+    providerGate.includes("FYNX_WALLET_COMPLIANCE_APPROVED === 'true'") &&
+    providerGate.includes("Boolean(process.env.PAYSTACK_SECRET_KEY)") &&
+    noWalletBranch.includes("canFundByBankTransfer: walletProviderApproved('DEPOSIT')") &&
+    noWalletBranch.includes("canFundByCard: walletProviderApproved('CARD_FUNDING')") &&
+    noWalletBranch.includes("canFundByUssd: walletProviderApproved('USSD_FUNDING')")],
+  ["first-time Wallet summary stays private and uncached",
+    summaryRoute.includes("Cache-Control', 'no-store, private") &&
+    summaryRoute.includes("WHERE user_id=$1 AND currency=$2")]
+);
 const failed=checks.filter(([,ok])=>!ok).map(([name])=>name);
 if(failed.length){console.error("FYNX buyer wallet backend verification FAILED");for(const name of failed)console.error(" - "+name);process.exit(1);}
 console.log("FYNX buyer wallet backend verification GREEN ("+checks.length+" checks)");
