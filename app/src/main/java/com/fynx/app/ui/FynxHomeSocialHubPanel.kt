@@ -100,6 +100,9 @@ fun FynxHomeSocialHubPanel(
     var showVoiceRecorder by remember { mutableStateOf(false) }
     var capturedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var capturedTypes by remember { mutableStateOf<List<String>>(emptyList()) }
+    /** Maps attached media to its clean editable source and camera text/style metadata. */
+    var cameraMediaEdits by remember { mutableStateOf<Map<String, FynxCameraMediaDraftEdit>>(emptyMap()) }
+    var cameraEditingMediaUri by remember { mutableStateOf<Uri?>(null) }
     var selectedVisualIndex by remember { mutableIntStateOf(0) }
     var text by remember { mutableStateOf("") }
     var visibility by remember { mutableStateOf(defaultPostVisibility) }
@@ -414,7 +417,7 @@ fun FynxHomeSocialHubPanel(
     }
 
     LaunchedEffect(initialCaption) {
-        if (!initialCaption.isNullOrBlank()) { text = initialCaption.trim().take(4000); capturedUris = emptyList(); capturedTypes = emptyList(); selectedVisualIndex = 0; notice = null; showComposer = true; onCaptionConsumed() }
+        if (!initialCaption.isNullOrBlank()) { text = initialCaption.trim().take(4000); capturedUris = emptyList(); capturedTypes = emptyList(); cameraMediaEdits = emptyMap(); cameraEditingMediaUri = null; selectedVisualIndex = 0; notice = null; showComposer = true; onCaptionConsumed() }
     }
 
 
@@ -431,6 +434,7 @@ fun FynxHomeSocialHubPanel(
     fun removeCapturedUri(uri: Uri) {
         if (posting) return
         capturedUris = capturedUris.filterNot { it == uri }
+        cameraMediaEdits = cameraMediaEdits - uri.toString()
         recomputeTypes()
     }
 
@@ -440,6 +444,8 @@ fun FynxHomeSocialHubPanel(
             showComposerPreview = false
             capturedUris = emptyList()
             capturedTypes = emptyList()
+            cameraMediaEdits = emptyMap()
+            cameraEditingMediaUri = null
             selectedVisualIndex = 0
             text = ""
             textBackground = null
@@ -462,6 +468,8 @@ fun FynxHomeSocialHubPanel(
         showComposerPreview = false
         capturedUris = emptyList()
         capturedTypes = emptyList()
+        cameraMediaEdits = emptyMap()
+        cameraEditingMediaUri = null
         selectedVisualIndex = 0
         text = ""
         textBackground = null
@@ -487,6 +495,15 @@ fun FynxHomeSocialHubPanel(
         textBackground = FynxPostTextBackground.entries.firstOrNull { it.key == draft.textBackgroundKey }
         capturedUris = draft.mediaPaths.map { Uri.fromFile(java.io.File(it)) }
         capturedTypes = draft.mediaTypes
+        cameraMediaEdits = draft.mediaPaths.mapIndexedNotNull { index, finalPath ->
+            val sourcePath = draft.mediaEditSourcePaths.getOrNull(index) ?: return@mapIndexedNotNull null
+            val editJson = draft.mediaEditStates.getOrNull(index) ?: return@mapIndexedNotNull null
+            val mediaUri = Uri.fromFile(java.io.File(finalPath))
+            val edit = decodeFynxCameraMediaDraftEdit(Uri.fromFile(java.io.File(sourcePath)), editJson)
+                ?: return@mapIndexedNotNull null
+            mediaUri.toString() to edit
+        }.toMap()
+        cameraEditingMediaUri = null
         selectedVisualIndex = 0
         selectedCatalogueMusic = if (draft.musicId != null && draft.musicMediaId != null) {
             FynxMusicCatalogueTrack(
@@ -523,7 +540,8 @@ fun FynxHomeSocialHubPanel(
                     location = postLocation,
                     textBackground = textBackground,
                     media = media,
-                    music = selectedCatalogueMusic
+                    music = selectedCatalogueMusic,
+                    mediaEdits = cameraMediaEdits
                 )
             }
             result.onSuccess { draft ->
