@@ -10,6 +10,7 @@ SPONSORED_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSpo
 SEASONAL_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionClient.kt").read_text(encoding="utf-8")
 SEASONAL_ADMIN = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8")
 ANNOUNCEMENTS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text(encoding="utf-8")
+MEDIA_PRIVACY = (ROOT / "backend/mediaPrivacy.js").read_text(encoding="utf-8")
 REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf-8")
 
 checks = [
@@ -36,9 +37,10 @@ checks = [
     ("private Seller Center shows the signed-in seller weekly awards", "FynxMarketplaceWeeklySellerClient.currentSellerHistory(context)" in SELLER_CENTER and "Weekly seller recognition" in SELLER_CENTER and "Best Seller of the Week" in SELLER_CENTER),
     ("seasonal feed client is connected to the authenticated API", "/api/marketplace/seasonal-feed" in SEASONAL_CLIENT and "listForAdmin" in SEASONAL_CLIENT),
     ("Owner/Admin seasonal scheduler is exposed only inside the existing Admin Control Center", "FynxMarketplaceSeasonalPromotionAdminPanel()" in ANNOUNCEMENTS and "d.role == \"OWNER\" || d.role == \"ADMIN\"" in ANNOUNCEMENTS),
-    ("scheduler supports ISO date windows and optional HTTPS artwork", "Starts at (ISO 8601)" in SEASONAL_ADMIN and "Ends at (ISO 8601)" in SEASONAL_ADMIN and "Artwork image HTTPS URL" in SEASONAL_ADMIN),
+    ("scheduler supports ISO date windows and uploaded FYNX image artwork", "Starts at (ISO 8601)" in SEASONAL_ADMIN and "Ends at (ISO 8601)" in SEASONAL_ADMIN and "Choose photo" in SEASONAL_ADMIN and "uploadArtwork(context, artworkUri!!)" in SEASONAL_ADMIN),
     ("scheduled variable-date promotions are passed into the real Marketplace banner", "seasonalPromotions = seasonalPromotions" in PANEL and "seasonalPromotions: List<FynxMarketplaceSeasonalPromotion>" in BANNER),
-    ("scheduled celebration artwork is displayed as a crop-fitted banner image", "FynxRemoteMedia(" in BANNER and "slide.artworkUrl" in BANNER and "contentScale = ContentScale.Crop" in BANNER),
+    ("scheduled celebration artwork is displayed through authenticated FYNX media", "FynxRemoteMedia(" in BANNER and "slide.artworkMediaId" in BANNER and 'mediaUrl = "/api/media/${slide.artworkMediaId}"' in BANNER and "contentScale = ContentScale.Crop" in BANNER),
+    ("only active scheduled banner artwork is public through media privacy", "marketplace_seasonal_promotions WHERE artwork_media_id=$1" in MEDIA_PRIVACY and "active=TRUE AND starts_at <= NOW() AND ends_at > NOW()" in MEDIA_PRIVACY),
 
 ]
 
