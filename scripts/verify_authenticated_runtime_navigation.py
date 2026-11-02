@@ -402,6 +402,187 @@ def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
     node = _find_control_node(root, [label.lower() for label in labels])
     return bool(node) and node.attrib.get("enabled", "true").lower() != "false"
 
+
+def wallet_fill_amount_for_sandbox(add_money_xml: str, prefix: str) -> str:
+    """Fill a bounded test amount in the real Add Money form; never runs outside the isolated Wallet E2E."""
+    fields = find_edit_fields(add_money_xml)
+    if len(fields) != 1:
+        FAILURES.append(f"{prefix}: expected one visible Add Money amount field, found {len(fields)}")
+        screenshot(prefix + "-amount-field-mismatch.png")
+        return ""
+    x, y = fields[0]
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    run("adb", "shell", "input", "keyevent", "KEYCODE_CTRL_A")
+    run("adb", "shell", "input", "keyevent", "KEYCODE_DEL")
+    typed = input_text("1000")
+    if typed.returncode != 0:
+        FAILURES.append(prefix + ": could not enter the isolated NGN 1,000 test amount")
+        return ""
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    time.sleep(0.5)
+    latest = dump_ui(prefix + "-amount-filled.xml")
+    screenshot(prefix + "-amount-filled.png")
+    if not latest or not find_control(latest, ["Debit card"]):
+        FAILURES.append(prefix + ": Add Money form did not remain available after entering the test amount")
+        return ""
+    (ROOT / (prefix + "-amount-filled.xml")).write_text(latest + chr(10), encoding="utf-8")
+    return latest
+
+
+def wallet_paystack_sandbox_checkout(card_xml: str, prefix: str) -> str:
+    """Run one Paystack test-card journey on the isolated Railway testing backend only."""
+    if os.environ.get("FYNX_WALLET_SANDBOX_E2E") != "1":
+        return card_xml
+
+    # A test-mode balance already present is reused; do not create repeated test credits.
+    if re.search(r"(?<![0-9])(?:₦|NGN\\s*)1,?000(?:\\.00)?", card_xml):
+        return card_xml
+
+    fields = find_edit_fields(card_xml)
+    if len(fields) != 1:
+        FAILURES.append(f"{prefix}: expected the payment-email field on the Wallet card page, found {len(fields)}")
+        screenshot(prefix + "-email-field-mismatch.png")
+        return ""
+
+    x, y = fields[0]
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    run("adb", "shell", "input", "keyevent", "KEYCODE_CTRL_A")
+    run("adb", "shell", "input", "keyevent", "KEYCODE_DEL")
+    typed = input_text("fynx-wallet-ci@example.com")
+    if typed.returncode != 0:
+        FAILURES.append(prefix + ": could not enter the isolated test payment email")
+        return ""
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    time.sleep(0.5)
+    ready = dump_ui(prefix + "-email-filled.xml")
+    (ROOT / (prefix + "-email-filled.xml")).write_text((ready or "") + chr(10), encoding="utf-8")
+    screenshot(prefix + "-email-filled.png")
+
+    if not ready or not control_is_enabled(ready, ["Continue to secure payment"]):
+        FAILURES.append(prefix + ": Continue to secure payment stayed disabled after valid amount and email were entered")
+        return ""
+
+    continue_control = find_control(ready, ["Continue to secure payment"])
+    if not continue_control:
+        FAILURES.append(prefix + ": secure checkout action was not accessible")
+        return ""
+    _, cx, cy = continue_control
+    run("adb", "shell", "input", "tap", str(cx), str(cy))
+
+    checkout = ""
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        time.sleep(0.7)
+        checkout = dump_ui(prefix + "-paystack-checkout.xml")
+        lowered = checkout.lower()
+        if "paystack" in lowered and len(find_edit_fields(checkout)) >= 3:
+            break
+    (ROOT / (prefix + "-paystack-checkout.xml")).write_text((checkout or "") + chr(10), encoding="utf-8")
+    screenshot(prefix + "-paystack-checkout.png")
+
+    lowered = checkout.lower()
+    if "paystack" not in lowered or "checkout.paystack.com" not in lowered:
+        FAILURES.append(prefix + ": FYNX did not open the Paystack-hosted HTTPS checkout page")
+        return ""
+    fields = find_edit_fields(checkout)
+    if len(fields) not in (3, 4):
+        FAILURES.append(f"{prefix}: Paystack checkout exposed {len(fields)} fields; refusing to guess their meaning")
+        return ""
+
+    # Official Paystack no-validation test card. It cannot debit real money.
+    test_values = ["4084084084084081", "10", "27", "408"] if len(fields) == 4 else ["4084084084084081", "10/27", "408"]
+    latest = checkout
+    for index, value in enumerate(test_values):
+        current_fields = find_edit_fields(latest)
+        if len(current_fields) not in (3, 4) or index >= len(current_fields):
+            FAILURES.append(prefix + f": Paystack field {index + 1} disappeared while entering test-card data")
+            return ""
+        fx, fy = current_fields[index]
+        run("adb", "shell", "input", "tap", str(fx), str(fy))
+        run("adb", "shell", "input", "keyevent", "KEYCODE_CTRL_A")
+        run("adb", "shell", "input", "keyevent", "KEYCODE_DEL")
+        entered = input_text(value)
+        if entered.returncode != 0:
+            FAILURES.append(prefix + f": could not enter Paystack test-card field {index + 1}")
+            return ""
+        latest = dump_ui(prefix + f"-paystack-field-{index + 1}.xml") or latest
+
+    # Only tap a real Pay action (not the Paystack brand or browser toolbar).
+    pay_button = None
+    try:
+        root = ET.fromstring(latest)
+        for node in root.iter("node"):
+            label = ((node.attrib.get("text") or "") + " " + (node.attrib.get("content-desc") or "")).strip().lower()
+            center = _center(node)
+            if node.attrib.get("clickable", "false").lower() == "true" and center and re.match(r"^pay(?:\\s|₦)", label):
+                pay_button = center
+                break
+    except ET.ParseError:
+        pass
+    if not pay_button:
+        (ROOT / (prefix + "-paystack-ready.xml")).write_text((latest or "") + chr(10), encoding="utf-8")
+        screenshot(prefix + "-paystack-ready.png")
+        FAILURES.append(prefix + ": Paystack checkout did not expose an identifiable Pay button")
+        return ""
+
+    run("adb", "shell", "input", "tap", str(pay_button[0]), str(pay_button[1]))
+    result_xml = ""
+    deadline = time.monotonic() + 60.0
+    while time.monotonic() < deadline:
+        time.sleep(0.8)
+        result_xml = dump_ui(prefix + "-paystack-result.xml")
+        lowered = result_xml.lower()
+        if any(marker in lowered for marker in ("payment successful", "transaction successful", "payment was successful", "check payment status")):
+            break
+        if any(marker in lowered for marker in ("payment declined", "transaction declined", "payment failed", "card was declined")):
+            FAILURES.append(prefix + ": Paystack sandbox rejected the test card")
+            screenshot(prefix + "-paystack-declined.png")
+            return ""
+    (ROOT / (prefix + "-paystack-result.xml")).write_text((result_xml or "") + chr(10), encoding="utf-8")
+    screenshot(prefix + "-paystack-result.png")
+
+    # Return from the hosted checkout to FYNX. Funding is still pending until
+    # FYNX's authenticated reference check or its signed Paystack webhook settles it.
+    if "check payment status" not in result_xml.lower():
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        time.sleep(1.0)
+        result_xml = dump_ui(prefix + "-fynx-after-paystack.xml")
+    deadline = time.monotonic() + 20.0
+    while time.monotonic() < deadline and "check payment status" not in result_xml.lower():
+        time.sleep(0.6)
+        result_xml = dump_ui(prefix + "-fynx-after-paystack-wait.xml")
+    if "check payment status" not in result_xml.lower():
+        FAILURES.append(prefix + ": returned from Paystack but FYNX did not show the funding-status check")
+        screenshot(prefix + "-fynx-status-missing.png")
+        return ""
+
+    status_xml = tap_control(
+        result_xml, ["Check payment status"], prefix + "-check-funding-status",
+        ["Test payment recorded", "Payment confirmed", "Payment awaiting confirmation"]
+    )
+    if not status_xml:
+        return ""
+    deadline = time.monotonic() + 45.0
+    while time.monotonic() < deadline and "test payment recorded" not in status_xml.lower() and "payment confirmed" not in status_xml.lower():
+        time.sleep(1.0)
+        status_xml = dump_ui(prefix + "-funding-reconcile-wait.xml") or status_xml
+    (ROOT / (prefix + "-funding-reconciled.xml")).write_text(status_xml + chr(10), encoding="utf-8")
+    screenshot(prefix + "-funding-reconciled.png")
+    if "test payment recorded" not in status_xml.lower():
+        FAILURES.append(prefix + ": Paystack checkout returned but the Wallet funding intent did not reach SUCCEEDED")
+        return ""
+
+    refresh_control = find_control(status_xml, ["Refresh Wallet balance"])
+    if refresh_control:
+        run("adb", "shell", "input", "tap", str(refresh_control[1]), str(refresh_control[2]))
+        time.sleep(1.0)
+        refreshed_card = dump_ui(prefix + "-wallet-balance-refreshed.xml")
+        if refreshed_card:
+            status_xml = refreshed_card
+
+    return status_xml
+
+
 def camera_wait_for_control(
     initial_xml: str, labels: list[str], *, enabled: bool | None = None,
     timeout: float = 30.0, prefix: str = "camera-control"
@@ -1745,7 +1926,9 @@ def capture_wallet_from_features(prefix:str):
             ["Dedicated bank transfer", "Debit card", "USSD and other methods"]
         )
         if add_money_xml:
-            (ROOT/"authenticated-wallet-add-money.xml").write_text(add_money_xml+chr(10),encoding="utf-8")
+            if os.environ.get("FYNX_WALLET_SANDBOX_E2E") == "1":
+                add_money_xml = wallet_fill_amount_for_sandbox(add_money_xml, "authenticated-wallet-sandbox")
+            (ROOT/"authenticated-wallet-add-money.xml").write_text((add_money_xml or "")+chr(10),encoding="utf-8")
             screenshot("authenticated-wallet-add-money.png")
             transfer_xml = tap_control(
                 add_money_xml, ["Dedicated bank transfer"], "wallet-bank-transfer",
@@ -1764,7 +1947,9 @@ def capture_wallet_from_features(prefix:str):
                         ["Debit card funding"]
                     )
                     if card_xml:
-                        (ROOT/"authenticated-wallet-card.xml").write_text(card_xml+chr(10),encoding="utf-8")
+                        if os.environ.get("FYNX_WALLET_SANDBOX_E2E") == "1":
+                            card_xml = wallet_paystack_sandbox_checkout(card_xml, "authenticated-wallet-sandbox")
+                        (ROOT/"authenticated-wallet-card.xml").write_text((card_xml or "")+chr(10),encoding="utf-8")
                         screenshot("authenticated-wallet-card.png")
                         add_money_after_card = tap_control(
                             card_xml, ["Back to Wallet"], "wallet-card-back",
