@@ -57,7 +57,11 @@ private fun fynxBackDestination(
     "Privacy" -> "Profile"
     "Notifications" -> if (notificationPreferencesOnly) "Profile" else "Home"
     "Calendar" -> "Extra Tools"
-    "Wallet", "Money Tools" -> "Features"
+    "Wallet" -> navigationHistory
+        .getOrNull(navigationHistory.lastIndex - 1)
+        ?.takeIf { it == "Marketplace" || it == "Features" }
+        ?: "Features"
+    "Money Tools" -> "Features"
     "Stories", "Calls" -> "Home"
     "Groups" -> "Chats"
     "Business Account" -> "Features"
