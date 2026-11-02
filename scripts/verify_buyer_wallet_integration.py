@@ -86,6 +86,9 @@ checks = [
   "walletActive" in client and "walletActive = json.optBoolean" in client
   and "if (!current.walletActive)" in actions and '"Wallet not active yet"' in actions
   and "walletActive: wallet?.status === 'ACTIVE'" in wallet_backend),
+ ("Paystack withdrawals stay closed unless FYNX is explicitly approved as a registered business",
+  "FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED === 'true'" in wallet_backend
+  and "FYNX_WALLET_PAYOUTS_APPROVED === 'true'" in wallet_backend),
  ("NGN 50 withdrawal minimum is displayed and blocks review before submission",
   "minimumPerTransfer" in actions and "MINIMUM_WITHDRAWAL_NGN" in actions
   and "minimumWithdrawalAmount" in actions and "parsedAmount >= minimumWithdrawalAmount" in actions
