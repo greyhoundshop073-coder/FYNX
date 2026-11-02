@@ -76,7 +76,7 @@ async function ensureAdvertisingSchema() {
       headline TEXT NOT NULL,
       body TEXT NOT NULL DEFAULT '',
       action_label TEXT NOT NULL DEFAULT 'Explore Marketplace',
-      artwork_url TEXT,
+      artwork_media_id BIGINT,
       starts_at TIMESTAMPTZ NOT NULL,
       ends_at TIMESTAMPTZ NOT NULL,
       active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -87,6 +87,7 @@ async function ensureAdvertisingSchema() {
     );
     CREATE INDEX IF NOT EXISTS marketplace_seasonal_promotions_active_window_idx
       ON marketplace_seasonal_promotions(active, starts_at, ends_at);
+    ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS artwork_media_id BIGINT;
   `);
 }
 
@@ -144,7 +145,7 @@ function seasonalPromotionPayload(row) {
     headline: row.headline,
     body: row.body || "",
     actionLabel: row.action_label || "Explore Marketplace",
-    artworkUrl: row.artwork_url || "",
+    artworkMediaId: row.artwork_media_id == null ? "" : String(row.artwork_media_id),
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     active: Boolean(row.active),
@@ -245,7 +246,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const headline = typeof req.body?.headline === "string" ? req.body.headline.trim() : "";
       const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
       const actionLabel = typeof req.body?.actionLabel === "string" ? req.body.actionLabel.trim() : "Explore Marketplace";
-      const artworkUrl = typeof req.body?.artworkUrl === "string" ? req.body.artworkUrl.trim() : "";
+      const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positiveInt(req.body.artworkMediaId);
       const startsAt = typeof req.body?.startsAt === "string" ? new Date(req.body.startsAt) : null;
       const endsAt = typeof req.body?.endsAt === "string" ? new Date(req.body.endsAt) : null;
       const active = req.body?.active !== false;
@@ -259,12 +260,12 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       if (endsAt.getTime() - startsAt.getTime() > 45 * 24 * 60 * 60 * 1000) {
         return res.status(400).json({ error: "seasonal promotion windows cannot exceed 45 days" });
       }
-      if (artworkUrl && (!/^https:\/\/[^\s]+$/i.test(artworkUrl) || artworkUrl.length > 1500)) {
-        return res.status(400).json({ error: "artwork must be an HTTPS image URL" });
+      if (req.body?.artworkMediaId != null && req.body.artworkMediaId !== "" && artworkMediaId === null) {
+        return res.status(400).json({ error: "artwork must be an uploaded FYNX image media ID" });
       }
       const result = await pool.query(
-        "INSERT INTO marketplace_seasonal_promotions (occasion_key,headline,body,action_label,artwork_url,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
-        [occasionKey, headline, body, actionLabel, artworkUrl || null, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
+        "INSERT INTO marketplace_seasonal_promotions (occasion_key,headline,body,action_label,artwork_media_id,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
+        [occasionKey, headline, body, actionLabel, artworkMediaId, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
       );
       return res.status(201).json({ promotion: seasonalPromotionPayload(result.rows[0]) });
     } catch (error) {
