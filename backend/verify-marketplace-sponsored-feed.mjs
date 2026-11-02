@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 const advertising = await readFile(new URL("./marketplaceAdvertising.js", import.meta.url), "utf8");
 const marketplaceSchema = await readFile(new URL("./marketplaceSchema.js", import.meta.url), "utf8");
 const start = advertising.indexOf('app.get("/api/advertising/marketplace-feed"');
-const end = advertising.indexOf("app.post(\"/api/advertising/campaigns/:id/metric\"", start);
+const end = advertising.lastIndexOf("\\n}");
 assert.ok(start >= 0 && end > start, "Marketplace sponsored feed route must be registered");
 const route = advertising.slice(start, end);
 
