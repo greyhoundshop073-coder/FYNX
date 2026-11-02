@@ -3,9 +3,10 @@
   "version": "1.1.1",
   "type": "module",
   "scripts": {
-    "prestart": "node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
+    "prestart": "node verify-buyer-wallet-core.mjs && node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
     "start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js",
-    "verify:wallet-hosted-funding": "node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs"
+    "verify:wallet-hosted-funding": "node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs",
+    "verify:wallet-core": "node verify-buyer-wallet-core.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
