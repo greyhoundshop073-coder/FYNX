@@ -183,16 +183,20 @@ fun FynxUserSupportPanel(initialCaseId: String? = null, onBack: () -> Unit = {})
                             }
                         }
                     }
-                    OutlinedTextField(reply, { reply = it.take(4000) }, Modifier.fillMaxWidth(), label = { Text("Reply to support") }, minLines = 2)
-                    Button(enabled = reply.isNotBlank() && !sending, onClick = {
-                        sending = true
-                        scope.launch {
-                            FynxSupportRemoteClient.replyAsUser(context, item.id, reply, userReplyRequestId)
-                                .onSuccess { reply = ""; userReplyRequestId = UUID.randomUUID().toString(); openCase(item); refresh++ }
-                                .onFailure { notice = it.message ?: "Reply could not be sent." }
-                            sending = false
-                        }
-                    }, modifier = Modifier.fillMaxWidth()) { Text(if (sending) "Sending…" else "Send reply") }
+                    if (item.status == "RESOLVED") {
+                        Text("This request has been resolved. To report a new issue, submit a new support request. Only the Owner can reopen this case.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        OutlinedTextField(reply, { reply = it.take(4000) }, Modifier.fillMaxWidth(), label = { Text("Reply to support") }, minLines = 2)
+                        Button(enabled = reply.isNotBlank() && !sending, onClick = {
+                            sending = true
+                            scope.launch {
+                                FynxSupportRemoteClient.replyAsUser(context, item.id, reply, userReplyRequestId)
+                                    .onSuccess { reply = ""; userReplyRequestId = UUID.randomUUID().toString(); openCase(item); refresh++ }
+                                    .onFailure { notice = it.message ?: "Reply could not be sent." }
+                                sending = false
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) { Text(if (sending) "Sending…" else "Send reply") }
+                    }
                 }
             }, confirmButton = { TextButton(onClick = { selectedCase = null }) { Text("Close") } })
     }
@@ -211,6 +215,7 @@ fun FynxAdminSupportPanel(role: String) {
     var notice by remember { mutableStateOf<String?>(null) }
     var selectedCase by remember { mutableStateOf<FynxSupportRemoteClient.SupportCase?>(null) }
     var messages by remember { mutableStateOf<List<FynxSupportRemoteClient.SupportMessage>>(emptyList()) }
+    var events by remember { mutableStateOf<List<FynxSupportRemoteClient.SupportEvent>>(emptyList()) }
     var reply by remember { mutableStateOf("") }
     var adminReplyRequestId by remember { mutableStateOf(UUID.randomUUID().toString()) }
     var internalNote by remember { mutableStateOf(false) }
@@ -226,14 +231,20 @@ fun FynxAdminSupportPanel(role: String) {
     fun openCase(item: FynxSupportRemoteClient.SupportCase) {
         selectedCase = item
         messages = emptyList()
+        events = emptyList()
         reply = ""
         adminReplyRequestId = UUID.randomUUID().toString()
         scope.launch { FynxSupportRemoteClient.adminMessages(context, item.id).onSuccess { messages = it }.onFailure { notice = it.message ?: "Conversation unavailable." } }
     }
     LaunchedEffect(selectedCase?.id) {
         val caseId = selectedCase?.id
-        if (caseId == null) attachments = emptyList()
-        else FynxSupportRemoteClient.attachments(context, caseId).onSuccess { attachments = it }
+        if (caseId == null) {
+            attachments = emptyList()
+            events = emptyList()
+        } else {
+            FynxSupportRemoteClient.attachments(context, caseId).onSuccess { attachments = it }
+            FynxSupportRemoteClient.events(context, caseId).onSuccess { events = it }
+        }
     }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -259,7 +270,7 @@ fun FynxAdminSupportPanel(role: String) {
                         Text("@${item.requesterUsername.orEmpty()} • ${item.requesterDisplayName.orEmpty()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Assigned: " + (item.assignedDisplayName ?: item.assignedUsername ?: "Unassigned"), style = MaterialTheme.typography.labelSmall)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (item.assignedAdminId.isNullOrBlank()) OutlinedButton(onClick = {
+                            if (item.assignedAdminId.isNullOrBlank() && item.status != "RESOLVED") OutlinedButton(onClick = {
                                 scope.launch { FynxSupportRemoteClient.claimCase(context, item.id).onSuccess { notice = "Case claimed."; refresh++ }.onFailure { notice = it.message ?: "Could not claim case." } }
                             }) { Text("Take case") }
                             OutlinedButton(onClick = { openCase(item) }) { Text("Open case") }
@@ -277,7 +288,10 @@ fun FynxAdminSupportPanel(role: String) {
                 Column(Modifier.fillMaxWidth().heightIn(max = 500.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SupportAttachmentViewer(item.id, attachments)
                     Text("User: @${item.requesterUsername.orEmpty()}", style = MaterialTheme.typography.labelMedium)
-                    if (item.assignedAdminId.isNullOrBlank()) OutlinedButton(onClick = {
+                    Text("Category: ${item.category.replace('_', ' ')}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Problem description", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    Text(item.description.ifBlank { "No description was supplied." }, style = MaterialTheme.typography.bodyMedium)
+                    if (item.assignedAdminId.isNullOrBlank() && item.status != "RESOLVED") OutlinedButton(onClick = {
                         scope.launch { FynxSupportRemoteClient.claimCase(context, item.id).onSuccess { notice = "Case claimed."; refresh++; openCase(item) }.onFailure { notice = it.message ?: "Could not claim case." } }
                     }) { Text("Take responsibility for this case") }
                     if (role == "OWNER") {
@@ -299,9 +313,12 @@ fun FynxAdminSupportPanel(role: String) {
                             }
                         }
                     }
+                    if (item.status == "RESOLVED" && role != "OWNER") {
+                        Text("This case is resolved. Admins may add an internal note, but only the Owner can reopen it or send another public reply.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    }
                     OutlinedTextField(reply, { reply = it.take(4000) }, Modifier.fillMaxWidth(), label = { Text(if (internalNote) "Internal note (not visible to user)" else "Reply to user") }, minLines = 2)
                     Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(internalNote, { internalNote = it }); Text("Internal note only") }
-                    Button(enabled = reply.isNotBlank() && !sending, onClick = {
+                    Button(enabled = reply.isNotBlank() && !sending && !(item.status == "RESOLVED" && role != "OWNER" && !internalNote), onClick = {
                         sending = true
                         scope.launch {
                             FynxSupportRemoteClient.replyAsAdmin(context, item.id, reply, internalNote, adminReplyRequestId)
@@ -310,10 +327,22 @@ fun FynxAdminSupportPanel(role: String) {
                             sending = false
                         }
                     }, modifier = Modifier.fillMaxWidth()) { Text(if (sending) "Sending…" else if (internalNote) "Save internal note" else "Send reply") }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "IN_REVIEW").onSuccess { refresh++; notice = "Case moved to review." }.onFailure { notice = it.message ?: "Status update failed." } } }) { Text("Review") }
-                        OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "WAITING_FOR_USER").onSuccess { refresh++; notice = "Waiting for user." }.onFailure { notice = it.message ?: "Status update failed." } } }) { Text("Waiting") }
-                        Button(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "RESOLVED").onSuccess { refresh++; notice = "Case resolved."; selectedCase = null }.onFailure { notice = it.message ?: "Could not resolve case." } } }) { Text("Resolve") }
+                    if (events.isNotEmpty()) {
+                        Text("Case activity", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        events.take(20).forEach { event ->
+                            Text(
+                                "${event.eventType.replace('_', ' ')} • ${event.username?.let { "@$it" } ?: "FYNX"} • ${event.createdAt}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (item.status != "RESOLVED" || role == "OWNER") {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "IN_REVIEW").onSuccess { refresh++; notice = "Case moved to review." }.onFailure { notice = it.message ?: "Status update failed." } } }) { Text("Review") }
+                            OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "WAITING_FOR_USER").onSuccess { refresh++; notice = "Waiting for user." }.onFailure { notice = it.message ?: "Status update failed." } } }) { Text("Waiting") }
+                            Button(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "RESOLVED").onSuccess { refresh++; notice = "Case resolved."; selectedCase = null }.onFailure { notice = it.message ?: "Could not resolve case." } } }) { Text("Resolve") }
+                        }
                     }
                     if (role == "OWNER" && item.status == "RESOLVED") OutlinedButton(onClick = { scope.launch { FynxSupportRemoteClient.updateStatus(context, item.id, "OPEN").onSuccess { refresh++; notice = "Case reopened." }.onFailure { notice = it.message ?: "Could not reopen case." } } }) { Text("Reopen case") }
                 }
