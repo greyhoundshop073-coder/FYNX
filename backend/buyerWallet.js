@@ -2017,12 +2017,13 @@ export function registerBuyerWalletRoutes({ app }) {
              WHERE e.transaction_id=t.id AND e.account_code='AVAILABLE'
           ) delta ON TRUE
          WHERE t.user_id=$1 AND t.wallet_id=$2
+           AND COALESCE(t.metadata->>'testMode','false') = $3
            AND COALESCE(t.metadata->>'internal','false') <> 'true'
-           AND t.created_at >= $3::date
-           AND t.created_at < ($4::date + INTERVAL '1 day')
+           AND t.created_at >= $4::date
+           AND t.created_at < ($5::date + INTERVAL '1 day')
          ORDER BY t.created_at ASC,t.id ASC
          LIMIT 5001
-      `, [req.user.sub, wallet.id, from, to]);
+      `, [req.user.sub, wallet.id, walletTestModeEnabled() ? 'true' : 'false', from, to]);
       if (rows.rows.length > 5000) return res.status(413).json({ error: 'statement is too large; export a shorter date range' });
       res.type('text/csv; charset=utf-8');
       res.set('Content-Disposition', 'attachment; filename="fynx-wallet-statement-' + from + '-to-' + to + '.csv"');
@@ -2051,12 +2052,13 @@ export function registerBuyerWalletRoutes({ app }) {
       const requestedLimit = Number(req.query?.limit);
       const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 20, 1), 50);
       const cursor = parsedCursor.cursor;
+      const testModeFilter = walletTestModeEnabled() ? 'true' : 'false';
       const cursorClause = cursor
-        ? 'AND (t.created_at,t.id) < ($4::timestamptz,$5::uuid)'
+        ? 'AND (t.created_at,t.id) < ($5::timestamptz,$6::uuid)'
         : '';
       const params = cursor
-        ? [req.user.sub, wallet.id, parsedDirection.direction, cursor.createdAt, cursor.id, limit + 1]
-        : [req.user.sub, wallet.id, parsedDirection.direction, limit + 1];
+        ? [req.user.sub, wallet.id, parsedDirection.direction, testModeFilter, cursor.createdAt, cursor.id, limit + 1]
+        : [req.user.sub, wallet.id, parsedDirection.direction, testModeFilter, limit + 1];
       const result = await pool.query(`
         SELECT t.id,t.transaction_type,
                CASE WHEN op.status='PENDING' THEN 'PROCESSING'
@@ -2073,6 +2075,7 @@ export function registerBuyerWalletRoutes({ app }) {
              WHERE e.transaction_id=t.id AND e.account_code='AVAILABLE'
           ) activity_delta ON TRUE
          WHERE t.user_id=$1 AND t.wallet_id=$2
+           AND COALESCE(t.metadata->>'testMode','false') = $4
            AND COALESCE(t.metadata->>'internal','false') <> 'true'
            AND (
              $3::text='ALL'
