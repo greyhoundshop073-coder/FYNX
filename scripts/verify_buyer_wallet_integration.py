@@ -217,10 +217,10 @@ checks.extend([
  ("sandbox Wallet runtime only submits a simulated test card and keeps real money movement unavailable",
   "TEST MODE" in runtime
   and "FYNX_WALLET_SANDBOX_E2E=1" in runtime
-  and "no real-money payment or payout" in runtime
+  and "never a real-money payment or payout" in runtime
   and "testMode" in client
-  and "canSpend: json.optBoolean(\"canSpend\", false) && !testMode" in client
-  and "canWithdraw: json.optBoolean(\"canWithdraw\", false) && !testMode" in client),
+  and "canSpend = json.optBoolean(\"canSpend\", false) && !testMode" in client
+  and "canWithdraw = json.optBoolean(\"canWithdraw\", false) && !testMode" in client),
  ("Wallet sandbox emulator and APK gates are enabled only for the dedicated verification branch",
   "fix/wallet-sandbox-runtime-verification-20261102" in workflow
   and workflow.count("github.event.pull_request.head.ref == 'fix/wallet-sandbox-runtime-verification-20261102'") >= 4
