@@ -389,6 +389,21 @@ checks.extend([
     ("Runtime exercises direct-on-media photo/video typing and video timing controls",
      "FYNXoverlaytest" in runtime and "FYNXvideooverlay" in runtime
      and "video text timing controls were not visible" in runtime),
+    ("Photo/video text edits remain editable when saved in and restored from a local post draft",
+     "mediaEditSourcePaths" in draft_store and "mediaEditStates" in draft_store
+     and "copyDraftMedia(edit.sourceUri" in draft_store
+     and "encodeFynxCameraMediaDraftEdit" in draft_store
+     and "decodeFynxCameraMediaDraftEdit" in home
+     and "Edit text on media" in home
+     and "initialTextOverlays" in home
+     and "onCapturedWithTextEdits" in camera
+     and "mediaDraftCodecPreservesEveryEditableTextOverlayProperty" in overlay_test
+     and "localPostDraftKeepsEditableMediaSourceAndOverlayStateUntilDelete" in overlay_test),
+    ("Video export validation checks overlay pixels at the selected time and media position",
+     "verifyFynxVideoEditOutput(source, output, videoStyle, visibleText)" in camera
+     and "selected video text has no visible interval" in video_effects
+     and "did not visibly burn the text overlay" in video_effects
+     and "cameraVideoTextOverlayBackgroundAnchor" in video_effects),
     ("More options is an accessible clickable row with viewport-aware runtime navigation",
      'contentDescription = "More options"' in home
      and "camera_scroll_until_control" in runtime
