@@ -427,7 +427,7 @@ def capture_support_center_from_settings(settings_xml: str, prefix: str) -> bool
         ("Report a problem", find_control(latest, ["Report a problem"])),
         ("Submit support request", find_control(latest, ["Submit support request"])),
         ("My support requests", find_control(latest, ["My support requests"])),
-        ("Attach screenshot (optional)", find_control(latest, ["Attach screenshot (optional)"))
+        ("Attach screenshot (optional)", find_control(latest, ["Attach screenshot (optional)"]))
     ]
     missing = [label for label, control in markers if not control]
     if missing:
