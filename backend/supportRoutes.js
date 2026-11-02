@@ -86,7 +86,7 @@ export function registerSupportRoutes({ app, pool, auth }) {
     return role;
   };
   const notify = async (userIds, payload) => {
-    const unique = [...new Set(userIds.map(String).filter(Boolean))];
+    const unique = [...new Set(userIds.filter(value => value != null && String(value).trim() !== "").map(String))];
     await Promise.allSettled(unique.map(userId => queueFynxNotification(pool, {
       userId, type: "SUPPORT", title: payload.title, message: payload.message,
       targetId: payload.caseId, route: `fynx://support/case/${payload.caseId}`,
@@ -142,7 +142,7 @@ export function registerSupportRoutes({ app, pool, auth }) {
         await client.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'CREATED',jsonb_build_object('category',$3::text))", [row.id, req.user.sub, category]);
       }
       await client.query("COMMIT");
-      const full = await pool.query("SELECT id,case_number,category,subject,status,assigned_admin_id,created_at,updated_at FROM fynx_support_cases WHERE id=$1", [row.id]);
+      const full = await pool.query("SELECT id,case_number,category,subject,description,status,assigned_admin_id,created_at,updated_at FROM fynx_support_cases WHERE id=$1", [row.id]);
       if (inserted.rows[0]) {
         const owner = await officialOwnerId();
         const admins = (await pool.query("SELECT user_id FROM fynx_admin_roles")).rows.map(x => x.user_id);
@@ -245,17 +245,26 @@ export function registerSupportRoutes({ app, pool, auth }) {
       const clientMessageId = typeof req.body?.clientMessageId === "string" ? req.body.clientMessageId.trim().slice(0, 100) : "";
       if (!caseId || body.length < 1 || !clientMessageId) return res.status(400).json({ error: "A valid message and request ID are required." });
       await client.query("BEGIN");
-      const owned = await client.query("SELECT id,status FROM fynx_support_cases WHERE id=$1 AND requester_id=$2 FOR UPDATE", [caseId, req.user.sub]);
+      const owned = await client.query("SELECT id,status,case_number,assigned_admin_id FROM fynx_support_cases WHERE id=$1 AND requester_id=$2 FOR UPDATE", [caseId, req.user.sub]);
       if (!owned.rows[0]) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Support case not found." }); }
+      if (owned.rows[0].status === "RESOLVED") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "This case is resolved. Only the Owner can reopen it; submit a new request for a different issue." });
+      }
       const inserted = await client.query("INSERT INTO fynx_support_messages(case_id,sender_id,body,visibility,client_message_id) VALUES($1,$2,$3,'PUBLIC',$4) ON CONFLICT(case_id,sender_id,client_message_id) WHERE client_message_id IS NOT NULL DO NOTHING RETURNING id,created_at", [caseId, req.user.sub, body, clientMessageId]);
-      await client.query("UPDATE fynx_support_cases SET status=CASE WHEN status='RESOLVED' THEN 'OPEN' ELSE 'WAITING_FOR_SUPPORT' END,updated_at=NOW(),resolved_at=NULL WHERE id=$1", [caseId]);
-      if (inserted.rows[0]) await client.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'USER_REPLIED','{}'::jsonb)", [caseId, req.user.sub]);
+      if (inserted.rows[0]) {
+        await client.query("UPDATE fynx_support_cases SET status='WAITING_FOR_SUPPORT',updated_at=NOW() WHERE id=$1", [caseId]);
+        await client.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'USER_REPLIED','{}'::jsonb)", [caseId, req.user.sub]);
+      }
       await client.query("COMMIT");
-      const caseRow = await pool.query("SELECT case_number,assigned_admin_id FROM fynx_support_cases WHERE id=$1", [caseId]);
-      const owner = await officialOwnerId();
-      const admins = (await pool.query("SELECT user_id FROM fynx_admin_roles")).rows.map(x => x.user_id);
-      await notify([owner, ...admins, caseRow.rows[0]?.assigned_admin_id], { caseId, eventId: `user-reply-${inserted.rows[0]?.id || clientMessageId}`, title: "User replied to a support case", message: `${caseRow.rows[0]?.case_number || "FYNX support"} has a new reply.` });
-      return res.status(201).json({ ok: true, duplicate: !inserted.rows[0], messageId: inserted.rows[0]?.id == null ? null : String(inserted.rows[0].id) });
+      if (inserted.rows[0]) {
+        const owner = await officialOwnerId();
+        const recipients = owned.rows[0].assigned_admin_id
+          ? [owner, owned.rows[0].assigned_admin_id]
+          : [owner, ...(await pool.query("SELECT user_id FROM fynx_admin_roles WHERE role='ADMIN'")).rows.map(x => x.user_id)];
+        await notify(recipients, { caseId, eventId: `user-reply-${inserted.rows[0].id}`, title: "User replied to a support case", message: `${owned.rows[0].case_number || "FYNX support"} has a new reply.` });
+      }
+      return res.status(inserted.rows[0] ? 201 : 200).json({ ok: true, duplicate: !inserted.rows[0], messageId: inserted.rows[0]?.id == null ? null : String(inserted.rows[0].id) });
     } catch (error) {
       if (client) await client.query("ROLLBACK").catch(() => {});
       console.error("support user reply", error);
@@ -344,22 +353,36 @@ export function registerSupportRoutes({ app, pool, auth }) {
       const visibility = req.body?.visibility === "INTERNAL" ? "INTERNAL" : "PUBLIC";
       const clientMessageId = typeof req.body?.clientMessageId === "string" ? req.body.clientMessageId.trim().slice(0, 100) : "";
       if (!caseId || !body || !clientMessageId) return res.status(400).json({ error: "A valid message and request ID are required." });
-      const access = await adminCanSeeCase(role, req.user.sub, caseId);
-      if (!access.row) return res.status(404).json({ error: "Support case not found." });
-      if (!access.allowed) return res.status(403).json({ error: "This case is assigned to another Admin." });
-      if (role !== "OWNER" && String(access.row.assigned_admin_id || "") !== String(req.user.sub)) return res.status(409).json({ error: "Claim this case before replying." });
       await client.query("BEGIN");
-      const inserted = await client.query("INSERT INTO fynx_support_messages(case_id,sender_id,body,visibility,client_message_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(case_id,sender_id,client_message_id) WHERE client_message_id IS NOT NULL DO NOTHING RETURNING id,created_at", [caseId, req.user.sub, body, visibility, clientMessageId]);
-      if (visibility === "PUBLIC") {
-        await client.query("UPDATE fynx_support_cases SET status='WAITING_FOR_USER',updated_at=NOW() WHERE id=$1", [caseId]);
-      } else {
-        await client.query("UPDATE fynx_support_cases SET updated_at=NOW() WHERE id=$1", [caseId]);
+      const locked = await client.query("SELECT requester_id,assigned_admin_id,status,case_number FROM fynx_support_cases WHERE id=$1 FOR UPDATE", [caseId]);
+      const row = locked.rows[0];
+      if (!row) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Support case not found." }); }
+      if (role !== "OWNER" && row.assigned_admin_id != null && String(row.assigned_admin_id) !== String(req.user.sub)) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "This case is assigned to another Admin." });
       }
-      if (inserted.rows[0]) await client.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,$3,jsonb_build_object('visibility',$4::text))", [caseId, req.user.sub, visibility === "INTERNAL" ? "INTERNAL_NOTE" : "ADMIN_REPLIED", visibility]);
+      if (role !== "OWNER" && String(row.assigned_admin_id || "") !== String(req.user.sub)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Claim this case before replying." });
+      }
+      if (role !== "OWNER" && row.status === "RESOLVED" && visibility === "PUBLIC") {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "Only the Owner can reopen a resolved case." });
+      }
+      const inserted = await client.query("INSERT INTO fynx_support_messages(case_id,sender_id,body,visibility,client_message_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(case_id,sender_id,client_message_id) WHERE client_message_id IS NOT NULL DO NOTHING RETURNING id,created_at", [caseId, req.user.sub, body, visibility, clientMessageId]);
+      if (inserted.rows[0]) {
+        if (visibility === "PUBLIC") {
+          await client.query("UPDATE fynx_support_cases SET status='WAITING_FOR_USER',updated_at=NOW(),resolved_at=NULL WHERE id=$1", [caseId]);
+        } else {
+          await client.query("UPDATE fynx_support_cases SET updated_at=NOW() WHERE id=$1", [caseId]);
+        }
+        await client.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,$3,jsonb_build_object('visibility',$4::text))", [caseId, req.user.sub, visibility === "INTERNAL" ? "INTERNAL_NOTE" : "ADMIN_REPLIED", visibility]);
+      }
       await client.query("COMMIT");
-      const c = await pool.query("SELECT requester_id,case_number FROM fynx_support_cases WHERE id=$1", [caseId]);
-      if (visibility === "PUBLIC" && inserted.rows[0]) await notify([c.rows[0].requester_id], { caseId, eventId: `admin-reply-${inserted.rows[0].id}`, title: "FYNX Support replied", message: `${c.rows[0].case_number} has a new response.` });
-      return res.status(201).json({ ok: true, duplicate: !inserted.rows[0], messageId: inserted.rows[0]?.id == null ? null : String(inserted.rows[0].id) });
+      if (visibility === "PUBLIC" && inserted.rows[0]) {
+        await notify([row.requester_id], { caseId, eventId: `admin-reply-${inserted.rows[0].id}`, title: "FYNX Support replied", message: `${row.case_number} has a new response.` });
+      }
+      return res.status(inserted.rows[0] ? 201 : 200).json({ ok: true, duplicate: !inserted.rows[0], messageId: inserted.rows[0]?.id == null ? null : String(inserted.rows[0].id) });
     } catch (error) {
       if (client) await client.query("ROLLBACK").catch(() => {});
       console.error("support admin reply", error);
@@ -368,6 +391,7 @@ export function registerSupportRoutes({ app, pool, auth }) {
   });
 
   app.patch("/api/admin/support/cases/:caseId/status", auth, async (req, res) => {
+    let client;
     try {
       await ensureSchema();
       const role = await requireSupport(req, res);
@@ -375,19 +399,41 @@ export function registerSupportRoutes({ app, pool, auth }) {
       const caseId = caseIdFrom(req.params.caseId);
       const status = String(req.body?.status || "").trim().toUpperCase();
       if (!caseId || !STATUSES.has(status)) return res.status(400).json({ error: "Choose a valid support status." });
-      const access = await adminCanSeeCase(role, req.user.sub, caseId);
-      if (!access.row) return res.status(404).json({ error: "Support case not found." });
-      if (!access.allowed) return res.status(403).json({ error: "This case is assigned to another Admin." });
-      if (role !== "OWNER" && String(access.row.assigned_admin_id || "") !== String(req.user.sub)) return res.status(409).json({ error: "Claim this case before changing its status." });
-      if (role !== "OWNER" && access.row.status === "RESOLVED" && status !== "RESOLVED") return res.status(403).json({ error: "Only the Owner can reopen a resolved case." });
-      const result = await pool.query("UPDATE fynx_support_cases SET status=$1,updated_at=NOW(),resolved_at=CASE WHEN $1='RESOLVED' THEN NOW() ELSE NULL END WHERE id=$2 RETURNING id,case_number,status", [status, caseId]);
-      await pool.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'STATUS_CHANGED',jsonb_build_object('status',$3::text))", [caseId, req.user.sub, status]);
-      if (status === "RESOLVED") {
-        const requester = await pool.query("SELECT requester_id FROM fynx_support_cases WHERE id=$1", [caseId]);
-        await notify([requester.rows[0]?.requester_id], { caseId, eventId: `resolved-${caseId}-${Date.now()}`, title: "Support request resolved", message: `${result.rows[0].case_number} has been marked resolved.` });
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const locked = await client.query("SELECT requester_id,assigned_admin_id,status,case_number FROM fynx_support_cases WHERE id=$1 FOR UPDATE", [caseId]);
+      const row = locked.rows[0];
+      if (!row) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Support case not found." }); }
+      if (role !== "OWNER" && row.assigned_admin_id != null && String(row.assigned_admin_id) !== String(req.user.sub)) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "This case is assigned to another Admin." });
       }
-      return res.json({ case: result.rows[0] });
-    } catch (error) { console.error("support case status", error); return res.status(500).json({ error: "Case status could not be updated." }); }
+      if (role !== "OWNER" && String(row.assigned_admin_id || "") !== String(req.user.sub)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Claim this case before changing its status." });
+      }
+      if (role !== "OWNER" && row.status === "RESOLVED" && status !== "RESOLVED") {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "Only the Owner can reopen a resolved case." });
+      }
+      if (row.status === status) {
+        await client.query("COMMIT");
+        return res.json({ case: { id: String(caseId), case_number: row.case_number, status }, changed: false });
+      }
+      const result = await client.query("UPDATE fynx_support_cases SET status=$1,updated_at=NOW(),resolved_at=CASE WHEN $1='RESOLVED' THEN NOW() ELSE NULL END WHERE id=$2 RETURNING id,case_number,status", [status, caseId]);
+      const event = await client.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'STATUS_CHANGED',jsonb_build_object('status',$3::text)) RETURNING id", [caseId, req.user.sub, status]);
+      await client.query("COMMIT");
+      if (status === "RESOLVED") {
+        await notify([row.requester_id], { caseId, eventId: `resolved-${event.rows[0].id}`, title: "Support request resolved", message: `${row.case_number} has been marked resolved.` });
+      } else if (row.status === "RESOLVED" && role === "OWNER") {
+        await notify([row.requester_id], { caseId, eventId: `reopened-${event.rows[0].id}`, title: "Support request reopened", message: `${row.case_number} has been reopened by FYNX Support.` });
+      }
+      return res.json({ case: result.rows[0], changed: true });
+    } catch (error) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
+      console.error("support case status", error);
+      return res.status(500).json({ error: "Case status could not be updated." });
+    } finally { client?.release(); }
   });
 
   app.get("/api/admin/support/cases/:caseId/events", auth, async (req, res) => {
