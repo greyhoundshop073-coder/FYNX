@@ -16,6 +16,8 @@ assert.match(bootstrap, /req\.rawBody = Buffer\.from\(buf\)/,
   'Paystack webhook must receive exact raw request bytes for HMAC verification');
 assert.match(wallet, /const pool = getFynxDatabasePool\(\)/,
   'Wallet module must use the existing bounded shared database pool');
+assert.doesNotMatch(wallet, /await pool\.end\(\)/,
+  'Wallet module must not close the shared database pool owned by the backend');
 assert.match(webhook, /handleBuyerWalletPaystackEvent\(eventName, transaction\)/,
   'Paystack charge.success must be dispatched to Wallet reconciliation');
 assert.match(webhook, /invalid webhook signature/,
