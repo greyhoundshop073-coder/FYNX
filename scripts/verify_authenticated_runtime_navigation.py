@@ -424,7 +424,7 @@ def find_edit_fields(xml_text:str):
         if center: fields.append(center)
     return fields
 
-def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None)->str:
+def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None, wait_attempts:int=16)->str:
     # Retry the same real accessibility selector; never use guessed coordinates.
     control=find_control(xml_text,labels)
     for _ in range(8):
@@ -442,8 +442,8 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
     run("adb","logcat","-c")
     run("adb","shell","input","tap",str(x),str(y))
     next_xml=""
-    for _ in range(16):
-        time.sleep(.5)
+    for _ in range(wait_attempts):
+        time.sleep(.25)
         next_xml=dump_ui(f"authenticated-{name}.xml")
         permission=find_control(next_xml,["While using the app","Only this time"])
         if permission:
@@ -1043,16 +1043,24 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         timer_panel, ["10 sec"], f"{prefix}-camera-timer-ten-seconds",
         ["Take photo"]
     ) if timer_panel else ""
-    if timer_selected and find_control(timer_selected, ["3 sec"]):
+    # Selecting a timer leaves the adjustments tray open. Close it deliberately
+    # before pressing the shutter so the tap cannot land on an obscured control.
+    if timer_selected:
+        timer_selected = tap_control(
+            timer_selected, ["Set capture timer"],
+            f"{prefix}-camera-timer-close-adjustments", ["Take photo"],
+            wait_attempts=3
+        )
+    if timer_selected and find_control(timer_selected, ["Take photo"]):
         countdown_xml = tap_control(
             timer_selected, ["Take photo"], f"{prefix}-camera-timer-start-cancel",
-            ["Cancel timer"]
+            ["Cancel timer"], wait_attempts=8
         )
         if countdown_xml:
             screenshot(f"{prefix}-camera-timer-countdown.png")
             cancelled_xml = tap_control(
                 countdown_xml, ["Cancel timer"], f"{prefix}-camera-timer-cancel",
-                ["Take photo"]
+                ["Take photo"], wait_attempts=4
             )
             if cancelled_xml:
                 time.sleep(3.4)
@@ -1911,11 +1919,19 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     if size_match:
         display_width, display_height = int(size_match.group(1)), int(size_match.group(2))
         scroll_x = str(display_width // 2)
-        scroll_from = str(int(display_height * 0.90))
-        scroll_to = str(int(display_height * 0.68))
-        run("adb", "shell", "input", "swipe", scroll_x, scroll_from, scroll_x, scroll_to, "500")
-        time.sleep(0.8)
-    caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-before.xml") or caption_xml
+        # The editor panel is bottom-anchored and its scroll viewport can be shorter
+        # than the panel. Repeat short upward swipes and re-read accessibility after
+        # each one instead of assuming one screen-relative gesture reached the field.
+        scroll_from = str(int(display_height * 0.88))
+        scroll_to = str(int(display_height * 0.62))
+        for scroll_attempt in range(5):
+            run("adb", "shell", "input", "swipe", scroll_x, scroll_from, scroll_x, scroll_to, "350")
+            time.sleep(0.35)
+            caption_xml = dump_ui(
+                f"{prefix}-camera-video-manual-caption-scroll-{scroll_attempt + 1}.xml"
+            ) or caption_xml
+            if find_control(caption_xml, ["Video captions"]):
+                break
     manual_caption_field = find_control(caption_xml, ["Video captions"])
     if not manual_caption_field:
         FAILURES.append(prefix + ": manual Video captions field was not visible in the video editor")
