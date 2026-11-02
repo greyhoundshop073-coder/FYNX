@@ -570,6 +570,7 @@ fun FynxCameraCapturePanel(
     var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
     var pendingType by remember { mutableStateOf<String?>(null) }
     var cameraTextOverlays by remember { mutableStateOf<List<FynxCameraTextOverlay>>(emptyList()) }
+    var cameraVideoDurationMs by remember { mutableLongStateOf(0L) }
     var selectedTextOverlayId by remember { mutableStateOf<String?>(null) }
     var editingTextOverlayId by remember { mutableStateOf<String?>(null) }
     var videoEditsApplied by remember { mutableStateOf(false) }
@@ -606,6 +607,23 @@ fun FynxCameraCapturePanel(
             }
         }
         videoEditsApplied = false
+    }
+    LaunchedEffect(pendingUri, pendingType) {
+        cameraVideoDurationMs = 0L
+        val uri = pendingUri
+        if (uri != null && (pendingType == "video" || pendingType == "video_note")) {
+            cameraVideoDurationMs = withContext(Dispatchers.IO) {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(uri.path ?: error("Video file unavailable"))
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+                } catch (_: Exception) {
+                    0L
+                } finally {
+                    runCatching { retriever.release() }
+                }
+            }
+        }
     }
     fun updateCameraTextOverlay(updated: FynxCameraTextOverlay) {
         cameraTextOverlays = cameraTextOverlays.map { if (it.id == updated.id) updated else it }
@@ -1151,6 +1169,8 @@ fun FynxCameraCapturePanel(
                                     else -> "CENTER"
                                 }))
                             } },
+                            videoDurationMs = cameraVideoDurationMs,
+                            onTiming = { start, end -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(startMs = start, endMs = end)) } },
                             onDelete = {
                                 selectedOverlay?.let { removed ->
                                     cameraTextOverlays = cameraTextOverlays.filterNot { it.id == removed.id }
@@ -1292,6 +1312,8 @@ fun FynxCameraCapturePanel(
                                 else -> "CENTER"
                             }))
                         } },
+                        videoDurationMs = cameraVideoDurationMs,
+                        onTiming = { start, end -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(startMs = start, endMs = end)) } },
                         onDelete = {
                             selectedOverlay?.let { removed ->
                                 cameraTextOverlays = cameraTextOverlays.filterNot { it.id == removed.id }

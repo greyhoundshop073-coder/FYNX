@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -14,6 +15,16 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class CameraTextOverlayInstrumentationTest {
+    @Test
+    fun videoTextOverlayHonoursInclusiveStartAndExclusiveEndTimes() {
+        val overlay = FynxCameraTextOverlay(text = "Timed text", startMs = 1_200L, endMs = 3_800L)
+        assertFalse(isFynxCameraTextOverlayVisibleAt(overlay, 1_199L))
+        assertTrue(isFynxCameraTextOverlayVisibleAt(overlay, 1_200L))
+        assertTrue(isFynxCameraTextOverlayVisibleAt(overlay, 3_799L))
+        assertFalse(isFynxCameraTextOverlayVisibleAt(overlay, 3_800L))
+        assertFalse(isFynxCameraTextOverlayVisibleAt(overlay.copy(text = "   "), 2_000L))
+    }
+
     @Test
     fun photoTextOverlayIsRenderedIntoTheExportedImage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

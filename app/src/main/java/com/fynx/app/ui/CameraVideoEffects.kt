@@ -109,7 +109,7 @@ private class FynxMediaTextOverlay(private val item: FynxCameraTextOverlay) : Te
 
     override fun getText(presentationTimeUs: Long): SpannableString {
         val timeMs = presentationTimeUs / 1000L
-        val visible = timeMs >= item.startMs && timeMs < item.endMs
+        val visible = isFynxCameraTextOverlayVisibleAt(item, timeMs)
         val text = SpannableString(if (visible) item.text.trim() else "")
         if (text.isNotEmpty()) {
             text.setSpan(ForegroundColorSpan(item.color), 0, text.length, 0)

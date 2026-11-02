@@ -39,6 +39,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -92,6 +93,14 @@ private fun cameraTextAlign(name: String): TextAlign = when (name) {
     "LEFT" -> TextAlign.Start
     "RIGHT" -> TextAlign.End
     else -> TextAlign.Center
+}
+
+internal fun isFynxCameraTextOverlayVisibleAt(item: FynxCameraTextOverlay, timeMs: Long): Boolean =
+    item.text.isNotBlank() && timeMs >= item.startMs && timeMs < item.endMs
+
+private fun formatCameraOverlayTime(timeMs: Long): String {
+    val seconds = (timeMs.coerceAtLeast(0L) / 1000L).toInt()
+    return "%d:%02d".format(seconds / 60, seconds % 60)
 }
 
 /**
@@ -210,6 +219,8 @@ internal fun CameraTextOverlayTools(
     onToggleBackground: () -> Unit,
     onToggleBold: () -> Unit,
     onAlignment: () -> Unit,
+    videoDurationMs: Long = 0L,
+    onTiming: (Long, Long) -> Unit = { _, _ -> },
     onDelete: () -> Unit,
     onDone: () -> Unit
 ) {
@@ -219,6 +230,10 @@ internal fun CameraTextOverlayTools(
         android.graphics.Color.CYAN,
         android.graphics.Color.MAGENTA,
         android.graphics.Color.RED,
+        android.graphics.Color.GREEN,
+        0xFFFF8A00.toInt(),
+        0xFFFF5C8A.toInt(),
+        0xFF8B75FF.toInt(),
         android.graphics.Color.BLACK
     )
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -262,6 +277,34 @@ internal fun CameraTextOverlayTools(
                     onClick = { onFont(font) },
                     label = { Text(font) },
                     enabled = selected != null
+                )
+            }
+        }
+        if (isVideo && selected != null && videoDurationMs > 1L) {
+            val duration = videoDurationMs.coerceAtLeast(2L)
+            val start = selected.startMs.coerceIn(0L, duration - 1L)
+            val end = selected.endMs.coerceIn(start + 1L, duration)
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .background(ComposeColor(0xFF25364A).copy(alpha = 0.42f), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Text timing", style = MaterialTheme.typography.labelLarge, color = ComposeColor.White)
+                    Text("${formatCameraOverlayTime(start)} – ${formatCameraOverlayTime(end)}", style = MaterialTheme.typography.labelSmall, color = ComposeColor(0xFFB8A7FF))
+                }
+                Text("Show from", style = MaterialTheme.typography.labelSmall, color = ComposeColor.White.copy(alpha = 0.76f))
+                Slider(
+                    value = start.toFloat(),
+                    onValueChange = { value -> onTiming(value.toLong().coerceIn(0L, end - 1L), end) },
+                    valueRange = 0f..(duration - 1L).toFloat()
+                )
+                Text("Show until", style = MaterialTheme.typography.labelSmall, color = ComposeColor.White.copy(alpha = 0.76f))
+                Slider(
+                    value = end.toFloat(),
+                    onValueChange = { value -> onTiming(start, value.toLong().coerceIn(start + 1L, duration)) },
+                    valueRange = (start + 1L).toFloat()..duration.toFloat()
                 )
             }
         }
