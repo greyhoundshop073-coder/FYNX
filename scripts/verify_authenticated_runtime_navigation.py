@@ -418,32 +418,40 @@ def capture_support_center_from_settings(settings_xml: str, prefix: str) -> bool
         return False
     deadline = time.monotonic() + 12.0
     latest = support_xml
+    form_markers = [
+        ("Report a problem", ["Report a problem"]),
+        ("Describe the problem", ["Describe the problem"]),
+        ("Attach screenshot (optional)", ["Attach screenshot (optional)"]),
+        ("Submit support request", ["Submit support request"])
+    ]
     while time.monotonic() < deadline:
-        required = [
-            find_control(latest, ["Report a problem"]),
-            find_control(latest, ["Submit support request"]),
-            find_control(latest, ["My support requests"]),
-            find_control(latest, ["Attach screenshot (optional)"])
-        ]
-        if all(required):
+        if all(find_control(latest, labels) for _, labels in form_markers):
             break
         time.sleep(0.5)
         latest = dump_ui(prefix + "-support-form-wait.xml") or latest
-    screenshot(prefix + "-user-support-centre.png")
-    (ROOT / (prefix + "-user-support-centre.xml")).write_text(latest + chr(10), encoding="utf-8")
-    markers = [
-        ("Report a problem", find_control(latest, ["Report a problem"])),
-        ("Submit support request", find_control(latest, ["Submit support request"])),
-        ("My support requests", find_control(latest, ["My support requests"])),
-        ("Attach screenshot (optional)", find_control(latest, ["Attach screenshot (optional)"]))
-    ]
-    missing = [label for label, control in markers if not control]
-    if missing:
-        FAILURES.append(prefix + ": Support form is missing visible controls: " + ", ".join(missing))
+    screenshot(prefix + "-user-support-request-form.png")
+    (ROOT / (prefix + "-user-support-request-form.xml")).write_text(latest + chr(10), encoding="utf-8")
+    missing_form = [label for label, labels in form_markers if not find_control(latest, labels)]
+    if missing_form:
+        FAILURES.append(prefix + ": Support request form is missing visible controls: " + ", ".join(missing_form))
         return False
-    report.append("- PASS captured the real FYNX Help & Support request form, screenshot option and case-history section from the running APK; no request was submitted.")
-    return True
 
+    # Capture case history separately because the request form is intentionally scrollable.
+    for attempt in range(4):
+        history_xml = dump_ui(prefix + "-support-history-scroll-" + str(attempt) + ".xml") or latest
+        if find_control(history_xml, ["My support requests"]):
+            latest = history_xml
+            break
+        run("adb", "shell", "input", "swipe", "700", "2200", "700", "850", "450")
+        time.sleep(0.4)
+    history_xml = dump_ui(prefix + "-support-history.xml") or latest
+    screenshot(prefix + "-user-support-request-history.png")
+    (ROOT / (prefix + "-user-support-request-history.xml")).write_text(history_xml + chr(10), encoding="utf-8")
+    if not find_control(history_xml, ["My support requests"]):
+        FAILURES.append(prefix + ": the Support request history section was not reachable below the request form")
+        return False
+    report.append("- PASS captured the real FYNX Help & Support request form and case-history section from the running APK; no request was submitted.")
+    return True
 
 def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
     """Read the actual accessibility enabled state of a visible control."""
