@@ -391,7 +391,12 @@ checks.extend([
      and "FYNXdraftoverlay" in runtime
      and "camera-post-draft-edit-text-open" in runtime
      and "video text timing controls were not visible" in runtime),
-    ("Selected non-file media waits for its working copy before live CameraX can bind",
+    ("Reopened draft media is edited from disposable copies, never directly from the saved source",
+     'mutableStateOf<Uri?>(null)' in camera
+     and "copyCameraGalleryMediaToCache(context, source)" in camera
+     and "releaseUnneededInitialMediaCopies" in camera
+     and "if (!initialMediaHandedOff)" in camera),
+    ("Selected content media waits for its working copy before live CameraX can bind",
      "isPreparingInitialMedia" in camera
      and "initialMediaLoadFailed" in camera
      and "pendingUri != null || isPreparingInitialMedia || initialMediaLoadFailed" in camera
