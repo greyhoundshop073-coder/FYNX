@@ -278,7 +278,16 @@ internal object FynxBuyerWalletClient {
             .mapCatching { raw ->
                 val json = JSONObject(raw)
                 require(json.optBoolean("hasWithdrawalPin", false)) { "Wallet PIN setup was not confirmed." }
-                FynxWalletSecurityStatus(true, false, null, null, null, null)
+                FynxWalletSecurityStatus(
+                    walletStatus = "ACTIVE",
+                    canSetWithdrawalPin = false,
+                    hasWithdrawalPin = true,
+                    isLocked = false,
+                    lockedUntil = null,
+                    maximumPerTransfer = null,
+                    dailyAmountLimit = null,
+                    dailyCountLimit = null
+                )
             }
     }
 
