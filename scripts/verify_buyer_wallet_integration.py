@@ -213,6 +213,11 @@ checks.extend([
   and '"Check payment status"' in runtime
   and '"Test payment recorded"' in runtime
   and "wallet_has_nonzero_available_balance" in runtime),
+ ("saved-device Wallet actions do not call private funding-account or security endpoints without a server token",
+  '"TRANSFER" -> {\\n                if (FynxBackendClient.hasAccessToken(context))' in actions
+  and '"SECURITY" -> {\\n                if (FynxBackendClient.hasAccessToken(context))' in actions
+  and "No account request has been sent." in actions
+  and "Wallet PIN status is private account information." in actions),
  ("sandbox Wallet runtime only submits a simulated test card and keeps real money movement unavailable",
   "NGN 1,000 Paystack test-card" in runtime
   and "FYNX_WALLET_SANDBOX_E2E=1" in runtime
