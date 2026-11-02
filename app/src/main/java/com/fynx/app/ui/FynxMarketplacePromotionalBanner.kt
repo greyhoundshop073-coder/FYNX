@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,6 +62,8 @@ fun MarketplacePromotionalBanner(
     onOpenListing: (FynxRemoteSocialClient.MarketplaceListing) -> Unit,
     onOpenSeller: (String) -> Unit,
     onShopNow: () -> Unit,
+    onOpenOrders: () -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -246,6 +250,14 @@ fun MarketplacePromotionalBanner(
     }
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Discover on FYNX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Featured products, weekly sellers and celebrations", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = onOpenOrders) { Icon(Icons.Default.ReceiptLong, "Orders", tint = MaterialTheme.colorScheme.primary) }
+            IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh promotions", tint = MaterialTheme.colorScheme.primary) }
+        }
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val bannerWidth = maxWidth
             LazyRow(
