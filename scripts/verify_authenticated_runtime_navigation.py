@@ -1804,7 +1804,7 @@ def capture_wallet_from_features(prefix:str):
 # unrelated instrumentation test fails. This branch performs read-only navigation:
 # it never publishes a listing, changes inventory, creates an order, or initiates payment.
 if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
-    report.append("- Capture scope: Home mirror-glass dark-mode proof plus Marketplace, My Shop and Wallet; no listing/order/payment mutations.")
+    report.append("- Capture scope: Marketplace, My Shop and Wallet only; no Home/Profile, Status/Stories, Chat/Groups or camera journeys; no listing/order/payment mutations.")
     if error:
         report += [
             "",
