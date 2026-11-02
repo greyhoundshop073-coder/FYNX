@@ -1,5 +1,13 @@
 import crypto from "node:crypto";
 import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
+// Keep PostgreSQL LIMIT/OFFSET bindings aligned with the dynamic filter parameters.
+export function appendMarketplaceDiscoveryPagination(params, limit, offset) {
+  params.push(limit + 1, offset);
+  return {
+    limitPlaceholder: '$' + (params.length - 1),
+    offsetPlaceholder: '$' + params.length
+  };
+}
 
 export function registerDiscoveryRoutes({ app, pool, auth }) {
   let schemaPromise;
@@ -31,15 +39,6 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
   const cleanText = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
   const validPostId = (value) => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
   const validListingId = (value) => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
-
-  // Keep PostgreSQL LIMIT/OFFSET bindings aligned with the dynamic filter parameters.
-  export function appendMarketplaceDiscoveryPagination(params, limit, offset) {
-    params.push(limit + 1, offset);
-    return {
-      limitPlaceholder: `${params.length - 1}`,
-      offsetPlaceholder: `${params.length}`
-    };
-  }
 
   app.post("/api/discovery/events", auth, async (req, res) => {
     try {
