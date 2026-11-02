@@ -1015,7 +1015,7 @@ def marketplace_product_card_target(xml_text: str):
             continue
         width, height = right - left, bottom - top
         # Exclude tiny buttons and full-screen containers; product/deal cards are larger.
-        if not (250 <= width <= 1200 and 220 <= height <= 1450):
+        if not (250 <= width <= 1400 and 220 <= height <= 1450):
             continue
         values = [
             (child.attrib.get("text") or "").strip()
@@ -1892,7 +1892,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
 
         # Scroll the real Marketplace list to its sell action; do not fill or submit the form.
-        sell_labels = ["Sell something", "Start selling", "Sell your first product"]
+        sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]
         for attempt in range(6):
             if find_control(marketplace_xml, sell_labels):
                 break

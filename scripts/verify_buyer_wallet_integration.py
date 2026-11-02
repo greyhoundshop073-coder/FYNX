@@ -171,6 +171,14 @@ checks.extend([
   '"authenticated-wallet-marketplace-shortcut.png"' in runtime_surface_gate)
 ])
 
+checks.extend([
+ ("Marketplace runtime recognises wide real priced product cards on modern phone layouts",
+  "250 <= width <= 1400" in runtime and "250 <= width <= 1200" not in runtime
+  and "real priced listing" in runtime),
+ ("Marketplace runtime recognises the actual compact Sell floating action",
+  'sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]' in runtime),
+])
+
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
 if failed: raise SystemExit("FYNX buyer wallet Android integration failed: "+", ".join(failed))
