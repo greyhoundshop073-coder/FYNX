@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSp
 import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileOutputStream
@@ -277,13 +278,16 @@ internal fun CameraTextOverlayLayer(
         val mediaTopPx = (heightPx - mediaHeightPx) / 2f
         val density = LocalDensity.current
         val overlayTextMaxWidth = with(density) { (mediaWidthPx * 0.84f).toDp() }
+        val overlayTextSize = with(density) {
+            (mediaWidthPx * 0.055f).coerceIn(24f, mediaWidthPx * 0.12f).toSp()
+        }
         overlays.forEach { overlay ->
             val editing = overlay.id == editingId
             val visibleAtPlayback = playbackPositionMs == null || isFynxCameraTextOverlayVisibleAt(overlay, playbackPositionMs)
             if ((overlay.text.isNotBlank() && visibleAtPlayback) || editing) {
                 val textStyle = TextStyle(
                     color = ComposeColor(overlay.color),
-                    fontSize = 36.sp,
+                    fontSize = overlayTextSize,
                     fontWeight = if (overlay.bold) FontWeight.Bold else FontWeight.Medium,
                     fontFamily = cameraTextFontFamily(overlay.font),
                     textAlign = cameraTextAlign(overlay.alignment),
