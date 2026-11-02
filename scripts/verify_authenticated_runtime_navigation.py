@@ -2292,9 +2292,9 @@ def open_features(target_labels:list[str]|None=None):
             else: FAILURES.append("authenticated Features -> "+name)
     else: FAILURES.append("authenticated Home -> Features")
 
-# Certify the actual Marketplace destination in the same exact-commit APK.
-# This is a UI/runtime assertion only; the screen must remain navigable when the
-# live service is unavailable, and no sample listing data is fabricated.
+# Certify Marketplace and the private My Shop control center in the same
+# authenticated exact-commit APK. These are read-only journeys: no listing,
+# inventory, order, payment, driver or payout records are created or changed.
 marketplace_home = restore_home_after_restart("authenticated-home-marketplace-entry")
 marketplace_xml = tap_control(
     marketplace_home,
@@ -2303,14 +2303,96 @@ marketplace_xml = tap_control(
     ["Search products, sellers or categories"]
 )
 if marketplace_xml:
+    settled_xml, settle_state = wait_for_marketplace_settled(timeout=20.0)
+    if settled_xml:
+        marketplace_xml = settled_xml
     screenshot("authenticated-marketplace.png")
-    report.append("- PASS authenticated Home -> Marketplace search/cart surface screenshot/UI hierarchy")
+    (ROOT/"authenticated-marketplace.xml").write_text(marketplace_xml+"\n", encoding="utf-8")
+    if settle_state == "loading timeout":
+        FAILURES.append("authenticated Marketplace discovery remained in loading state after 20 seconds")
+    else:
+        report.append(f"- PASS authenticated Home -> Marketplace settled to: {settle_state}")
+    report.append("- PASS authenticated Home -> Marketplace search/cart screenshot and UI hierarchy")
+
+    # Open My Shop through its real Marketplace shortcut. Capture a settled
+    # private overview and each real seller-management destination.
+    for attempt in range(5):
+        if find_control(marketplace_xml, ["My Shop"]):
+            break
+        run("adb", "shell", "input", "swipe", "720", "700", "720", "2450", "450")
+        time.sleep(0.35)
+        marketplace_xml = dump_ui("authenticated-marketplace-return-top-"+str(attempt)+".xml") or marketplace_xml
+    shop_xml = tap_control(
+        marketplace_xml, ["My Shop"], "authenticated-marketplace-my-shop-overview",
+        ["Your shop at a glance", "Manage your storefront", "Shop profile"]
+    )
+    if shop_xml:
+        shop_xml, overview_settled = wait_for_my_shop_section_settled("overview", timeout=20.0)
+        if shop_xml:
+            screenshot("authenticated-marketplace-my-shop-overview.png")
+            (ROOT/"authenticated-marketplace-my-shop-overview.xml").write_text(shop_xml+"\n", encoding="utf-8")
+        if overview_settled:
+            report.append("- PASS authenticated My Shop overview reached a settled seller-control-center state")
+        else:
+            FAILURES.append("authenticated My Shop overview did not settle within 20 seconds")
+
+        shop_sections = [
+            ("profile", "Shop profile", ["Shop identity"]),
+            ("listings", "Listings", ["Your listings", "You have no active listings yet", "Retry loading listings", "Archived listings"]),
+            ("orders", "Orders", ["Seller orders", "No buyer orders yet.", "Seller orders could not load."]),
+            ("delivery-drivers", "Delivery & drivers", ["Manage driver assignments and delivery coordination separately from order review and payout settings"]),
+            ("earnings-payouts", "Earnings & payouts", ["Marketplace earnings"]),
+        ]
+        current_shop_xml = shop_xml
+        for slug, label, expected in shop_sections:
+            control = find_control(current_shop_xml, [label])
+            # The horizontal seller tabs may be off-screen on a narrow device.
+            # Reveal the actual tab before tapping; never guess its coordinates.
+            for attempt in range(4):
+                if control:
+                    break
+                overview_control = find_control(current_shop_xml, ["Overview"])
+                tab_y = overview_control[2] if overview_control else 600
+                run("adb", "shell", "input", "swipe", "1270", str(tab_y), "230", str(tab_y), "450")
+                time.sleep(0.35)
+                current_shop_xml = dump_ui("authenticated-marketplace-my-shop-tabs-"+slug+"-"+str(attempt)+".xml") or current_shop_xml
+                control = find_control(current_shop_xml, [label])
+            if not control:
+                FAILURES.append("authenticated My Shop tab was not reachable: "+label)
+                continue
+            section_xml = tap_control(
+                current_shop_xml, [label], "authenticated-marketplace-my-shop-"+slug, expected
+            )
+            if not section_xml:
+                FAILURES.append("authenticated My Shop section did not open: "+label)
+                current_shop_xml = dump_ui("authenticated-marketplace-my-shop-"+slug+"-after-attempt.xml") or current_shop_xml
+                continue
+            section_xml, section_settled = wait_for_my_shop_section_settled(slug, timeout=20.0)
+            if section_xml:
+                screenshot("authenticated-marketplace-my-shop-"+slug+".png")
+                (ROOT/("authenticated-marketplace-my-shop-"+slug+".xml")).write_text(section_xml+"\n", encoding="utf-8")
+                current_shop_xml = section_xml
+            if section_settled:
+                report.append("- PASS authenticated My Shop section: "+label)
+            else:
+                FAILURES.append("authenticated My Shop section did not settle within 20 seconds: "+label)
+    else:
+        FAILURES.append("authenticated Marketplace -> My Shop did not reach the seller control center")
 else:
     FAILURES.append("authenticated Home -> Marketplace")
-    
-report += ["","## Captured authenticated surfaces",
+
+report += ["","## Captured authenticated Marketplace/My Shop evidence",
+           "- authenticated-marketplace.png",
+           "- authenticated-marketplace-my-shop-overview.png",
+           "- authenticated-marketplace-my-shop-profile.png",
+           "- authenticated-marketplace-my-shop-listings.png",
+           "- authenticated-marketplace-my-shop-orders.png",
+           "- authenticated-marketplace-my-shop-delivery-drivers.png",
+           "- authenticated-marketplace-my-shop-earnings-payouts.png",
+           "",
+           "## Other captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-wallet.png","- authenticated-ai.png","- authenticated-marketplace.png","",
+           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-wallet.png","- authenticated-ai.png","",
            f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
