@@ -1005,7 +1005,7 @@ fun FynxCameraCapturePanel(
             val result = runCatching {
                 withTimeout(120_000L) {
                     val output = applyFynxVideoEdits(context, source, videoStyle, videoCaptionText, visibleText)
-                    withContext(Dispatchers.IO) { verifyFynxVideoEditOutput(source, output, videoStyle) }
+                    withContext(Dispatchers.IO) { verifyFynxVideoEditOutput(source, output, videoStyle, visibleText) }
                     output
                 }
             }
@@ -1046,7 +1046,7 @@ fun FynxCameraCapturePanel(
                         recordingNotice = "Rendering your video text and effects…"
                         finalUri = withTimeout(120_000L) {
                             val output = applyFynxVideoEdits(context, source, videoStyle, videoCaptionText, visibleText)
-                            withContext(Dispatchers.IO) { verifyFynxVideoEditOutput(source, output, videoStyle) }
+                            withContext(Dispatchers.IO) { verifyFynxVideoEditOutput(source, output, videoStyle, visibleText) }
                             output
                         }
                         if (current != source) deleteUri(current)
