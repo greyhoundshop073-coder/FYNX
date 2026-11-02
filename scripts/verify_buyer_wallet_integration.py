@@ -193,6 +193,23 @@ checks.extend([
   'sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]' in runtime),
 ])
 
+
+checks.extend([
+ ("hosted Wallet funding URLs accept only the exact HTTPS Paystack checkout host",
+  'parsed.scheme.equals("https", ignoreCase = true)' in client
+  and 'parsed.host.equals("checkout.paystack.com", ignoreCase = true)' in client
+  and 'parsed.rawUserInfo == null' in client
+  and 'parsed.port == -1 || parsed.port == 443' in client),
+ ("Wallet funding URL tests reject lookalike hosts and URL user-info tricks",
+  "checkout.paystack.com@attacker.example" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
+  and "https://attacker.example/session" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
+  and "checkout.paystack.com:8443" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()),
+ ("private Wallet funding-account and PIN-security panels require a server access token",
+  'FynxBackendClient.hasAccessToken(context)' in actions
+  and "No account request has been sent." in actions
+  and "Wallet PIN status is private account information." in actions)
+])
+
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
 if failed: raise SystemExit("FYNX buyer wallet Android integration failed: "+", ".join(failed))
