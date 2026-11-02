@@ -26,7 +26,10 @@ data class FynxLocalPostDraft(
     val musicTitle: String?,
     val musicArtist: String?,
     val musicDurationMs: Long,
-    val createdAt: Long
+    val createdAt: Long,
+    /** Editable media source copies and text/style state, aligned with mediaPaths. */
+    val mediaEditSourcePaths: List<String?> = emptyList(),
+    val mediaEditStates: List<String?> = emptyList()
 ) {
     val title: String
         get() = caption.trim().ifBlank {
@@ -79,13 +82,19 @@ object FynxLocalPostDraftStore {
                     val item = array.optJSONObject(index) ?: continue
                     val paths = item.optJSONArray("mediaPaths") ?: JSONArray()
                     val types = item.optJSONArray("mediaTypes") ?: JSONArray()
+                    val editSources = item.optJSONArray("mediaEditSourcePaths") ?: JSONArray()
+                    val editStates = item.optJSONArray("mediaEditStates") ?: JSONArray()
                     val validMedia = (0 until paths.length()).mapNotNull { mediaIndex ->
                         val path = paths.optString(mediaIndex).takeIf(String::isNotBlank) ?: return@mapNotNull null
                         if (!File(path).isFile) return@mapNotNull null
-                        path to types.optString(mediaIndex, "image")
+                        val editSource = if (editSources.isNull(mediaIndex)) null else editSources.optString(mediaIndex).takeIf { it.isNotBlank() && File(it).isFile }
+                        val editState = if (editStates.isNull(mediaIndex)) null else editStates.optString(mediaIndex).takeIf { it.isNotBlank() }
+                        Triple(path, types.optString(mediaIndex, "image"), editSource to editState)
                     }
                     val mediaPaths = validMedia.map { it.first }
                     val alignedTypes = validMedia.map { it.second }
+                    val alignedEditSources = validMedia.map { it.third.first }
+                    val alignedEditStates = validMedia.map { it.third.second }
                     val friendIds = item.optJSONArray("selectedAudienceIds") ?: JSONArray()
                     add(
                         FynxLocalPostDraft(
@@ -98,6 +107,8 @@ object FynxLocalPostDraftStore {
                             textBackgroundKey = item.optString("textBackgroundKey").takeIf { it.isNotBlank() },
                             mediaPaths = mediaPaths,
                             mediaTypes = alignedTypes,
+                            mediaEditSourcePaths = alignedEditSources,
+                            mediaEditStates = alignedEditStates,
                             musicId = item.optLong("musicId").takeIf { it > 0L },
                             musicMediaId = item.optLong("musicMediaId").takeIf { it > 0L },
                             musicTitle = item.optString("musicTitle").takeIf { it.isNotBlank() },
@@ -121,7 +132,8 @@ object FynxLocalPostDraftStore {
         location: String?,
         textBackground: FynxPostTextBackground?,
         media: List<Pair<Uri, String>>,
-        music: FynxMusicCatalogueTrack?
+        music: FynxMusicCatalogueTrack?,
+        mediaEdits: Map<String, FynxCameraMediaDraftEdit> = emptyMap()
     ): Result<FynxLocalPostDraft> = runCatching {
         require(caption.isNotBlank() || media.isNotEmpty() || music != null) {
             "Add a caption, photo, video or music before saving a draft."
@@ -135,11 +147,9 @@ object FynxLocalPostDraftStore {
         }
         val copied = ArrayList<File>()
         try {
-            val mediaPaths = media.mapIndexed { index, pair ->
-                val uri = pair.first
-                val type = pair.second
+            fun copyDraftMedia(uri: Uri, type: String, suffix: String): String {
                 val extension = mediaExtension(context, uri, type)
-                val target = File(directory, "${draftId}-${index}-${UUID.randomUUID()}.${extension}")
+                val target = File(directory, "${draftId}-${suffix}-${UUID.randomUUID()}.${extension}")
                 // Register before opening/copying so a partial file is also removed if any
                 // subsequent I/O or validation step fails.
                 copied += target
@@ -150,7 +160,21 @@ object FynxLocalPostDraftStore {
                 }
                 input.use { source -> target.outputStream().use { output -> source.copyTo(output) } }
                 require(target.isFile && target.length() > 0L) { "A selected media item could not be saved to the draft." }
-                target.absolutePath
+                return target.absolutePath
+            }
+            val mediaPaths = media.mapIndexed { index, pair ->
+                copyDraftMedia(pair.first, pair.second, "media-$index")
+            }
+            val mediaEditSourcePaths = media.mapIndexed { index, pair ->
+                mediaEdits[pair.first.toString()]?.let { edit ->
+                    require(edit.sourceUri != pair.first) {
+                        "The editable media source must be separate from the published overlay output."
+                    }
+                    copyDraftMedia(edit.sourceUri, pair.second, "edit-source-$index")
+                }
+            }
+            val mediaEditStates = media.map { pair ->
+                mediaEdits[pair.first.toString()]?.let(::encodeFynxCameraMediaDraftEdit)
             }
 
             val draft = FynxLocalPostDraft(
@@ -163,6 +187,8 @@ object FynxLocalPostDraftStore {
                 textBackgroundKey = textBackground?.key,
                 mediaPaths = mediaPaths,
                 mediaTypes = media.map { it.second },
+                mediaEditSourcePaths = mediaEditSourcePaths,
+                mediaEditStates = mediaEditStates,
                 musicId = music?.id,
                 musicMediaId = music?.mediaId,
                 musicTitle = music?.title,
@@ -184,6 +210,12 @@ object FynxLocalPostDraftStore {
                     put("textBackgroundKey", item.textBackgroundKey)
                     put("mediaPaths", JSONArray(item.mediaPaths))
                     put("mediaTypes", JSONArray(item.mediaTypes))
+                    put("mediaEditSourcePaths", JSONArray().apply {
+                        item.mediaEditSourcePaths.forEach { put(it ?: JSONObject.NULL) }
+                    })
+                    put("mediaEditStates", JSONArray().apply {
+                        item.mediaEditStates.forEach { put(it ?: JSONObject.NULL) }
+                    })
                     put("musicId", item.musicId)
                     put("musicMediaId", item.musicMediaId)
                     put("musicTitle", item.musicTitle)
@@ -195,8 +227,11 @@ object FynxLocalPostDraftStore {
             check(accountPrefs(context).edit().putString(KEY_DRAFTS, json.toString()).commit()) {
                 "Draft could not be saved. Please try again."
             }
-            previous?.mediaPaths?.forEach { old -> if (old !in mediaPaths) runCatching { File(old).delete() } }
-            (current.drop(MAX_DRAFTS - 1)).flatMap { it.mediaPaths }.forEach { old -> runCatching { File(old).delete() } }
+            (previous?.mediaPaths.orEmpty() + previous?.mediaEditSourcePaths.orEmpty().filterNotNull()).forEach { old ->
+                if (old !in mediaPaths && old !in mediaEditSourcePaths.filterNotNull()) runCatching { File(old).delete() }
+            }
+            current.drop(MAX_DRAFTS - 1).flatMap { it.mediaPaths + it.mediaEditSourcePaths.filterNotNull() }
+                .forEach { old -> runCatching { File(old).delete() } }
             draft
         } catch (failure: Throwable) {
             copied.forEach { runCatching { it.delete() } }
@@ -220,6 +255,12 @@ object FynxLocalPostDraftStore {
                 put("textBackgroundKey", item.textBackgroundKey)
                 put("mediaPaths", JSONArray(item.mediaPaths))
                 put("mediaTypes", JSONArray(item.mediaTypes))
+                put("mediaEditSourcePaths", JSONArray().apply {
+                    item.mediaEditSourcePaths.forEach { put(it ?: JSONObject.NULL) }
+                })
+                put("mediaEditStates", JSONArray().apply {
+                    item.mediaEditStates.forEach { put(it ?: JSONObject.NULL) }
+                })
                 put("musicId", item.musicId)
                 put("musicMediaId", item.musicMediaId)
                 put("musicTitle", item.musicTitle)
@@ -231,6 +272,6 @@ object FynxLocalPostDraftStore {
         check(accountPrefs(context).edit().putString(KEY_DRAFTS, json.toString()).commit()) {
             "Draft could not be deleted. Please try again."
         }
-        removed.mediaPaths.forEach { path -> runCatching { File(path).delete() } }
+        (removed.mediaPaths + removed.mediaEditSourcePaths.filterNotNull()).forEach { path -> runCatching { File(path).delete() } }
     }
 }
