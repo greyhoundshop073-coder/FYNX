@@ -58,9 +58,10 @@ export function registerAdminRoutes({ app }) {
   };
   const auth = (req,res,next) => { const header=req.get('authorization')||''; const token=header.startsWith('Bearer ')?header.slice(7).trim():''; if(!token||!JWT_SECRET)return res.status(401).json({error:'authentication required'}); try{req.user=jwt.verify(token,JWT_SECRET);return next();}catch{return res.status(401).json({error:'invalid or expired token'});} };
   const role = async userId => {
-    const first=(await pool.query('SELECT id FROM users ORDER BY id ASC LIMIT 1')).rows[0];
-    if(first && String(first.id)===String(userId)) return 'OWNER';
-    const admin=(await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1',[userId])).rowCount;
+    const officialUsername=(process.env.FYNX_OFFICIAL_USERNAME || 'fynx').trim().toLowerCase();
+    const official=(await pool.query('SELECT id FROM users WHERE lower(username)=$1 LIMIT 1',[officialUsername])).rows[0];
+    if(official && String(official.id)===String(userId)) return 'OWNER';
+    const admin=(await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1",[userId])).rowCount;
     return admin ? 'ADMIN' : null;
   };
   const requireAdmin = async (req,res) => { const value=await role(req.user.sub); if(!value){res.status(403).json({error:'administrator access required',code:'ADMIN_REQUIRED'});return null;} req.fynxAdminRole=value; return value; };
