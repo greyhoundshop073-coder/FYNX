@@ -298,6 +298,7 @@ export function registerSupportRoutes({ app, pool, auth }) {
   });
 
   app.post("/api/admin/support/cases/:caseId/assign", auth, async (req, res) => {
+    let client;
     try {
       await ensureSchema();
       const role = await requireSupport(req, res);
@@ -306,20 +307,45 @@ export function registerSupportRoutes({ app, pool, auth }) {
       const adminId = req.body?.adminId == null ? String(req.user.sub) : String(req.body.adminId);
       if (!caseId) return res.status(400).json({ error: "Invalid support case." });
       if (role !== "OWNER" && adminId !== String(req.user.sub)) return res.status(403).json({ error: "Admins can only claim cases for themselves." });
+
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const locked = await client.query("SELECT id,case_number,status,assigned_admin_id FROM fynx_support_cases WHERE id=$1 FOR UPDATE", [caseId]);
+      const row = locked.rows[0];
+      if (!row) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Support case not found." }); }
+      if (role !== "OWNER" && row.status === "RESOLVED") {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "Only the Owner can manage a resolved case." });
+      }
+      if (role !== "OWNER" && row.assigned_admin_id != null && String(row.assigned_admin_id) !== String(req.user.sub)) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "This case is assigned to another Admin." });
+      }
       if (role === "OWNER" && adminId !== "" && adminId !== String(req.user.sub)) {
-        const isAdmin = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1", [adminId]);
-        if (!isAdmin.rowCount) return res.status(400).json({ error: "Choose an active FYNX Admin." });
+        const isAdmin = await client.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN'", [adminId]);
+        if (!isAdmin.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: "Choose an active FYNX Admin." });
+        }
       }
-      const predicate = role === "OWNER" ? "TRUE" : "(assigned_admin_id IS NULL OR assigned_admin_id=$3)";
-      const result = await pool.query(`UPDATE fynx_support_cases SET assigned_admin_id=$2,updated_at=NOW() WHERE id=$1 AND ${predicate} RETURNING id,case_number,assigned_admin_id`, role === "OWNER" ? [caseId, adminId === "" ? null : adminId] : [caseId, req.user.sub, req.user.sub]);
-      if (!result.rows[0]) return res.status(409).json({ error: "This case is assigned to another Admin or no longer exists." });
-      await pool.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'ASSIGNED',jsonb_build_object('assignedAdminId',$3::text))", [caseId, req.user.sub, adminId]);
-      if (adminId) {
-        const caseRow = await pool.query("SELECT case_number FROM fynx_support_cases WHERE id=$1", [caseId]);
-        await notify([adminId], { caseId, eventId: `assigned-${caseId}-${Date.now()}`, title: "Support case assigned to you", message: `${caseRow.rows[0]?.case_number || "FYNX support"} is ready for your review.` });
+      const targetAdminId = adminId === "" ? null : adminId;
+      if (String(row.assigned_admin_id || "") === String(targetAdminId || "")) {
+        await client.query("COMMIT");
+        return res.json({ case: { id: String(caseId), case_number: row.case_number, assigned_admin_id: row.assigned_admin_id == null ? null : String(row.assigned_admin_id) }, changed: false });
       }
-      return res.json({ case: result.rows[0] });
-    } catch (error) { console.error("support case assign", error); return res.status(500).json({ error: "Case assignment failed." }); }
+      const updated = await client.query("UPDATE fynx_support_cases SET assigned_admin_id=$2,updated_at=NOW() WHERE id=$1 RETURNING id,case_number,assigned_admin_id", [caseId, targetAdminId]);
+      const event = await client.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'ASSIGNED',jsonb_build_object('assignedAdminId',$3::text)) RETURNING id", [caseId, req.user.sub, targetAdminId]);
+      await client.query("COMMIT");
+
+      const owner = await officialOwnerId();
+      const recipients = targetAdminId ? [owner, targetAdminId] : [owner];
+      await notify(recipients, { caseId, eventId: `assigned-${event.rows[0].id}`, title: targetAdminId ? "Support case assignment updated" : "Support case unassigned", message: targetAdminId ? `${row.case_number || "FYNX support"} has been assigned to an Admin.` : `${row.case_number || "FYNX support"} is now unassigned.` });
+      return res.json({ case: updated.rows[0], changed: true });
+    } catch (error) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
+      console.error("support case assign", error);
+      return res.status(500).json({ error: "Case assignment failed." });
+    } finally { client?.release(); }
   });
 
   app.get("/api/admin/support/cases/:caseId/messages", auth, async (req, res) => {
