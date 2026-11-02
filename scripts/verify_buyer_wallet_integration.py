@@ -82,6 +82,10 @@ checks = [
  ("withdrawal transfers reserve only available funds and await signed provider outcome", "'AVAILABLE','DEBIT'" in wallet_backend and "'WITHDRAWAL_PENDING','CREDIT'" in wallet_backend and "reconcileWalletTransferEvent" in wallet_backend and "transfer.success" in wallet_backend and "transfer.failed" in wallet_backend and "transfer.reversed" in wallet_backend),
  ("withdrawals require a password-reauthenticated wallet PIN with temporary lockout", '"Set your wallet withdrawal PIN"' in actions and '"/api/wallet/security/pin"' in client and "bcrypt.compare(pin, wallet.withdrawal_pin_hash)" in wallet_backend and "INTERVAL '15 minutes'" in wallet_backend),
  ("withdrawal amount and daily-count limits are backend-enforced", "FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT" in wallet_backend and "FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT" in wallet_backend and "FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT" in wallet_backend and "dailyUsage?.requested_amount" in wallet_backend and "dailyUsage?.request_count" in wallet_backend),
+ ("Wallet PIN setup is hidden until the backend confirms that the wallet is active",
+  "walletActive" in client and "walletActive = json.optBoolean" in client
+  and "if (!current.walletActive)" in actions and '"Wallet not active yet"' in actions
+  and "walletActive: wallet?.status === 'ACTIVE'" in wallet_backend),
  ("NGN 50 withdrawal minimum is displayed and blocks review before submission",
   "minimumPerTransfer" in actions and "MINIMUM_WITHDRAWAL_NGN" in actions
   and "minimumWithdrawalAmount" in actions and "parsedAmount >= minimumWithdrawalAmount" in actions

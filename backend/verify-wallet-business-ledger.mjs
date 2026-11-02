@@ -60,6 +60,10 @@ const checks = [
   ['Repeated wrong wallet PINs create a 15-minute lockout', wallet.includes("withdrawal_pin_failed_attempts") && wallet.includes("INTERVAL '15 minutes'") && wallet.includes("failedAttempts >= 5")],
   ['Wallet PIN setup reauthenticates the current password and locks repeated failures', wallet.includes("bcrypt.compare(currentPassword, user.password_hash)") && wallet.includes("withdrawal_pin_setup_failed_attempts") && wallet.includes("withdrawal_pin_setup_locked_until")],
   ['Wallet security returns PIN state and configured withdrawal limits', wallet.includes("app.get('/api/wallet/security', auth") && wallet.includes("maximumPerTransfer") && wallet.includes("dailyAmountLimit") && wallet.includes("dailyCountLimit")],
+  ['Wallet PIN setup is gated by an active wallet and the security endpoint reports that state',
+    wallet.includes("SELECT status,withdrawal_pin_hash,withdrawal_pin_locked_until") &&
+    wallet.includes("walletActive: wallet?.status === 'ACTIVE'") &&
+    wallet.includes("if (!wallet || wallet.status !== 'ACTIVE')")],
   ['Per-transfer and daily wallet withdrawal limits are enforced server-side', wallet.includes("FYNX_WALLET_WITHDRAWAL_MAX_AMOUNT") && wallet.includes("FYNX_WALLET_WITHDRAWAL_DAILY_LIMIT") && wallet.includes("FYNX_WALLET_WITHDRAWAL_DAILY_COUNT_LIMIT") && wallet.includes("dailyUsage?.requested_amount") && wallet.includes("dailyUsage?.request_count")],
   ['Withdrawal reservations only move cleared funds to the pending bucket', wallet.includes("'AVAILABLE','DEBIT',$4,'NGN'") && wallet.includes("'WITHDRAWAL_PENDING','CREDIT',$4,'NGN'")],
   ['Transfer webhooks reconcile success, failure and reversal with balanced ledger entries', wallet.includes("reconcileWalletTransferEvent(client, eventName, transfer)") && wallet.includes("eventName === 'transfer.success'") && wallet.includes("eventName === 'transfer.failed'") && wallet.includes("eventName === 'transfer.reversed'")],

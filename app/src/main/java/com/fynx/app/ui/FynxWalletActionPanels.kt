@@ -375,6 +375,12 @@ private fun FynxWalletSecurityPanel() {
             OutlinedButton(onClick = { refresh() }, enabled = !loading) { Text("Retry") }
         } else {
             val current = checkNotNull(security)
+            if (!current.walletActive) {
+                WalletActionNotice(
+                    title = "Wallet not active yet",
+                    message = "Your Wallet PIN can be created after your FYNX Wallet has been activated. No PIN setup is requested while Wallet activation is pending."
+                )
+            } else {
             WalletActionNotice(
                 title = if (current.hasWithdrawalPin == true) "Wallet PIN is set" else "Wallet PIN is not set",
                 message = when {
@@ -475,6 +481,7 @@ private fun FynxWalletSecurityPanel() {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         TextButton(onClick = { refresh() }, enabled = !loading && !saving) { Text("Refresh security status") }

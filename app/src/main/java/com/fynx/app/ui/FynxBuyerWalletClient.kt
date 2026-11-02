@@ -80,6 +80,7 @@ internal data class FynxWalletPayoutBank(
 
 internal data class FynxWalletSecurityStatus(
     val hasWithdrawalPin: Boolean,
+    val walletActive: Boolean,
     val isLocked: Boolean,
     val lockedUntil: String?,
     val minimumPerTransfer: Double?,
@@ -258,6 +259,7 @@ internal object FynxBuyerWalletClient {
             else limits.optInt("dailyCountLimit").takeIf { it > 0 }
         return FynxWalletSecurityStatus(
             hasWithdrawalPin = json.optBoolean("hasWithdrawalPin", false),
+            walletActive = json.optBoolean("walletActive", false),
             isLocked = isLocked,
             lockedUntil = json.optString("lockedUntil").takeIf { isLocked && it.isNotBlank() && it != "null" },
             minimumPerTransfer = limit("minimumPerTransfer"),
@@ -283,7 +285,16 @@ internal object FynxBuyerWalletClient {
             .mapCatching { raw ->
                 val json = JSONObject(raw)
                 require(json.optBoolean("hasWithdrawalPin", false)) { "Wallet PIN setup was not confirmed." }
-                FynxWalletSecurityStatus(true, false, null, MINIMUM_WITHDRAWAL_NGN, null, null, null)
+                FynxWalletSecurityStatus(
+                    hasWithdrawalPin = true,
+                    walletActive = true,
+                    isLocked = false,
+                    lockedUntil = null,
+                    minimumPerTransfer = MINIMUM_WITHDRAWAL_NGN,
+                    maximumPerTransfer = null,
+                    dailyAmountLimit = null,
+                    dailyCountLimit = null
+                )
             }
     }
 
