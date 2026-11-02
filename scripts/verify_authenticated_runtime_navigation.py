@@ -13,6 +13,7 @@ PACKAGE="com.fynx.app"
 USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1"
+FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
 LOGIN_MODE="server credential login"
@@ -1209,8 +1210,17 @@ def login():
         screenshot("authenticated-before-login-after-permission.png")
         if (xml and find_control(xml, ["Open FYNX camera"])
                 and find_control(xml, ["Chat"]) and find_control(xml, ["Friends"])):
-            LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
-            return xml, ""
+            if FORCE_LOCAL_VISUALS or not PASSWORD:
+                LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
+                return xml, ""
+            # A Home surface behind Android's permission dialog is not itself proof
+            # of authentication. Accept it for a credentialed run only when the
+            # encrypted server access-token key can be positively verified.
+            token_present=secure_access_token_persisted()
+            if token_present is True:
+                LOGIN_MODE="existing server-authenticated session (encrypted token verified)"
+                return xml, ""
+            return xml, "Home was visible behind the permission dialog, but the encrypted server access token was not verifiably present"
     sign_in_gate=find_control(xml,["Sign In"])
     if not sign_in_gate: return xml,"authentication gate was not visible"
     _,x,y=sign_in_gate; run("adb","shell","input","tap",str(x),str(y))
@@ -1239,14 +1249,14 @@ def login():
     )
     # A supplied CI password is an explicit request for a server-authenticated
     # session. Never choose the passwordless debug shortcut ahead of credentials.
-    if debug_entry_visible and not PASSWORD:
+    if debug_entry_visible and (not PASSWORD or FORCE_LOCAL_VISUALS):
         LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
         home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
         if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
             return home_xml,""
         return home_xml or xml,"debug-only UI entry did not reach Home"
-    if VISUALS_ONLY and not PASSWORD:
-        return xml,"the passwordless debug-only entry was not visible; refusing to submit a server login without credentials"
+    if VISUALS_ONLY and (not PASSWORD or FORCE_LOCAL_VISUALS):
+        return xml,"the explicitly selected local visual entry was not visible; refusing to submit server credentials in local-only mode"
     pass_control=find_control(xml,["Password"])
     if not pass_control:
         fields=find_edit_fields(xml)
