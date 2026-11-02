@@ -49,8 +49,10 @@ internal fun selectMarketplaceSellerOfTheWeek(
     }
     if (eligible.isEmpty()) return null
 
-    val weekStart = eligible.maxOf { it.weekStart }
-    val weekEnd = eligible.minOf { it.weekEndExclusive }
+    // Never compare different reporting windows: that would make the weekly award unfair.
+    val reportingWindows = eligible.map { it.weekStart to it.weekEndExclusive }.distinct()
+    if (reportingWindows.size != 1) return null
+    val (weekStart, weekEnd) = reportingWindows.single()
     if (weekStart >= weekEnd) return null
 
     val sameWeek = eligible.filter { it.weekStart == weekStart && it.weekEndExclusive == weekEnd }
