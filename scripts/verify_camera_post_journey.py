@@ -365,6 +365,12 @@ checks.extend([
      "readFynxCameraMediaMetrics" in overlay and "mediaAspectRatio" in overlay
      and "mediaWidthPx" in overlay and "mediaHeightPx" in overlay
      and 'centerCrop = previewType == "image"' in camera),
+    ("Multiline overlay preview line spacing scales with the media and matches the export layout",
+     "val overlayTextSizePx = (mediaWidthPx * 0.055f).coerceIn(24f, mediaWidthPx * 0.12f)" in overlay
+     and "val overlayTextLineHeight = with(density) { (overlayTextSizePx * 1.16f).toSp() }" in overlay
+     and "lineHeight = overlayTextLineHeight" in overlay
+     and "lineHeight = 40.sp" not in overlay
+     and "textSize = (bitmap.width * 0.055f * item.scale)" in overlay),
     ("Video overlay timing uses the same source-of-truth interval in live preview and Media3 export",
      "isFynxCameraTextOverlayVisibleAt" in overlay
      and "playbackPositionMs" in overlay and "playbackPositionMs = if (previewType" in camera
