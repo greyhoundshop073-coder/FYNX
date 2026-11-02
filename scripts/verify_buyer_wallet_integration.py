@@ -82,6 +82,7 @@ checks = [
  ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel)
 ]
 runtime_token_probe = runtime.split("def secure_access_token_persisted()->bool|None:", 1)[1].split(chr(10)+chr(10)+"install=", 1)[0]
+runtime_home_recovery = runtime.split("def restore_home_after_restart(name:str)->str:", 1)[1].split("\\ndef capture_surface(", 1)[0]
 runtime_surface_gate = runtime.split("expected_authenticated_surfaces = [", 1)[1].split("]", 1)[0]
 checks.extend([
  ("runtime Home recovery requires Home-only feed and camera markers, not Friends bottom-navigation markers",
@@ -97,7 +98,7 @@ checks.extend([
   and 'if is_server_login_gate(current):' in runtime),
  ("runtime Home recovery waits for the Home destination and does not return on a generic Friends marker",
   'Home deep link did not reach the authenticated Home feed within 22 seconds' in runtime
-  and 'dismiss_runtime_permission_prompt() or dump_ui' not in runtime),
+  and 'dismiss_runtime_permission_prompt(' not in runtime_home_recovery),
  ("Status runtime can recover Home from nested feature panels through the registered deep link without force-stop",
   '"fynx://home"' in status_runtime
   and 'status-return-home-deeplink.xml' in status_runtime
