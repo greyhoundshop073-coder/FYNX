@@ -1254,7 +1254,45 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
             if (loading && listings.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
-                loading && listings.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                loading && listings.isEmpty() -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    // Keep the promotional experience visible while live listings are loading.
+                    // Previously this full-screen spinner hid the banner until the feed request completed.
+                    item(key = "marketplace-loading-hero") {
+                        MarketplacePromotionalBanner(
+                            listings = listings,
+                            sellerReputations = sellerReputations,
+                            weeklySeller = weeklySeller,
+                            weeklySellerListing = weeklySellerListing,
+                            sponsoredPromotions = sponsoredPromotions,
+                            seasonalPromotions = seasonalPromotions,
+                            onOpenListing = { selected = it },
+                            onOpenSeller = { sellerStoreUsername = it },
+                            onShopNow = { showAllProducts = true },
+                            onOpenOrders = { showOrders = true; reloadOrders() },
+                            onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    item(key = "marketplace-loading-status") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "Loading live products…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
                 listings.isEmpty() && error != null -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
