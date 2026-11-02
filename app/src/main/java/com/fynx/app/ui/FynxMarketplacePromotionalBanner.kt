@@ -163,15 +163,6 @@ fun MarketplacePromotionalBanner(
                     )
                 )
             }
-            add(
-                MarketplacePromoSlide(
-                    key = "fynx-marketplace-message",
-                    eyebrow = "THE FYNX MARKETPLACE EXPERIENCE",
-                    headline = "Discover more with FYNX",
-                    body = "Discover independent shops and new finds on FYNX.",
-                    actionLabel = "Explore Marketplace"
-                )
-            )
             featuredListings.forEachIndexed { index, listing ->
                 val seller = listing.sellerDisplayName.trim()
                     .ifBlank { listing.storeName.trim() }
