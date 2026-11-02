@@ -395,18 +395,18 @@ function walletWithdrawalLimits() {
   return { minimumPerTransfer: MINIMUM_WALLET_WITHDRAWAL_NGN, maximumPerTransfer: maximum, dailyAmountLimit: daily, dailyCountLimit: count };
 }
 
-function walletProviderApproved(action) {
-  // A deliberately isolated sandbox exception enables card checkout testing only.
-  // It cannot activate deposits, USSD, spending, withdrawals, or payouts, and
-  // requires both Railway's testing environment and a Paystack test secret key.
-  if (
-    action === 'CARD_FUNDING' &&
-    process.env.FYNX_WALLET_TEST_MODE_ENABLED === 'true' &&
+function walletTestModeEnabled() {
+  return process.env.FYNX_WALLET_TEST_MODE_ENABLED === 'true' &&
     process.env.RAILWAY_ENVIRONMENT_NAME === 'testing' &&
-    /^sk_test_/.test(String(process.env.PAYSTACK_SECRET_KEY || '').trim())
-  ) {
-    return process.env.FYNX_WALLET_CARD_FUNDING_ENABLED === 'true' && walletFundingLimits() !== null;
-  }
+    /^sk_test_/.test(String(process.env.PAYSTACK_SECRET_KEY || '').trim()) &&
+    process.env.FYNX_WALLET_CARD_FUNDING_ENABLED === 'true' &&
+    walletFundingLimits() !== null;
+}
+
+function walletProviderApproved(action) {
+  // The sandbox exception can only authorize card funding, never real-money
+  // deposits, USSD, spending, Marketplace Wallet purchases, or withdrawals.
+  if (action === 'CARD_FUNDING' && walletTestModeEnabled()) return true;
   const common = process.env.FYNX_WALLET_PROVIDER_APPROVED === 'true' &&
     process.env.FYNX_WALLET_CUSTODY_APPROVED === 'true' &&
     process.env.FYNX_WALLET_COMPLIANCE_APPROVED === 'true' &&
@@ -1029,7 +1029,10 @@ export function registerBuyerWalletRoutes({ app }) {
           canFundByUssd: walletProviderApproved('USSD_FUNDING'),
           canSpend: false,
           canWithdraw: false,
-          notice: 'Your FYNX Wallet is being prepared. Payment methods appear only after the approved provider connection and required checks are complete.'
+          testMode: walletTestModeEnabled(),
+          notice: walletTestModeEnabled()
+            ? 'TEST MODE ONLY: Paystack card payments are simulated. This test balance is not real money and cannot be spent, transferred, used for Marketplace purchases or withdrawn.'
+            : 'Your FYNX Wallet is being prepared. Payment methods appear only after the approved provider connection and required checks are complete.'
         });
       }
       const balanceRows = await pool.query(`
@@ -1056,9 +1059,12 @@ export function registerBuyerWalletRoutes({ app }) {
         canFundByUssd: walletProviderApproved('USSD_FUNDING'),
         canSpend: wallet.status === 'ACTIVE' && walletProviderApproved('SPENDING'),
         canWithdraw: wallet.status === 'ACTIVE' && walletProviderApproved('WITHDRAWAL'),
-        notice: wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT')
-          ? 'Your dedicated funding account is active. Wallet spending and withdrawals remain unavailable until their separate approvals are complete.'
-          : 'Wallet money movement is not enabled until provider, custody and regulatory checks are complete.',
+        testMode: walletTestModeEnabled(),
+        notice: walletTestModeEnabled()
+          ? 'TEST MODE ONLY: Paystack card payments are simulated. This test balance is not real money and cannot be spent, transferred, used for Marketplace purchases or withdrawn.'
+          : wallet.funding_account_status === 'ACTIVE' && walletProviderApproved('DEPOSIT')
+            ? 'Your dedicated funding account is active. Wallet spending and withdrawals remain unavailable until their separate approvals are complete.'
+            : 'Wallet money movement is not enabled until provider, custody and regulatory checks are complete.',
         updatedAt: wallet.updated_at
       });
     } catch (error) {
@@ -1194,7 +1200,11 @@ export function registerBuyerWalletRoutes({ app }) {
         amount: Number(intent.amount),
         paymentMethod,
         authorizationUrl,
-        accessCode
+        accessCode,
+        testMode: walletTestModeEnabled(),
+        message: walletTestModeEnabled()
+          ? 'TEST MODE: This is a simulated Paystack payment. Any credited balance is for testing only and cannot be spent or withdrawn.'
+          : 'Continue through the secure Paystack checkout.'
       });
     } catch (error) {
       console.error('buyer wallet hosted funding initialization', error);
@@ -1228,8 +1238,11 @@ export function registerBuyerWalletRoutes({ app }) {
         reference,
         amount: Number(intent.amount),
         paymentMethod: intent.payment_method,
+        testMode: walletTestModeEnabled(),
         message: outcome.status === 'SUCCEEDED'
-          ? 'Paystack confirmed the payment and FYNX credited your Wallet.'
+          ? walletTestModeEnabled()
+            ? 'TEST MODE: Paystack confirmed this simulated payment and FYNX recorded it in your test Wallet. The balance is not real and cannot be spent or withdrawn.'
+            : 'Paystack confirmed the payment and FYNX credited your Wallet.'
           : outcome.status === 'FAILED' || outcome.status === 'BLOCKED'
             ? 'The payment was not credited. Check the status and try again with a new payment request.'
             : 'Paystack has not confirmed a successful payment yet. Your Wallet has not been credited.'
