@@ -31,6 +31,35 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun testModeWalletShowsSimulatedBalanceWithoutEnablingSpendingOrWithdrawals() {
+        val summary = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":1500.0,"reservedBalance":0,"withdrawalPendingBalance":0,"canFund":true,"canSpend":false,"canWithdraw":false,"canFundByCard":true,"testMode":true,"notice":"TEST MODE ONLY"}"""
+        )
+        assertTrue(summary.testMode)
+        assertEquals(1500.0, summary.availableBalance!!, 0.0)
+        assertTrue(summary.canFundByCard)
+        assertFalse(summary.canSpend)
+        assertFalse(summary.canWithdraw)
+    }
+
+    @Test
+    fun ordinaryWalletSummaryDefaultsToNonTestMode() {
+        val summary = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"ACTIVE","currency":"NGN","availableBalance":50.0,"canSpend":false,"canWithdraw":false}"""
+        )
+        assertFalse(summary.testMode)
+    }
+
+    @Test
+    fun hostedWalletFundingSessionCarriesTestModeNotice() {
+        val session = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"SUCCEEDED","reference":"fwd_abcdef0123456789abcdef0123456789","amount":100.0,"paymentMethod":"CARD","testMode":true,"message":"TEST MODE simulated payment"}"""
+        )
+        assertTrue(session.testMode)
+        assertTrue(session.message.startsWith("TEST MODE"))
+    }
+
+    @Test
     fun walletSummaryRejectsUnsupportedCurrency() {
         assertThrows(IllegalArgumentException::class.java) {
             FynxBuyerWalletClient.parseSummary("""{"walletStatus":"ACTIVE","currency":"USD"}""")
