@@ -1335,25 +1335,67 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
+def is_server_login_gate(xml_text:str)->bool:
+    """Treat a screen as the login gate only when all three login controls are visible."""
+    return bool(
+        find_control(xml_text, ["Sign In"])
+        and find_control(xml_text, ["Username"])
+        and find_control(xml_text, ["Password"])
+    )
+
+
+def is_authenticated_home_surface(xml_text:str)->bool:
+    """Require Home-only content; Friends' 'Search username or name' is not Home."""
+    return bool(
+        find_control(xml_text, ["Open FYNX camera"])
+        and find_control(xml_text, ["Your feed"])
+    )
+
+
 def restore_home_after_restart(name:str)->str:
-    """Return to Home without killing the authenticated process or discarding its session."""
-    # A force-stop here is unnecessary: the explicit Home deep link already routes
-    # through the app's real navigation entry point. Killing the process before every
-    # journey caused intermittent sign-in-gate regressions and made a navigation
-    # smoke test depend on a second authentication round-trip.
+    """Return to the actual authenticated Home surface without killing the app process."""
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(1.5)
-    current=dismiss_runtime_permission_prompt() or dump_ui(name+"-initial.xml")
-    if find_control(current,["Sign In"]):
-        # Only perform a fresh credential login if the app genuinely presents its
-        # sign-in gate. The normal authenticated path remains in the same process.
-        current,error=login()
-        if error:
-            FAILURES.append(name+": could not restore Home after navigation: "+error)
+    deadline=time.monotonic()+22.0
+    current=""
+    while time.monotonic()<deadline:
+        current=dump_ui(name+"-wait.xml") or current
+
+        # Never accept a generic Friends/Chat bottom-navigation marker as proof that
+        # the Home route completed. Wait for controls that exist on the Home feed.
+        if is_authenticated_home_surface(current):
             return current
-    if find_control(current,["Sign In"]) or find_control(current,["Username"]):
-        FAILURES.append(name+": Home deep link remained at the sign-in gate")
-        return current
+
+        # A username search field exists on Friends. Require the complete sign-in
+        # form before attempting a fresh credential login.
+        if is_server_login_gate(current):
+            current,error=login()
+            if error:
+                FAILURES.append(name+": credential recovery was required but failed: "+error)
+                return current
+            if is_authenticated_home_surface(current):
+                return current
+            FAILURES.append(
+                name+": credential login returned without the authenticated Home feed; visible markers: "
+                + visible_marker_summary(current)
+            )
+            return current
+
+        # Dismiss only Android's actual notification-permission dialog. Do not return
+        # early just because the currently visible screen contains Chat/Friends tabs.
+        if "com.google.android.permissioncontroller" in current:
+            permission_action=find_control(current,["Don’t allow","Don't allow"])
+            if permission_action:
+                _,px,py=permission_action
+                run("adb","shell","input","tap",str(px),str(py))
+                time.sleep(.5)
+                continue
+
+        time.sleep(.5)
+
+    FAILURES.append(
+        name+": Home deep link did not reach the authenticated Home feed within 22 seconds; last visible markers: "
+        + visible_marker_summary(current)
+    )
     return current
 
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:

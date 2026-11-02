@@ -14,6 +14,8 @@ seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeller
 transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text()
 ast.parse(runtime)
+status_runtime = (ROOT / "scripts/verify_status_creator_runtime.py").read_text()
+ast.parse(status_runtime)
 admin_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt").read_text()
 admin_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text()
 admin_routes = (ROOT / "backend/adminRoutes.js").read_text()
@@ -81,6 +83,26 @@ checks = [
 ]
 runtime_token_probe = runtime.split("def secure_access_token_persisted()->bool|None:", 1)[1].split(chr(10)+chr(10)+"install=", 1)[0]
 runtime_surface_gate = runtime.split("expected_authenticated_surfaces = [", 1)[1].split("]", 1)[0]
+checks.extend([
+ ("runtime Home recovery requires Home-only feed and camera markers, not Friends bottom-navigation markers",
+  'def is_authenticated_home_surface(xml_text:str)->bool:' in runtime
+  and 'find_control(xml_text, ["Open FYNX camera"])' in runtime
+  and 'find_control(xml_text, ["Your feed"])' in runtime
+  and 'is_authenticated_home_surface(current)' in runtime),
+ ("runtime sign-in recovery requires Sign In, Username and Password together",
+  'def is_server_login_gate(xml_text:str)->bool:' in runtime
+  and 'find_control(xml_text, ["Sign In"])' in runtime
+  and 'find_control(xml_text, ["Username"])' in runtime
+  and 'find_control(xml_text, ["Password"])' in runtime
+  and 'if is_server_login_gate(current):' in runtime),
+ ("runtime Home recovery waits for the Home destination and does not return on a generic Friends marker",
+  'Home deep link did not reach the authenticated Home feed within 22 seconds' in runtime
+  and 'dismiss_runtime_permission_prompt() or dump_ui' not in runtime),
+ ("Status runtime can recover Home from nested feature panels through the registered deep link without force-stop",
+  '"fynx://home"' in status_runtime
+  and 'status-return-home-deeplink.xml' in status_runtime
+  and '"force-stop"' not in status_runtime),
+])
 checks.extend([
  ("runtime token persistence probe uses package-scoped test/grep without nested shell quoting",
   '"run-as", PACKAGE, "test", "-f", prefs_file' in runtime_token_probe
