@@ -388,7 +388,14 @@ checks.extend([
      "inMutable = true" in overlay and "val canvas = Canvas(bitmap)" in overlay),
     ("Runtime exercises direct-on-media photo/video typing and video timing controls",
      "FYNXoverlaytest" in runtime and "FYNXvideooverlay" in runtime
+     and "FYNXdraftoverlay" in runtime
+     and "camera-post-draft-edit-text-open" in runtime
      and "video text timing controls were not visible" in runtime),
+    ("Selected non-file media waits for its working copy before live CameraX can bind",
+     "isPreparingInitialMedia" in camera
+     and "initialMediaLoadFailed" in camera
+     and "pendingUri != null || isPreparingInitialMedia || initialMediaLoadFailed" in camera
+     and "Preparing your media for text editing" in camera),
     ("Photo/video text edits remain editable when saved in and restored from a local post draft",
      "mediaEditSourcePaths" in draft_store and "mediaEditStates" in draft_store
      and "copyDraftMedia(edit.sourceUri" in draft_store
