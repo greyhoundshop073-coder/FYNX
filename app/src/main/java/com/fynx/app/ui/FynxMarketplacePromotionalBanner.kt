@@ -47,7 +47,7 @@ private data class MarketplacePromoSlide(
     val isWeeklyWinner: Boolean = false,
     val isSponsored: Boolean = false,
     val celebration: Boolean = false,
-    val artworkUrl: String? = null
+    val artworkMediaId: String? = null
 )
 
 @Composable
@@ -121,7 +121,7 @@ fun MarketplacePromotionalBanner(
                         body = promotion.body,
                         actionLabel = promotion.actionLabel,
                         celebration = true,
-                        artworkUrl = promotion.artworkUrl.takeIf { it.isNotBlank() }
+                        artworkMediaId = promotion.artworkMediaId.takeIf { it.isNotBlank() }
                     )
                 )
             }
@@ -313,9 +313,9 @@ private fun MarketplacePromotionalSlide(
                     contentScale = ContentScale.Crop,
                     rounded = false
                 )
-            } else if (!slide.artworkUrl.isNullOrBlank()) {
+            } else if (!slide.artworkMediaId.isNullOrBlank()) {
                 FynxRemoteMedia(
-                    mediaUrl = slide.artworkUrl,
+                    mediaUrl = "/api/media/${slide.artworkMediaId}",
                     type = "image",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
