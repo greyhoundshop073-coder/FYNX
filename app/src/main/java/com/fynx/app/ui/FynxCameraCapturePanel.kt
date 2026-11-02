@@ -574,14 +574,13 @@ fun FynxCameraCapturePanel(
     var recordingElapsed by remember { mutableLongStateOf(0L) }
     var error by remember { mutableStateOf<String?>(null) }
     var statusShareChecking by remember { mutableStateOf(false) }
-    val initialMediaIsLocalFile = initialMediaUri?.scheme == "file"
-    var isPreparingInitialMedia by remember(initialMediaUri) { mutableStateOf(initialMediaUri != null && !initialMediaIsLocalFile) }
+    var isPreparingInitialMedia by remember(initialMediaUri) { mutableStateOf(initialMediaUri != null) }
     var initialMediaLoadFailed by remember(initialMediaUri) { mutableStateOf(false) }
     var initialMediaHandedOff by remember(initialMediaUri) { mutableStateOf(false) }
     var copiedInitialMediaFiles by remember(initialMediaUri) { mutableStateOf<List<Uri>>(emptyList()) }
-    var pendingUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri.takeIf { initialMediaIsLocalFile }) }
-    var pendingOriginalUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri.takeIf { initialMediaIsLocalFile }) }
-    var pendingType by remember(initialMediaUri, initialMediaType) { mutableStateOf(initialMediaType.takeIf { initialMediaIsLocalFile }) }
+    var pendingUri by remember(initialMediaUri) { mutableStateOf<Uri?>(null) }
+    var pendingOriginalUri by remember(initialMediaUri) { mutableStateOf<Uri?>(null) }
+    var pendingType by remember(initialMediaUri, initialMediaType) { mutableStateOf<String?>(null) }
     var cameraReady by remember { mutableStateOf(false) }
     var cameraTextOverlays by remember(initialMediaUri) { mutableStateOf(initialTextOverlays) }
     var cameraVideoDurationMs by remember { mutableLongStateOf(0L) }
@@ -627,10 +626,6 @@ fun FynxCameraCapturePanel(
     }
     LaunchedEffect(initialMediaUri, initialMediaType) {
         val source = initialMediaUri ?: return@LaunchedEffect
-        if (source.scheme == "file") {
-            isPreparingInitialMedia = false
-            return@LaunchedEffect
-        }
         isPreparingInitialMedia = true
         initialMediaLoadFailed = false
         val result = withContext(Dispatchers.IO) {
@@ -842,7 +837,7 @@ fun FynxCameraCapturePanel(
             recording?.stop()
             cameraProvider?.unbindAll()
             faceAnalyzer.close()
-            if (initialMediaUri?.scheme != "file" && !initialMediaHandedOff) {
+            if (!initialMediaHandedOff) {
                 copiedInitialMediaFiles.forEach { uri -> File(uri.path ?: "").delete() }
             }
         }
