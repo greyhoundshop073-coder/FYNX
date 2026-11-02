@@ -9,6 +9,16 @@ workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8
 
 checks = [
     (
+        "the normal authenticated runtime journey opens My Shop and captures every seller-management section",
+        'marketplace_home = restore_home_after_restart("authenticated-home-marketplace-entry")' in navigation
+        and 'shop_xml = tap_control(' in navigation[navigation.index("# Certify Marketplace and the private"):navigation.index('report += ["","## Captured authenticated Marketplace/My Shop evidence"')]
+        and all(
+            f'authenticated-marketplace-my-shop-{slug}.png' in navigation
+            for slug in ("overview", "profile", "listings", "orders", "delivery-drivers", "earnings-payouts")
+        )
+        and "No listing, inventory, order, payment, driver or payout records are created or changed." in navigation,
+    ),
+    (
         "Android CI attempts focused Marketplace/My Shop capture after instrumentation failure",
         'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
         and 'else\n  # A red instrumentation test must not suppress Marketplace/My Shop screenshot evidence.' in runner,
