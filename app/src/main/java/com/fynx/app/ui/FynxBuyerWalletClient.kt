@@ -207,7 +207,16 @@ internal object FynxBuyerWalletClient {
         }
         val amount = json.optDouble("amount", Double.NaN)
         require(amount.isFinite() && amount > 0.0) { "Wallet funding amount is invalid." }
-        val authorizationUrl = json.optString("authorizationUrl").trim().takeIf { it.startsWith("https://") }
+        val rawAuthorizationUrl = json.optString("authorizationUrl").trim()
+        val authorizationUrl = rawAuthorizationUrl.takeIf { it.isNotBlank() }?.also { url ->
+            val parsed = Uri.parse(url)
+            require(
+                parsed.scheme.equals("https", ignoreCase = true) &&
+                    parsed.host.equals("checkout.paystack.com", ignoreCase = true) &&
+                    parsed.userInfo == null &&
+                    (parsed.port == -1 || parsed.port == 443)
+            ) { "Wallet funding returned an untrusted Paystack checkout URL." }
+        }
         val paymentMethod = json.optString("paymentMethod").trim().uppercase(Locale.US)
         require(paymentMethod.isBlank() || paymentMethod in setOf("CARD", "USSD")) {
             "Wallet funding method is invalid."
