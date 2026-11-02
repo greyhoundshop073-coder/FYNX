@@ -278,9 +278,11 @@ internal fun CameraTextOverlayLayer(
         val mediaTopPx = (heightPx - mediaHeightPx) / 2f
         val density = LocalDensity.current
         val overlayTextMaxWidth = with(density) { (mediaWidthPx * 0.84f).toDp() }
-        val overlayTextSize = with(density) {
-            (mediaWidthPx * 0.055f).coerceIn(24f, mediaWidthPx * 0.12f).toSp()
-        }
+        val overlayTextSizePx = (mediaWidthPx * 0.055f).coerceIn(24f, mediaWidthPx * 0.12f)
+        val overlayTextSize = with(density) { overlayTextSizePx.toSp() }
+        // Match StaticLayout's media-pixel line metrics so multiline text does not
+        // spread farther apart in the live preview than it does in the exported media.
+        val overlayTextLineHeight = with(density) { (overlayTextSizePx * 1.16f).toSp() }
         overlays.forEach { overlay ->
             val editing = overlay.id == editingId
             val visibleAtPlayback = playbackPositionMs == null || isFynxCameraTextOverlayVisibleAt(overlay, playbackPositionMs)
@@ -291,7 +293,7 @@ internal fun CameraTextOverlayLayer(
                     fontWeight = if (overlay.bold) FontWeight.Bold else FontWeight.Medium,
                     fontFamily = cameraTextFontFamily(overlay.font),
                     textAlign = cameraTextAlign(overlay.alignment),
-                    lineHeight = 40.sp
+                    lineHeight = overlayTextLineHeight
                 )
                 Box(
                     modifier = Modifier
