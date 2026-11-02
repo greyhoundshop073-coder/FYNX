@@ -29,7 +29,7 @@ camera_checks = {
     "zoom": "setZoomRatio" in camera,
     "exposure": "setExposureCompensationIndex" in camera,
     "timer": "captureTimerSeconds" in camera,
-    "preview and Next hand-off": "pendingUri" in camera and 'Text("Next")' in camera and "onCaptured(previewUri, previewType)" in camera,
+    "preview and Next hand-off": "pendingUri" in camera and 'Text("Next")' in camera and 'onClick = { finishCameraMedia(toStatus = false) }' in camera and "onCaptured(finalUri, mediaType)" in camera and "renderFynxPhotoTextOverlays(context, current, cameraTextOverlays)" in camera and "applyFynxVideoEdits(context, source, videoStyle, videoCaptionText, visibleText)" in camera,
     "retake": "retake()" in camera,
 }
 surface_checks = {
