@@ -27,6 +27,16 @@ const checks = [
   ['Pending commission is labelled an estimate and not revenue', settlement.includes('pending_commission_estimate') && settlement.includes('not platform cash revenue')],
   ['Only unsettled active orders contribute to pending commission', settlement.includes("o.status IN ('PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED')")],
   ['Wallet deposit, spending and withdrawal capabilities require their explicit provider approvals', wallet.includes("walletProviderApproved('DEPOSIT')") && wallet.includes("walletProviderApproved('SPENDING')") && wallet.includes("walletProviderApproved('WITHDRAWAL')")],
+  ['First authenticated Wallet summary provisions one empty provider-pending NGN Wallet idempotently without enabling money movement',
+    walletSummaryRoute.includes('INSERT INTO buyer_wallets (id,user_id,currency)') &&
+    walletSummaryRoute.includes("VALUES ($1,$2,'NGN')") &&
+    walletSummaryRoute.includes('ON CONFLICT (user_id,currency) DO NOTHING') &&
+    walletSummaryRoute.includes('crypto.randomUUID(), req.user.sub') &&
+    walletSummaryRoute.includes("throw new Error('wallet provisioning did not return the customer wallet')") &&
+    walletSummaryRoute.includes("walletStatus: String(wallet.status || 'PENDING_PROVIDER')") &&
+    walletSummaryRoute.includes("canSpend: wallet.status === 'ACTIVE' && walletProviderApproved('SPENDING')") &&
+    walletSummaryRoute.includes("canWithdraw: wallet.status === 'ACTIVE' && walletProviderApproved('WITHDRAWAL')") &&
+    !walletSummaryRoute.includes('walletPaystackRequest')],
   ['Wallet ledger is immutable and double-entry balanced', wallet.includes('buyer wallet ledger entries are immutable') && wallet.includes('buyer wallet transaction is not double-entry balanced')],
   ['Dedicated funding account creation is gated by provider, custody, compliance and deposit approval', wallet.includes('FYNX_WALLET_PROVIDER_APPROVED') && wallet.includes('FYNX_WALLET_CUSTODY_APPROVED') && wallet.includes('FYNX_WALLET_COMPLIANCE_APPROVED') && wallet.includes('FYNX_WALLET_DEPOSITS_ENABLED')],
   ['Funding account numbers are encrypted with AES-256-GCM before storage', wallet.includes("createCipheriv('aes-256-gcm'") && wallet.includes('funding_account_ciphertext') && wallet.includes('funding_account_tag')],
