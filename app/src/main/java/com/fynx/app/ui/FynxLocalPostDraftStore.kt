@@ -122,7 +122,7 @@ object FynxLocalPostDraftStore {
         }.getOrDefault(emptyList())
     }
 
-    fun save(
+    internal fun save(
         context: Context,
         existingId: String?,
         caption: String,
