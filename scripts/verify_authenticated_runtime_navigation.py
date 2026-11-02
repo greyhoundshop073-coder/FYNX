@@ -1842,7 +1842,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         else:
             report.append(f"- PASS: captured the real Marketplace surface after it settled to: {settle_state}.")
 
-        if not VISUALS_ONLY:
+        if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
             token_present=secure_access_token_persisted()
             report.append("- Secure access-token key after Marketplace discovery: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
             if token_present is not True:
@@ -1916,7 +1916,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             ["Your shop at a glance", "Manage your storefront", "Shop profile"]
         )
         if shop_xml:
-            if not VISUALS_ONLY:
+            if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
                 token_present=secure_access_token_persisted()
                 report.append("- Secure access-token key upon entering My Shop: "+("PRESENT" if token_present is True else "MISSING" if token_present is False else "CHECK UNAVAILABLE"))
                 if token_present is not True:
