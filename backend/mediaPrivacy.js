@@ -107,6 +107,13 @@ export function installMediaPrivacyGuard(app) {
       if (!row) return next();
       if (String(row.owner_id) === userId) return next();
       if (row.blocked_message_media) return res.status(403).json({ error: "media unavailable" });
+      // Seasonal banner artwork is public only while its explicitly scheduled campaign is live.
+      // The media ID remains private for all other uses and windows.
+      const seasonalArtwork = await pool.query(
+        "SELECT 1 FROM marketplace_seasonal_promotions WHERE artwork_media_id=$1 AND active=TRUE AND starts_at <= NOW() AND ends_at > NOW() LIMIT 1",
+        [mediaId]
+      );
+      if (seasonalArtwork.rowCount) return next();
       return next();
     } catch (error) {
       console.error("media privacy guard", error);
