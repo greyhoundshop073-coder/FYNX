@@ -171,21 +171,41 @@ export function registerSupportRoutes({ app, pool, auth }) {
   });
 
   app.post("/api/support/cases/:caseId/attachments", auth, async (req, res) => {
+    let client;
     try {
       await ensureSchema();
       const caseId = caseIdFrom(req.params.caseId);
       const mediaId = Number(req.body?.mediaId);
       if (!caseId || !Number.isSafeInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: "A valid screenshot is required." });
-      const ownedCase = await pool.query("SELECT id FROM fynx_support_cases WHERE id=$1 AND requester_id=$2", [caseId, req.user.sub]);
-      if (!ownedCase.rowCount) return res.status(404).json({ error: "Support case not found." });
-      const media = await pool.query("SELECT id,mime_type,byte_size FROM message_media WHERE id=$1 AND owner_id=$2", [mediaId, req.user.sub]);
-      if (!media.rows[0]) return res.status(403).json({ error: "Screenshot is not owned by this account." });
-      if (!String(media.rows[0].mime_type || "").startsWith("image/")) return res.status(400).json({ error: "Only image screenshots can be attached." });
-      const result = await pool.query("INSERT INTO fynx_support_attachments(case_id,media_id,uploader_id) VALUES($1,$2,$3) ON CONFLICT(case_id,media_id) DO NOTHING RETURNING id,media_id", [caseId, mediaId, req.user.sub]);
-      const row = result.rows[0] || (await pool.query("SELECT id,media_id FROM fynx_support_attachments WHERE case_id=$1 AND media_id=$2", [caseId, mediaId])).rows[0];
-      await pool.query("UPDATE fynx_support_cases SET updated_at=NOW() WHERE id=$1", [caseId]);
-      return res.status(result.rows[0] ? 201 : 200).json({ attachment: { id:String(row.id), mediaId:String(row.media_id) } });
-    } catch (error) { console.error("support screenshot attach", error); return res.status(500).json({ error: "Screenshot could not be attached." }); }
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const ownedCase = await client.query("SELECT id FROM fynx_support_cases WHERE id=$1 AND requester_id=$2 FOR UPDATE", [caseId, req.user.sub]);
+      if (!ownedCase.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Support case not found." });
+      }
+      const media = await client.query("SELECT id,mime_type,byte_size FROM message_media WHERE id=$1 AND owner_id=$2", [mediaId, req.user.sub]);
+      if (!media.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "Screenshot is not owned by this account." });
+      }
+      if (!String(media.rows[0].mime_type || "").startsWith("image/")) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Only image screenshots can be attached." });
+      }
+      const result = await client.query("INSERT INTO fynx_support_attachments(case_id,media_id,uploader_id) VALUES($1,$2,$3) ON CONFLICT(case_id,media_id) DO NOTHING RETURNING id,media_id", [caseId, mediaId, req.user.sub]);
+      const row = result.rows[0] || (await client.query("SELECT id,media_id FROM fynx_support_attachments WHERE case_id=$1 AND media_id=$2", [caseId, mediaId])).rows[0];
+      if (result.rows[0]) {
+        await client.query("UPDATE fynx_support_cases SET updated_at=NOW() WHERE id=$1", [caseId]);
+        await client.query("INSERT INTO fynx_support_case_events(case_id,actor_id,event_type,details) VALUES($1,$2,'SCREENSHOT_ATTACHED',jsonb_build_object('attachmentId',$3::text))", [caseId, req.user.sub, row.id]);
+      }
+      await client.query("COMMIT");
+      return res.status(result.rows[0] ? 201 : 200).json({ attachment: { id:String(row.id), mediaId:String(row.media_id) }, duplicate: !result.rows[0] });
+    } catch (error) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
+      console.error("support screenshot attach", error);
+      return res.status(500).json({ error: "Screenshot could not be attached." });
+    } finally { client?.release(); }
   });
 
   app.get("/api/support/cases/:caseId/attachments", auth, async (req, res) => {
