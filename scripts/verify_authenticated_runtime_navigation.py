@@ -1904,6 +1904,17 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
 
     # Enter a real caption in the video editor and verify the keyboard and saved field value.
     # This tests the user-controlled path independently of the emulator's ASR model support.
+    # The video editor keeps its style and caption controls in a scrollable bottom panel.
+    # Scroll that panel itself so the manual field is genuinely visible before querying it.
+    display_size = run("adb", "shell", "wm", "size").stdout or ""
+    size_match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", display_size)
+    if size_match:
+        display_width, display_height = int(size_match.group(1)), int(size_match.group(2))
+        scroll_x = str(display_width // 2)
+        scroll_from = str(int(display_height * 0.82))
+        scroll_to = str(int(display_height * 0.56))
+        run("adb", "shell", "input", "swipe", scroll_x, scroll_from, scroll_x, scroll_to, "500")
+        time.sleep(0.8)
     caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-before.xml") or caption_xml
     manual_caption_field = find_control(caption_xml, ["Video captions"])
     if not manual_caption_field:
