@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URI
 import java.util.Locale
 
 internal data class FynxBuyerWalletSummary(
@@ -209,11 +210,12 @@ internal object FynxBuyerWalletClient {
         require(amount.isFinite() && amount > 0.0) { "Wallet funding amount is invalid." }
         val rawAuthorizationUrl = json.optString("authorizationUrl").trim()
         val authorizationUrl = rawAuthorizationUrl.takeIf { it.isNotBlank() }?.also { url ->
-            val parsed = Uri.parse(url)
+            val parsed = runCatching { URI(url) }.getOrNull()
             require(
-                parsed.scheme.equals("https", ignoreCase = true) &&
+                parsed != null &&
+                    parsed.scheme.equals("https", ignoreCase = true) &&
                     parsed.host.equals("checkout.paystack.com", ignoreCase = true) &&
-                    parsed.userInfo == null &&
+                    parsed.rawUserInfo == null &&
                     (parsed.port == -1 || parsed.port == 443)
             ) { "Wallet funding returned an untrusted Paystack checkout URL." }
         }
