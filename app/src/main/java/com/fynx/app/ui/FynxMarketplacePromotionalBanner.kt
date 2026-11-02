@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -42,6 +43,7 @@ private data class MarketplacePromoSlide(
     val actionLabel: String,
     val listing: FynxRemoteSocialClient.MarketplaceListing? = null,
     val sellerUsername: String? = null,
+    val campaignId: String? = null,
     val isWeeklyWinner: Boolean = false,
     val isSponsored: Boolean = false,
     val celebration: Boolean = false
@@ -60,6 +62,7 @@ fun MarketplacePromotionalBanner(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val sellerSales = remember(sellerReputations) {
         sellerReputations.mapKeys { it.key.removePrefix("@").trim().lowercase(Locale.US) }
             .mapValues { it.value.successfulSales }
@@ -136,6 +139,7 @@ fun MarketplacePromotionalBanner(
                         actionLabel = "Shop now",
                         listing = listing,
                         sellerUsername = listing.sellerUsername,
+                        campaignId = promotion.campaignId,
                         isSponsored = true
                     )
                 )
@@ -176,6 +180,29 @@ fun MarketplacePromotionalBanner(
     val currentIndex by remember(slides) {
         derivedStateOf { if (slides.isEmpty()) 0 else listState.firstVisibleItemIndex.coerceIn(0, slides.lastIndex) }
     }
+    val currentSlide = slides.getOrNull(currentIndex)
+
+    LaunchedEffect(currentSlide?.key) {
+        val campaignId = currentSlide?.campaignId
+        if (campaignId != null) {
+            FynxMarketplaceSponsoredPromotionClient.recordMetric(context, campaignId, "impression")
+        }
+    }
+
+    fun openSlide(slide: MarketplacePromoSlide) {
+        val campaignId = slide.campaignId
+        if (campaignId != null) {
+            scope.launch {
+                FynxMarketplaceSponsoredPromotionClient.recordMetric(context, campaignId, "click")
+            }
+        }
+        when {
+            slide.isWeeklyWinner && !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
+            slide.listing != null -> onOpenListing(slide.listing)
+            !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
+            else -> onShopNow()
+        }
+    }
 
     LaunchedEffect(slides.map { it.key }) {
         listState.scrollToItem(0)
@@ -209,14 +236,7 @@ fun MarketplacePromotionalBanner(
                         context = context,
                         slide = slide,
                         width = bannerWidth,
-                        onClick = {
-                            when {
-                                slide.isWeeklyWinner && !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
-                                slide.listing != null -> onOpenListing(slide.listing)
-                                !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
-                                else -> onShopNow()
-                            }
-                        }
+                        onClick = { openSlide(slide) }
                     )
                 }
             }
