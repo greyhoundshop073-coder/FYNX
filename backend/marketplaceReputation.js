@@ -79,8 +79,8 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       await ensureSchema();
       const result = await pool.query(`
         WITH week_bounds AS (
-          SELECT date_trunc('week', NOW()) AS week_start,
-                 date_trunc('week', NOW()) + INTERVAL '1 week' AS week_end
+          SELECT date_trunc('week', NOW() AT TIME ZONE 'Africa/Lagos') AT TIME ZONE 'Africa/Lagos' AS week_start,
+                 (date_trunc('week', NOW() AT TIME ZONE 'Africa/Lagos') + INTERVAL '1 week') AT TIME ZONE 'Africa/Lagos' AS week_end
         ), weekly_sales AS (
           SELECT o.seller_id,
                  COUNT(*)::INTEGER AS completed_orders,
