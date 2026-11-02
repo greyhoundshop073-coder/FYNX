@@ -843,6 +843,10 @@ fun FynxCameraCapturePanel(
         }
     }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
+    fun releaseUnneededInitialMediaCopies(retained: Set<Uri>) {
+        copiedInitialMediaFiles.filterNot { it in retained }.forEach(::deleteUri)
+        copiedInitialMediaFiles = copiedInitialMediaFiles.filter { it in retained }
+    }
     fun retake() {
         // Force a clean CameraX bind instead of depending on a PreviewView detach/attach race.
         cameraReady = false
@@ -1083,16 +1087,20 @@ fun FynxCameraCapturePanel(
                 } else {
                     statusShareChecking = false
                     recordingNotice = null
-                    val editSource = when (mediaType) {
-                        "video", "video_note" -> pendingOriginalUri ?: current
+                    val editableOverlays = cameraTextOverlays.filter { it.text.isNotBlank() }
+                    val hasEditableState = editableOverlays.isNotEmpty() || videoStyle != CameraVideoStyle.NATURAL || videoCaptionText.isNotBlank()
+                    val editSource = when {
+                        !hasEditableState -> finalUri
+                        mediaType == "video" || mediaType == "video_note" -> pendingOriginalUri ?: current
                         else -> current
                     }
-                    val editableOverlays = cameraTextOverlays.filter { it.text.isNotBlank() }
                     val editCallback = onCapturedWithTextEdits
                     if (editCallback != null) {
+                        releaseUnneededInitialMediaCopies(setOf(finalUri, editSource))
                         initialMediaHandedOff = true
                         editCallback(finalUri, mediaType, editSource, editableOverlays, videoStyle.name, videoCaptionText)
                     } else {
+                        releaseUnneededInitialMediaCopies(setOf(finalUri))
                         initialMediaHandedOff = true
                         onCaptured(finalUri, mediaType)
                     }
