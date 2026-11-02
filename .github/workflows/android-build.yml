@@ -14,6 +14,7 @@ on:
       - "scripts/**"
       - "docs/**"
       - ".github/workflows/android-build.yml"
+      - ".github/workflows/fynx-chat-group-parity-layout.yml"
       - ".maestro/**"
       - "visual-baselines/**"
   pull_request:
@@ -29,6 +30,8 @@ on:
       - "scripts/**"
       - "docs/**"
       - ".maestro/**"
+      - ".github/workflows/android-build.yml"
+      - ".github/workflows/fynx-chat-group-parity-layout.yml"
       - "visual-baselines/**"
   workflow_dispatch:
     inputs:
