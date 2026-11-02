@@ -73,7 +73,7 @@ import org.json.JSONObject
 import kotlin.math.roundToInt
 
 /** Media text is stored as normalized coordinates so it renders consistently across screen sizes. */
-internal data class FynxCameraTextOverlay(
+data class FynxCameraTextOverlay(
     val id: String = UUID.randomUUID().toString(),
     val text: String = "",
     val x: Float = 0.5f,
