@@ -1910,13 +1910,112 @@ if not FAILURES:
             if status_add_xml and find_control(status_add_xml, ["Voice"]) and find_control(status_add_xml, ["Text"]):
                 report.append("- PASS Home own-Status + button opens the real Add status panel")
                 report.append("- PASS Add status panel exposes both Voice and Text creation choices")
+
+                # Exercise the real local Voice recording flow without publishing a
+                # dummy Status. tap_control handles the Android microphone prompt.
+                voice_composer_xml = tap_control(
+                    status_add_xml, ["Voice"], "status-voice-composer",
+                    ["Start recording"]
+                )
+                if voice_composer_xml and find_control(voice_composer_xml, ["Start recording"]):
+                    report.append("- PASS Add status -> Voice opens the actual recording composer")
+                    recording_xml = tap_control(
+                        voice_composer_xml, ["Start recording"], "status-voice-record-start",
+                        ["Stop •", "Pause"]
+                    )
+                    if recording_xml:
+                        # Let MediaRecorder write a playable local file before stopping.
+                        time.sleep(1.4)
+                        recording_xml = dump_ui("authenticated-status-voice-recording.xml")
+                        screenshot("authenticated-status-voice-recording.png")
+                        if find_control(recording_xml, ["Stop •", "Pause"]):
+                            report.append("- PASS Voice Status recording state is visible in the running emulator")
+                        else:
+                            FAILURES.append("Voice recorder did not remain in the recording state after Start recording")
+
+                        stopped_xml = tap_control(
+                            recording_xml, ["Stop •"], "status-voice-stop",
+                            ["Voice Status ready", "Play voice preview", "Delete"]
+                        )
+                        if stopped_xml and find_control(stopped_xml, ["Voice Status ready"]):
+                            screenshot("authenticated-status-voice-preview.png")
+                            report.append("- PASS stopping voice capture opens the local recording preview without publishing")
+
+                            # Confirm the caption remains usable with the keyboard open,
+                            # then survives dismissal. Never tap Send from this debug UI run.
+                            caption_text = "FYNX voice caption runtime check"
+                            caption_fields = find_edit_fields(stopped_xml)
+                            if caption_fields:
+                                caption_x, caption_y = caption_fields[0]
+                                run("adb", "shell", "input", "tap", str(caption_x), str(caption_y))
+                                input_text(caption_text)
+                                time.sleep(0.8)
+                                caption_xml = dump_ui("authenticated-status-voice-caption-keyboard.xml")
+                                screenshot("authenticated-status-voice-caption-keyboard.png")
+                                if caption_text in caption_xml and find_control(caption_xml, ["Send"]):
+                                    report.append("- PASS Voice Status caption is visible with the keyboard open")
+                                else:
+                                    FAILURES.append("Voice Status caption was not retained/usable while the keyboard was open")
+                                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                                time.sleep(0.6)
+                                caption_return_xml = dump_ui("authenticated-status-voice-caption-keyboard-dismissed.xml")
+                                if caption_text in caption_return_xml and find_control(caption_return_xml, ["Play voice preview"]):
+                                    report.append("- PASS voice caption and local recording preview survive keyboard dismissal")
+                                    stopped_xml = caption_return_xml
+                                else:
+                                    FAILURES.append("Voice caption or local recording preview was lost after keyboard dismissal")
+                                    if caption_return_xml:
+                                        stopped_xml = caption_return_xml
+                            else:
+                                FAILURES.append("Recorded Voice Status did not expose an editable caption field")
+
+                            preview_xml = tap_control(
+                                stopped_xml, ["Play voice preview"], "status-voice-preview-play",
+                                ["Stop voice preview"]
+                            )
+                            if preview_xml and find_control(preview_xml, ["Stop voice preview"]):
+                                screenshot("authenticated-status-voice-playing.png")
+                                report.append("- PASS local voice preview plays from the recorded file")
+                                preview_stopped_xml = tap_control(
+                                    preview_xml, ["Stop voice preview"], "status-voice-preview-stop",
+                                    ["Play voice preview"]
+                                )
+                            else:
+                                preview_stopped_xml = stopped_xml
+                                FAILURES.append("Local voice preview did not enter its playing state after Play voice preview")
+
+                            if preview_stopped_xml:
+                                discarded_xml = tap_control(
+                                    preview_stopped_xml, ["Delete"], "status-voice-discard",
+                                    ["Start recording"]
+                                )
+                                if discarded_xml and find_control(discarded_xml, ["Start recording"]):
+                                    report.append("- PASS voice draft can be discarded before publishing")
+                                    voice_closed_xml = tap_control(
+                                        discarded_xml, ["Back from Status composer"], "status-voice-close",
+                                        ["Open FYNX camera"]
+                                    )
+                                    if voice_closed_xml and find_control(voice_closed_xml, ["Open FYNX camera"]):
+                                        screenshot("authenticated-status-voice-return-home.png")
+                                        report.append("- PASS closing the unsubmitted Voice draft returns to Home")
+                                else:
+                                    FAILURES.append("Voice draft could not be discarded before publishing")
+                        else:
+                            FAILURES.append("Stopping the voice recording did not expose its preview/delete controls")
+                    else:
+                        FAILURES.append("Voice Start recording action did not enter the recording state")
+                else:
+                    FAILURES.append("Add status -> Voice did not expose Start recording")
             else:
                 FAILURES.append("Home own-Status + button did not open Add status with both Voice and Text choices")
         else:
             FAILURES.append("could not return to Home through in-app Back navigation for Status runtime check")
         report += ["", "## Captured Status surfaces",
                    "- authenticated-status-home.png", "- authenticated-status-create.png",
-                   "", "Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only saved-device UI entry, which explicitly does not certify server authentication."]
+                   "- authenticated-status-voice-recording.png", "- authenticated-status-voice-preview.png",
+                   "- authenticated-status-voice-caption-keyboard.png", "- authenticated-status-voice-playing.png",
+                   "- authenticated-status-voice-return-home.png",
+                   "", "Voice recording, caption, playback and discard were exercised locally; no dummy Status was published. Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only saved-device UI entry, which explicitly does not certify server authentication."]
         report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
         if FAILURES:
             report += ["", "Failures:"] + ["- " + item for item in FAILURES]
