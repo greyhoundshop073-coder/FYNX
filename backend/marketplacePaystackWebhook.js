@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
+import { handleBuyerWalletPaystackEvent } from './buyerWallet.js';
 
 function safeEqualHex(actual, expected) {
   if (!actual || !expected) return false;
@@ -130,7 +131,23 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
       finally { client.release(); }
     }
     if (eventName !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
-    const transaction = event.data || {}, reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
+    const transaction = event.data || {};
+    // Wallet funding has its own owner/amount/channel/reference verification and
+    // idempotent ledger reconciliation. Non-Wallet Marketplace payments continue
+    // through the existing handler below without changing their behavior.
+    try {
+      const walletResult = await handleBuyerWalletPaystackEvent(eventName, transaction);
+      if (walletResult?.handled) {
+        if (walletResult.statusCode) {
+          return res.status(walletResult.statusCode).json({ error: walletResult.error || 'Wallet payment could not be reconciled' });
+        }
+        return res.status(200).json({ received: true, wallet: true, ...walletResult });
+      }
+    } catch (error) {
+      console.error('buyer Wallet Paystack webhook', error);
+      return res.status(500).json({ error: 'Wallet funding webhook processing failed' });
+    }
+    const reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
     if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference)) return res.status(400).json({ error: 'invalid payment reference' });
     if (reference.startsWith('FYNX-CHECKOUT-')) {
       if (!/^FYNX-CHECKOUT-[0-9a-f-]{36}$/i.test(reference)) return res.status(400).json({ error: 'invalid checkout payment reference' });
