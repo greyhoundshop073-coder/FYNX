@@ -1907,7 +1907,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # The video editor keeps its style and caption controls in a scrollable bottom panel.
     # Scroll that panel itself so the manual field is genuinely visible before querying it.
     display_size = run("adb", "shell", "wm", "size").stdout or ""
-    size_match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", display_size)
+    size_match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", display_size)
     if size_match:
         display_width, display_height = int(size_match.group(1)), int(size_match.group(2))
         scroll_x = str(display_width // 2)
