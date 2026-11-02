@@ -52,6 +52,8 @@ assert.ok(bootstrap.includes("registerAdminRoutes({ app })"),
   "existing Owner/Admin routes must be mounted in the production runtime");
 assert.ok(adminRoutes.includes("fynx_admin_roles"),
   "support Admin authorization must use the existing Admin role table");
+assert.ok(adminRoutes.includes("FYNX_OFFICIAL_USERNAME") && adminRoutes.includes("lower(username)"),
+  "Owner identity must resolve from the official FYNX account, not account creation order");
 for (const contract of [
   "/api/support/cases",
   "/api/support/cases/mine",
