@@ -1298,23 +1298,24 @@ fun FynxCameraCapturePanel(
         }
         if (timerCountingDown > 0) {
             Surface(
-                onClick = ::cancelCaptureTimer,
                 modifier = Modifier.align(Alignment.Center).border(
                     1.dp, Color.White.copy(alpha = 0.26f), MaterialTheme.shapes.extraLarge
                 ),
                 shape = MaterialTheme.shapes.extraLarge,
-                color = Color(0xFF25364A).copy(alpha = 0.72f)
+                color = Color(0xFF25364A).copy(alpha = 0.88f)
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 36.dp, vertical = 20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge)
-                    Text(
-                        "Cancel timer",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelLarge
-                    )
+                    Button(
+                        onClick = ::cancelCaptureTimer,
+                        modifier = Modifier.semantics { contentDescription = "Cancel timer" }
+                    ) {
+                        Text("Cancel timer")
+                    }
                 }
             }
         }
