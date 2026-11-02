@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.util.Locale
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /** A Marketplace-native seller storefront, backed only by current FYNX listing/reputation data. */
@@ -93,43 +94,60 @@ internal fun FynxMarketplaceSellerStoreDialog(
         profileLoading = true
         shopProfileError = null
         followError = null
-        FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())
-            .onSuccess { fetched ->
-                storefrontListings = fetched.filter { it.active && it.quantity > 0 }
-                storefrontError = null
-            }
-            .onFailure {
-                storefrontListings = null
-                storefrontError = "Products could not load. Check your connection and try again."
-            }
-        storefrontLoading = false
-        FynxProfileRemoteClient.get(context, username.removePrefix("@").trim())
-            .onSuccess { profile ->
-                profileName = profile.displayName.orEmpty()
-                profileBio = profile.bio.orEmpty()
-                followedByViewer = profile.followedByCurrentUser
-                followerCount = profile.followerCount
-                followError = null
-            }
-            .onFailure { failure ->
-                followedByViewer = null
-                followerCount = null
-                followError = marketplaceSafeError(failure, "Follow status could not load.")
-            }
         storeName = listings.firstOrNull()?.storeName.orEmpty()
-        FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())
-            .mapCatching { raw ->
-                org.json.JSONObject(raw).optJSONObject("shop")
-                    ?: throw IllegalStateException("Public shop profile response was incomplete.")
+
+        // Products, profile/follow state and shop identity are independent requests.
+        // Fetch them concurrently so a slow endpoint cannot delay the whole storefront.
+        var authoritativeShopBio: String? = null
+        coroutineScope {
+            launch {
+                FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())
+                    .onSuccess { fetched ->
+                        storefrontListings = fetched.filter { it.active && it.quantity > 0 }
+                        storefrontError = null
+                    }
+                    .onFailure { failure ->
+                        storefrontError = if (storefrontListings.isNullOrEmpty()) {
+                            marketplaceSafeError(failure, "Products could not load. Check your connection and try again.")
+                        } else {
+                            "Showing previously loaded products. Product availability could not be refreshed."
+                        }
+                    }
+                storefrontLoading = false
             }
-            .onSuccess { shop ->
-                storeName = shop.optString("shopName").ifBlank { storeName }
-                profileBio = shop.optString("description").ifBlank { profileBio }
-                shopLocation = shop.optString("location")
-                shopContactPhone = shop.optString("contactPhone")
+            launch {
+                FynxProfileRemoteClient.get(context, username.removePrefix("@").trim())
+                    .onSuccess { profile ->
+                        profileName = profile.displayName.orEmpty()
+                        profileBio = profile.bio.orEmpty()
+                        followedByViewer = profile.followedByCurrentUser
+                        followerCount = profile.followerCount
+                        followError = null
+                    }
+                    .onFailure { failure ->
+                        followError = marketplaceSafeError(failure, "Follow status could not load.")
+                    }
+                profileLoading = false
             }
-            .onFailure { failure -> shopProfileError = marketplaceSafeError(failure, "Shop details could not load.") }
-        profileLoading = false
+            launch {
+                FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())
+                    .mapCatching { raw ->
+                        org.json.JSONObject(raw).optJSONObject("shop")
+                            ?: throw IllegalStateException("Public shop profile response was incomplete.")
+                    }
+                    .onSuccess { shop ->
+                        storeName = shop.optString("shopName").ifBlank { storeName }
+                        authoritativeShopBio = shop.optString("description").takeIf { it.isNotBlank() }
+                        shopLocation = shop.optString("location")
+                        shopContactPhone = shop.optString("contactPhone")
+                    }
+                    .onFailure { failure ->
+                        shopProfileError = marketplaceSafeError(failure, "Shop details could not load.")
+                    }
+            }
+        }
+        // The persistent shop description is authoritative over the account bio.
+        authoritativeShopBio?.let { profileBio = it }
     }
     LaunchedEffect(username) {
         FynxMarketplaceWeeklySellerClient.history(context, username)
@@ -347,7 +365,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             }
                         }
                     }
-                } else if (storefrontLoading) {
+                } else if (storefrontLoading && sellerListings.isEmpty()) {
                     item {
                         Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(20.dp))
@@ -355,7 +373,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             Text("Loading this seller’s products…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                } else if (storefrontError != null) {
+                } else if (storefrontError != null && sellerListings.isEmpty()) {
                     item {
                         Card(shape = RoundedCornerShape(18.dp)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -367,6 +385,23 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 } else if (sellerListings.isEmpty()) {
                     item { Text("This seller has no active products available right now.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else {
+                    if (storefrontLoading) item {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Refreshing seller products…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    storefrontError?.let { message ->
+                        item {
+                            Card(shape = RoundedCornerShape(14.dp)) {
+                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(message, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                    TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading) { Text("Retry") }
+                                }
+                            }
+                        }
+                    }
                     items(sellerListings, key = { "seller-store-${it.id}" }) { listing ->
                         Surface(
                             onClick = { onOpenListing(listing) },

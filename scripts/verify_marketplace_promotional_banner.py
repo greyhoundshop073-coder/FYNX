@@ -48,6 +48,22 @@ checks = [
     ("scheduled celebration artwork is displayed through authenticated FYNX media", "FynxRemoteMedia(" in BANNER and "slide.artworkMediaId" in BANNER and 'mediaUrl = "/api/media/${slide.artworkMediaId}"' in BANNER and "contentScale = ContentScale.Crop" in BANNER),
     ("only active scheduled banner artwork is public through media privacy", "marketplace_seasonal_promotions WHERE artwork_media_id=$1" in MEDIA_PRIVACY and "active=TRUE AND starts_at <= NOW() AND ends_at > NOW()" in MEDIA_PRIVACY),
 
+
+    ("Marketplace first page is cached per account and exact search scope", "FynxMarketplaceFeedCache.read(context, requestQuery, requestCategory, cacheLocation)" in PANEL and "FynxMarketplaceFeedCache.write(" in PANEL and "FynxAuthStore.accountStorageKey(context)" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceFeedCache.kt").read_text(encoding="utf-8")),
+    ("cached Marketplace products render while the live request refreshes", "Showing saved products while FYNX checks for updates." in PANEL and "val cachedPage = FynxMarketplaceFeedCache.read(" in PANEL),
+    ("failed refresh preserves saved products and warns that availability may have changed", "Showing saved products from your last visit." in PANEL and "product availability may have changed" in PANEL),
+    ("filter changes do not show another search's products as matching results", "Never present another search/filter" in PANEL and "listings = listOfNotNull(pinned)" in PANEL),
+    ("seller card details load in bounded parallel batches", "pending.chunked(4)" in PANEL and "reputationCall = async" in PANEL and "profileCall = async" in PANEL and ".awaitAll()" in PANEL),
+    ("temporary seller metadata failures do not erase previously loaded details", "sellerReputations.filterKeys { it in visibleKeys } + reputationUpdates" in PANEL and "sellerPhotoIds.filterKeys { it in visibleKeys } + photoUpdates" in PANEL),
+    ("seasonal promotions retain a last-known schedule for offline display", "writeResponse(context" in SEASONAL_CLIENT and "seasonal_promotions" in SEASONAL_CLIENT and "readResponse(" in SEASONAL_CLIENT),
+    ("cached seasonal promotions must still be within their scheduled time window", "val started = starts == null || !now.isBefore(starts)" in SEASONAL_CLIENT and "val notEnded = ends == null || now.isBefore(ends)" in SEASONAL_CLIENT and "promotion.active && started && notEnded" in SEASONAL_CLIENT),
+
+    ("Marketplace listing cache serialization and parsing run off the UI thread", "withContext(Dispatchers.IO) { FynxMarketplaceFeedCache.read(" in PANEL and "withContext(Dispatchers.IO) {" in PANEL and "FynxMarketplaceFeedCache.write(context" in PANEL),
+    ("public seller storefront fetches products, profile and shop identity concurrently", "coroutineScope {" in SELLER_STORE and "FynxProfileRemoteClient.get(context" in SELLER_STORE and "/api/marketplace/shops/" in SELLER_STORE),
+    ("public seller storefront preserves products and displays stale-data notice after refresh errors", "Showing previously loaded products." in SELLER_STORE and "storefrontError != null && sellerListings.isEmpty()" in SELLER_STORE and "storefrontLoading && sellerListings.isEmpty()" in SELLER_STORE),
+    ("Seller Center inventory state is scoped to the signed-in seller account", "remember(sellerAccountKey) { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }" in SELLER_CENTER and "LaunchedEffect(sellerAccountKey) { refresh() }" in SELLER_CENTER),
+    ("Seller Center keeps previously loaded inventory visible during refresh failures", "Previously loaded listings are shown" in SELLER_CENTER and "if (loading && listings.isEmpty() && archivedListings.isEmpty())" in SELLER_CENTER and "Refreshing your inventory…" in SELLER_CENTER),
+    ("Seller Center retains same-account shop profile details during transient refresh errors", "Previously saved details are still shown" in SELLER_CENTER and "Keep this account's last confirmed shop details visible" in SELLER_CENTER),
 ]
 
 failed = []

@@ -151,7 +151,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         FROM marketplace_listings l JOIN users u ON u.id=l.seller_id
         LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id=l.seller_id
         WHERE ${where.join(" AND ")}
-        ORDER BY discovery_score DESC,l.created_at DESC LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}
+        ORDER BY discovery_score DESC,l.created_at DESC,l.id DESC LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}
       `, params);
       const hasMore = result.rows.length > limit;
       const rows = hasMore ? result.rows.slice(0, limit) : result.rows;

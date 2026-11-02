@@ -3,6 +3,9 @@ package com.fynx.app.ui
 import android.content.Context
 import android.net.Uri
 import org.json.JSONObject
+import java.time.Instant
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** A server-scheduled celebration or seasonal Marketplace message. */
 data class FynxMarketplaceSeasonalPromotion(
@@ -31,20 +34,39 @@ object FynxMarketplaceSeasonalPromotionClient {
             active = value.optBoolean("active")
         )
 
-    suspend fun load(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> =
-        FynxBackendClient.get(context, "/api/marketplace/seasonal-feed").mapCatching { raw ->
+    suspend fun load(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> {
+        val response = FynxBackendClient.get(context, "/api/marketplace/seasonal-feed")
+        val raw = if (response.isSuccess) {
+            response.getOrThrow()
+        } else {
+            withContext(Dispatchers.IO) {
+                FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 24L * 60L * 60L * 1000L)
+            } ?: return Result.failure(response.exceptionOrNull() ?: IllegalStateException("Seasonal promotion feed is unavailable."))
+        }
+        if (response.isSuccess) {
+            withContext(Dispatchers.IO) {
+                FynxMarketplaceFeedCache.writeResponse(context, "seasonal_promotions", raw)
+            }
+        }
+        return runCatching {
             val rows = JSONObject(raw).optJSONArray("promotions")
                 ?: throw IllegalStateException("Seasonal promotion response was incomplete.")
+            val now = Instant.now()
             buildList {
                 for (index in 0 until rows.length()) {
                     val row = rows.optJSONObject(index) ?: continue
                     val promotion = parsePromotion(row)
-                    if (promotion.id.isNotBlank() && promotion.occasionKey.isNotBlank() && promotion.headline.isNotBlank()) {
-                        add(promotion)
-                    }
+                    val starts = runCatching { Instant.parse(promotion.startsAt) }.getOrNull()
+                    val ends = runCatching { Instant.parse(promotion.endsAt) }.getOrNull()
+                    val started = starts == null || !now.isBefore(starts)
+                    val notEnded = ends == null || now.isBefore(ends)
+                    if (promotion.active && started && notEnded &&
+                        promotion.id.isNotBlank() && promotion.occasionKey.isNotBlank() && promotion.headline.isNotBlank()
+                    ) add(promotion)
                 }
             }
         }
+    }
 
     suspend fun listForAdmin(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> =
         FynxBackendClient.get(context, "/api/admin/marketplace/seasonal-promotions").mapCatching { raw ->

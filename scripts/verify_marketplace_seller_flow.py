@@ -200,7 +200,7 @@ checks = [
      and "DropdownMenu(" in seller_center
      and all(value in seller_center for value in ('"Phones & Computers"', '"Auto Parts"', '"Business & Workshop Supplies"'))),
     ("My Shop edit listing offers matching subcategories and clears stale choices when the main category changes",
-     'var editSubcategory by rememberSaveable { mutableStateOf("") }' in seller_center
+     'var editSubcategory by rememberSaveable(sellerAccountKey) { mutableStateOf("") }' in seller_center
      and seller_center.count("editSubcategory = marketplaceDescriptionSubcategory(listing.description)") == 2
      and "val editSubcategoryOptions = marketplaceSubcategoriesFor(editCategory)" in seller_center
      and 'if (!editCategory.equals(option, ignoreCase = true)) editSubcategory = ""' in seller_center
@@ -295,11 +295,12 @@ checks = [
 ]
 
 checks.extend([
+    ("public seller storefront shows stale catalogue cards during loading and failure", "if (storefrontLoading) item {" in storefront and "storefrontError?.let { message ->" in storefront and "items(sellerListings, key =" in storefront and "Showing previously loaded products." in storefront),
     ("public seller storefront has an explicit loading state for its own listing request", "var storefrontLoading by remember(username)" in storefront and "Loading this seller’s products…" in storefront),
     ("public seller storefront surfaces listing failures and provides a retry action", "storefrontError != null" in storefront and "Products could not load. Check your connection and try again." in storefront and "Retry products" in storefront and "storefrontReloadKey += 1" in storefront),
     ("public seller storefront retries by restarting the seller-specific request", "LaunchedEffect(username, viewerUsername, storefrontReloadKey)" in storefront and 'FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())' in storefront),
     ("failed storefront requests do not silently substitute a partial Marketplace feed as the seller's complete catalogue", "storefrontListings.orEmpty()" in storefront and "storefrontListings ?: listings.filter" not in storefront),
-    ("public seller storefront distinguishes a successful empty catalogue from a failed request", "else if (storefrontLoading)" in storefront and "else if (storefrontError != null)" in storefront and "else if (sellerListings.isEmpty())" in storefront),
+    ("public seller storefront distinguishes initial loading, failed requests and a successful empty catalogue", "else if (storefrontLoading && sellerListings.isEmpty())" in storefront and "else if (storefrontError != null && sellerListings.isEmpty())" in storefront and "else if (sellerListings.isEmpty())" in storefront),
     ("public seller storefront shows real follow state, follower count, and safe follow/unfollow recovery without allowing self-follow", "viewerUsername: String" in storefront and "profile.followedByCurrentUser" in storefront and "profile.followerCount" in storefront and "FynxRemoteSocialClient.follow(context, username, wasFollowing)" in storefront and 'followedByViewer == false -> "Follow shop"' in storefront and 'followedByViewer == true -> "Following"' in storefront and "!isOwnStore" in storefront and "followError" in storefront and 'Text("Retry follow status")' in storefront),
     ("Marketplace, My Shop and Saved Products discard account-scoped transient UI state when the signed-in account changes", "val marketplaceAccountKey = authSession.username?.removePrefix(\"@\")?.trim()?.lowercase(java.util.Locale.US)" in app_shell and '"Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(' in app_shell and '"Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel() }' in app_shell and '"Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(' in app_shell),
 ])
@@ -316,7 +317,7 @@ checks.extend([
     ("My Shop inventory, profile and payout refreshes are independent and each drops stale responses", 'scope.launch {\n            val inventoryResult = runCatching { FynxMarketplaceClient.myListings(context).getOrThrow() }' in seller_center and 'scope.launch {\n            val shopResult = runCatching {\n                val raw = FynxBackendClient.get(context, "/api/marketplace/my-shop").getOrThrow()' in seller_center and 'scope.launch {\n            val payoutResult = runCatching {\n                val raw = FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account").getOrThrow()' in seller_center and seller_center.count("if (requestGeneration != refreshGeneration) return@launch") >= 3 and "loading = false" in seller_center and "shopLoading = false" in seller_center and "accountLoading = false" in seller_center and "loadMoney()" in seller_center),
     ("My Shop refresh rejects stale overlapping inventory/profile/payout responses", "var refreshGeneration by remember { mutableIntStateOf(0) }" in seller_center and "val requestGeneration = ++refreshGeneration" in seller_center and seller_center.count("if (requestGeneration != refreshGeneration) return@launch") >= 3),
     ("My Shop profile and payout GET responses are parsed inside exception-safe result boundaries", ('FynxBackendClient.get(context, "/api/marketplace/my-shop")\n                .mapCatching { raw ->' in seller_center or 'val raw = FynxBackendClient.get(context, "/api/marketplace/my-shop").getOrThrow()' in seller_center) and ('FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account")\n                .mapCatching { raw ->' in seller_center or 'val raw = FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account").getOrThrow()' in seller_center) and 'val shopResult = runCatching {' in seller_center and 'val payoutResult = runCatching {' in seller_center),
-    ("failed inventory refresh clears old listing rows and labels the overview count unavailable", "Inventory is not current. Retry refresh before relying on listing availability." in seller_center and 'listings = emptyList()\n                    archivedListings = emptyList()' in seller_center and 'Listing count unavailable until refresh succeeds' in seller_center),
+    ("failed inventory refresh preserves prior seller rows and labels the inventory as stale", "Inventory is not current. Retry refresh before relying on listing availability." in seller_center and "Previously loaded listings are shown" in seller_center and "Could not refresh your inventory." in seller_center and 'Listing count unavailable until refresh succeeds' in seller_center and 'listings = emptyList()\n                    archivedListings = emptyList()' not in seller_center),
     ("failed or malformed payout-account refresh clears previous account and verification state", "payoutAccounts = emptyList()" in seller_center and "payoutAccount = null" in seller_center and 'accountMessage = marketplaceSafeError(failure, "Payout account status could not load.")' in seller_center),
     ("My Shop refresh button is disabled while the refresh is active", 'IconButton(onClick = { refresh() }, enabled = !loading) { Icon(Icons.Default.Refresh, "Refresh My Shop") }' in seller_center),
     ("shop-profile save parses the response inside mapCatching so malformed success cannot strand the save spinner", 'FynxBackendClient.patchJson(context, "/api/marketplace/my-shop", payload.toString())\n                                    .mapCatching { raw ->' in seller_center and 'shopSaving = false' in seller_center),
@@ -416,7 +417,8 @@ checks.extend([
      and 'deliveryDetails = details.first' in order_lifecycle),
     ("public seller shop profile JSON failures are retryable without hiding product listings",
      'var shopProfileError by remember(username)' in storefront
-     and 'FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())\n            .mapCatching { raw ->' in storefront
+     and 'FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())' in storefront
+     and '.mapCatching { raw ->' in storefront
      and 'shopProfileError?.let { message ->' in storefront
      and 'TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }' in storefront),
 ])

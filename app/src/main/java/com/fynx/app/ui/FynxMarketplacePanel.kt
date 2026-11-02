@@ -84,8 +84,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.time.Instant
 import org.json.JSONObject
@@ -954,12 +959,30 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             val requestCategory = category
             val requestNearbyMode = nearbyMode
             val requestNearbyLabel = nearbyLabel
+            val cacheLocation = if (requestNearbyMode) requestNearbyLabel else ""
+            val cachedPage = withContext(Dispatchers.IO) { FynxMarketplaceFeedCache.read(context, requestQuery, requestCategory, cacheLocation) }
+
             loading = true
             loadingMoreListings = false
             nextListingsOffset = 0
             hasMoreListings = false
             error = null
             discoveryFallbackWarning = null
+
+            // Never present another search/filter's old products as matching results.
+            // An exact cached result is displayed immediately during live refresh.
+            val pinned = pinnedPublishedListing?.takeIf {
+                requestQuery.isBlank() && requestCategory.equals("All", ignoreCase = true) && !requestNearbyMode
+            }
+            if (cachedPage != null) {
+                listings = (listOfNotNull(pinned) + cachedPage.listings).distinctBy { it.id }
+                hasMoreListings = cachedPage.hasMore
+                nextListingsOffset = 24
+                discoveryFallbackWarning = "Showing saved products while FYNX checks for updates."
+            } else {
+                listings = listOfNotNull(pinned)
+            }
+
             val result = kotlinx.coroutines.withTimeoutOrNull(MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS) {
                 if (requestNearbyMode && requestNearbyLabel.isNotBlank()) {
                     FynxRemoteSocialClient.nearbyMarketplaceListings(context, requestQuery, requestCategory, requestNearbyLabel)
@@ -969,29 +992,37 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         .map { page -> Triple(page.listings, page.hasMore, null as String?) }
                         .recoverCatching {
                             val fallbackListings = FynxRemoteSocialClient.listings(context, requestQuery, requestCategory).getOrThrow()
-                            Triple(
-                                fallbackListings,
-                                false,
-                                "Marketplace discovery is temporarily unavailable; showing live listings through the backup route."
-                            )
+                            Triple(fallbackListings, false, "Marketplace discovery is temporarily unavailable; showing live listings through the backup route.")
                         }
                 }
             }
+
             if (requestGeneration != listingRequestGeneration) return@launch
-            if (result == null) {
-                error = "Marketplace is taking longer than expected. Check your connection and try again."
-            } else {
-                result.onSuccess { (items, more, fallbackWarning) ->
-                    val pinned = pinnedPublishedListing?.takeIf {
-                        requestQuery.isBlank() && requestCategory.equals("All", ignoreCase = true) && !requestNearbyMode
+            when {
+                result == null -> {
+                    if (cachedPage != null) {
+                        discoveryFallbackWarning = "Showing saved products from your last visit. FYNX could not refresh; product availability may have changed."
+                    } else {
+                        error = "Marketplace is taking longer than expected. Check your connection and try again."
                     }
-                    listings = (listOfNotNull(pinned) + items).distinctBy { it.id }
-                    hasMoreListings = more
-                    discoveryFallbackWarning = fallbackWarning
-                    nextListingsOffset = advanceMarketplaceListingsOffset(0, 24)
-                }.onFailure { error = marketplaceSafeError(it, "Marketplace could not load.") }
+                }
+                else -> {
+                    if (result.isSuccess) {
+                        val (items, more, fallbackWarning) = result.getOrThrow()
+                        withContext(Dispatchers.IO) {
+                            FynxMarketplaceFeedCache.write(context, requestQuery, requestCategory, cacheLocation, items, more)
+                        }
+                        listings = (listOfNotNull(pinned) + items).distinctBy { it.id }
+                        hasMoreListings = more
+                        discoveryFallbackWarning = fallbackWarning
+                        nextListingsOffset = 24
+                    } else if (cachedPage != null) {
+                        discoveryFallbackWarning = "Showing saved products from your last visit. FYNX could not refresh; product availability may have changed."
+                    } else {
+                        error = marketplaceSafeError(result.exceptionOrNull() ?: IllegalStateException("Marketplace request failed."), "Marketplace could not load.")
+                    }
+                }
             }
-            // Listing visibility must not wait on the independent orders request.
             loading = false
             reloadOrders()
         }
@@ -1093,17 +1124,38 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     LaunchedEffect(listings) {
-        val sellers = listings.distinctBy { it.sellerUsername.removePrefix("@").trim().lowercase() }.take(12)
-        val reputationMap = linkedMapOf<String, FynxMarketplaceClient.SellerReputation>()
-        val photoMap = linkedMapOf<String, String?>()
-        sellers.forEach { listing ->
-            val username = listing.sellerUsername.removePrefix("@").trim()
-            if (username.isBlank()) return@forEach
-            FynxMarketplaceClient.sellerReputation(context, username).onSuccess { reputationMap[username.lowercase()] = it }
-            FynxProfileRemoteClient.get(context, username).onSuccess { photoMap[username.lowercase()] = it.profilePhotoMediaId }
+        val sellers = listings.map { it.sellerUsername.removePrefix("@").trim() }
+            .filter { it.isNotBlank() }.distinctBy { it.lowercase(Locale.US) }.take(12)
+        val pending = sellers.filter { username ->
+            val key = username.lowercase(Locale.US)
+            key !in sellerReputations || !sellerPhotoIds.containsKey(key)
         }
-        sellerReputations = reputationMap
-        sellerPhotoIds = photoMap
+        val reputationUpdates = linkedMapOf<String, FynxMarketplaceClient.SellerReputation>()
+        val photoUpdates = linkedMapOf<String, String?>()
+        // Fetch four sellers at a time; both seller endpoints run concurrently per seller.
+        pending.chunked(4).forEach { batch ->
+            val results = coroutineScope {
+                batch.map { username ->
+                    async {
+                        val key = username.lowercase(Locale.US)
+                        val reputationCall = async {
+                            runCatching { FynxMarketplaceClient.sellerReputation(context, username).getOrNull() }.getOrNull()
+                        }
+                        val profileCall = async {
+                            runCatching { FynxProfileRemoteClient.get(context, username) }.getOrNull()
+                        }
+                        Triple(key, reputationCall.await(), profileCall.await())
+                    }
+                }.awaitAll()
+            }
+            results.forEach { (key, reputation, profileResult) ->
+                if (reputation != null) reputationUpdates[key] = reputation
+                if (profileResult?.isSuccess == true) photoUpdates[key] = profileResult.getOrNull()?.profilePhotoMediaId
+            }
+        }
+        val visibleKeys = sellers.map { it.lowercase(Locale.US) }.toSet()
+        sellerReputations = sellerReputations.filterKeys { it in visibleKeys } + reputationUpdates
+        sellerPhotoIds = sellerPhotoIds.filterKeys { it in visibleKeys } + photoUpdates
     }
 
     // Keep sellers discoverable even when their reputation request is unavailable.
