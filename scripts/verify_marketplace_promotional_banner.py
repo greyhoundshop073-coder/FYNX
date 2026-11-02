@@ -5,6 +5,7 @@ PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").rea
 BANNER = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt").read_text(encoding="utf-8")
 WEEKLY_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceWeeklySellerClient.kt").read_text(encoding="utf-8")
 SELLER_STORE = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt").read_text(encoding="utf-8")
+SELLER_CENTER = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text(encoding="utf-8")
 SPONSORED_CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSponsoredPromotionClient.kt").read_text(encoding="utf-8")
 REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf-8")
 
@@ -29,6 +30,7 @@ checks = [
     ("weekly rank is sourced from completed order records rather than advertising data", "o.status = 'COMPLETED'" in REPUTATION and "o.completed_at >= w.week_start" in REPUTATION and "marketplace_ad_campaigns" not in REPUTATION[REPUTATION.index("app.get('/api/marketplace/sellers/weekly'"):REPUTATION.index("app.get('/api/marketplace/sellers/:username/reputation'")]),
     ("weekly history is persisted for closed weeks", "marketplace_weekly_seller_awards" in REPUTATION and "ON CONFLICT (week_start, weekly_rank) DO NOTHING" in REPUTATION),
     ("seller storefront shows historical weekly recognition without ad-based scoring", "FynxMarketplaceWeeklySellerClient.history(context, username)" in SELLER_STORE and "FYNX Seller Hall of Fame" in SELLER_STORE and "not advertising spend" in SELLER_STORE),
+    ("private Seller Center shows the signed-in seller weekly awards", "FynxMarketplaceWeeklySellerClient.currentSellerHistory(context)" in SELLER_CENTER and "Weekly seller recognition" in SELLER_CENTER and "Best Seller of the Week" in SELLER_CENTER),
 ]
 
 failed = []
