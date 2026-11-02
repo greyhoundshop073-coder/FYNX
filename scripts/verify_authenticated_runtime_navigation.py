@@ -2461,6 +2461,16 @@ if marketplace_xml:
     screenshot("authenticated-marketplace.png")
     report.append("- PASS authenticated Home -> Marketplace search/cart surface screenshot/UI hierarchy")
 
+    # Independently exercise the Marketplace Wallet shortcut and verify Back restores Marketplace.
+    wallet_shortcut_captured, wallet_shortcut_message, marketplace_xml = capture_wallet_root_from_marketplace(
+        marketplace_xml, "authenticated-marketplace-wallet"
+    )
+    if wallet_shortcut_captured:
+        report.append("- PASS: " + wallet_shortcut_message)
+    else:
+        report.append("- FAIL: " + wallet_shortcut_message)
+        FAILURES.append("Authenticated Marketplace -> Wallet shortcut: " + wallet_shortcut_message)
+
     # Continue in the same real, server-authenticated session into the private
     # seller control center. This is read-only: do not save a shop profile,
     # publish a listing, change inventory, assign a driver or create an order.
@@ -2540,6 +2550,7 @@ expected_authenticated_surfaces = [
     "authenticated-features.png",
     "authenticated-money.png",
     "authenticated-wallet.png",
+    "authenticated-wallet-marketplace-shortcut.png",
     "authenticated-wallet-add-money.png",
     "authenticated-wallet-bank-transfer.png",
     "authenticated-wallet-card.png",
