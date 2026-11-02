@@ -64,6 +64,14 @@ checks = [
     ("filter changes do not show another search's products as matching results", "Never present another search/filter" in PANEL and "listings = listOfNotNull(pinned)" in PANEL),
     ("seller card details load in bounded parallel batches", "pending.chunked(4)" in PANEL and "reputationCall = async" in PANEL and "profileCall = async" in PANEL and ".awaitAll()" in PANEL),
     ("temporary seller metadata failures do not erase previously loaded details", "sellerReputations.filterKeys { it in visibleKeys } + reputationUpdates" in PANEL and "sellerPhotoIds.filterKeys { it in visibleKeys } + photoUpdates" in PANEL),
+    ("empty Marketplace promo slides show a branded storefront illustration without inventing a product image",
+     "val showBrandedFallback = !hasRemoteArtwork && !slide.isWeeklyWinner" in BANNER
+     and "Icons.Default.Storefront" in BANNER
+     and "contentDescription = \"FYNX Marketplace\"" in BANNER
+     and "fillMaxWidth(if (showBrandedFallback) 0.70f else 0.78f)" in BANNER),
+    ("seasonal banner artwork receives the same image-readable overlay treatment as real listing media",
+     "val hasRemoteArtwork = listing?.mediaIds?.isNotEmpty() == true || !slide.artworkMediaId.isNullOrBlank()" in BANNER
+     and "alpha = if (hasRemoteArtwork) 0.18f else 0.58f" in BANNER),
     ("seasonal promotions retain a last-known schedule for offline display", "writeResponse(context" in SEASONAL_CLIENT and "seasonal_promotions" in SEASONAL_CLIENT and "readResponse(" in SEASONAL_CLIENT),
     ("cached seasonal promotions require valid timestamps and an active, in-window campaign", "isMarketplaceSeasonalPromotionEligible(promotion, now)" in SEASONAL_CLIENT and "starts.isBefore(ends) && !now.isBefore(starts) && now.isBefore(ends)" in PROMOTION_MODELS and "if (!promotion.active" in PROMOTION_MODELS),
 
