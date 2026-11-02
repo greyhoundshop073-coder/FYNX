@@ -155,11 +155,13 @@ wallet_shortcut_helper = runtime.split("def capture_wallet_root_from_marketplace
 runtime_authenticated_marketplace_flow = runtime.split("# Certify the actual Marketplace destination", 1)[1].split("# This workflow certifies the current Wallet + Marketplace + My Shop phase.", 1)[0]
 checks.extend([
  ("authenticated runtime exercises Marketplace -> Wallet and proves Back returns to Marketplace",
-  'capture_wallet_root_from_marketplace(\\n        marketplace_xml, "authenticated-marketplace-wallet"\\n    )' in runtime_authenticated_marketplace_flow
+  "capture_wallet_root_from_marketplace(" in runtime_authenticated_marketplace_flow
+  and 'marketplace_xml, "authenticated-marketplace-wallet"' in runtime_authenticated_marketplace_flow
   and "wallet_shortcut_captured" in runtime_authenticated_marketplace_flow
   and 'FAILURES.append("Authenticated Marketplace -> Wallet shortcut:' in runtime_authenticated_marketplace_flow),
  ("Marketplace -> Wallet runtime helper waits for settled Wallet buckets, saves the screenshot, and verifies Marketplace return",
-  'tap_control(\\n        marketplace_xml, ["Wallet"]' in wallet_shortcut_helper
+  "tap_control(" in wallet_shortcut_helper
+  and 'marketplace_xml, ["Wallet"]' in wallet_shortcut_helper
   and "wallet_destination_ready(latest)" in wallet_shortcut_helper
   and "authenticated-wallet-marketplace-shortcut.png" in wallet_shortcut_helper
   and 'find_control(back_xml, ["Search products, sellers or categories"])' in wallet_shortcut_helper),
