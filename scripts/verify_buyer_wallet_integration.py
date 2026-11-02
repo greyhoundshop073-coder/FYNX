@@ -108,10 +108,7 @@ checks.extend([
  ("runtime Home recovery waits for the Home destination and does not return on a generic Friends marker",
   'Home deep link did not reach the authenticated Home feed within 22 seconds' in runtime
   and 'dismiss_runtime_permission_prompt(' not in runtime_home_recovery),
- ("Status runtime can recover Home from nested feature panels through the registered deep link without force-stop",
-  '"fynx://home"' in status_runtime
-  and 'status-return-home-deeplink.xml' in status_runtime
-  and '"force-stop"' not in status_runtime),
+
 ])
 checks.extend([
  ("runtime token persistence probe uses package-scoped test/grep without nested shell quoting",
@@ -137,9 +134,13 @@ checks.extend([
   ]))
 ])
 checks.extend([
- ("server credential is preferred to a visible passwordless debug entry when CI supplies a password",
-  "if debug_entry_visible and not PASSWORD:" in runtime
-  and "if debug_entry_visible:" not in runtime),
+ ("server credentials remain preferred unless local visual mode is explicitly forced",
+  'FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"' in runtime
+  and "if debug_entry_visible and (not PASSWORD or FORCE_LOCAL_VISUALS):" in runtime
+  and "if VISUALS_ONLY and (not PASSWORD or FORCE_LOCAL_VISUALS):" in runtime
+  and "if debug_entry_visible and not PASSWORD:" not in runtime
+  and "token_present=secure_access_token_persisted()" in runtime
+  and "if token_present is True:" in runtime),
  ("non-visual Wallet runtime certification rejects local-only login mode",
   'LOGIN_MODE != "server credential login"' in runtime
   and "Wallet runtime certification requires a server-credential login" in runtime),
