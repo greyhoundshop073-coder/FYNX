@@ -1492,20 +1492,31 @@ def find_exact_home_action(xml_text: str, label: str):
 
 
 def is_home_feed_navigation_visible(xml_text: str) -> bool:
-    """Recognize the Home shell even when a scrolled LazyColumn hides its header."""
+    """Recognize the persistent Home bottom-navigation destination while the header collapses."""
     return bool(
         xml_text and PACKAGE in xml_text
-        and find_control(xml_text, ["Open FYNX camera"])
         and find_control(xml_text, ["Home"])
     )
 
 
 def scroll_home_feed_page(index: int) -> str:
-    """Scroll the Home feed viewport to expose the next real post; never change tabs."""
-    run("adb", "shell", "input", "swipe", "720", "2450", "720", "1050", "500")
-    time.sleep(0.8)
+    """Scroll within the actual emulator viewport; never start a swipe off-screen."""
+    size = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", size)
+    if not match:
+        FAILURES.append("Home feed scan could not read emulator dimensions; refusing an unverified swipe.")
+        return ""
+    width, height = (int(match.group(1)), int(match.group(2)))
+    x = max(1, min(width - 1, int(width * 0.67)))
+    start_y = max(1, min(height - 1, int(height * 0.82)))
+    end_y = max(1, min(height - 1, int(height * 0.32)))
+    run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+    time.sleep(1.0)
     candidate = dump_ui(f"authenticated-home-feed-scan-page-{index}.xml")
-    return candidate if is_home_feed_navigation_visible(candidate) else ""
+    if candidate and is_home_feed_navigation_visible(candidate):
+        screenshot(f"authenticated-home-feed-scan-page-{index}.png")
+        return candidate
+    return ""
 
 
 def capture_home_feed_visuals(home_xml: str) -> str:
@@ -1599,7 +1610,9 @@ def capture_home_feed_visuals(home_xml: str) -> str:
                     return dump_ui("authenticated-discovery-return-home-timeout.xml") or viewer_xml
                 current = discovery_home
 
-        comment_control = find_exact_home_action(current, "Comment")
+        # Pair the conversation capture with a viewport that actually exposes
+        # a real inline video control. Do not count an unrelated text-post comment.
+        comment_control = find_exact_home_action(current, "Comment") if video_control else None
         if comment_control and not comments_captured:
             comment_action_seen = True
             _, x, y = comment_control
