@@ -679,10 +679,18 @@ fun FynxHomeSocialHubPanel(
                 // Dialog windows draw edge-to-edge on API 35; reserve a visible footer gap even when
                 // the platform reports a zero navigation inset for the dialog decor.
                 Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = 64.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { clearComposer() }, enabled = !posting) { Icon(Icons.Default.ArrowBack, "Back") }
-                        Text("New post", style = MaterialTheme.typography.titleLarge)
-
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { clearComposer() }, enabled = !posting) {
+                            Icon(Icons.Default.ArrowBack, "Back")
+                        }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Text("New post", style = MaterialTheme.typography.titleLarge)
+                        }
+                        // Balance the back affordance so the title remains truly centred.
+                        Spacer(Modifier.width(48.dp))
                     }
 
                     Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
