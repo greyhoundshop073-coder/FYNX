@@ -74,8 +74,9 @@ internal fun MediaStorageSettingsPanel(onBack: () -> Unit) {
                 )
             }
         }
-        OutlinedButton(
+        FynxSoftActionButton(
             onClick = { confirmClear = true },
+            danger = true,
             enabled = !loading && cacheBytes > 0L,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             shape = RoundedCornerShape(14.dp)

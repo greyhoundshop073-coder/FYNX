@@ -83,6 +83,33 @@ checks = [
     ("supporting palette usage rules are documented",
      all(token in guidelines for token in ("#F5F7FA", "#1C2434", "#64748B", "#D4AF37", "#E8EEFA"))),
 ]
+
+soft_actions = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSoftActionButton.kt").read_text(encoding="utf-8")
+profile_settings = (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8")
+soft_action_screens = [
+    "FynxMediaComposer.kt", "FynxSavedPostsPanel.kt", "FynxGroupSocialBatch.kt",
+    "FynxInvitePanel.kt", "SecureMoneyVaultPanel.kt", "FynxMarketplaceReferenceDetailComponents.kt",
+    "FynxMarketplaceReviews.kt", "FynxMoneyTransfer.kt", "ChatsPanel.kt", "MoneyToolsPanel.kt",
+    "FynxGroupsPanel.kt", "MediaStorageSettingsPanel.kt", "FynxConversationMoments.kt",
+    "FynxMarketplaceDetailsSearchReference.kt", "FynxContactsPanel.kt", "OtherUserProfilePanel.kt",
+    "FynxMarketplaceSellerOrders.kt", "CurrencyConverterPanel.kt", "FynxUniversalSearchPanel.kt",
+    "FynxAiAssistantPanel.kt", "ConversationPanel.kt",
+]
+soft_action_source_count = sum(
+    (ROOT / "app/src/main/java/com/fynx/app/ui" / filename).read_text(encoding="utf-8").count("FynxSoftActionButton(")
+    for filename in soft_action_screens
+)
+checks.extend([
+    ("shared secondary action uses the exact pale-blue fill and blue outline", "SoftActionLightContainer = Color(0xFFE3F2FC)" in design and "SoftActionLightOutline = Color(0xFF5B9BB8)" in design),
+    ("dark and AMOLED secondary actions use a readable deep-blue treatment", "SoftActionDarkContainer = Color(0xFF17365D)" in design and "SoftActionDarkForeground = Color(0xFFEAF1FF)" in design and "SoftActionDarkOutline = Color(0xFF6BAED6)" in design),
+    ("shared secondary button adapts to the current light/dark appearance without changing saved theme options", "background.luminance() > 0.5f" in soft_actions and 'Triple("System"' in profile_settings and 'Triple("Light"' in profile_settings and 'Triple("Black AMOLED"' in profile_settings),
+    ("secondary actions retain a restrained raised elevation and a visible outline", "defaultElevation = 2.dp" in soft_actions and "BorderStroke(1.dp, outlineColor)" in soft_actions),
+    ("secondary action wrapper preserves caller click, enabled, shape, custom colors, border and padding", "onClick = onClick" in soft_actions and "enabled = enabled" in soft_actions and "shape = shape" in soft_actions and "colors = colors ?: ButtonDefaults.buttonColors" in soft_actions and "border = border ?: BorderStroke" in soft_actions and "contentPadding = contentPadding" in soft_actions),
+    ("destructive secondary actions retain red semantics in light and dark appearances", "SoftActionDangerLightOutline = CrimsonRed" in design and "SoftActionDangerDarkOutline = DarkModeError" in design),
+    ("shared soft-blue secondary actions are rolled out across independent app screens", soft_action_source_count >= 35),
+    ("master UI guidelines document the adaptive raised secondary-action system", "Secondary action buttons: use the shared raised soft-blue treatment" in guidelines and "#E3F2FC" in guidelines and "#17365D" in guidelines),
+])
+
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
 failed = [name for name, ok in checks if not ok]

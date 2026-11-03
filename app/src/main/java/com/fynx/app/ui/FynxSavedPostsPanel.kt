@@ -105,13 +105,13 @@ fun FynxSavedPostsPanel(onOpenAuthorProfile: (String) -> Unit = {}) {
         }
         if (error != null && posts.isNotEmpty()) {
             Text(error!!, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.error)
-            OutlinedButton(onClick = { if (hasMore && nextOffset > 0) loadMore() else refreshToken++ }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Retry") }
+            FynxSoftActionButton(onClick = { if (hasMore && nextOffset > 0) loadMore() else refreshToken++ }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Retry") }
         }
         when {
             loading && posts.isEmpty() -> Text("Loading saved posts…", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             error != null && posts.isEmpty() -> Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(error ?: "Saved posts could not be loaded.", color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = { refreshToken++ }, enabled = !loading) { Text("Retry") }
+                FynxSoftActionButton(onClick = { refreshToken++ }, enabled = !loading) { Text("Retry") }
             }
             posts.isEmpty() -> Column(Modifier.fillMaxWidth().padding(24.dp)) {
                 Icon(Icons.Default.BookmarkBorder, null)
@@ -165,7 +165,7 @@ fun FynxSavedPostsPanel(onOpenAuthorProfile: (String) -> Unit = {}) {
                     }
                 }
                 if (hasMore) item(key = "saved_posts_load_more") {
-                    OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    FynxSoftActionButton(onClick = { loadMore() }, enabled = !loadingMore, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                         if (loadingMore) CircularProgressIndicator(Modifier.height(18.dp), strokeWidth = 2.dp) else Text("Load more saved posts")
                     }
                 }

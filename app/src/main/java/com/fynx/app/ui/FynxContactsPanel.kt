@@ -187,7 +187,7 @@ fun FynxContactsPanel(
         notice?.let {
             Text(it, color = MaterialTheme.colorScheme.error)
             if (!loading && permission) {
-                OutlinedButton(onClick = { loadContacts() }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Retry") }
+                FynxSoftActionButton(onClick = { loadContacts() }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Retry") }
             }
         }
     }

@@ -130,7 +130,7 @@ private fun SavingsGoalsCard() {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { val target = targetText.toDoubleOrNull(); if (!name.isBlank() && target != null && target > 0) goal = EmbeddedSavingsGoal(name.trim(), target, 0.0) }, shape = FynxDesign.ControlShape) { Text("Create Goal") }
             OutlinedTextField(addText, { addText = it }, label = { Text("Add saved") }, singleLine = true, modifier = Modifier.weight(1f), shape = FynxDesign.ControlShape)
-            OutlinedButton(onClick = { val add = addText.toDoubleOrNull(); if (add != null && add > 0) goal?.let { goal = it.copy(saved = (it.saved + add).coerceAtMost(it.target)) } }, shape = FynxDesign.ControlShape) { Text("Add") }
+            FynxSoftActionButton(onClick = { val add = addText.toDoubleOrNull(); if (add != null && add > 0) goal?.let { goal = it.copy(saved = (it.saved + add).coerceAtMost(it.target)) } }, shape = FynxDesign.ControlShape) { Text("Add") }
         }
         goal?.let { val progress = (it.saved / it.target).coerceIn(0.0, 1.0).toFloat(); Text(it.name, style = MaterialTheme.typography.titleMedium); Text("Saved ${formatMoney(it.saved)} of ${formatMoney(it.target)}"); LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()); if (it.saved >= it.target) Text("🏆 Goal completed!") else Text("Remaining ${formatMoney(it.target - it.saved)}", color = FynxDesign.TextSecondary) }
     }

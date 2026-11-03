@@ -64,7 +64,7 @@ internal fun MarketplaceReferenceProductSummary(
             IconButton(onClick = onShare) { Icon(Icons.Default.Share, "Share", tint = FynxMarketplaceReferenceStyle.text) }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = onMessageSeller, modifier = Modifier.weight(1f)) {
+            FynxSoftActionButton(onClick = onMessageSeller, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Default.ChatBubbleOutline, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Message seller")

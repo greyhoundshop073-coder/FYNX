@@ -110,7 +110,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
                                 FynxRemoteProfileAvatar(person.profilePhotoMediaId, person.displayName.ifBlank { person.username }, Modifier.size(42.dp), ownerUsername = person.username)
                                 Spacer(Modifier.width(9.dp))
                                 Column(Modifier.weight(1f)) { Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleSmall); Text("@${person.username.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-                                OutlinedButton(onClick = { onOpenProfile(person.username) }, shape = FynxDesign.ControlShape) { Text("Profile") }
+                                FynxSoftActionButton(onClick = { onOpenProfile(person.username) }, shape = FynxDesign.ControlShape) { Text("Profile") }
                             }
                         }
                     }

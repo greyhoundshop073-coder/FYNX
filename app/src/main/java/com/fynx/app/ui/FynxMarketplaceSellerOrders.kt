@@ -162,7 +162,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         }
     }
 
-    OutlinedButton(onClick = { open = true; load() }) {
+    FynxSoftActionButton(onClick = { open = true; load() }) {
         Icon(Icons.Default.LocalShipping, null, Modifier.size(18.dp))
         Spacer(Modifier.width(5.dp))
         Text("Seller orders")
@@ -632,7 +632,7 @@ fun FynxMarketplaceDriverAssignmentsDialog(context: Context, onDismiss: () -> Un
                                             minLines = 2,
                                             modifier = Modifier.fillMaxWidth()
                                         )
-                                        OutlinedButton(
+                                        FynxSoftActionButton(
                                             enabled = !loading && busyOrderId == null,
                                             onClick = {
                                                 deliveryPhotoPickerOrderId = assignment.orderId

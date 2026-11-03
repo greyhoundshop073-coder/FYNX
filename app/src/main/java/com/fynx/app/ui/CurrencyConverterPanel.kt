@@ -79,7 +79,7 @@ fun CurrencyConverterPanel() {
 private fun CurrencyChoice(label: String, selected: String, onSelected: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text("$label: $selected") }
+        FynxSoftActionButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text("$label: $selected") }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) { supportedCurrencies.forEach { code -> DropdownMenuItem(text = { Text(code) }, onClick = { onSelected(code); expanded = false }) } }
     }
 }
