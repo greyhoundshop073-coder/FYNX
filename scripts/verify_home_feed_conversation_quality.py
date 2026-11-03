@@ -31,6 +31,7 @@ checks = [
     ("reaction changes roll back on API failure", "reactionStates = reactionStates + (id to previous)" in HOME),
     ("manual video retry refreshes failed cached media", "forceRefresh: Boolean = false" in MEDIA_CACHE and "forceRefresh = reloadNonce > 0" in HOME and "forceRefresh = retryNonce > 0" in DISCOVERY),
     ("media refresh preserves the last good cached file until replacement succeeds", "file.name}.refresh" in MEDIA_CACHE and "file.name}.backup" in MEDIA_CACHE and "if (hadPrevious) backup.renameTo(file)" in MEDIA_CACHE),
+    ("interrupted media refresh restores the last good cache on next access", "if (!hasUsableCachedFile() && backup.isFile" in MEDIA_CACHE and "backup.renameTo(file)" in MEDIA_CACHE),
     ("comment pagination uses the last returned row as cursor", "String(result.rows[limit - 1].id)" in BOOTSTRAP),
     ("pagination does not skip the look-ahead row", "String(result.rows[result.rows.length - 1].id)" not in BOOTSTRAP),
     ("backend preserves the selected reply parent", "const directParentId = parentId;" in BOOTSTRAP and "[postId, req.user.sub, directParentId, text]" in BOOTSTRAP),
