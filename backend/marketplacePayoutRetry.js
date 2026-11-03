@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
+import { marketplacePayoutsEnabled, marketplacePayoutsNotice } from './marketplacePayoutEligibility.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -27,6 +28,12 @@ function parseUuid(value) { return typeof value === 'string' && /^[0-9a-f-]{36}$
 
 export function registerMarketplacePayoutRetryRoutes({ app }) {
   app.post('/api/marketplace/settlement/retry/:id', auth, async (req, res) => {
+    if (!marketplacePayoutsEnabled()) {
+      return res.status(503).json({
+        error: marketplacePayoutsNotice(),
+        code: 'MARKETPLACE_PAYOUTS_NOT_ENABLED'
+      });
+    }
     const orderId = parseUuid(req.params.id);
     if (!orderId) return res.status(400).json({ error: 'invalid order id' });
     if (!pool) return res.status(503).json({ error: 'settlement database is not configured' });

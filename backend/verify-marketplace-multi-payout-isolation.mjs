@@ -2,6 +2,8 @@ import fs from 'node:fs';
 
 const read = (file) => fs.readFileSync(new URL(file, import.meta.url), 'utf8');
 const checkoutOrder = read('./marketplaceCheckoutOrder.js');
+const settlement = read('./marketplaceSettlement.js');
+const payoutEligibility = read('./marketplacePayoutEligibility.js');
 const payoutRetry = read('./marketplacePayoutRetry.js');
 const worker = read('./marketplaceSettlementWorker.js');
 const webhook = read('./marketplacePaystackWebhook.js');
@@ -14,6 +16,15 @@ const checks = [
   ['payout account is selected for that seller and order currency', payoutRetry.includes('seller_id=$1') && payoutRetry.includes('UPPER(currency)=UPPER($2)') && payoutRetry.includes('order.currency')],
   ['seller net plus marketplace fee reconciles against that child escrow', payoutRetry.includes('sellerNetAmount + marketplaceFee') && payoutRetry.includes('protectedAmount')],
   ['payout operation preserves the child order currency', payoutRetry.includes("INSERT INTO marketplace_financial_operations") && payoutRetry.includes('order.currency')],
+  ['seller bank-account setup and payout release require Registered Business plus FYNX payout approval',
+    settlement.includes("if (!marketplacePayoutsEnabled())") &&
+    settlement.includes("MARKETPLACE_PAYOUTS_NOT_ENABLED") &&
+    payoutEligibility.includes("FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED") &&
+    payoutEligibility.includes("FYNX_MARKETPLACE_PAYOUTS_APPROVED")],
+  ['payout retry and worker cannot initiate a new transfer while approval is closed',
+    payoutRetry.includes("if (!marketplacePayoutsEnabled())") &&
+    worker.includes("if (!marketplacePayoutsEnabled())") &&
+    worker.includes("if (existingTransfer.found)")],
   ['worker locks the child escrow before payout release', worker.includes('WHERE order_id=$1 FOR UPDATE') && worker.includes("escrow.status !== 'RELEASE_PENDING'")],
   ['worker validates payout currency against child escrow currency', worker.includes('operation.currency').toString() && worker.includes('escrow.currency') && worker.includes('transferMatchesOperation')],
   ['payout ledger remains child-order idempotent', worker.includes('PAYOUT-RELEASE-${operation.order_id}') && worker.includes('ON CONFLICT (idempotency_key) DO NOTHING')],

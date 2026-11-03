@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
+import { marketplacePayoutsEnabled, marketplacePayoutsNotice } from './marketplacePayoutEligibility.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -417,6 +418,8 @@ export function registerMarketplaceSettlementRoutes({ app }) {
       const payoutAccounts = rows.map(publicPayoutAccount);
       return res.json({
         payoutAccounts,
+        payoutsEnabled: marketplacePayoutsEnabled(),
+        payoutsNotice: marketplacePayoutsNotice(),
         // Backward-compatible single-account field for older clients.
         payoutAccount: payoutAccounts.find((account) => account.currency === 'NGN') || payoutAccounts[0] || null
       });
@@ -427,6 +430,12 @@ export function registerMarketplaceSettlementRoutes({ app }) {
   });
 
   app.post('/api/marketplace/settlement/payout-account', auth, async (req, res) => {
+    if (!marketplacePayoutsEnabled()) {
+      return res.status(503).json({
+        error: marketplacePayoutsNotice(),
+        code: 'MARKETPLACE_PAYOUTS_NOT_ENABLED'
+      });
+    }
     const bankCode = typeof req.body?.bankCode === 'string' ? req.body.bankCode.trim() : '';
     const accountNumber = typeof req.body?.accountNumber === 'string' ? req.body.accountNumber.replace(/\D/g, '') : '';
     const accountName = typeof req.body?.accountName === 'string' ? req.body.accountName.trim().slice(0, 160) : '';
@@ -466,6 +475,12 @@ export function registerMarketplaceSettlementRoutes({ app }) {
   });
 
   app.post('/api/marketplace/settlement/release/:id', auth, async (req, res) => {
+    if (!marketplacePayoutsEnabled()) {
+      return res.status(503).json({
+        error: marketplacePayoutsNotice(),
+        code: 'MARKETPLACE_PAYOUTS_NOT_ENABLED'
+      });
+    }
     const orderId = parseUuid(req.params.id);
     if (!orderId) return res.status(400).json({ error: 'invalid order id' });
     try {
