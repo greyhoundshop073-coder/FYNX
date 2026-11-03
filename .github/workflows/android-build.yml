@@ -286,6 +286,36 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo 'ERROR: /dev/kvm is unavailable on this runner'; exit 1; fi
+      - name: Preinstall Android 35 Google APIs emulator image with retry
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101') || startsWith(github.ref, 'refs/heads/fix/camera-contrast-and-expanded-runtime-cert-20261031')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101' || startsWith(github.head_ref, 'fix/camera-contrast-and-expanded-runtime-cert-20261031')))) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "::error::Android sdkmanager was not found under $SDK_ROOT"
+            exit 1
+          fi
+          PACKAGE="system-images;android-35;google_apis;x86_64"
+          IMAGE_DIR="$SDK_ROOT/system-images/android-35/google_apis/x86_64"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          for attempt in 1 2 3; do
+            echo "Installing Android 35 Google APIs image (attempt $attempt/3)."
+            if "$SDKMANAGER" --install "$PACKAGE" --channel=0; then
+              if [ -s "$IMAGE_DIR/package.xml" ] && [ -s "$IMAGE_DIR/system.img" ] && [ -s "$IMAGE_DIR/ramdisk.img" ]; then
+                echo "ANDROID_EMULATOR_IMAGE_READY=true"
+                exit 0
+              fi
+              echo "::warning::SDK manager returned success but the emulator image is incomplete."
+            else
+              echo "::warning::Android emulator image installation failed on attempt $attempt."
+            fi
+            rm -rf "$IMAGE_DIR" "$SDK_ROOT/.temp"
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 10)); fi
+          done
+          echo "::error::Android 35 emulator image could not be installed and verified after 3 attempts."
+          exit 1
       - name: Run Android instrumentation tests and capture the real FYNX UI
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101') || startsWith(github.ref, 'refs/heads/fix/camera-contrast-and-expanded-runtime-cert-20261031')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101' || startsWith(github.head_ref, 'fix/camera-contrast-and-expanded-runtime-cert-20261031')))) }}
         timeout-minutes: 60
