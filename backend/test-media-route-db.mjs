@@ -27,7 +27,7 @@ for (const required of [
 ]) assert.ok(seasonalSqlFragment.includes(required), `seasonal SQL fragment must enforce ${required}`);
 const sql = sqlTemplate.replace("${seasonalMediaAuthorization}", seasonalSqlFragment);
 assert.ok(!sql.includes("${seasonalMediaAuthorization}"), "PostgreSQL test query must not contain an unexpanded JavaScript placeholder");
-assert.match(source, /to_regclass\\('public\\.marketplace_seasonal_promotions'\\)/, "runtime media route must skip the optional campaign table until it exists");
+assert.ok(source.includes("to_regclass('public.marketplace_seasonal_promotions')"), "runtime media route must skip the optional campaign table until it exists");
 const db = new Client();
 await db.connect();
 try {
