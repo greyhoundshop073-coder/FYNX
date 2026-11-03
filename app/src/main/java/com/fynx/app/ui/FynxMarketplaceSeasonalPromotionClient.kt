@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 /** A server-scheduled celebration or seasonal Marketplace message. */
 data class FynxMarketplaceSeasonalPromotion(
     val id: String,
+    val promotionType: String,
     val occasionKey: String,
     val headline: String,
     val body: String,
@@ -24,6 +25,7 @@ object FynxMarketplaceSeasonalPromotionClient {
     private fun parsePromotion(value: JSONObject): FynxMarketplaceSeasonalPromotion =
         FynxMarketplaceSeasonalPromotion(
             id = value.optString("id").trim(),
+            promotionType = value.optString("promotionType", "SEASONAL").trim().uppercase().ifBlank { "SEASONAL" },
             occasionKey = value.optString("occasionKey").trim(),
             headline = value.optString("headline").trim(),
             body = value.optString("body").trim(),
@@ -83,6 +85,7 @@ object FynxMarketplaceSeasonalPromotionClient {
 
     suspend fun create(
         context: Context,
+        promotionType: String,
         occasionKey: String,
         headline: String,
         body: String,
@@ -92,6 +95,7 @@ object FynxMarketplaceSeasonalPromotionClient {
         endsAt: String
     ): Result<FynxMarketplaceSeasonalPromotion> {
         val payload = JSONObject()
+            .put("promotionType", promotionType.trim().uppercase())
             .put("occasionKey", occasionKey.trim())
             .put("headline", headline.trim())
             .put("body", body.trim())

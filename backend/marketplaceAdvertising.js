@@ -13,6 +13,7 @@ const pool = DATABASE_URL
 const CAMPAIGN_STATUSES = new Set(["draft", "pending_review", "active", "paused", "completed", "rejected"]);
 const TARGETING_KEYS = new Set(["locations", "ageMin", "ageMax", "interests"]);
 const CREATIVE_TYPES = new Set(["post", "product", "business"]);
+const SEASONAL_PROMOTION_TYPES = new Set(["SEASONAL", "ANNOUNCEMENT", "OFFER"]);
 
 async function ensureAdvertisingSchema() {
   if (!pool) return;
@@ -73,6 +74,7 @@ async function ensureAdvertisingSchema() {
     CREATE TABLE IF NOT EXISTS marketplace_seasonal_promotions (
       id BIGSERIAL PRIMARY KEY,
       occasion_key TEXT NOT NULL,
+      promotion_type TEXT NOT NULL DEFAULT 'SEASONAL',
       headline TEXT NOT NULL,
       body TEXT NOT NULL DEFAULT '',
       action_label TEXT NOT NULL DEFAULT 'Explore Marketplace',
@@ -88,6 +90,19 @@ async function ensureAdvertisingSchema() {
     CREATE INDEX IF NOT EXISTS marketplace_seasonal_promotions_active_window_idx
       ON marketplace_seasonal_promotions(active, starts_at, ends_at);
     ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS artwork_media_id BIGINT;
+    ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS promotion_type TEXT NOT NULL DEFAULT 'SEASONAL';
+    DO $
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'marketplace_seasonal_promotions_type_check'
+          AND conrelid = 'marketplace_seasonal_promotions'::regclass
+      ) THEN
+        ALTER TABLE marketplace_seasonal_promotions
+          ADD CONSTRAINT marketplace_seasonal_promotions_type_check
+          CHECK (promotion_type IN ('SEASONAL', 'ANNOUNCEMENT', 'OFFER'));
+      END IF;
+    END $;
   `);
 }
 
@@ -141,6 +156,7 @@ async function requireMarketplaceAdmin(req, res, auth) {
 function seasonalPromotionPayload(row) {
   return {
     id: String(row.id),
+    promotionType: row.promotion_type || "SEASONAL",
     occasionKey: row.occasion_key,
     headline: row.headline,
     body: row.body || "",
@@ -242,6 +258,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     try {
       const role = await requireMarketplaceAdmin(req, res, auth);
       if (!role) return;
+      const promotionType = typeof req.body?.promotionType === "string" ? req.body.promotionType.trim().toUpperCase() : "SEASONAL";
       const occasionKey = typeof req.body?.occasionKey === "string" ? req.body.occasionKey.trim().toLowerCase() : "";
       const headline = typeof req.body?.headline === "string" ? req.body.headline.trim() : "";
       const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
@@ -250,9 +267,13 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const startsAt = typeof req.body?.startsAt === "string" ? new Date(req.body.startsAt) : null;
       const endsAt = typeof req.body?.endsAt === "string" ? new Date(req.body.endsAt) : null;
       const active = req.body?.active !== false;
-      if (!/^[a-z0-9][a-z0-9_-]{1,59}$/.test(occasionKey)) return res.status(400).json({ error: "occasion key must use 2-60 letters, numbers, dashes or underscores" });
+      if (!SEASONAL_PROMOTION_TYPES.has(promotionType)) return res.status(400).json({ error: "promotion type must be SEASONAL, ANNOUNCEMENT or OFFER" });
+      if (!/^[a-z0-9][a-z0-9_-]{1,59}$/.test(occasionKey)) return res.status(400).json({ error: "campaign key must use 2-60 letters, numbers, dashes or underscores" });
       if (headline.length < 3 || headline.length > 120 || body.length > 500 || actionLabel.length < 2 || actionLabel.length > 48) {
         return res.status(400).json({ error: "headline, body or action label is outside the allowed length" });
+      }
+      if ((promotionType === "ANNOUNCEMENT" || promotionType === "OFFER") && body.length < 10) {
+        return res.status(400).json({ error: "announcements and special offers require at least 10 characters of supporting details" });
       }
       if (!(startsAt instanceof Date) || !Number.isFinite(startsAt.getTime()) || !(endsAt instanceof Date) || !Number.isFinite(endsAt.getTime()) || endsAt <= startsAt) {
         return res.status(400).json({ error: "valid start and end dates are required; end must be after start" });
@@ -271,8 +292,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         if (!ownedMedia.rowCount) return res.status(403).json({ error: "seasonal artwork must be uploaded by the current Owner/Admin account" });
       }
       const result = await pool.query(
-        "INSERT INTO marketplace_seasonal_promotions (occasion_key,headline,body,action_label,artwork_media_id,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
-        [occasionKey, headline, body, actionLabel, artworkMediaId, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
+        "INSERT INTO marketplace_seasonal_promotions (promotion_type,occasion_key,headline,body,action_label,artwork_media_id,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *",
+        [promotionType, occasionKey, headline, body, actionLabel, artworkMediaId, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
       );
       return res.status(201).json({ promotion: seasonalPromotionPayload(result.rows[0]) });
     } catch (error) {

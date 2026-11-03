@@ -22,10 +22,11 @@ const routes = [
   'app.get("/api/marketplace/seasonal-feed"'
 ];
 const checks = [
-  ["seasonal schedule has a persistent database table and active-window index", advertising.includes("CREATE TABLE IF NOT EXISTS marketplace_seasonal_promotions") && advertising.includes("marketplace_seasonal_promotions_active_window_idx")],
+  ["campaign schedule has a persistent database table, typed campaign constraint and active-window index", advertising.includes("CREATE TABLE IF NOT EXISTS marketplace_seasonal_promotions") && advertising.includes("promotion_type TEXT NOT NULL DEFAULT 'SEASONAL'") && advertising.includes("marketplace_seasonal_promotions_type_check") && advertising.includes("marketplace_seasonal_promotions_active_window_idx")],
   ["all admin seasonal CRUD routes are registered", routes.every(route => advertising.includes(route))],
   ["seasonal create, update and delete require authenticated Owner/Admin access", advertising.includes("authenticate(req, res)") && advertising.includes("requireMarketplaceAdmin(req, res, auth)")],
-  ["campaign creation validates occasion key and headline lengths", advertising.includes("occasion key must use 2-60 letters") && advertising.includes("headline.length < 3")],
+  ["campaign creation validates campaign type, campaign key and headline lengths", advertising.includes("SEASONAL_PROMOTION_TYPES") && advertising.includes("ANNOUNCEMENT") && advertising.includes("OFFER") && advertising.includes("campaign key must use 2-60 letters") && advertising.includes("headline.length < 3")],
+  ["announcements and offers require supporting copy instead of a headline-only fake campaign", advertising.includes("body.length < 10") && advertising.includes("supporting details")],
   ["campaign schedule requires valid start/end dates and a bounded 45-day window", advertising.includes("endsAt <= startsAt") && advertising.includes("45 * 24 * 60 * 60 * 1000")],
   ["artwork is stored as a FYNX media ID instead of an external URL", advertising.includes("artwork_media_id BIGINT") && advertising.includes("artworkMediaId === null") && !advertising.includes("artwork_url TEXT")],
   ["active scheduled artwork is authorized through the FYNX media privacy guard", mediaPrivacy.includes("marketplace_seasonal_promotions WHERE artwork_media_id=$1") && mediaPrivacy.includes("active=TRUE AND starts_at <= NOW() AND ends_at > NOW()")],
@@ -33,7 +34,11 @@ const checks = [
   ["Owner/Admin can only attach artwork uploaded by that same account", advertising.includes("message_media WHERE id=$1 AND owner_id=$2") && advertising.includes("seasonal artwork must be uploaded by the current Owner/Admin account")],
   ["seasonal public feed only returns active campaigns inside the scheduled window", advertising.includes("active=TRUE AND starts_at <= NOW() AND ends_at > NOW()")],
   ["paid sponsored campaign approval and payment checks remain separate", advertising.includes("c.payment_status = 'paid'") && advertising.includes("c.approved_at IS NOT NULL")],
-  ["Android reads authenticated seasonal schedule feed", client.includes("/api/marketplace/seasonal-feed") && client.includes("FynxMarketplaceSeasonalPromotion")],
+  ["Android reads typed authenticated Marketplace campaign feed", client.includes("/api/marketplace/seasonal-feed") && client.includes("promotionType") && client.includes("FynxMarketplaceSeasonalPromotion")],
+  ["Owner/Admin can choose seasonal, FYNX announcement or special-offer campaign types", adminUi.includes('listOf("SEASONAL", "ANNOUNCEMENT", "OFFER")') && adminUi.includes("Campaign type") && adminUi.includes("promotionType")],
+  ["banner labels FYNX announcements and special offers separately from seasonal celebrations", banner.includes("FYNX ANNOUNCEMENT") && banner.includes("SPECIAL OFFER") && banner.includes("A CELEBRATION FROM FYNX")],
+  ["permanent FYNX house message remains in every banner rotation", banner.includes('key = "fynx-evergreen"') && banner.includes("FYNX MARKETPLACE") && banner.includes("special offers on FYNX")],
+  ["sponsored impressions only count after a minimum visible dwell period", banner.includes("MARKETPLACE_SPONSORED_IMPRESSION_MIN_DWELL_MS") && banner.includes("delay(MARKETPLACE_SPONSORED_IMPRESSION_MIN_DWELL_MS)")],
   ["Marketplace home loads seasonal campaigns and passes them to the banner", panel.includes("FynxMarketplaceSeasonalPromotionClient.load(context)") && panel.includes("seasonalPromotions = seasonalPromotions")],
   ["banner rotates server-scheduled variable-date celebrations", banner.includes("seasonalPromotions.take(4)") && banner.includes("scheduled-seasonal-") && banner.includes("it.occasionKey.equals(celebration.first")],
   ["scheduled celebration artwork is displayed from authenticated FYNX media with crop fit", banner.includes("slide.artworkMediaId") && banner.includes('mediaUrl = "/api/media/\u0024{slide.artworkMediaId}"') && banner.includes("contentScale = ContentScale.Crop")],

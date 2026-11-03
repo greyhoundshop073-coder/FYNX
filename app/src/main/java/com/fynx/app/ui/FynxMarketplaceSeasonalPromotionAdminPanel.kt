@@ -106,6 +106,7 @@ private fun showMarketplaceSeasonalDateTimePicker(
 fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var promotionType by remember { mutableStateOf("SEASONAL") }
     var occasionKey by remember { mutableStateOf("") }
     var headline by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
@@ -142,18 +143,37 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     LaunchedEffect(Unit) { refresh() }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Marketplace seasonal promotions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("Marketplace campaigns", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(
-            "Schedule variable-date celebrations such as Eid using the confirmed local dates for that year. This schedule is separate from paid seller advertising and does not affect Best Seller rankings.",
+            "Schedule FYNX announcements, special offers and celebrations. Use confirmed local dates for variable-date events such as Eid. Campaigns are independent of paid seller advertising and Best Seller rankings.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Text("Campaign type", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("SEASONAL", "ANNOUNCEMENT", "OFFER").forEach { type ->
+                val label = when (type) {
+                    "ANNOUNCEMENT" -> "Announcement"
+                    "OFFER" -> "Special offer"
+                    else -> "Seasonal"
+                }
+                if (promotionType == type) {
+                    Button(onClick = { promotionType = type }, modifier = Modifier.weight(1f), enabled = !saving) {
+                        Text(label, maxLines = 1)
+                    }
+                } else {
+                    OutlinedButton(onClick = { promotionType = type; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) {
+                        Text(label, maxLines = 1)
+                    }
+                }
+            }
+        }
         OutlinedTextField(
             value = occasionKey,
             onValueChange = { occasionKey = it.trim().lowercase().take(60); message = null },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Occasion key") },
-            supportingText = { Text("Example: eid-al-fitr-2027") },
+            label = { Text("Campaign key") },
+            supportingText = { Text("Example: eid-al-fitr-2027, fynx-update-2026 or summer-offer") },
             singleLine = true,
             enabled = !saving
         )
@@ -169,7 +189,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             value = body,
             onValueChange = { body = it.take(500); message = null },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Celebration write-up") },
+            label = { Text(when (promotionType) { "ANNOUNCEMENT" -> "Announcement details"; "OFFER" -> "Special offer details"; else -> "Celebration write-up" }) },
             minLines = 2,
             enabled = !saving
         )
@@ -182,7 +202,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             enabled = !saving
         )
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("Celebration artwork (optional)", style = MaterialTheme.typography.labelLarge)
+            Text("Campaign artwork (optional)", style = MaterialTheme.typography.labelLarge)
             Text(
                 "Choose a photo from the device. FYNX uploads it through its authenticated media service and displays it only while this scheduled campaign is active.",
                 style = MaterialTheme.typography.bodySmall,
@@ -212,7 +232,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
         }
         Text("Campaign timing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
-            "Choose the confirmed local date and time. FYNX starts and ends this celebration automatically using Nigeria time (WAT, UTC+01:00).",
+            "Choose the confirmed local date and time. FYNX publishes and expires this campaign automatically using Nigeria time (WAT, UTC+01:00).",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -274,9 +294,9 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         artworkMediaId = mediaId
                     }
                     FynxMarketplaceSeasonalPromotionClient.create(
-                        context, occasionKey, headline, body, actionLabel, savedArtworkId, startsAt, endsAt
+                        context, promotionType, occasionKey, headline, body, actionLabel, savedArtworkId, startsAt, endsAt
                     ).onSuccess {
-                        message = "Seasonal promotion scheduled. It will appear automatically inside its start/end window."
+                        message = "${promotionType.lowercase().replaceFirstChar { it.uppercase() }} campaign scheduled. It will appear automatically inside its start/end window."
                         occasionKey = ""
                         headline = ""
                         body = ""
@@ -287,7 +307,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         endsAt = ""
                         refresh()
                     }.onFailure {
-                        error = marketplaceSafeError(it, "Seasonal promotion could not be saved.")
+                        error = marketplaceSafeError(it, "Marketplace campaign could not be saved.")
                     }
                     saving = false
                 }
@@ -296,7 +316,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 marketplaceSeasonalWindowIsValid(startsAt, endsAt),
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (saving) CircularProgressIndicator() else Text("Schedule seasonal promotion")
+            if (saving) CircularProgressIndicator() else Text("Schedule campaign")
         }
         message?.let { Text(it, color = FynxDesign.ClassicGreen, style = MaterialTheme.typography.bodySmall) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -311,7 +331,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = { refresh() }) { Text("Retry") }
         } else if (campaigns.isEmpty()) {
-            Text("No seasonal campaigns have been scheduled.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("No Marketplace campaigns have been scheduled.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             campaigns.forEach { campaign ->
                 val now = System.currentTimeMillis()
@@ -349,7 +369,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                                 )
                             }
                         }
-                        Text(campaign.occasionKey, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        Text("${campaign.promotionType}  •  ${campaign.occasionKey}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                         Text("Starts: ${formatMarketplaceSeasonalDateTime(campaign.startsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Ends: ${formatMarketplaceSeasonalDateTime(campaign.endsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

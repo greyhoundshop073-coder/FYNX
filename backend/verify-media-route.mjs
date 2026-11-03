@@ -27,8 +27,21 @@ assert.match(sql, /FROM\s+blocks/i, "blocked users must be excluded");
 assert.match(sql, /FROM\s+statuses/i, "status media must retain audience checks");
 assert.match(sql, /FROM\s+marketplace_listings/i, "active Marketplace listing media must be retrievable by authenticated viewers");
 assert.match(sql, /seasonalMediaAuthorization/, "seasonal artwork must be included through the optional schema-safe authorization clause");
-assert.match(source, /const seasonalMediaAuthorization = seasonalPromotionTable\\.rows\\[0\\]\\?\\.relation \\? `OR EXISTS \\([\\s\\S]*?FROM marketplace_seasonal_promotions sp[\\s\\S]*?sp\\.artwork_media_id = mm\\.id[\\s\\S]*?sp\\.active = TRUE[\\s\\S]*?sp\\.starts_at <= NOW\\(\\)[\\s\\S]*?sp\\.ends_at > NOW\\(\\)[\\s\\S]*?\\)\\s*`\\s*:\\s*"";/, "only currently active and scheduled seasonal artwork may be publicly retrieved through the optional SQL fragment");
-assert.match(source, /to_regclass\\('public\\.marketplace_seasonal_promotions'\\)/, "media access remains safe before seasonal promotion schema initialization");
+const seasonalAuthorizationStart = source.indexOf("const seasonalMediaAuthorization = seasonalPromotionTable.rows[0]?.relation");
+assert.notEqual(seasonalAuthorizationStart, -1, "seasonal media authorization must be schema-guarded");
+const seasonalAuthorizationEnd = source.indexOf(";\n    let result = await pool.query(`", seasonalAuthorizationStart);
+assert.ok(seasonalAuthorizationEnd > seasonalAuthorizationStart, "seasonal authorization fragment must be complete before the primary media query");
+const seasonalAuthorization = source.slice(seasonalAuthorizationStart, seasonalAuthorizationEnd);
+for (const required of [
+  "FROM marketplace_seasonal_promotions sp",
+  "sp.artwork_media_id = mm.id",
+  "sp.active = TRUE",
+  "sp.starts_at <= NOW()",
+  "sp.ends_at > NOW()"
+]) {
+  assert.ok(seasonalAuthorization.includes(required), `seasonal media authorization must enforce ${required}`);
+}
+assert.match(source, /to_regclass\('public\.marketplace_seasonal_promotions'\)/, "media access remains safe before seasonal promotion schema initialization");
 assert.match(sql, /ml\.active\s*=\s*TRUE/i, "only active Marketplace listings may expose listing media");
 assert.match(sql, /ml\.seller_id/i, "Marketplace listing media privacy must be tied to the listing seller");
 assert.ok(sql.includes("mm.owner_id = ml.seller_id"), "Marketplace media ownership must match its listing seller");

@@ -35,6 +35,7 @@ import java.time.ZoneId
 import java.util.Locale
 
 private const val MARKETPLACE_PROMO_ROTATION_MS = 6_500L
+private const val MARKETPLACE_SPONSORED_IMPRESSION_MIN_DWELL_MS = 1_000L
 private const val MARKETPLACE_PROMO_BANNER_HEIGHT_DP = 224
 
 private data class MarketplacePromoSlide(
@@ -48,6 +49,8 @@ private data class MarketplacePromoSlide(
     val campaignId: String? = null,
     val isWeeklyWinner: Boolean = false,
     val isSponsored: Boolean = false,
+    val isAnnouncement: Boolean = false,
+    val isOffer: Boolean = false,
     val celebration: Boolean = false,
     val artworkMediaId: String? = null
 )
@@ -120,12 +123,18 @@ fun MarketplacePromotionalBanner(
             seasonalPromotions.take(4).forEach { promotion ->
                 add(
                     MarketplacePromoSlide(
-                        key = "scheduled-seasonal-${promotion.id}",
-                        eyebrow = "A CELEBRATION FROM FYNX",
+                        key = "scheduled-campaign-${promotion.id}",
+                        eyebrow = when (promotion.promotionType) {
+                            "ANNOUNCEMENT" -> "FYNX ANNOUNCEMENT"
+                            "OFFER" -> "SPECIAL OFFER"
+                            else -> "A CELEBRATION FROM FYNX"
+                        },
                         headline = promotion.headline,
                         body = promotion.body,
                         actionLabel = promotion.actionLabel,
-                        celebration = true,
+                        isAnnouncement = promotion.promotionType == "ANNOUNCEMENT",
+                        isOffer = promotion.promotionType == "OFFER",
+                        celebration = promotion.promotionType == "SEASONAL",
                         artworkMediaId = promotion.artworkMediaId.takeIf { it.isNotBlank() }
                     )
                 )
@@ -179,17 +188,16 @@ fun MarketplacePromotionalBanner(
                     )
                 )
             }
-            if (isEmpty()) {
-                add(
-                    MarketplacePromoSlide(
-                        key = "fynx-welcome",
-                        eyebrow = "WELCOME TO FYNX MARKETPLACE",
-                        headline = "Discover more. Shop with confidence.",
-                        body = "Explore products and independent shops from FYNX sellers.",
-                        actionLabel = "Explore Marketplace"
-                    )
+            // Keep FYNX's own house message in every rotation, not only when the feed is empty.
+            add(
+                MarketplacePromoSlide(
+                    key = "fynx-evergreen",
+                    eyebrow = "FYNX MARKETPLACE",
+                    headline = "Discover more. Shop with confidence.",
+                    body = "Explore independent shops, featured products, seller awards, celebrations and special offers on FYNX.",
+                    actionLabel = "Explore Marketplace"
                 )
-            }
+            )
         }
     }
     val loopSlides = remember(slides) {
@@ -204,6 +212,7 @@ fun MarketplacePromotionalBanner(
     LaunchedEffect(currentSlide?.key) {
         val campaignId = currentSlide?.campaignId
         if (campaignId != null) {
+            delay(MARKETPLACE_SPONSORED_IMPRESSION_MIN_DWELL_MS)
             FynxMarketplaceSponsoredPromotionClient.recordMetric(context, campaignId, "impression")
         }
     }
@@ -245,7 +254,7 @@ fun MarketplacePromotionalBanner(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("Discover on FYNX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Featured products, weekly sellers and celebrations", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Announcements, special offers, featured sellers and products", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onOpenOrders) { Icon(Icons.Default.ReceiptLong, "Orders", tint = MaterialTheme.colorScheme.primary) }
             IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh promotions", tint = MaterialTheme.colorScheme.primary) }
@@ -331,8 +340,8 @@ private fun MarketplacePromotionalSlide(
                 Box(
                     Modifier.fillMaxSize().background(
                         Brush.linearGradient(
-                            if (slide.isWeeklyWinner) {
-                                listOf(Color(0xFF172E50), Color(0xFF0D1B31), Color(0xFF74551D))
+                            if (slide.isWeeklyWinner || slide.isOffer) {
+                                listOf(Color(0xFF172E50), Color(0xFF74551D), Color(0xFFB38A34))
                             } else if (slide.celebration) {
                                 listOf(Color(0xFF8B1E2D), Color(0xFFB94329), Color(0xFF243D64))
                             } else {
@@ -356,7 +365,7 @@ private fun MarketplacePromotionalSlide(
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 Surface(
-                    color = if (slide.isWeeklyWinner || slide.isSponsored) Color(0xFFD4AF37) else Color(0xFF007FFF),
+                    color = if (slide.isWeeklyWinner || slide.isSponsored || slide.isOffer) Color(0xFFD4AF37) else Color(0xFF007FFF),
                     shape = RoundedCornerShape(50)
                 ) {
                     Row(
@@ -367,7 +376,7 @@ private fun MarketplacePromotionalSlide(
                         if (slide.isWeeklyWinner) Icon(Icons.Default.EmojiEvents, null, tint = Color(0xFF172033), modifier = Modifier.size(15.dp))
                         Text(
                             slide.eyebrow,
-                            color = if (slide.isWeeklyWinner || slide.isSponsored) Color(0xFF172033) else Color.White,
+                            color = if (slide.isWeeklyWinner || slide.isSponsored || slide.isOffer) Color(0xFF172033) else Color.White,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
