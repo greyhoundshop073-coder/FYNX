@@ -1245,6 +1245,15 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         Spacer(Modifier.width(5.dp))
                         Text("My Shop", maxLines = 1)
                     }
+                    OutlinedButton(
+                        onClick = { sellerStoreUsername = currentUsername.removePrefix("@").trim() },
+                        enabled = currentUsername.isNotBlank(),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Marketplace profile", maxLines = 1)
+                    }
                     OutlinedButton(onClick = { showOrders = true; reloadOrders() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                         Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
