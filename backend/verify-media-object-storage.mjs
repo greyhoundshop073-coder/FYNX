@@ -25,7 +25,7 @@ assert.match(server, /message_media_object_key_unique/);
 
 const upload = route(server, 'app.post("/api/media"', "\n\nconst statusSchema");
 assert.match(upload, /await mediaStorage\.putMediaObject/);
-assert.match(upload, /storage_provider,object_key/);
+assert.match(upload, /storage_provider,\s*object_key/);
 assert.match(upload, /await mediaStorage\.deleteMediaObject/);
 assert.match(upload, /MAX_MEDIA_BYTES/);
 
