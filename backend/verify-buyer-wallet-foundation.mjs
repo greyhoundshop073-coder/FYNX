@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import "./verify-wallet-business-ledger.mjs";
 const source = fs.readFileSync(new URL("./buyerWallet.js", import.meta.url), "utf8");
+const walletMarketplace = fs.readFileSync(new URL("./buyerWalletMarketplace.js", import.meta.url), "utf8");
 const settlement = fs.readFileSync(new URL("./marketplaceSettlement.js", import.meta.url), "utf8");
 const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url), "utf8");
 const checks = [
@@ -60,6 +61,15 @@ checks.push(
     summaryRoute.includes("ON CONFLICT (user_id,currency) DO NOTHING") &&
     !summaryRoute.includes("INSERT INTO buyer_wallet_transactions") &&
     !summaryRoute.includes("INSERT INTO buyer_wallet_ledger_entries")],
+  ["Test Mode is card-only and cannot enable real-money Wallet spending",
+    providerGate.includes("if (process.env.FYNX_WALLET_TEST_MODE_ENABLED === 'true')") &&
+    providerGate.includes("return action === 'CARD_FUNDING' && walletTestModeEnabled();") &&
+    walletMarketplace.includes("env.FYNX_WALLET_TEST_MODE_ENABLED === 'true'") &&
+    walletMarketplace.includes("return false;")],
+  ["Wallet Marketplace payment validates exactly six numeric PIN digits through the tested validator",
+    walletMarketplace.includes("export function isValidWalletMarketplacePin(value)") &&
+    walletMarketplace.includes("isValidWalletMarketplacePin(pin)") &&
+    walletMarketplace.includes("walletMarketplaceSpendingApproved()")],
   ["wallet balances are derived only from succeeded append-only ledger postings",
     summaryRoute.includes("t.status='SUCCEEDED'") &&
     summaryRoute.includes("FROM buyer_wallet_ledger_entries e") &&

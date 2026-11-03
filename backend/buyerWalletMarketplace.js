@@ -37,12 +37,21 @@ function auth(req, res, next) {
   }
 }
 
-const walletSpendingApproved = () =>
-  process.env.FYNX_WALLET_PROVIDER_APPROVED === 'true' &&
-  process.env.FYNX_WALLET_CUSTODY_APPROVED === 'true' &&
-  process.env.FYNX_WALLET_COMPLIANCE_APPROVED === 'true' &&
-  process.env.FYNX_WALLET_SPENDING_ENABLED === 'true' &&
-  Boolean(process.env.PAYSTACK_SECRET_KEY);
+export function walletMarketplaceSpendingApproved(env = process.env) {
+  // A test-mode balance is simulated and must never be debited for a real order.
+  if (env.FYNX_WALLET_TEST_MODE_ENABLED === 'true') return false;
+  return env.FYNX_WALLET_PROVIDER_APPROVED === 'true' &&
+    env.FYNX_WALLET_CUSTODY_APPROVED === 'true' &&
+    env.FYNX_WALLET_COMPLIANCE_APPROVED === 'true' &&
+    env.FYNX_WALLET_SPENDING_ENABLED === 'true' &&
+    Boolean(env.PAYSTACK_SECRET_KEY);
+}
+
+export function isValidWalletMarketplacePin(value) {
+  return typeof value === 'string' && /^\d{6}$/.test(value);
+}
+
+const walletSpendingApproved = () => walletMarketplaceSpendingApproved();
 
 const parseUuid = (value) =>
   typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
@@ -229,7 +238,7 @@ export function registerBuyerWalletMarketplaceRoutes({ app }) {
     const orderId = parseUuid(req.params.id);
     const idempotencyKey = typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey.trim() : '';
     const pin = typeof req.body?.pin === 'string' ? req.body.pin.trim() : '';
-    if (!orderId || !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey) || !/^\\d{6}$/.test(pin)) {
+    if (!orderId || !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey) || !isValidWalletMarketplacePin(pin)) {
       return res.status(400).json({ error: 'valid Marketplace order, payment reference and six-digit Wallet PIN are required' });
     }
     if (!walletSpendingApproved()) {

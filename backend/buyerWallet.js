@@ -440,7 +440,11 @@ function walletTestModeEnabled() {
 
 function walletProviderApproved(action) {
   // Test Mode authorizes card funding only; it never enables real-money flows.
-  if (action === 'CARD_FUNDING' && walletTestModeEnabled()) return true;
+  // When Test Mode is explicitly configured, it may authorize simulated card funding only.
+  // Never let other approval flags accidentally turn test funds into spendable money.
+  if (process.env.FYNX_WALLET_TEST_MODE_ENABLED === 'true') {
+    return action === 'CARD_FUNDING' && walletTestModeEnabled();
+  }
   const common = process.env.FYNX_WALLET_PROVIDER_APPROVED === 'true' &&
     process.env.FYNX_WALLET_CUSTODY_APPROVED === 'true' &&
     process.env.FYNX_WALLET_COMPLIANCE_APPROVED === 'true' &&
