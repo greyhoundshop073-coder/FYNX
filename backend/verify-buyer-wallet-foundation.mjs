@@ -73,6 +73,7 @@ checks.push(
   ["multi-product Wallet payment is server-gated and reconciles group/child accounting before atomically debiting each child to escrow",
     walletMarketplace.includes("app.post('/api/wallet/marketplace-checkout-groups/:id/pay'") &&
     walletMarketplace.includes("buildWalletMarketplaceCheckoutAllocations(group, children)") &&
+    walletMarketplace.includes("const expectedBuyerTotal = productSubtotal + deliveryFee + buyerFee;") &&
     walletMarketplace.includes("walletMarketplaceSpendingApproved()") &&
     walletMarketplace.includes("metadata->>'checkoutGroupId'") &&
     walletMarketplace.includes("'MARKETPLACE_ESCROW','CREDIT'") &&
