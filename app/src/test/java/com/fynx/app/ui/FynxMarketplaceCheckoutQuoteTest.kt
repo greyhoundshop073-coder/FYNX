@@ -88,6 +88,47 @@ class FynxMarketplaceCheckoutQuoteTest {
         )
     }
 
+
+    @Test
+    fun multiProductWalletCheckoutRequiresApprovedNGNWalletAndEnoughClearedBalance() {
+        val active = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"ACTIVE","currency":"NGN","availableBalance":1150.0,"canSpend":true,"canWithdraw":false,"testMode":false}"""
+        )
+        assertTrue(marketplaceWalletCanCoverCheckout("NGN", 1150.0, active, false))
+        assertTrue(!marketplaceWalletCanCoverCheckout("NGN", 1150.01, active, false))
+        assertTrue(!marketplaceWalletCanCoverCheckout("USD", 100.0, active, false))
+        assertTrue(!marketplaceWalletCanCoverCheckout("NGN", 100.0, active, true))
+        val testMode = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"ACTIVE","currency":"NGN","availableBalance":5000.0,"canSpend":true,"testMode":true}"""
+        )
+        assertTrue(!marketplaceWalletCanCoverCheckout("NGN", 100.0, testMode, false))
+    }
+
+    @Test
+    fun marketplaceWalletGroupPaymentParserRequiresTheExpectedPaidNGNCheckout() {
+        val valid = JSONObject()
+            .put("status", "PAID")
+            .put("checkoutId", "550e8400-e29b-41d4-a716-446655440099")
+            .put("reference", "fwmpg_0123456789abcdef0123456789abcdef")
+            .put("amount", 1150.0)
+            .put("currency", "NGN")
+            .put("childOrderCount", 2)
+            .toString()
+        val payment = FynxBuyerWalletClient.parseMarketplaceCheckoutGroupPayment(
+            valid, "550e8400-e29b-41d4-a716-446655440099"
+        )
+        assertEquals("NGN", payment.currency)
+        assertEquals(1150.0, payment.amount, 0.001)
+        assertEquals(2, payment.childOrderCount)
+        assertTrue(runCatching {
+            FynxBuyerWalletClient.parseMarketplaceCheckoutGroupPayment(valid, "550e8400-e29b-41d4-a716-446655440001")
+        }.isFailure)
+        val usd = JSONObject(valid).put("currency", "USD").toString()
+        assertTrue(runCatching {
+            FynxBuyerWalletClient.parseMarketplaceCheckoutGroupPayment(usd, "550e8400-e29b-41d4-a716-446655440099")
+        }.isFailure)
+    }
+
     @Test
     fun validServerQuoteMapsAuthoritativeTotals() {
         val quote = parse(validQuote())
