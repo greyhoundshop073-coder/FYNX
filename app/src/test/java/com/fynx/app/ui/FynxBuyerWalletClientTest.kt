@@ -31,6 +31,28 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun pendingWalletBalanceCaptionDoesNotPromiseSpendableFunds() {
+        val pending = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":0.0,"reservedBalance":0.0,"withdrawalPendingBalance":0.0,"canFund":false,"canSpend":false,"canWithdraw":false,"testMode":false}"""
+        )
+        assertEquals(
+            "Wallet setup pending — this balance cannot be spent or withdrawn yet",
+            buyerWalletBalanceCaption(pending, summaryLoading = false, summaryError = null)
+        )
+    }
+
+    @Test
+    fun activeWalletBalanceCaptionDescribesClearedFunds() {
+        val active = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"ACTIVE","currency":"NGN","availableBalance":125.0,"canSpend":false,"canWithdraw":false}"""
+        )
+        assertEquals(
+            "Cleared funds available to use",
+            buyerWalletBalanceCaption(active, summaryLoading = false, summaryError = null)
+        )
+    }
+
+    @Test
     fun firstVisitPendingWalletShowsOnlyItsLedgerDerivedZeroBalance() {
         val summary = FynxBuyerWalletClient.parseSummary(
             """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":0.0,"reservedBalance":0.0,"withdrawalPendingBalance":0.0,"canFund":false,"canSpend":false,"canWithdraw":false,"testMode":false}"""

@@ -72,6 +72,25 @@ internal fun shouldShowBuyerWalletBalance(wallet: FynxBuyerWalletSummary?): Bool
         wallet.availableBalance != null &&
         (wallet.walletStatus == "ACTIVE" || wallet.walletStatus == "PENDING_PROVIDER" || wallet.testMode)
 
+internal fun buyerWalletBalanceCaption(
+    wallet: FynxBuyerWalletSummary?,
+    summaryLoading: Boolean,
+    summaryError: String?
+): String = when {
+    summaryLoading -> "Checking your wallet status securely"
+    wallet?.testMode == true && shouldShowBuyerWalletBalance(wallet) ->
+        "TEST MODE — simulated balance; cannot spend or withdraw"
+    wallet?.walletStatus == "PENDING_PROVIDER" && shouldShowBuyerWalletBalance(wallet) ->
+        "Wallet setup pending — this balance cannot be spent or withdrawn yet"
+    shouldShowBuyerWalletBalance(wallet) ->
+        "Cleared funds available to use"
+    summaryError != null ->
+        "Balance unavailable until your connection is restored"
+    wallet?.testMode == true ->
+        "Complete your first test card payment to display your simulated balance"
+    else -> "Your wallet balance will appear here after activation"
+}
+
 private fun fynxWalletTransactionTitle(type: String): String = when (type) {
     "FUNDING" -> "Money received"
     "MARKETPLACE_PAYMENT" -> "Marketplace purchase"
@@ -355,14 +374,7 @@ fun FynxBuyerWalletPanel() {
                             color = Color.White
                         )
                         Text(
-                            when {
-                                summaryLoading -> "Checking your wallet status securely"
-                                canShowBalance && wallet?.testMode == true -> "TEST MODE — simulated balance; cannot spend or withdraw"
-                                canShowBalance -> "Cleared funds available to use"
-                                summaryError != null -> "Balance unavailable until your connection is restored"
-                                wallet?.testMode == true -> "Complete your first test card payment to display your simulated balance"
-                                else -> "Your wallet balance will appear here after activation"
-                            },
+                            buyerWalletBalanceCaption(wallet, summaryLoading, summaryError),
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.88f)
                         )

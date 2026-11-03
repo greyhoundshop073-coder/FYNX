@@ -47,10 +47,12 @@ checks = [
  ("focused server-authenticated screenshots still require a secure token", 'if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":' in runtime),
  ("wallet authenticated summary and activity APIs", '"/api/wallet/summary"' in client and '"/api/wallet/transactions?limit="' in client),
  ("no locally fabricated balance", "SharedPreferences" not in client and "125,500" not in panel and "100,000" not in panel),
- ("first-visit pending Wallet shows the ledger-derived zero balance while restricted and closed Wallets stay hidden",
+ ("first-visit pending Wallet shows its ledger-derived zero without implying spendability",
   "shouldShowBuyerWalletBalance(wallet)" in panel
   and 'wallet.walletStatus == "PENDING_PROVIDER"' in panel
   and 'wallet.walletStatus == "ACTIVE"' in panel
+  and "Wallet setup pending — this balance cannot be spent or withdrawn yet" in panel
+  and "pendingWalletBalanceCaptionDoesNotPromiseSpendableFunds" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
   and "firstVisitPendingWalletShowsOnlyItsLedgerDerivedZeroBalance" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
   and "restrictedAndClosedWalletBalancesRemainHidden" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()),
  ("Azure wallet card with white text", "FynxDesign.AzureBlue" in panel and "contentColor = Color.White" in panel and "Color.White" in panel),
