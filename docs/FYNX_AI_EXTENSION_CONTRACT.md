@@ -29,8 +29,9 @@ Future AI features must be added as a new capability behind the existing FYNX AI
    - sensitive writes remain confirmation-gated or unavailable until explicitly designed and verified
 
 5. **Provider adapters**
-   - text provider calls remain server-side
-   - realtime provider calls remain server-side
+   - normal text conversations and image understanding use the server-side Gemini adapter in `geminiAssistantProvider.js`
+   - Gemini credentials are read only from backend `GEMINI_API_KEY` and sent in the `x-goog-api-key` request header
+   - realtime voice continues to use the existing server-side OpenAI WebRTC adapter until a separately reviewed migration is approved
    - provider changes must not leak into the Android APK
 
 ## Extension categories
@@ -56,6 +57,7 @@ When adding a capability:
 - preserve realtime voice session authentication
 - preserve the central network transport
 - add a focused verifier for the new capability
+- add and run a mocked provider test for text, images, tool calls and secret handling without using a real provider key
 - run the existing AI security gate and full Android build before declaring GREEN
 
 ## Future-proofing
