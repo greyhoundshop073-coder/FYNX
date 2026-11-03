@@ -1,0 +1,29 @@
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]
+def read(path):
+    return (ROOT / path).read_text(encoding="utf-8")
+social = read("backend/socialRoutes.js")
+transactions = read("backend/marketplaceTransactions.js")
+client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
+storefront = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt")
+purchase_start = transactions.find("my-purchased-listings")
+purchase_end = transactions.find("app.get('/api/marketplace/orders',", purchase_start)
+purchase_route = transactions[purchase_start:purchase_end] if purchase_start >= 0 and purchase_end > purchase_start else ""
+checks = [
+    ("listing likes have account/product uniqueness", "CREATE TABLE IF NOT EXISTS marketplace_listing_likes" in social and "PRIMARY KEY (user_id, listing_id)" in social),
+    ("seller engagement is authenticated and viewer-specific", 'app.get("/api/marketplace/shops/:username/listing-engagement", auth' in social and "COUNT(DISTINCT likes.user_id)" in social and "likedByCurrentUser" in social),
+    ("product likes are idempotent and reject self-likes", 'app.post("/api/marketplace/listings/:id/like", auth' in social and "ON CONFLICT (user_id, listing_id) DO NOTHING" in social and "you cannot like your own product" in social),
+    ("purchase history is private to the signed-in buyer", "app.get('/api/marketplace/my-purchased-listings', auth" in transactions and "WHERE buyer_id = $1" in purchase_route),
+    ("only confirmed order states count as previous purchases", "status IN ('PAID', 'SHIPPED', 'DELIVERED', 'INSPECTION', 'COMPLETED', 'DISPUTED')" in purchase_route and all(x not in purchase_route for x in ("PAYMENT_PENDING", "CANCELLED", "REFUNDED"))),
+    ("Android client reads seller likes and buyer purchase history", "marketplaceSellerListingEngagement" in client and "/listing-engagement" in client and "setMarketplaceListingLike" in client and "myPurchasedMarketplaceListingIds" in client and "/api/marketplace/my-purchased-listings" in client),
+    ("public shop uses a three-column photo-backed grid", "sellerListings.chunked(3)" in storefront and "MarketplaceSellerProductGridCard" in storefront and "aspectRatio(1f)" in storefront and "FynxRemoteMedia(" in storefront),
+    ("product cards show private bought-before, live likes, price and stock", "Bought before" in storefront and "previouslyPurchasedListingIds" in storefront and "likeCount" in storefront and '"Available: " + listing.quantity' in storefront),
+    ("seller medals map to existing reputation tiers", '"ELITE SELLER" -> "GOLD SELLER"' in storefront and '"TOP SELLER" -> "SILVER SELLER"' in storefront and '"TRUSTED SELLER" -> "BRONZE SELLER"' in storefront and '"RISING SELLER" -> "RISING SELLER"' in storefront),
+    ("seller ranking and weekly awards use existing reputation records", "reputation?.let { MarketplaceSellerTierBadge(it.tier) }" in storefront and "FynxMarketplaceWeeklySellerClient.history" in storefront),
+]
+failed = [name for name, passed in checks if not passed]
+for name, passed in checks:
+    print(f"{'PASS' if passed else 'FAIL'}: {name}")
+if failed:
+    raise SystemExit(f"{len(failed)} public Marketplace storefront contract checks failed.")
+print(f"PASS: all {len(checks)} public Marketplace storefront contract checks")

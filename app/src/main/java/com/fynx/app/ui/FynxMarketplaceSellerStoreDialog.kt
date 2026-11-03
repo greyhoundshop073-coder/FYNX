@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
@@ -88,6 +90,13 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var storefrontError by remember(username) { mutableStateOf<String?>(null) }
     var storefrontReloadKey by remember(username) { mutableStateOf(0) }
     var weeklyAwards by remember(username) { mutableStateOf<List<FynxMarketplaceSellerWeeklyAward>>(emptyList()) }
+    var listingEngagement by remember(username, viewerUsername) {
+        mutableStateOf<Map<String, FynxRemoteSocialClient.MarketplaceListingEngagement>?>(null)
+    }
+    var listingEngagementError by remember(username, viewerUsername) { mutableStateOf<String?>(null) }
+    var previouslyPurchasedListingIds by remember(viewerUsername) { mutableStateOf<Set<String>>(emptySet()) }
+    var likeBusyListingIds by remember(username, viewerUsername) { mutableStateOf<Set<String>>(emptySet()) }
+    var likeError by remember(username, viewerUsername) { mutableStateOf<String?>(null) }
     LaunchedEffect(username, viewerUsername, storefrontReloadKey) {
         storefrontLoading = true
         storefrontError = null
@@ -146,6 +155,28 @@ internal fun FynxMarketplaceSellerStoreDialog(
                     }
             }
         }
+    LaunchedEffect(username, viewerUsername, storefrontReloadKey) {
+        listingEngagement = null
+        listingEngagementError = null
+        likeError = null
+        coroutineScope {
+            launch {
+                FynxRemoteSocialClient.marketplaceSellerListingEngagement(context, username)
+                    .onSuccess { listingEngagement = it }
+                    .onFailure { failure -> listingEngagementError = marketplaceSafeError(failure, "Product likes could not load.") }
+            }
+            launch {
+                val viewer = viewerUsername.trim().removePrefix("@")
+                if (viewer.isNotBlank() && !viewer.equals("preview", ignoreCase = true)) {
+                    FynxRemoteSocialClient.myPurchasedMarketplaceListingIds(context)
+                        .onSuccess { previouslyPurchasedListingIds = it }
+                        .onFailure { previouslyPurchasedListingIds = emptySet() }
+                } else {
+                    previouslyPurchasedListingIds = emptySet()
+                }
+            }
+        }
+    }
         // The persistent shop description is authoritative over the account bio.
         authoritativeShopBio?.let { profileBio = it }
     }
@@ -180,6 +211,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             FynxRemoteProfileAvatar(photoId, profileName.ifBlank { username }, Modifier.size(84.dp).clip(CircleShape), ownerUsername = username)
                             Text(profileName.ifBlank { username.removePrefix("@") }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             if (storeName.isNotBlank()) Text(storeName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                            reputation?.let { MarketplaceSellerTierBadge(it.tier) }
                             Text("@${username.removePrefix("@")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (profileLoading) CircularProgressIndicator(Modifier.size(18.dp))
                             shopProfileError?.let { message ->
@@ -402,29 +434,114 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             }
                         }
                     }
-                    items(sellerListings, key = { "seller-store-${it.id}" }) { listing ->
-                        Surface(
-                            onClick = { onOpenListing(listing) },
-                            shape = RoundedCornerShape(18.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainer
-                        ) {
-                            Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                if (listing.mediaIds.isNotEmpty()) FynxRemoteMedia(FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()), FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()), Modifier.size(112.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
-                                else Box(Modifier.size(112.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.ShoppingBag, "Product image unavailable", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-                                }
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    Text(listing.title, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                    Text("${listing.currency.uppercase(Locale.US)} ${String.format(Locale.US, "%,.2f", listing.price)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                    Text("${listing.quantity} available · ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (listing.location.isNotBlank()) Text(listing.location, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    TextButton(onClick = { onContact(listing) }, contentPadding = PaddingValues(0.dp)) { Text("Contact seller") }
-                                }
+                    listingEngagementError?.let { message ->
+                        item(key = "seller-store-like-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
+                    }
+                    likeError?.let { message ->
+                        item(key = "seller-store-like-action-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
+                    }
+                    items(sellerListings.chunked(3), key = { row -> "seller-store-row-" + row.first().id }) { productRow ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                            productRow.forEach { listing ->
+                                val engagement = listingEngagement?.get(listing.id)
+                                MarketplaceSellerProductGridCard(
+                                    listing = listing,
+                                    likeCount = engagement?.likeCount,
+                                    liked = engagement?.likedByCurrentUser == true,
+                                    likeBusy = listing.id in likeBusyListingIds,
+                                    likeEnabled = !isOwnStore && engagement != null,
+                                    purchasedBefore = listing.id in previouslyPurchasedListingIds,
+                                    onOpen = { onOpenListing(listing) },
+                                    onLike = {
+                                        if (engagement != null && listing.id !in likeBusyListingIds && !isOwnStore) {
+                                            likeBusyListingIds = likeBusyListingIds + listing.id
+                                            likeError = null
+                                            scope.launch {
+                                                FynxRemoteSocialClient.setMarketplaceListingLike(context, listing.id, !engagement.likedByCurrentUser)
+                                                    .onSuccess { updated -> listingEngagement = listingEngagement.orEmpty() + (listing.id to updated) }
+                                                    .onFailure { failure -> likeError = marketplaceSafeError(failure, "Product like could not be updated.") }
+                                                likeBusyListingIds = likeBusyListingIds - listing.id
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
+                            repeat(3 - productRow.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
                 item { Spacer(Modifier.height(12.dp)); HorizontalDivider() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarketplaceSellerTierBadge(tier: String) {
+    val badge = when (tier.trim().uppercase(Locale.US)) {
+        "ELITE SELLER" -> "GOLD SELLER" to Color(0xFFD4AF37)
+        "TOP SELLER" -> "SILVER SELLER" to Color(0xFFB8C0CC)
+        "TRUSTED SELLER" -> "BRONZE SELLER" to Color(0xFFCD7F32)
+        "RISING SELLER" -> "RISING SELLER" to Color(0xFF007FFF)
+        else -> null
+    } ?: return
+    Surface(color = badge.second.copy(alpha = 0.18f), shape = RoundedCornerShape(50)) {
+        Row(Modifier.padding(horizontal = 11.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(15.dp), tint = badge.second)
+            Text(badge.first, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = badge.second)
+        }
+    }
+}
+
+@Composable
+private fun MarketplaceSellerProductGridCard(
+    listing: FynxRemoteSocialClient.MarketplaceListing,
+    likeCount: Int?,
+    liked: Boolean,
+    likeBusy: Boolean,
+    likeEnabled: Boolean,
+    purchasedBefore: Boolean,
+    onOpen: () -> Unit,
+    onLike: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    Surface(onClick = onOpen, modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+        Column {
+            Box {
+                if (listing.mediaIds.isNotEmpty()) {
+                    FynxRemoteMedia(FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()),
+                        FynxMarketplaceClient.mediaDisplayType(listing.mediaTypes.firstOrNull()),
+                        Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(topStart = 15.dp, topEnd = 15.dp)))
+                } else {
+                    Box(Modifier.fillMaxWidth().aspectRatio(1f).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.ShoppingBag, contentDescription = "Product image unavailable", modifier = Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                if (purchasedBefore) {
+                    Surface(Modifier.align(Alignment.BottomStart).padding(5.dp), color = Color(0xFFE5F1FF), shape = RoundedCornerShape(6.dp)) {
+                        Text("Bought before", Modifier.padding(horizontal = 6.dp, vertical = 4.dp), color = Color(0xFF0759A5), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                IconButton(onClick = onLike, enabled = likeEnabled && !likeBusy, modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(34.dp)) {
+                    if (likeBusy) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
+                    else Icon(if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = if (liked) "Unlike product" else "Like product", modifier = Modifier.size(20.dp),
+                        tint = if (liked) Color(0xFFDC143C) else MaterialTheme.colorScheme.onSurface)
+                }
+            }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(listing.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(listing.currency.uppercase(Locale.US) + " " + String.format(Locale.US, "%,.2f", listing.price),
+                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Available: " + listing.quantity, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (listing.location.isNotBlank()) Text(listing.location.trim(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(11.dp), tint = Color(0xFFDC143C))
+                    Text(likeCount?.toString() ?: "—", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("likes", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
