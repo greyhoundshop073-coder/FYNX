@@ -67,7 +67,7 @@ async function ensureAdvertisingSchema() {
     UPDATE marketplace_ad_campaigns
       SET cost_per_click_kobo = LEAST(500, GREATEST(1, daily_budget_kobo), GREATEST(1, total_budget_kobo))
       WHERE cost_per_click_kobo > daily_budget_kobo OR cost_per_click_kobo > total_budget_kobo;
-    DO $ 
+    DO $cpc$ 
     BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='marketplace_ad_campaigns_cpc_positive_check' AND conrelid='marketplace_ad_campaigns'::regclass) THEN
         ALTER TABLE marketplace_ad_campaigns ADD CONSTRAINT marketplace_ad_campaigns_cpc_positive_check CHECK (cost_per_click_kobo > 0);
@@ -75,7 +75,7 @@ async function ensureAdvertisingSchema() {
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='marketplace_ad_campaigns_daily_spent_nonnegative_check' AND conrelid='marketplace_ad_campaigns'::regclass) THEN
         ALTER TABLE marketplace_ad_campaigns ADD CONSTRAINT marketplace_ad_campaigns_daily_spent_nonnegative_check CHECK (daily_spent_kobo >= 0);
       END IF;
-    END $;
+    END $cpc$;
     CREATE INDEX IF NOT EXISTS marketplace_ad_campaigns_owner_idx ON marketplace_ad_campaigns(owner_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS marketplace_ad_campaigns_active_idx ON marketplace_ad_campaigns(status, starts_at, ends_at);
     CREATE INDEX IF NOT EXISTS marketplace_ad_campaigns_payment_reference_idx ON marketplace_ad_campaigns(payment_reference);
