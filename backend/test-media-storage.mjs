@@ -7,6 +7,10 @@ const calls = [];
 const fakeClient = {
   async send(command) {
     calls.push(command);
+    if (command.constructor.name === "CopyObjectCommand") return {};
+    if (command.constructor.name === "HeadObjectCommand") {
+      return { ContentLength: 15, ContentType: "image/webp" };
+    }
     if (command.constructor.name === "GetObjectCommand") {
       return {
         Body: (async function* () {
@@ -34,6 +38,13 @@ const storage = createMediaStorage({
   },
   async signUrlFactory(_client, command, options) {
     calls.push(command);
+    if (command.constructor.name === "PutObjectCommand") {
+      assert.equal(options.expiresIn, 300);
+      assert.equal(command.input.Bucket, "fynx-media");
+      assert.equal(command.input.Key, "uploads/" + UUID);
+      assert.equal(command.input.ContentType, "image/webp");
+      return "https://fynx-media.example.r2.cloudflarestorage.com/signed-write";
+    }
     assert.equal(command.constructor.name, "GetObjectCommand");
     assert.equal(options.expiresIn, 120);
     return "https://fynx-media.example.r2.cloudflarestorage.com/signed-read";
@@ -58,6 +69,34 @@ assert.equal(calls[0].input.ContentLength, Buffer.byteLength("new-media-bytes"))
 assert.equal(calls[0].input.CacheControl, "private, max-age=60");
 assert.equal(Buffer.from(calls[0].input.Body).toString(), "new-media-bytes");
 
+
+const uploadUrl = await storage.createUploadUrl({
+  objectKey: "uploads/" + UUID,
+  mimeType: "image/webp"
+});
+assert.equal(uploadUrl, "https://fynx-media.example.r2.cloudflarestorage.com/signed-write");
+const uploadInfo = await storage.inspectMediaObject("uploads/" + UUID);
+assert.deepEqual(uploadInfo, { byteSize: 15, mimeType: "image/webp" });
+await storage.promoteUploadedObject("uploads/" + UUID, "media/" + UUID);
+assert.equal(calls.at(-1).constructor.name, "CopyObjectCommand");
+assert.equal(calls.at(-1).input.Bucket, "fynx-media");
+assert.equal(calls.at(-1).input.Key, "media/" + UUID);
+assert.equal(calls.at(-1).input.CopySource, "fynx-media/uploads/" + UUID);
+const objectInfo = await storage.inspectMediaObject("media/" + UUID);
+assert.deepEqual(objectInfo, { byteSize: 15, mimeType: "image/webp" });
+await assert.rejects(
+  storage.createUploadUrl({ objectKey: "media/" + UUID, mimeType: "image/webp" }),
+  /Invalid FYNX temporary upload object key/
+);
+await assert.rejects(
+  storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "image/webp", expiresInSeconds: 30 }),
+  /expiry must be between 60 and 600 seconds/
+);
+await assert.rejects(
+  storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "application/pdf" }),
+  /Unsupported FYNX media type/
+);
+
 const signedUrl = await storage.createDownloadUrl("media/" + UUID);
 assert.equal(signedUrl, "https://fynx-media.example.r2.cloudflarestorage.com/signed-read");
 assert.equal(calls.at(-1).constructor.name, "GetObjectCommand");
@@ -69,6 +108,8 @@ assert.deepEqual(optionsSeen[0], {
 
 const downloaded = await storage.getMediaObjectBytes("media/" + UUID);
 assert.equal(downloaded.toString(), "FYNX-media-bytes");
+await storage.deleteMediaObject("uploads/" + UUID);
+assert.equal(calls.at(-1).constructor.name, "DeleteObjectCommand");
 await storage.deleteMediaObject("media/" + UUID);
 assert.equal(calls.at(-1).constructor.name, "DeleteObjectCommand");
 

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
@@ -12,6 +14,7 @@ const MAX_MEDIA_OBJECT_BYTES = 12 * 1024 * 1024;
 const DEFAULT_DOWNLOAD_URL_TTL_SECONDS = 120;
 const MAX_DOWNLOAD_URL_TTL_SECONDS = 300;
 const MEDIA_OBJECT_KEY_PATTERN = /^media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UPLOAD_OBJECT_KEY_PATTERN = /^uploads\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class MediaStorageConfigurationError extends Error {
   constructor(message = "FYNX media object storage is not configured.") {
@@ -93,6 +96,20 @@ export function createMediaStorage({
     return key;
   }
 
+  function validateUploadObjectKey(objectKey) {
+    const key = String(objectKey || "").trim();
+    if (!UPLOAD_OBJECT_KEY_PATTERN.test(key)) throw new Error("Invalid FYNX temporary upload object key.");
+    return key;
+  }
+
+  function validateStoredObjectKey(objectKey) {
+    const key = String(objectKey || "").trim();
+    if (!MEDIA_OBJECT_KEY_PATTERN.test(key) && !UPLOAD_OBJECT_KEY_PATTERN.test(key)) {
+      throw new Error("Invalid FYNX stored media object key.");
+    }
+    return key;
+  }
+
   return Object.freeze({
     provider,
     isObjectStorageEnabled: provider === "r2",
@@ -122,6 +139,50 @@ export function createMediaStorage({
       return { storageProvider: "r2", objectKey };
     },
 
+    async createUploadUrl({ objectKey, mimeType, expiresInSeconds = 300 }) {
+      requireR2Configuration();
+      const key = validateUploadObjectKey(objectKey);
+      const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
+      if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mp4|mpeg|aac|x-m4a|wav))$/.test(normalizedMimeType)) {
+        throw new Error("Unsupported FYNX media type.");
+      }
+      if (!Number.isInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 600) {
+        throw new RangeError("Media upload URL expiry must be between 60 and 600 seconds.");
+      }
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        ContentType: normalizedMimeType,
+        CacheControl: "private, max-age=60"
+      });
+      const url = await signUrlFactory(getClient(), command, { expiresIn: expiresInSeconds });
+      if (typeof url !== "string" || !url.startsWith("https://")) throw new Error("Object storage returned an invalid upload URL.");
+      return url;
+    },
+
+    async promoteUploadedObject(sourceObjectKey, destinationObjectKey) {
+      requireR2Configuration();
+      const sourceKey = validateUploadObjectKey(sourceObjectKey);
+      const destinationKey = validateObjectKey(destinationObjectKey);
+      await getClient().send(new CopyObjectCommand({
+        Bucket: bucket,
+        Key: destinationKey,
+        CopySource: bucket + "/" + sourceKey,
+        MetadataDirective: "COPY"
+      }));
+      return { objectKey: destinationKey };
+    },
+
+    async inspectMediaObject(objectKey) {
+      requireR2Configuration();
+      const key = validateStoredObjectKey(objectKey);
+      const result = await getClient().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+      return {
+        byteSize: Number(result?.ContentLength || 0),
+        mimeType: String(result?.ContentType || "").split(";")[0].trim().toLowerCase()
+      };
+    },
+
     async createDownloadUrl(objectKey, expiresInSeconds = DEFAULT_DOWNLOAD_URL_TTL_SECONDS) {
       requireR2Configuration();
       const key = validateObjectKey(objectKey);
@@ -143,7 +204,7 @@ export function createMediaStorage({
 
     async deleteMediaObject(objectKey) {
       requireR2Configuration();
-      const key = validateObjectKey(objectKey);
+      const key = validateStoredObjectKey(objectKey);
       await getClient().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
     }
   });
