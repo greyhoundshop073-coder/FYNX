@@ -129,6 +129,7 @@ check("media completion retries safely through an idempotent server POST", "post
 check("PostgreSQL-only backend keeps the explicit legacy Base64 fallback", "useLegacyUpload" in media_upload_method and "dataBase64" in media_upload_method)
 check("Status validates media types before using the shared optimized uploader", 'normalizedMime = mimeType.trim().lowercase()' in status_upload_method and "FynxProductionMessaging.uploadMedia(context, uri, normalizedMime)" in status_upload_method)
 check("R2 PUT client accepts only a Cloudflare HTTPS R2 endpoint", "isTrustedR2Host(target.host)" in put_method and "cloudflarestorage" in media_backend_client.lower())
+check("R2 host allowlist accepts only optional bucket label plus 32-hex account ID", "a-z0-9-]{1,61}[a-z0-9]" in media_backend_client and "[0-9a-f]{32}\\\\.r2\\\\.cloudflarestorage" in media_backend_client)
 check("R2 PUT never receives the FYNX bearer token", "Authorization" not in put_method and "accessToken(context)" not in put_method)
 check("R2 PUT sends the signed MIME and cache headers", 'setRequestProperty("Content-Type", mimeType)' in put_once_method and 'setRequestProperty("Cache-Control", "private, max-age=60")' in put_once_method)
 

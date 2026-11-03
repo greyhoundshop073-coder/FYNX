@@ -158,7 +158,7 @@ object FynxBackendClient {
     }
 
     private fun isTrustedR2Host(host: String): Boolean =
-        Regex("^[0-9a-f]{32}\\.r2\\.cloudflarestorage\\.com$", RegexOption.IGNORE_CASE).matches(host)
+        Regex("^(?:[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\\.)?[0-9a-f]{32}\\.r2\\.cloudflarestorage\\.com$", RegexOption.IGNORE_CASE).matches(host)
 
     private suspend fun downloadOnce(context: Context, target: URL, temporary: File, maxBytes: Long): DownloadedMedia {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
