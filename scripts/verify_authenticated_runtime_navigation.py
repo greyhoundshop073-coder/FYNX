@@ -1562,6 +1562,19 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     screenshot(f"{prefix}-camera-photo-text-overlay-typing.png")
                     if "FYNXoverlaytest" in typed_xml:
                         report.append("- PASS photo text is typed directly over the media without a caption input box")
+                        remaining_rail = [
+                            label for label in ["Looks", "Face FX", "Background", "AI Studio", "Rotate"]
+                            if find_control(typed_xml, [label])
+                        ]
+                        if remaining_rail:
+                            FAILURES.append(
+                                prefix + ": photo text editing still has the overlapping effect rail visible: "
+                                + ", ".join(remaining_rail)
+                            )
+                        elif find_control(typed_xml, ["Done"]):
+                            report.append("- PASS text-editing keyboard view hides the right-side effect rail and keeps Done visible")
+                        else:
+                            FAILURES.append(prefix + ": text-editing keyboard view did not expose the pinned Done action")
                         run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
                         time.sleep(0.5)
                         after_keyboard = dump_ui(f"{prefix}-camera-photo-text-keyboard-dismissed.xml") or typed_xml
