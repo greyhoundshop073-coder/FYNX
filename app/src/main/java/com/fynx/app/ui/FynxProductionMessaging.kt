@@ -100,12 +100,51 @@ object FynxProductionMessaging {
             val effectiveMimeType = prepared.second
             require(bytes.isNotEmpty()) { "The selected media is empty." }
             require(bytes.size <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
-            val body = JSONObject().apply { put("mimeType", effectiveMimeType); put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)) }
-            val raw = FynxBackendClient.postJson(context, "/api/media", body.toString()).getOrThrow()
+
+            val uploadPlanRaw = try {
+                FynxBackendClient.postJson(
+                    context,
+                    "/api/media/upload-url",
+                    JSONObject().put("mimeType", effectiveMimeType).put("byteSize", bytes.size).toString()
+                ).getOrThrow()
+            } catch (error: Throwable) {
+                if (FynxBackendClient.isHttpFailure(error, 404)) null else throw error
+            }
+            val raw = if (uploadPlanRaw == null) {
+                val legacyBody = JSONObject().apply {
+                    put("mimeType", effectiveMimeType)
+                    put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                }
+                FynxBackendClient.postJson(context, "/api/media", legacyBody.toString()).getOrThrow()
+            } else {
+                val uploadPlan = JSONObject(uploadPlanRaw)
+                when (uploadPlan.optString("mode")) {
+                    "legacy" -> {
+                        val legacyBody = JSONObject().apply {
+                            put("mimeType", effectiveMimeType)
+                            put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                        }
+                        FynxBackendClient.postJson(context, "/api/media", legacyBody.toString()).getOrThrow()
+                    }
+                    "direct" -> {
+                        val uploadId = uploadPlan.getString("uploadId")
+                        val uploadUrl = uploadPlan.getString("uploadUrl")
+                        val headers = uploadPlan.optJSONObject("headers")
+                        val signedContentType = headers?.optString("Content-Type")?.takeIf { it.isNotBlank() } ?: effectiveMimeType
+                        require(signedContentType.equals(effectiveMimeType, true)) { "Media upload content type did not match its signed request." }
+                        FynxBackendClient.putSignedMedia(context, uploadUrl, bytes, signedContentType).getOrThrow()
+                        FynxBackendClient.postJson(context, "/api/media/complete", JSONObject().put("uploadId", uploadId).toString()).getOrThrow()
+                    }
+                    else -> throw IllegalStateException("Backend returned an unsupported media upload mode.")
+                }
+            }
             val item = JSONObject(raw).getJSONObject("media")
             Result.success(RemoteMedia(item.getString("id"), item.getString("mimeType"), item.optInt("byteSize", bytes.size)))
-        } catch (cancelled: CancellationException) { throw cancelled }
-        catch (error: Throwable) { Result.failure(error) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            Result.failure(error)
+        }
     }
 
     private fun readMediaBytes(context: Context, uri: Uri): ByteArray {

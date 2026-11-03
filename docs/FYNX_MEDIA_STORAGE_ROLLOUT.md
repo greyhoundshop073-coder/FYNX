@@ -35,3 +35,32 @@ Before activation, check Cloudflare's R2 subscription/checkout requirements and 
 6. Consider direct-to-R2 signed PUT uploads as a later client upgrade. This foundation preserves the current base64 upload contract so existing app builds continue to work.
 
 No bucket is provisioned, no credentials are added, no existing media bytes are migrated or deleted, and no live provider switch is performed by this code change.
+
+
+## Direct uploads, staging promotion and safe legacy migration
+
+The Android upload client requests an authenticated upload intent. When the backend still uses PostgreSQL storage, the API returns legacy mode and the app uses the existing upload route. When R2 is configured, the backend returns a 15-minute signed PUT URL for a private media-staging object. Android uploads directly to that staging key without sending the FYNX bearer token to Cloudflare, then calls the authenticated completion route.
+
+Completion verifies the staged object's exact content type and byte size, copies it server-side to a separate immutable media key, verifies the final object, and only then creates the normal message_media row. The signed PUT URL can no longer overwrite the final media object after completion. Staging objects are retained only until their signed URL expiry and are cleaned by the expiry cleanup command. Existing media IDs and PostgreSQL-only rows remain compatible.
+
+To inspect expired staging uploads without changing data, run this command from the backend folder:
+
+    npm run cleanup:media-upload-intents
+
+Only run cleanup with the documented explicit confirmation variable after R2 is configured. Completed media rows are never removed by this cleanup.
+
+### Legacy media migration
+
+The migration is deliberately manual and defaults to a dry-run. It copies each eligible PostgreSQL BYTEA object to R2, downloads it again, compares SHA-256 checksums, and only then changes the row's storage provider and object key. The original PostgreSQL BYTEA is retained as a rollback backup.
+
+First run the inventory from the backend folder:
+
+    npm run migrate:media-to-r2
+
+After confirming the R2 bucket, credentials, active database branch and backup, apply a small test batch:
+
+    FYNX_MEDIA_MIGRATION_CONFIRM=COPY_LEGACY_MEDIA_TO_R2_KEEP_POSTGRES_BACKUP npm run migrate:media-to-r2 -- --apply --max-items=5
+
+Then verify those five migrated media items through FYNX before running the full migration. Do not clear PostgreSQL BYTEA backups as part of this migration. A separate reviewed cleanup is required after independent backups and production validation.
+
+The backend must be configured with FYNX_MEDIA_STORAGE_PROVIDER=r2, FYNX_R2_ACCOUNT_ID, FYNX_R2_ACCESS_KEY_ID, FYNX_R2_SECRET_ACCESS_KEY, and FYNX_R2_BUCKET. Never put access keys in Android, source control, issue comments, or chat messages. Add them only to protected backend service variables. Keep FYNX_MEDIA_STORAGE_PROVIDER=postgres until a private bucket and test credentials have been verified.

@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import pg from "pg";
 import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { mediaStorage, redirectStoredMedia } from "./mediaStorage.js";
+import { registerMediaUploadIntentRoutes } from "./mediaUploadIntents.js";
 import { WebSocketServer } from "ws";
 import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
@@ -135,6 +136,19 @@ async function initDatabase() {
     ALTER TABLE message_media ADD COLUMN IF NOT EXISTS object_key TEXT;
     ALTER TABLE message_media ALTER COLUMN data DROP NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS message_media_object_key_unique ON message_media (object_key) WHERE object_key IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS media_upload_intents (
+      id UUID PRIMARY KEY,
+      owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      upload_key TEXT NOT NULL UNIQUE,
+      object_key TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL,
+      expected_size INTEGER NOT NULL CHECK (expected_size > 0 AND expected_size <= 12582912),
+      expires_at TIMESTAMPTZ NOT NULL,
+      completed_at TIMESTAMPTZ,
+      media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS media_upload_intents_owner_expiry_idx ON media_upload_intents (owner_id, expires_at);
     CREATE INDEX IF NOT EXISTS message_media_owner_idx ON message_media (owner_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_recipient_idx ON messages (recipient_id, created_at DESC);
@@ -367,6 +381,8 @@ app.post("/api/assistant", auth, async (req, res) => {
     return res.status(500).json({ error: "assistant request failed" });
   }
 });
+
+registerMediaUploadIntentRoutes(app, { auth, pool, storage: mediaStorage, maxMediaBytes: MAX_MEDIA_BYTES });
 
 app.post("/api/media", auth, async (req, res) => {
   try {

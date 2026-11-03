@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
@@ -12,6 +14,7 @@ const MAX_MEDIA_OBJECT_BYTES = 12 * 1024 * 1024;
 const DEFAULT_DOWNLOAD_URL_TTL_SECONDS = 120;
 const MAX_DOWNLOAD_URL_TTL_SECONDS = 300;
 const MEDIA_OBJECT_KEY_PATTERN = /^media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MEDIA_STAGING_KEY_PATTERN = /^media-staging\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class MediaStorageConfigurationError extends Error {
   constructor(message = "FYNX media object storage is not configured.") {
@@ -93,6 +96,22 @@ export function createMediaStorage({
     return key;
   }
 
+  function validateUploadObjectKey(objectKey) {
+    const key = String(objectKey || "").trim();
+    if (!MEDIA_OBJECT_KEY_PATTERN.test(key) && !MEDIA_STAGING_KEY_PATTERN.test(key)) {
+      throw new Error("Invalid FYNX media object key.");
+    }
+    return key;
+  }
+
+  async function readObjectHead(objectKey) {
+    const result = await getClient().send(new HeadObjectCommand({ Bucket: bucket, Key: objectKey }));
+    return {
+      contentLength: Number(result?.ContentLength),
+      contentType: String(result?.ContentType || "").trim().toLowerCase()
+    };
+  }
+
   return Object.freeze({
     provider,
     isObjectStorageEnabled: provider === "r2",
@@ -122,6 +141,54 @@ export function createMediaStorage({
       return { storageProvider: "r2", objectKey };
     },
 
+    async createUploadUrl({ mimeType, byteSize, expiresInSeconds = 900 }) {
+      requireR2Configuration();
+      const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
+      const size = Number(byteSize);
+      if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mp4|mpeg|aac|x-m4a|wav))$/.test(normalizedMimeType)) {
+        throw new Error("Unsupported media type.");
+      }
+      if (!Number.isInteger(size) || size < 1 || size > MAX_MEDIA_OBJECT_BYTES) {
+        throw new RangeError("Media must be between 1 byte and 12 MB.");
+      }
+      if (!Number.isInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
+        throw new RangeError("Media upload URL expiry must be between 60 and 900 seconds.");
+      }
+      const uploadId = idFactory();
+      const uploadKey = "media-staging/" + uploadId;
+      const objectKey = "media/" + uploadId;
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: uploadKey,
+        ContentType: normalizedMimeType,
+        ContentLength: size
+      });
+      const uploadUrl = await signUrlFactory(getClient(), command, { expiresIn: expiresInSeconds });
+      if (typeof uploadUrl !== "string" || !uploadUrl.startsWith("https://")) {
+        throw new Error("Object storage returned an invalid upload URL.");
+      }
+      return { uploadKey, objectKey, uploadUrl };
+    },
+
+    async promoteMediaObject(uploadKey, objectKey, mimeType) {
+      requireR2Configuration();
+      const source = String(uploadKey || "").trim();
+      if (!MEDIA_STAGING_KEY_PATTERN.test(source)) throw new Error("Invalid FYNX media staging key.");
+      const destination = validateObjectKey(objectKey);
+      const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
+      if (!/^(image|video|audio)\//.test(normalizedMimeType)) throw new Error("Unsupported media type.");
+      const encodedSource = source.split("/").map(encodeURIComponent).join("/");
+      await getClient().send(new CopyObjectCommand({
+        Bucket: bucket,
+        Key: destination,
+        CopySource: "/" + bucket + "/" + encodedSource,
+        MetadataDirective: "REPLACE",
+        ContentType: normalizedMimeType,
+        CacheControl: "private, max-age=60"
+      }));
+      return readObjectHead(destination);
+    },
+
     async createDownloadUrl(objectKey, expiresInSeconds = DEFAULT_DOWNLOAD_URL_TTL_SECONDS) {
       requireR2Configuration();
       const key = validateObjectKey(objectKey);
@@ -141,9 +208,15 @@ export function createMediaStorage({
       return bodyToBuffer(result?.Body);
     },
 
+    async headMediaObject(objectKey) {
+      requireR2Configuration();
+      const key = validateUploadObjectKey(objectKey);
+      return readObjectHead(key);
+    },
+
     async deleteMediaObject(objectKey) {
       requireR2Configuration();
-      const key = validateObjectKey(objectKey);
+      const key = validateUploadObjectKey(objectKey);
       await getClient().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
     }
   });

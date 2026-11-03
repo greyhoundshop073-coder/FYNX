@@ -156,8 +156,13 @@ jobs:
       - name: Verify optional R2 media object storage adapter
         run: |
           node --check mediaStorage.js
+          node --check mediaUploadIntents.js
+          node --check migrate-legacy-media-to-r2.mjs
+          node --check cleanup-expired-media-upload-intents.mjs
           node test-media-storage.mjs
+          node test-media-upload-intents.mjs
           node verify-media-object-storage.mjs
+          node verify-media-migration-safety.mjs
       - name: Run Chat end-to-end integration gate
         working-directory: .
         run: python3 scripts/verify_chat_end_to_end.py

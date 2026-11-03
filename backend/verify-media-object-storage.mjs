@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [server, cache, social, marketplace, bootstrap, pkg] = await Promise.all([
+const [server, cache, social, marketplace, bootstrap, pkg, intents] = await Promise.all([
   read("./server.js"),
   read("./mediaPayloadCache.js"),
   read("./socialRoutes.js"),
   read("./marketplaceCompletion.js"),
   read("./socialMultiMediaBootstrap.js"),
-  read("./package.json")
+  read("./package.json"),
+  read("./mediaUploadIntents.js")
 ]);
 
 function route(source, startMarker, endMarker) {
@@ -22,6 +23,13 @@ assert.match(server, /storage_provider TEXT NOT NULL DEFAULT 'postgres'/);
 assert.match(server, /object_key TEXT/);
 assert.match(server, /ALTER COLUMN data DROP NOT NULL/);
 assert.match(server, /message_media_object_key_unique/);
+assert.match(server, /CREATE TABLE IF NOT EXISTS media_upload_intents/);
+assert.match(server, /upload_key TEXT NOT NULL UNIQUE/);
+assert.match(server, /registerMediaUploadIntentRoutes\(app/);
+assert.match(intents, /FOR UPDATE/);
+assert.match(intents, /storage\.promoteMediaObject/);
+assert.match(intents, /storage\.headMediaObject/);
+assert.match(intents, /storage\.deleteMediaObject\(intent\.upload_key\)/);
 
 const upload = route(server, 'app.post("/api/media"', "\n\nconst statusSchema");
 assert.match(upload, /await mediaStorage\.putMediaObject/);
@@ -56,6 +64,9 @@ assert.match(bootstrap, /redirectStoredMedia/);
 assert.match(bootstrap, /mm\.storage_provider, mm\.object_key/);
 assert.match(pkg, /test-media-storage\.mjs/);
 assert.match(pkg, /verify-media-object-storage\.mjs/);
+assert.match(pkg, /test-media-upload-intents\.mjs/);
+assert.match(pkg, /migrate:media-to-r2/);
+assert.match(pkg, /cleanup:media-upload-intents/);
 
 console.log("FYNX MEDIA STORAGE INTEGRATION CONTRACT: GREEN");
 console.log("Existing media IDs, authorization-before-redirect, Postgres fallback and all server media surfaces: PASS");

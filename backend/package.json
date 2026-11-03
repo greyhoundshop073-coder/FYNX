@@ -3,9 +3,11 @@
   "version": "1.1.1",
   "type": "module",
   "scripts": {
-    "prestart": "node test-assistant-json-body-parser.mjs && node test-gemini-assistant-provider.mjs && node test-media-storage.mjs && node verify-media-object-storage.mjs && node verify-marketplace-seller-summary-route.mjs && node verify-buyer-wallet-core.mjs && node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
+    "prestart": "node test-assistant-json-body-parser.mjs && node test-gemini-assistant-provider.mjs && node test-media-storage.mjs && node test-media-upload-intents.mjs && node verify-media-object-storage.mjs && node verify-media-migration-safety.mjs && node verify-marketplace-seller-summary-route.mjs && node verify-buyer-wallet-core.mjs && node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
     "start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js",
-    "verify:media-storage": "node test-media-storage.mjs && node verify-media-object-storage.mjs",
+    "verify:media-storage": "node test-media-storage.mjs && node test-media-upload-intents.mjs && node verify-media-object-storage.mjs && node verify-media-migration-safety.mjs",
+    "migrate:media-to-r2": "node migrate-legacy-media-to-r2.mjs",
+    "cleanup:media-upload-intents": "node cleanup-expired-media-upload-intents.mjs",
     "verify:wallet-hosted-funding": "node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs",
     "verify:wallet-core": "node verify-buyer-wallet-core.mjs"
   },
