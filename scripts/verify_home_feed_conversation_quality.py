@@ -22,6 +22,7 @@ checks = [
     ("pagination does not skip the look-ahead row", "String(result.rows[result.rows.length - 1].id)" not in BOOTSTRAP),
     ("backend preserves the selected reply parent", "const directParentId = parentId;" in BOOTSTRAP and "[postId, req.user.sub, directParentId, text]" in BOOTSTRAP),
     ("reply endpoints validate post and parent visibility", "visiblePost(postId, req.user.sub)" in BOOTSTRAP and "NOT EXISTS (SELECT 1 FROM blocks" in BOOTSTRAP),
+    ("both reply-parent visibility queries close their NOT EXISTS predicates", BOOTSTRAP.count("OR (b.blocker_id=c.author_id AND b.blocked_id=$3))") >= 2),
     ("runtime screenshot flow captures a visible inline video card", 'def capture_home_feed_visuals(home_xml: str)' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8") and 'authenticated-home-inline-video.png' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")),
     ("runtime screenshot flow opens a real Comments conversation without sending content", 'authenticated-home-comments.png' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8") and "No comment or reply was sent." in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")),
 ]
