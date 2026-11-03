@@ -1548,6 +1548,14 @@ def capture_home_feed_visuals(home_xml: str) -> str:
                 ["Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video"]
             )
             if viewer_xml:
+                # Do not count the viewer as a playable video until the real
+                # VideoView has prepared and exposed its mute control.
+                viewer_xml = camera_wait_for_control(
+                    viewer_xml,
+                    ["Unmute Discovery video", "Mute Discovery video"],
+                    timeout=35.0,
+                    prefix="authenticated-discovery-video-player-ready"
+                )
                 missing_actions = []
                 if not find_control(viewer_xml, ["Like video", "Unlike video"]):
                     missing_actions.append("Like / Unlike")
