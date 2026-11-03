@@ -103,6 +103,22 @@ class FynxMarketplacePromotionModelsTest {
     }
 
     @Test
+    fun campaignDestinationsOnlyAcceptResolvableInAppTargets() {
+        assertTrue(isValidMarketplaceCampaignDestination("MARKETPLACE", ""))
+        assertTrue(isValidMarketplaceCampaignDestination("CATEGORY", "Electronics"))
+        assertTrue(isValidMarketplaceCampaignDestination("CATEGORY", "handmade & local"))
+        assertTrue(isValidMarketplaceCampaignDestination("PRODUCT", "42"))
+        assertTrue(isValidMarketplaceCampaignDestination("SHOP", "seller_123"))
+        assertTrue(isValidMarketplaceCampaignDestination("SHOP", "@seller_123"))
+        assertFalse(isValidMarketplaceCampaignDestination("CATEGORY", "Made-up category"))
+        assertFalse(isValidMarketplaceCampaignDestination("PRODUCT", "0"))
+        assertFalse(isValidMarketplaceCampaignDestination("PRODUCT", "not-a-product"))
+        assertFalse(isValidMarketplaceCampaignDestination("SHOP", "ab"))
+        assertFalse(isValidMarketplaceCampaignDestination("EXTERNAL", "https://example.com"))
+        assertFalse(isValidMarketplaceCampaignDestination("MARKETPLACE", "unexpected-target"))
+    }
+
+    @Test
     fun tieBreaksAreStableWhenAllPerformanceMetricsMatch() {
         val winner = selectMarketplaceSellerOfTheWeek(
             listOf(
