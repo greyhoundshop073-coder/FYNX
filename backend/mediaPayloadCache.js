@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { mediaStorage } from "./mediaStorage.js";
 
 // Cache media bytes only after each route has re-checked the caller's access.
 // This avoids repeatedly pulling the same BYTEA payload from Neon while keeping
@@ -51,12 +52,18 @@ export async function getCachedMediaPayload(pool, mediaId) {
 
   const load = (async () => {
     const result = await pool.query(
-      "SELECT mime_type, data FROM message_media WHERE id = $1 LIMIT 1",
+      "SELECT mime_type, data, storage_provider, object_key FROM message_media WHERE id = $1 LIMIT 1",
       [id]
     );
     const row = result.rows?.[0];
-    if (!row || !row.mime_type || row.data == null) return null;
-    const data = Buffer.isBuffer(row.data) ? Buffer.from(row.data) : Buffer.from(row.data);
+    if (!row || !row.mime_type) return null;
+    const storageProvider = String(row.storage_provider || "postgres").toLowerCase();
+    if (storageProvider !== "postgres" && storageProvider !== "r2") return null;
+    const sourceData = storageProvider === "r2"
+      ? await mediaStorage.getMediaObjectBytes(row.object_key)
+      : row.data;
+    if (sourceData == null) return null;
+    const data = Buffer.isBuffer(sourceData) ? Buffer.from(sourceData) : Buffer.from(sourceData);
     if (data.length < 1) return null;
     const payload = { mimeType: String(row.mime_type), data };
     cacheEntry(id, payload.mimeType, data, Date.now());

@@ -25,22 +25,24 @@ function route(source, startMarker, endMarker) {
 }
 
 const primaryMediaRoute = route(serverSource, 'app.get("/api/media/:id"', "\nfunction messageProjection()");
-assert.match(primaryMediaRoute, /SELECT mm\.mime_type\s+FROM message_media mm/);
+assert.match(primaryMediaRoute, /SELECT mm\.mime_type,\s*mm\.storage_provider,\s*mm\.object_key\s+FROM message_media mm/);
 assert.doesNotMatch(primaryMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
-assert.ok(primaryMediaRoute.indexOf("if (!result.rows[0])") < primaryMediaRoute.indexOf("getCachedMediaPayload"));
+assert.ok(primaryMediaRoute.indexOf("if (!result.rows[0])") < primaryMediaRoute.indexOf("redirectStoredMedia"));
 
 const marketplaceMediaRoute = route(marketplaceSource, "app.get('/api/marketplace/media/:id'", "\n  app.get('/api/marketplace/seller/orders'");
-assert.match(marketplaceMediaRoute, /SELECT mm\.mime_type\s+FROM message_media mm/);
+assert.match(marketplaceMediaRoute, /SELECT mm\.mime_type,\s*mm\.storage_provider,\s*mm\.object_key\s+FROM message_media mm/);
 assert.doesNotMatch(marketplaceMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
-assert.ok(marketplaceMediaRoute.indexOf("if (!result.rows[0])") < marketplaceMediaRoute.indexOf("getCachedMediaPayload"));
+assert.ok(marketplaceMediaRoute.indexOf("if (!result.rows[0])") < marketplaceMediaRoute.indexOf("redirectStoredMedia"));
 
 const socialMediaRoute = route(socialSource, "app.get('/api/social/media/:id'", "\n\n}");
-assert.match(socialMediaRoute, /SELECT mm\.mime_type\s+FROM message_media mm/);
+assert.match(socialMediaRoute, /SELECT mm\.mime_type,\s*mm\.storage_provider,\s*mm\.object_key\s+FROM message_media mm/);
 assert.doesNotMatch(socialMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
-assert.ok(socialMediaRoute.indexOf("if(!r.rows[0])") < socialMediaRoute.indexOf("getCachedMediaPayload"));
-assert.match(socialBootstrap, /SELECT mm\.mime_type\s*\n\s*FROM message_media mm/);
+assert.ok(socialMediaRoute.indexOf("if(!r.rows[0])") < socialMediaRoute.indexOf("redirectStoredMedia"));
+assert.match(socialBootstrap, /SELECT mm\.mime_type,\s*mm\.storage_provider,\s*mm\.object_key\s*\n\s*FROM message_media mm/);
 assert.doesNotMatch(socialBootstrap, /SELECT mm\.mime_type, mm\.data/);
 assert.match(serverSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
+assert.match(serverSource, /import \{ mediaStorage, redirectStoredMedia \} from "\.\/mediaStorage\.js";/);
+assert.match(cacheSource, /import \{ mediaStorage \} from "\.\/mediaStorage\.js";/);
 assert.match(marketplaceSource, /import \{ getCachedMediaPayload \} from '\.\/mediaPayloadCache\.js';/);
 assert.match(socialSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
 assert.match(aiSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
