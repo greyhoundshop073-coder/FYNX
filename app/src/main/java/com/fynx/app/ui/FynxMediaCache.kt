@@ -26,7 +26,17 @@ internal object FynxMediaCache {
         val directory = File(context.filesDir, "$FYNX_MEDIA_CACHE_DIR/${accountCacheKey(accountKey)}").apply { mkdirs() }
         val extension = when (type) { "video" -> ".mp4"; "audio" -> ".m4a"; else -> ".jpg" }
         val file = File(directory, "${key(normalizedPath, type)}$extension")
+        val backup = File(directory, ".${file.name}.backup")
         fun hasUsableCachedFile(): Boolean = file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES
+
+        // Recover the last good file if the app was stopped after moving it
+        // aside but before installing the replacement download.
+        if (!hasUsableCachedFile() && backup.isFile && backup.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
+            file.delete()
+            backup.renameTo(file)
+        } else if (hasUsableCachedFile() && backup.exists()) {
+            backup.delete()
+        }
 
         if (hasUsableCachedFile() && !forceRefresh) {
             file.setLastModified(System.currentTimeMillis())
@@ -61,7 +71,6 @@ internal object FynxMediaCache {
                 // Download to a temporary sibling first. Do not discard a usable
                 // cached copy unless the replacement has arrived and can be swapped in.
                 val refreshed = File(directory, ".${file.name}.refresh")
-                val backup = File(directory, ".${file.name}.backup")
                 refreshed.delete()
                 val downloaded = download(context, normalizedPath, refreshed)
                     ?: return@withLock file.takeIf { hasUsableCachedFile() }
