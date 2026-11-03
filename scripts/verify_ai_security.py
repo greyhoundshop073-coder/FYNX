@@ -13,6 +13,7 @@ def check(name, condition):
     checks.append((name, bool(condition)))
 
 registry = read("backend/fynxAiToolRegistry.js")
+gemini_provider = read("backend/geminiAssistantProvider.js")
 realtime = read("backend/aiRealtimeRoutes.js")
 voice = read("backend/aiVoiceSession.js")
 android_voice = read("app/src/main/java/com/fynx/app/ui/FynxAiWebRtcEngine.kt")
@@ -23,7 +24,8 @@ abuse = read("backend/apiAbuseGuard.js")
 
 check("AI registry exposes strict function definitions", 'strict: true' in registry and 'type: "function"' in registry)
 check("AI agent requires authenticated user", 'const userId = authenticate(req);' in registry and 'if (!userId) return res.status(401)' in registry)
-check("AI provider key stays server-side", 'process.env.OPENAI_API_KEY' in registry and 'OPENAI_API_KEY' not in android_voice and 'OPENAI_API_KEY' not in android_panel)
+check("Gemini text provider key stays server-side", 'process.env.GEMINI_API_KEY' in gemini_provider and 'GEMINI_API_KEY' not in android_voice and 'GEMINI_API_KEY' not in android_panel and 'GEMINI_API_KEY' not in ai_conversations)
+check("Gemini provider sends credentials only in its server-side API header", 'x-goog-api-key' in gemini_provider and 'GEMINI_API_KEY' not in gemini_provider.split("const endpoint", 1)[-1])
 check("AI tool execution requires authenticated user", 'if (!userId) throw new Error("authenticated user is required")' in registry)
 check("AI tool arguments are JSON validated", 'JSON.parse(argumentsJson)' in registry)
 check("AI agent rejects empty provider responses", 'throw new Error("AI provider returned an empty response")' in registry)

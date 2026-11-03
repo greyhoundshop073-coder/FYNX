@@ -124,6 +124,16 @@ jobs:
           node --check verify-stage15h-admin.mjs
           node --check verify-stage15d-advanced.mjs
           node --check verify-stage15d-jobs.mjs
+      - name: Check and test Gemini assistant provider adapter
+        run: |
+          node --check geminiAssistantProvider.js
+          node test-gemini-assistant-provider.mjs
+      - name: Run FYNX AI security and extension contracts
+        working-directory: .
+        run: |
+          python3 scripts/verify_ai_security.py
+          python3 scripts/verify_ai_extension_contract.py
+          python3 scripts/verify_large_badge8_ai_intelligence.py
       - name: Run buyer wallet backend verification
         run: node verify-buyer-wallet-foundation.mjs
       - name: Run buyer wallet PostgreSQL schema and ledger tests
