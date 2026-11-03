@@ -150,7 +150,7 @@ async function initDatabase() {
     );
     CREATE INDEX IF NOT EXISTS message_media_upload_intents_owner_idx ON message_media_upload_intents (owner_id, expires_at DESC);
     ALTER TABLE message_media_upload_intents ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
-    CREATE INDEX IF NOT EXISTS message_media_upload_intents_expiry_idx ON message_media_upload_intents (expires_at) WHERE completed_media_id IS NULL;
+    CREATE INDEX IF NOT EXISTS message_media_upload_intents_expiry_idx ON message_media_upload_intents (expires_at) WHERE completed_at IS NULL;
     CREATE INDEX IF NOT EXISTS message_media_owner_idx ON message_media (owner_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_recipient_idx ON messages (recipient_id, created_at DESC);
@@ -1075,27 +1075,42 @@ if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
 async function cleanupExpiredMediaUploadIntents() {
   if (!pool || mediaStorage.provider !== "r2" || !mediaStorage.isConfigured) return;
-  const expired = await pool.query(
-    "SELECT id, object_key FROM message_media_upload_intents WHERE completed_at IS NULL AND expires_at < NOW() - INTERVAL '15 minutes' ORDER BY expires_at ASC LIMIT 50"
-  );
+  const client = await pool.connect();
+  let inTransaction = false;
   let removed = 0;
-  for (const intent of expired.rows) {
-    try {
-      await mediaStorage.deleteMediaObject(intent.object_key);
-      const result = await pool.query(
-        "DELETE FROM message_media_upload_intents WHERE id = $1 AND completed_media_id IS NULL",
-        [intent.id]
-      );
-      removed += result.rowCount || 0;
-    } catch (error) {
-      // Keep the intent row so the next sweep can retry a transient object-store failure.
-      console.error("expired media upload cleanup failed", String(intent.id), error);
+  try {
+    await client.query("BEGIN");
+    inTransaction = true;
+    const expired = await client.query(
+      "SELECT id, object_key FROM message_media_upload_intents WHERE completed_at IS NULL AND expires_at < NOW() - INTERVAL '15 minutes' ORDER BY expires_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED"
+    );
+    for (const intent of expired.rows) {
+      try {
+        // Keep the row lock while deleting so a completion request cannot register a
+        // media row after the sweeper has removed its object.
+        await mediaStorage.deleteMediaObject(intent.object_key);
+        const result = await client.query(
+          "DELETE FROM message_media_upload_intents WHERE id = $1 AND completed_at IS NULL",
+          [intent.id]
+        );
+        removed += result.rowCount || 0;
+      } catch (error) {
+        // Keep this row so the next sweep can retry a transient object-store failure.
+        console.error("expired media upload cleanup failed", String(intent.id), error);
+      }
     }
+    await client.query(
+      "DELETE FROM message_media_upload_intents WHERE completed_at IS NOT NULL AND completed_at < NOW() - INTERVAL '30 days'"
+    );
+    await client.query("COMMIT");
+    inTransaction = false;
+    if (removed > 0) console.log("[fynx-media] removed expired incomplete upload intents:", removed);
+  } catch (error) {
+    if (inTransaction) await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
-  await pool.query(
-    "DELETE FROM message_media_upload_intents WHERE completed_at IS NOT NULL AND completed_at < NOW() - INTERVAL '30 days'"
-  );
-  if (removed > 0) console.log("[fynx-media] removed expired incomplete upload intents:", removed);
 }
 
 await initDatabase();
