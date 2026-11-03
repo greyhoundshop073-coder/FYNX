@@ -7,8 +7,11 @@ def read(path):
 
 doc = read("docs/FYNX_AI_EXTENSION_CONTRACT.md")
 registry = read("backend/fynxAiToolRegistry.js")
+gemini_provider = read("backend/geminiAssistantProvider.js")
 conversation = read("backend/aiConversationRoutes.js")
 realtime = read("backend/aiRealtimeRoutes.js")
+assistant_parser = read("backend/assistantJsonBodyParser.js")
+assistant_parser_test = read("backend/test-assistant-json-body-parser.mjs")
 voice = read("backend/aiVoiceSession.js")
 android_client = read("app/src/main/java/com/fynx/app/ui/FynxAiConversationClient.kt")
 android_voice = read("app/src/main/java/com/fynx/app/ui/FynxAiVoiceSession.kt")
@@ -17,10 +20,19 @@ backend_client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
 
 checks = [
     ("extension contract exists", "FYNX AI Extension Contract" in doc),
+    ("assistant JSON parser is strict and bounded", 'express.json({' in assistant_parser and 'limit: "18mb"' in assistant_parser and 'strict: true' in assistant_parser),
+    ("persistent conversation routes parse JSON before handlers", 'app.post("/api/assistant/conversations", assistantJsonBodyParser,' in conversation and 'app.post("/api/assistant/conversations/:id/message", assistantJsonBodyParser,' in conversation),
+    ("assistant agent and tools routes parse JSON before handlers", 'app.post("/api/assistant/agent", assistantJsonBodyParser,' in registry and 'app.post("/api/assistant/tools", assistantJsonBodyParser,' in registry),
+    ("realtime assistant routes parse JSON before handlers", 'app.post("/api/assistant/realtime-session", assistantJsonBodyParser,' in realtime and 'app.post("/api/assistant/realtime-tool", assistantJsonBodyParser,' in realtime),
+    ("assistant parser regression covers all six JSON routes", "jsonRoutes" in assistant_parser_test and "parser-probe" in assistant_parser_test),
+
     ("registry remains the approved capability seam", "export function getFynxAiTools()" in registry and "executeFynxAiTool" in registry),
     ("text AI uses the existing conversation route", "/api/assistant/conversations/:id/message" in conversation and "runAssistantAgent" in conversation),
     ("realtime AI uses the existing authenticated session route", "/api/assistant/realtime-session" in realtime and "authenticate(req, res)" in realtime),
     ("realtime tools use the same approved registry", "getFynxAiTools" in realtime and "executeFynxAiTool" in realtime),
+    ("Gemini text provider credentials stay server-side", "process.env.GEMINI_API_KEY" in gemini_provider and "GEMINI_API_KEY" not in android_client and "GEMINI_API_KEY" not in android_panel),
+    ("Gemini text requests use the official server-side API-key header", "x-goog-api-key" in gemini_provider and "generativelanguage.googleapis.com" in gemini_provider),
+    ("text assistant delegates to the Gemini provider adapter", "runGeminiAssistant" in registry and "geminiAssistantProvider.js" in registry),
     ("voice provider credentials stay server-side", "process.env.OPENAI_API_KEY" in voice and "OPENAI_API_KEY" not in android_voice and "OPENAI_API_KEY" not in android_panel),
     ("Android text AI stays on FYNX backend transport", "FynxBackendClient.get" in android_client and "FynxBackendClient.postJson" in android_client),
     ("Android realtime session stays on FYNX backend transport", "FynxBackendClient.postJson" in android_voice),
