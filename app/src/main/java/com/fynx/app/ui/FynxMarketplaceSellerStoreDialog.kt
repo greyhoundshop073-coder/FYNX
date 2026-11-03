@@ -174,7 +174,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                         }
                         .onFailure { failure ->
                             previouslyPurchasedListingIds = emptySet()
-                            purchaseHistoryError = marketplaceSafeError(failure, "Purchase history could not load. Previous-purchase labels are temporarily unavailable.")
+                            purchaseHistoryError = "Previous purchases are temporarily unavailable."
                         }
                 } else {
                     previouslyPurchasedListingIds = emptySet()
@@ -206,102 +206,215 @@ internal fun FynxMarketplaceSellerStoreDialog(
             }
             LazyColumn(
                 Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
-                    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            FynxRemoteProfileAvatar(photoId, profileName.ifBlank { username }, Modifier.size(84.dp).clip(CircleShape), ownerUsername = username)
-                            Text(profileName.ifBlank { username.removePrefix("@") }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            if (storeName.isNotBlank()) Text(storeName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                            reputation?.let { MarketplaceSellerTierBadge(it.tier) }
-                            Text("@${username.removePrefix("@")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (profileLoading) CircularProgressIndicator(Modifier.size(18.dp))
-                            shopProfileError?.let { message ->
-                                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                                TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }
+                    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(7.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            FynxRemoteProfileAvatar(
+                                photoId,
+                                profileName.ifBlank { username },
+                                Modifier.size(64.dp).clip(CircleShape),
+                                ownerUsername = username
+                            )
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Column(
+                                    Modifier.weight(1f),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                                ) {
+                                    Text(
+                                        storeName.ifBlank { profileName.ifBlank { username.removePrefix("@") } },
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    if (profileName.isNotBlank() && !profileName.equals(storeName, ignoreCase = true)) {
+                                        Text(
+                                            "by " + profileName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Text(
+                                        "@${username.removePrefix("@")}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                reputation?.let { MarketplaceSellerTierBadge(it.tier) }
                             }
-                            if (profileBio.isNotBlank()) Text(profileBio, style = MaterialTheme.typography.bodyMedium)
-                            if (shopLocation.isNotBlank()) Text("Location: " + shopLocation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (shopContactPhone.isNotBlank()) Text("Shop contact: " + shopContactPhone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            if (profileLoading) CircularProgressIndicator(Modifier.size(16.dp))
+                            shopProfileError?.let { message ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        message,
+                                        Modifier.weight(1f),
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    TextButton(
+                                        onClick = { storefrontReloadKey += 1 },
+                                        enabled = !profileLoading,
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                    ) { Text("Retry") }
+                                }
+                            }
+                            if (profileBio.isNotBlank()) {
+                                Text(
+                                    profileBio,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                            val shopMetadata = listOfNotNull(
+                                shopLocation.trim().takeIf { it.isNotBlank() },
+                                shopContactPhone.trim().takeIf { it.isNotBlank() }?.let { "Contact: " + it }
+                            ).joinToString("  •  ")
+                            if (shopMetadata.isNotBlank()) {
+                                Text(
+                                    shopMetadata,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text(sellerListings.size.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                                    Text("Available products", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Products", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 followerCount?.let { count ->
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                         Text(count.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                                         Text("Followers", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                                 reputation?.let { r ->
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                         Text(r.successfulSales.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                                         Text("Successful sales", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    if (r.reviewCount > 0) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Star, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.tertiary)
-                                            Text(String.format(Locale.US, "%.1f", r.averageRating), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                    if (r.reviewCount > 0) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Star, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
+                                                Text(String.format(Locale.US, "%.1f", r.averageRating), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                            }
+                                            Text("${r.reviewCount} reviews", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
-                                        Text("${r.reviewCount} reviews", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
-                            if (!isOwnStore) {
-                                OutlinedButton(
-                                    enabled = !profileLoading && followedByViewer != null && !followBusy,
-                                    onClick = {
-                                        val wasFollowing = followedByViewer ?: return@OutlinedButton
-                                        followBusy = true
-                                        followError = null
-                                        scope.launch {
-                                            FynxRemoteSocialClient.follow(context, username, wasFollowing)
-                                                .onSuccess { nowFollowing ->
-                                                    if (nowFollowing != wasFollowing) {
-                                                        followerCount = followerCount?.let { count ->
-                                                            (count + if (nowFollowing) 1 else -1).coerceAtLeast(0)
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (!isOwnStore) {
+                                    OutlinedButton(
+                                        modifier = Modifier.weight(1f),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                        enabled = !profileLoading && followedByViewer != null && !followBusy,
+                                        onClick = {
+                                            val wasFollowing = followedByViewer ?: return@OutlinedButton
+                                            followBusy = true
+                                            followError = null
+                                            scope.launch {
+                                                FynxRemoteSocialClient.follow(context, username, wasFollowing)
+                                                    .onSuccess { nowFollowing ->
+                                                        if (nowFollowing != wasFollowing) {
+                                                            followerCount = followerCount?.let { count ->
+                                                                (count + if (nowFollowing) 1 else -1).coerceAtLeast(0)
+                                                            }
                                                         }
+                                                        followedByViewer = nowFollowing
                                                     }
-                                                    followedByViewer = nowFollowing
-                                                }
-                                                .onFailure { failure ->
-                                                    followError = marketplaceSafeError(failure, "Could not update shop follow status.")
-                                                }
-                                            followBusy = false
+                                                    .onFailure { failure ->
+                                                        followError = marketplaceSafeError(failure, "Could not update shop follow status.")
+                                                    }
+                                                followBusy = false
+                                            }
                                         }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        when {
-                                            followBusy -> "Updating follow…"
-                                            profileLoading -> "Loading follow status…"
-                                            followedByViewer == true -> "Following"
-                                            followedByViewer == false -> "Follow shop"
-                                            else -> "Follow status unavailable"
-                                        }
-                                    )
+                                    ) {
+                                        Text(
+                                            when {
+                                                followBusy -> "Updating…"
+                                                profileLoading -> "Loading…"
+                                                followedByViewer == true -> "Following"
+                                                followedByViewer == false -> "Follow"
+                                                else -> "Unavailable"
+                                            },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
-                                followError?.let { message ->
-                                    Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                Button(
+                                    onClick = { sellerListings.firstOrNull()?.let(onContact) },
+                                    enabled = sellerListings.isNotEmpty(),
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                ) {
+                                    Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(16.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text("Message seller", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            followError?.let { message ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     if (followedByViewer == null) {
-                                        TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading) {
-                                            Text("Retry follow status")
-                                        }
+                                        TextButton(
+                                            onClick = { storefrontReloadKey += 1 },
+                                            enabled = !storefrontLoading,
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                        ) { Text("Retry") }
                                     }
                                 }
                             }
-                            Button(onClick = { sellerListings.firstOrNull()?.let(onContact) }, enabled = sellerListings.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
-                                Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Message seller")
-                            }
-                            Text("Seller details and reputation are shown only when FYNX has real account data.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "Seller reputation is based on verified FYNX orders and buyer feedback.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
+                }
                 }
                 if (weeklyAwards.isNotEmpty()) {
                     item(key = "seller-weekly-awards-$username") {
@@ -440,20 +553,20 @@ internal fun FynxMarketplaceSellerStoreDialog(
                     }
                     listingEngagementError?.let { message ->
                         item(key = "seller-store-like-error") {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                                TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading) {
-                                    Text("Retry product likes")
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                                    Text("Retry likes")
                                 }
                             }
                         }
                     }
                     purchaseHistoryError?.let { message ->
                         item(key = "seller-store-purchase-history-error") {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                                TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading) {
-                                    Text("Retry purchase history")
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                                    Text("Retry history")
                                 }
                             }
                         }

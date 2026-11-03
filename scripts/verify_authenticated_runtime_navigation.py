@@ -1980,7 +1980,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                     has_product_state = any(
                         find_control(profile_ready_xml, [marker])
                         for marker in profile_terminal_markers
-                    ) or bool(find_control(profile_ready_xml, ["NGN", "USD"]))
+                    ) or bool(find_control(profile_ready_xml, ["NGN", "USD"])) or bool(find_control(profile_ready_xml, ["Available: "]))
                     if has_header and has_count and has_product_state:
                         break
                     time.sleep(0.5)
