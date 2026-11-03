@@ -44,20 +44,6 @@ object FynxDesign {
     val SlateGrey = Color(0xFF64748B)
     val PremiumGold = Color(0xFFD4AF37)
     val PaleCobalt = Color(0xFFE8EEFA)
-    /** Raised secondary actions used across all app surfaces and appearance modes. */
-    val SoftActionLightContainer = Color(0xFFE3F2FC)
-    val SoftActionLightForeground = Color(0xFF102A3A)
-    val SoftActionLightOutline = Color(0xFF5B9BB8)
-    val SoftActionDarkContainer = Color(0xFF17365D)
-    val SoftActionDarkForeground = Color(0xFFEAF1FF)
-    val SoftActionDarkOutline = Color(0xFF6BAED6)
-    /** Destructive controls retain red semantics instead of adopting the secondary blue treatment. */
-    val SoftActionDangerLightContainer = Color(0xFFFDE8EC)
-    val SoftActionDangerLightForeground = Color(0xFF8F1D2C)
-    val SoftActionDangerLightOutline = CrimsonRed
-    val SoftActionDangerDarkContainer = Color(0xFF4B1724)
-    val SoftActionDangerDarkForeground = Color(0xFFFFDDE3)
-    val SoftActionDangerDarkOutline = DarkModeError
 
     val Background = Color(0xFF071326)
     val Surface = Color(0xFF0D1B2E)
@@ -87,6 +73,20 @@ object FynxDesign {
     val CrimsonRed = Color(0xFFDC143C)
     /** Brighter counterpart used for error text on dark surfaces to preserve contrast. */
     val DarkModeError = Color(0xFFFF7086)
+    /** Raised secondary actions used across all app surfaces and appearance modes. */
+    val SoftActionLightContainer = Color(0xFFE3F2FC)
+    val SoftActionLightForeground = Color(0xFF102A3A)
+    val SoftActionLightOutline = Color(0xFF5B9BB8)
+    val SoftActionDarkContainer = Color(0xFF17365D)
+    val SoftActionDarkForeground = Color(0xFFEAF1FF)
+    val SoftActionDarkOutline = Color(0xFF6BAED6)
+    /** Destructive controls retain red semantics instead of adopting the secondary blue treatment. */
+    val SoftActionDangerLightContainer = Color(0xFFFDE8EC)
+    val SoftActionDangerLightForeground = Color(0xFF8F1D2C)
+    val SoftActionDangerLightOutline = CrimsonRed
+    val SoftActionDangerDarkContainer = Color(0xFF4B1724)
+    val SoftActionDangerDarkForeground = Color(0xFFFFDDE3)
+    val SoftActionDangerDarkOutline = DarkModeError
     val PurpleLightCompanionContainer = Color(0xFFF3E7EC)
     val PurpleDarkCompanionContainer = Color(0xFF3A2B32)
     val CharcoalLightCompanionContainer = Color(0xFFE7EBED)
