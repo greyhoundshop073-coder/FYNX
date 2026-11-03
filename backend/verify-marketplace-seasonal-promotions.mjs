@@ -24,7 +24,7 @@ const routes = [
   'app.get("/api/marketplace/seasonal-feed"'
 ];
 const checks = [
-  ["campaign schedule has a persistent database table, typed campaign constraint and active-window index", advertising.includes("CREATE TABLE IF NOT EXISTS marketplace_seasonal_promotions") && advertising.includes("promotion_type TEXT NOT NULL DEFAULT 'SEASONAL'") && advertising.includes("marketplace_seasonal_promotions_type_check") && advertising.includes("DO $") && advertising.includes("END $;") && advertising.includes("marketplace_seasonal_promotions_active_window_idx")],
+  ["campaign schedule has a persistent database table, typed campaign constraint and active-window index", advertising.includes("CREATE TABLE IF NOT EXISTS marketplace_seasonal_promotions") && advertising.includes("promotion_type TEXT NOT NULL DEFAULT 'SEASONAL'") && advertising.includes("marketplace_seasonal_promotions_type_check") && advertising.includes("DO " + "$".repeat(2)) && advertising.includes("END " + "$".repeat(2) + ";") && advertising.includes("marketplace_seasonal_promotions_active_window_idx")],
   ["CI runs an actual PostgreSQL legacy-schema migration and idempotency test", seasonalDbTest.includes("CREATE TABLE marketplace_seasonal_promotions") && seasonalDbTest.includes("await db.query(migration);") && seasonalDbTest.includes("await assert.rejects(") && backendWorkflow.includes("node test-marketplace-advertising-schema-db.mjs")],
   ["all admin seasonal CRUD routes are registered", routes.every(route => advertising.includes(route))],
   ["seasonal create, update and delete require authenticated Owner/Admin access", advertising.includes("authenticate(req, res)") && advertising.includes("requireMarketplaceAdmin(req, res, auth)")],

@@ -12,7 +12,7 @@ const sqlStart = queryStart + "await pool.query(`".length;
 const sqlEnd = source.indexOf("`);", sqlStart);
 assert.ok(migrationStart >= 0 && queryStart > migrationStart && sqlEnd > sqlStart, "advertising schema migration extraction failed");
 const migration = source.slice(sqlStart, sqlEnd);
-assert.ok(migration.includes("DO $$") && migration.includes("END $$;"), "typed campaign constraint migration must use a valid PostgreSQL dollar-quoted block");
+assert.ok(migration.includes("DO " + "$".repeat(2)) && migration.includes("END " + "$".repeat(2) + ";"), "typed campaign constraint migration must use a valid PostgreSQL dollar-quoted block");
 
 const db = new Client();
 const schema = `fynx_ads_migration_test_${process.pid}_${Date.now()}`;
