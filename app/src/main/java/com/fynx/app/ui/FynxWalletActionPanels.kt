@@ -375,6 +375,12 @@ private fun FynxWalletSecurityPanel() {
             OutlinedButton(onClick = { refresh() }, enabled = !loading) { Text("Retry") }
         } else {
             val current = checkNotNull(security)
+            if (!current.walletActive) {
+                WalletActionNotice(
+                    title = "Wallet not active yet",
+                    message = "Your Wallet PIN can be created after your FYNX Wallet has been activated. No PIN setup is requested while Wallet activation is pending."
+                )
+            } else {
             WalletActionNotice(
                 title = if (current.hasWithdrawalPin == true) "Wallet PIN is set" else "Wallet PIN is not set",
                 message = when {
@@ -475,6 +481,7 @@ private fun FynxWalletSecurityPanel() {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         TextButton(onClick = { refresh() }, enabled = !loading && !saving) { Text("Refresh security status") }
@@ -535,7 +542,8 @@ private fun FynxWalletWithdrawalPanel(
     }
 
     val parsedAmount = amount.toBigDecimalOrNull()
-    val validAmount = parsedAmount != null && parsedAmount > java.math.BigDecimal.ZERO &&
+    val minimumWithdrawalAmount = java.math.BigDecimal.valueOf(FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN)
+    val validAmount = parsedAmount != null && parsedAmount >= minimumWithdrawalAmount &&
         availableBalance != null && parsedAmount.toDouble() <= availableBalance
     val canVerify = !verifying && selectedBank != null && accountNumber.matches(Regex("^\\d{10}$"))
     val hasUsablePin = security?.hasWithdrawalPin == true && security?.isLocked != true &&
@@ -653,11 +661,12 @@ private fun FynxWalletWithdrawalPanel(
                 }
             } else {
                 security?.let { policy ->
+                    val minimum = policy.minimumPerTransfer ?: FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN
                     val maximum = policy.maximumPerTransfer
                     val daily = policy.dailyAmountLimit
                     if (maximum != null && daily != null) {
                         Text(
-                            "Withdrawal limit: up to " + walletActionMoney(maximum) +
+                            "Withdrawal limit: " + walletActionMoney(minimum) + "–" + walletActionMoney(maximum) +
                                 " per transfer · " + walletActionMoney(daily) +
                                 " per day · " + (policy.dailyCountLimit?.toString() ?: "—") + " requests per day.",
                             style = MaterialTheme.typography.bodySmall,
@@ -1142,6 +1151,8 @@ private fun WalletAmountStatus(amount: String, availableBalance: Double?, isWith
     val message = when {
         amount.isBlank() -> "Enter an amount in NGN."
         parsed == null || parsed <= java.math.BigDecimal.ZERO -> "Enter a valid amount greater than zero."
+        isWithdrawal && parsed < java.math.BigDecimal.valueOf(FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN) ->
+            "The minimum FYNX Wallet withdrawal is " + walletActionMoney(FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN) + "."
         availableBalance != null && parsed.toDouble() > availableBalance ->
             "This amount is above your verified available balance."
         isWithdrawal && availableBalance == null && parsed > java.math.BigDecimal.ZERO ->
@@ -1150,6 +1161,7 @@ private fun WalletAmountStatus(amount: String, availableBalance: Double?, isWith
     }
     val invalid = amount.isNotBlank() && (
         parsed == null || parsed <= java.math.BigDecimal.ZERO ||
+            (isWithdrawal && parsed < java.math.BigDecimal.valueOf(FynxBuyerWalletClient.MINIMUM_WITHDRAWAL_NGN)) ||
             (availableBalance != null && parsed.toDouble() > availableBalance) ||
             (isWithdrawal && availableBalance == null && parsed > java.math.BigDecimal.ZERO)
     )

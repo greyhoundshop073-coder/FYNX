@@ -74,15 +74,25 @@ function ready() {
 }
 
 function authenticate(req, res) {
-  if (!JWT_SECRET) return res.status(503).json({ error: "service unavailable" });
+  // Route handlers use a null result to stop unauthenticated requests. Returning
+  // Express's Response object here is truthy, so callers would continue into SQL
+  // after the 401/503 and could attempt a second response from their catch block.
+  if (!JWT_SECRET) {
+    res.status(503).json({ error: "service unavailable" });
+    return null;
+  }
   const header = req.headers.authorization || "";
-  if (!header.startsWith("Bearer ")) return res.status(401).json({ error: "authentication required" });
+  if (!header.startsWith("Bearer ")) {
+    res.status(401).json({ error: "authentication required" });
+    return null;
+  }
   try {
     const payload = jwt.verify(header.slice(7), JWT_SECRET);
     if (!payload?.sub) throw new Error("invalid token");
     return { userId: Number(payload.sub) };
   } catch {
-    return res.status(401).json({ error: "authentication required" });
+    res.status(401).json({ error: "authentication required" });
+    return null;
   }
 }
 

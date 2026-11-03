@@ -189,6 +189,38 @@ try {
   );
   if (Number(balance.rows[0].amount) !== 400) throw new Error("Balanced funding entry did not produce the expected available balance.");
 
+  // Seed both ordinary RESERVED funds and Marketplace order escrow, then execute
+  // the exact ledger-balance query extracted from the production summary route.
+  // This catches a UI-summary regression even when escrow ledger writes pass.
+  const reservedTransactionId = await insertPendingTransaction(walletId, userId, 25, "RESERVED");
+  await client.query("BEGIN");
+  await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [reservedTransactionId]);
+  await client.query(
+    "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,'AVAILABLE','DEBIT',25,'NGN')",
+    [reservedTransactionId, walletId, "LEG-" + reservedTransactionId + "-AVAILABLE"]
+  );
+  await client.query(
+    "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,'RESERVED','CREDIT',25,'NGN')",
+    [reservedTransactionId, walletId, "LEG-" + reservedTransactionId + "-RESERVED"]
+  );
+  await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [reservedTransactionId]);
+  await client.query("COMMIT");
+
+  const summaryRouteStart = source.indexOf("app.get('/api/wallet/summary'");
+  const summaryQueryMarker = "const balanceRows = await pool.query(" + String.fromCharCode(96);
+  const summaryQueryStart = source.indexOf(summaryQueryMarker, summaryRouteStart);
+  const summaryQuerySqlStart = summaryQueryStart + summaryQueryMarker.length;
+  const summaryQuerySqlEnd = source.indexOf(String.fromCharCode(96) + ", [wallet.id]", summaryQuerySqlStart);
+  if (summaryRouteStart < 0 || summaryQueryStart < summaryRouteStart || summaryQuerySqlEnd <= summaryQuerySqlStart) {
+    throw new Error("Could not extract the exact Wallet summary balance query for PostgreSQL regression testing.");
+  }
+  const summaryBalanceRows = await client.query(source.slice(summaryQuerySqlStart, summaryQuerySqlEnd), [walletId]);
+  const summaryBalances = Object.fromEntries(summaryBalanceRows.rows.map((row) => [row.account_code, Number(row.balance || 0)]));
+  const displayedReservedBalance = (summaryBalances.RESERVED || 0) + (summaryBalances.MARKETPLACE_ESCROW || 0);
+  if (summaryBalances.RESERVED !== 25 || summaryBalances.MARKETPLACE_ESCROW !== 100 || displayedReservedBalance !== 125) {
+    throw new Error("Wallet summary did not include both ordinary reserved funds and Marketplace escrow in the Reserved total.");
+  }
+
   await expectTransactionFailure(async () => {
     const id = await insertPendingTransaction(walletId, userId, 10, "SKIP_PROCESSING");
     await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [id]);
@@ -204,19 +236,21 @@ try {
     await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [id]);
   }, "balanced");
 
-  await expectTransactionFailure(async () => {
-    const id = await insertPendingTransaction(walletId, userId, 600, "NEGATIVE");
-    await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [id]);
-    await client.query(
-      "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,'AVAILABLE','DEBIT',600,'NGN')",
-      [id, walletId, "LEG-" + id + "-AVAILABLE"]
-    );
-    await client.query(
-      "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,'PROVIDER_CLEARING','CREDIT',600,'NGN')",
-      [id, walletId, "LEG-" + id + "-CLEARING"]
-    );
-    await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [id]);
-  }, "buyer wallet available, reserved or withdrawal balance cannot be negative");
+  for (const accountCode of ["AVAILABLE", "RESERVED", "MARKETPLACE_ESCROW", "WITHDRAWAL_PENDING"]) {
+    await expectTransactionFailure(async () => {
+      const id = await insertPendingTransaction(walletId, userId, 600, "NEGATIVE_" + accountCode);
+      await client.query("UPDATE buyer_wallet_transactions SET status='PROCESSING' WHERE id=$1", [id]);
+      await client.query(
+        "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,$4,'DEBIT',600,'NGN')",
+        [id, walletId, "LEG-" + id + "-" + accountCode, accountCode]
+      );
+      await client.query(
+        "INSERT INTO buyer_wallet_ledger_entries(transaction_id,wallet_id,entry_key,account_code,side,amount,currency) VALUES ($1,$2,$3,'PROVIDER_CLEARING','CREDIT',600,'NGN')",
+        [id, walletId, "LEG-" + id + "-CLEARING"]
+      );
+      await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [id]);
+    }, "buyer wallet available");
+  }
 
   await expectTransactionFailure(async () => {
     await client.query("UPDATE buyer_wallet_transactions SET description='rewrite' WHERE id=$1", [validTransactionId]);
@@ -234,7 +268,7 @@ try {
     );
   }, "buyer wallet transaction owner or currency does not match its wallet");
 
-  console.log("FYNX buyer wallet PostgreSQL schema, ledger, cursor and direction tests GREEN (8 scenarios)");
+  console.log("FYNX buyer wallet PostgreSQL schema, ledger, cursor, direction and summary-balance tests GREEN (12 scenarios)");
 } finally {
   if (schemaCreated) {
     await client.query("SET search_path TO public").catch(() => {});

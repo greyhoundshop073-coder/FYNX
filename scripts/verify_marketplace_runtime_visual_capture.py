@@ -19,12 +19,16 @@ checks = [
     ),
     (
         "green instrumentation selects authenticated navigation only when backend health is ready",
-        'if node --input-type=module -e' in runner
+        'elif node --input-type=module -e' in runner
         and 'body?.database !== "ready"' in runner
         and 'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
         and 'if [ -z "${FYNX_E2E_USERNAME:-}" ] || [ -z "${FYNX_E2E_PASSWORD:-}" ]; then' in runner
+        and runner.index('elif node --input-type=module -e') < runner.index('if [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" = "1" ]; then')
         and 'E2E credentials are not configured; running read-only camera/Marketplace UI certification' in runner
         and 'Live backend is unavailable; running read-only camera/Marketplace UI certification' in runner
+        and 'FYNX_LOCAL_VISUALS_ONLY=1' in runner
+        and 'FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"' in navigation
+        and 'if debug_entry_visible and (not PASSWORD or FORCE_LOCAL_VISUALS):' in navigation
         and 'TEST_EXIT=$?' in runner,
     ),
     (
@@ -55,7 +59,8 @@ checks = [
     ),
     (
         "real Marketplace screenshot and UI hierarchy are captured after destination marker verification",
-        'tap_control(\n        xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]' in navigation
+        ('tap_control(\n        xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]' in navigation
+         or 'tap_control(\n        home_xml, ["Marketplace"], "marketplace", ["Search products, sellers or categories"]' in navigation)
         and 'screenshot("authenticated-marketplace-product-detail.png")' in navigation
         and '"authenticated-marketplace.xml"' in navigation
         and "def wait_for_marketplace_settled(timeout: float = 20.0)" in navigation
@@ -84,7 +89,7 @@ checks = [
     ),
     (
         "product-publishing form is captured without submitting a listing",
-        '["Sell something", "Start selling", "Sell your first product"]' in navigation
+        '["Sell", "Sell something", "Start selling", "Sell your first product"]' in navigation
         and "without submitting or creating a listing" in navigation,
     ),
     (
@@ -179,6 +184,13 @@ checks.extend([
         and "BorderStroke(1.dp, dealsGlassBorder)" in hero_source,
     ),
 ])
+
+
+guard_source = Path(__file__).read_text(encoding="utf-8")
+checks.append((
+    "Python regression verifier uses Python string APIs for runtime-order checks",
+    ("runner." + "indexOf(") not in guard_source and "runner.index(" in guard_source,
+))
 
 failed = 0
 for name, passed in checks:

@@ -64,3 +64,48 @@ Google Merchant Center and virtual cards are outside this release.
 - Provider-generated dedicated account numbers, signed payment webhooks, withdrawals, KYC/custody approval and live-money end-to-end tests remain provider/backend release dependencies.
 
 - The Withdraw screen also lays out disabled bank, account-number and provider-verified account-name fields, so the intended destination form is visible without collecting or storing sensitive bank details before provider-backed verification exists.
+
+## Phase 2 Wallet audit — 02 November 2026
+
+### Verified from the installed canonical Android runtime
+
+- The same Wallet screen opens from the FYNX Features hub and from Marketplace.
+- Marketplace → Wallet → Back returns to Marketplace.
+- Wallet summary, activity, Add Money, bank-transfer readiness and Withdraw surfaces were captured from the installed APK using Android UIAutomator and adb screenshots.
+- The first-time screen shows no available balance rather than a sample or locally fabricated amount.
+- Backend and PostgreSQL CI checks passed for wallet owner/currency validation, balanced double-entry postings, append-only transaction/ledger history, non-negative available/reserved/Marketplace-escrow/withdrawal buckets, keyset activity pagination, and the reserved-balance inclusion of Marketplace escrow, and rejection of negative postings in each of the four buyer balance buckets.
+
+### Read-only environment observations
+
+The Railway FYNX-Isolated-Testing/testing environment reported the fynx-backend-testing service online on deployment f0198048-fe9a-495c-a4e6-bca710e8ab31, with one running replica and no recent deployment failures. Its Wallet summary and activity endpoints returned HTTP 200 during the authenticated runtime walkthrough; HTTP success is not proof of an active real-money wallet.
+
+A read-only inspection of Neon project patient-lab-43403708, branch live-recovery-20261101, database neondb, reported:
+
+| Data set | Rows |
+|---|---:|
+| Buyer wallets | 0 |
+| Wallet transactions | 0 |
+| Wallet ledger entries | 0 |
+| Funding intents | 0 |
+| Provider operations | 0 |
+| Marketplace orders | 4 |
+| Marketplace escrows | 0 |
+| Marketplace escrow ledger entries | 0 |
+
+That branch also contained 239 users, 3 active Marketplace listings and 1 shop profile, consistent with the inspected Marketplace runtime. Railway's integration hides the value of DATABASE_URL, so the exact Railway-to-Neon branch mapping remains unconfirmed and must not be represented as proven.
+
+### Provider and release blockers
+
+The Railway service exposes the database/auth/runtime variable names, but its visible variable-name inventory contains no Paystack secret or Wallet approval/encryption configuration. Values are redacted by the integration; no secrets were read or changed. The backend deliberately requires separate provider, custody, compliance, deposit, spending, payout and fee-policy approvals before enabling money movement.
+
+**Current disposition:** Wallet navigation, presentation, read-only API contract and database ledger protections are verified. Real funding, dedicated account assignment, card/USSD deposits, Wallet spending, withdrawals and buyer-wallet checkout remain blocked pending the provider business arrangement, written custody/compliance approval, configured secrets and sandbox/webhook reconciliation. Do not create a wallet row, balance or test money transaction merely to make the screen appear active.
+
+### Added regression coverage
+
+The foundation verifier now explicitly protects the first-time Wallet path: summary reads cannot auto-create a wallet, the NOT_SETUP response must return null balance buckets with spending and withdrawals disabled, balances must come only from succeeded ledger postings, reserved funds must include Marketplace escrow, and provider/custody/compliance/Paystack gates remain mandatory.
+
+- Added explicit PostgreSQL negative-balance regression scenarios for AVAILABLE, RESERVED, MARKETPLACE_ESCROW and WITHDRAWAL_PENDING. The database guard's error now names Marketplace escrow as one of the protected buckets.
+
+- Withdrawal initiation now enforces the NGN 50 Paystack transfer minimum before opening the database transaction, resolving a bank account or creating a provider recipient. The same minimum is returned by the security endpoint, shown with the configured limits and checked by the Android client before it sends the request.
+
+- Wallet security now reads the signed-in user's wallet status and only exposes PIN creation/change when the wallet is ACTIVE. First-time users whose wallet is still NOT_SETUP receive a preparation notice instead of a PIN form that would be rejected by the backend.

@@ -133,6 +133,8 @@ jobs:
         run: |
           node verify-media-route.mjs
           node test-media-route-db.mjs
+      - name: Verify Marketplace advertising auth failure isolation
+        run: node verify-marketplace-advertising-auth.mjs
 
       - name: Verify notification bootstrap idempotency
         run: node verify-notification-bootstrap-idempotency.mjs

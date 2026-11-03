@@ -198,7 +198,16 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                         // saved local debug account, so protected APIs receive a server token.
                                         busy = true
                                         error = null
-                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }
+                                        scope.launch {
+                                            // Reconnect an existing saved-device account with the migration-aware path.
+                                            // Account creation remains limited to this exact saved account in a debug build.
+                                            val authResult = if (savedLocalUsername != null && FynxAuthStore.hasAccount(context)) {
+                                                FynxRemoteAuthClient.connectSavedAccount(context, password)
+                                            } else {
+                                                FynxRemoteAuthClient.login(context, requestedUsername, password)
+                                            }
+                                            finish(authResult, allowOfflineEntry = true)
+                                        }
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
