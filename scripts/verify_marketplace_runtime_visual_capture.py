@@ -6,6 +6,7 @@ import sys
 runner = Path("scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 navigation = Path("scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
+emulator_storage = Path("scripts/configure_android_emulator_storage.sh").read_text(encoding="utf-8")
 
 checks = [
     (
@@ -127,7 +128,13 @@ checks = [
     (
         "Android emulator userdata is capped to fit the hosted runner AVD storage",
         "profile: pixel_7_pro" in workflow
-        and "disk-size: 4G" in workflow
+        and "disk-size: 3G" in workflow
+        and "pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh" in workflow
+        and "sed -i" in emulator_storage
+        and "disk.dataPartition.size" in emulator_storage
+        and 'partition_entries != "1"' in emulator_storage
+        and 'partition_value != "3G"' in emulator_storage
+        and 'available_mb -lt 3500' in emulator_storage
         and "emulator-boot-timeout" not in workflow.split("uses: reactivecircus/android-emulator-runner@", 1)[1].split("script: bash scripts/run_android_runtime_certification.sh", 1)[0],
     ),
 ]
