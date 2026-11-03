@@ -67,7 +67,7 @@ async function ensureAdvertisingSchema() {
     UPDATE marketplace_ad_campaigns
       SET cost_per_click_kobo = LEAST(500, GREATEST(1, daily_budget_kobo), GREATEST(1, total_budget_kobo))
       WHERE cost_per_click_kobo > daily_budget_kobo OR cost_per_click_kobo > total_budget_kobo;
-    DO $
+    DO $ 
     BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='marketplace_ad_campaigns_cpc_positive_check' AND conrelid='marketplace_ad_campaigns'::regclass) THEN
         ALTER TABLE marketplace_ad_campaigns ADD CONSTRAINT marketplace_ad_campaigns_cpc_positive_check CHECK (cost_per_click_kobo > 0);
