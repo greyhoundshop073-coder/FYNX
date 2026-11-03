@@ -1832,7 +1832,133 @@ def capture_home_feed_visuals(home_xml: str) -> str:
             # containing a visible video duration, not just the first Home screen.
             time.sleep(0.8)
             screenshot(page_png_name)
-            if video_captured:
+            if not video_captured:
+                (ROOT / "authenticated-home-inline-video.xml").write_text(current + "\n", encoding="utf-8")
+                screenshot("authenticated-home-inline-video.png")
+            video_captured = True
+            for duration in duration_labels:
+                if duration not in captured_video_durations:
+                    captured_video_durations.append(duration)
+
+        discovery_control = find_control(current, ["Open Discovery video"])
+        if discovery_control and not discovery_viewer_captured:
+            viewer_xml = tap_control(
+                current,
+                ["Open Discovery video"],
+                "authenticated-home-discovery-video-open",
+                ["Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video"]
+            )
+            if viewer_xml:
+                # Do not count the viewer as a playable video until the real
+                # VideoView has prepared and exposed its mute control.
+                viewer_xml = camera_wait_for_control(
+                    viewer_xml,
+                    ["Unmute Discovery video", "Mute Discovery video"],
+                    timeout=35.0,
+                    prefix="authenticated-discovery-video-player-ready"
+                )
+                missing_actions = []
+                if not find_control(viewer_xml, ["Like video", "Unlike video"]):
+                    missing_actions.append("Like / Unlike")
+                if not find_control(viewer_xml, ["Open comments"]):
+                    missing_actions.append("Comments")
+                if not find_control(viewer_xml, ["Share video"]):
+                    missing_actions.append("Share")
+                if not find_control(viewer_xml, ["Unmute Discovery video", "Mute Discovery video"]):
+                    missing_actions.append("Mute / unmute")
+                if not find_control(viewer_xml, ["Pause Discovery video", "Play Discovery video"]):
+                    missing_actions.append("Playback controls")
+                if missing_actions:
+                    screenshot("authenticated-discovery-video-actions-missing.png")
+                    (ROOT / "authenticated-discovery-video-actions-missing.xml").write_text(
+                        viewer_xml + chr(10), encoding="utf-8"
+                    )
+                    FAILURES.append(
+                        "Discovery video viewer is missing visible action controls: "
+                        + ", ".join(missing_actions)
+                    )
+                else:
+                    screenshot("authenticated-discovery-video-viewer.png")
+                    (ROOT / "authenticated-discovery-video-viewer.xml").write_text(
+                        viewer_xml + chr(10), encoding="utf-8"
+                    )
+                    discovery_viewer_captured = True
+                    report.append(
+                        "- PASS: opened a real, prepared Discovery video and captured its viewer with playback, mute, Like, Comments and Share controls; no interaction or post was submitted."
+                    )
+                run("adb", "shell", "input", "keyevent", "4")
+                return_deadline = time.monotonic() + 15.0
+                discovery_home = ""
+                while time.monotonic() < return_deadline:
+                    candidate = dump_ui("authenticated-discovery-return-home.xml")
+                    if candidate and is_home_feed_navigation_visible(candidate):
+                        discovery_home = candidate
+                        break
+                    time.sleep(0.5)
+                if not discovery_home:
+                    FAILURES.append("Discovery video viewer did not return to the Home feed safely.")
+                    return dump_ui("authenticated-discovery-return-home-timeout.xml") or viewer_xml
+                current = discovery_home
+
+        # Pair the conversation capture with a viewport that actually exposes
+        # a real inline video control. Do not count an unrelated text-post comment.
+        comment_control = find_home_video_post_comment_action(current) if video_control and duration_control else None
+        if comment_control and not comments_captured:
+            comment_action_seen = True
+            _, x, y = comment_control
+            run("adb", "logcat", "-c")
+            run("adb", "shell", "input", "tap", str(x), str(y))
+            deadline = time.monotonic() + 12.0
+            conversation_xml = ""
+            while time.monotonic() < deadline:
+                candidate = dump_ui("authenticated-home-comments-probe.xml")
+                if (
+                    candidate
+                    and find_control(candidate, ["Comments"])
+                    and find_control(candidate, ["Write a comment"])
+                    and has_visible_home_comment_row(candidate)
+                ):
+                    conversation_xml = candidate
+                    break
+                time.sleep(0.5)
+
+            if not conversation_xml:
+                screenshot("authenticated-home-comments-open-failed.png")
+                FAILURES.append(
+                    "A real Home video post Comment action was visible, but its conversation did not render an existing comment row with Reply/Replies actions within 12 seconds."
+                )
+                return current
+
+            (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
+            screenshot("authenticated-home-comments.png")
+            comments_captured = True
+            report.append("- PASS: opened the video post's own Comments conversation and verified an existing comment body plus Reply/Replies actions alongside the post context and composer. No comment or reply was sent.")
+
+            run("adb", "shell", "input", "keyevent", "4")
+            return_home_deadline = time.monotonic() + 15.0
+            home_after_comments = ""
+            while time.monotonic() < return_home_deadline:
+                candidate = dump_ui("authenticated-home-after-comments.xml")
+                if candidate and is_home_feed_navigation_visible(candidate):
+                    home_after_comments = candidate
+                    break
+                time.sleep(0.5)
+            if not home_after_comments:
+                FAILURES.append("Home Feed visual capture could not return safely from the Comments conversation.")
+                return dump_ui("authenticated-home-after-comments-timeout.xml") or current
+            current = home_after_comments
+
+        if video_captured and comments_captured and discovery_viewer_captured:
+            break
+        if page == 8:
+            break
+
+        next_xml = scroll_home_feed_page(page, current)
+        if not next_xml or next_xml == current or next_xml == previous_xml:
+            break
+        previous_xml, current = current, next_xml
+
+    if video_captured:
         report.append(
             "- PASS: measured Home inline video duration(s) captured from real media metadata: "
             + ", ".join(captured_video_durations)
