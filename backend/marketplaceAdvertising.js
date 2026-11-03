@@ -731,7 +731,13 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
            WHERE id=$1`,
           [id, nextSpent, todaySpent + clickCost, clickDay]
         );
-        await client.query("UPDATE marketplace_ad_metrics SET clicks=clicks+1, updated_at=NOW() WHERE campaign_id=$1", [id]);
+        await client.query(
+          `INSERT INTO marketplace_ad_metrics (campaign_id, clicks, updated_at)
+           VALUES ($1,1,NOW())
+           ON CONFLICT (campaign_id) DO UPDATE
+             SET clicks=marketplace_ad_metrics.clicks+1, updated_at=NOW()`,
+          [id]
+        );
         await client.query("COMMIT");
         return res.status(204).end();
       } catch (error) {
