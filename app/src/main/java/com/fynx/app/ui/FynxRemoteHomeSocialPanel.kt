@@ -892,7 +892,30 @@ private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, pl
 }
 
 @Composable
-private fun ReactionChoice(emoji: String, reaction: String, active: Boolean, onReact: (String) -> Unit) { TextButton(onClick = { onReact(reaction) }, modifier = Modifier.heightIn(min = 48.dp), colors = ButtonDefaults.textButtonColors(contentColor = if (active) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary)) { Text(emoji, style = MaterialTheme.typography.titleLarge) } }
+private fun ReactionChoice(emoji: String, reaction: String, active: Boolean, onReact: (String) -> Unit) {
+    val reactionLabel = when (reaction) {
+        "LIKE" -> "like"
+        "LOVE" -> "love"
+        "LAUGH" -> "laugh"
+        "WOW" -> "wow"
+        "SAD" -> "sad"
+        else -> "reaction"
+    }
+    TextButton(
+        onClick = { onReact(reaction) },
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "React with $reactionLabel"
+                role = Role.Button
+            },
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = if (active) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary
+        )
+    ) {
+        Text(emoji, style = MaterialTheme.typography.titleLarge)
+    }
+}
 private fun reactionSummary(state: FynxHomePostReactionsClient.ReactionState): String { val order = listOf("LIKE" to "👍", "LOVE" to "❤️", "LAUGH" to "😂", "WOW" to "😮", "SAD" to "😢"); val visible = order.filter { (key, _) -> (state.counts[key] ?: 0) > 0 }.take(5); return "${visible.joinToString(" ") { it.second }}  ${state.total} reaction${if (state.total == 1) "" else "s"}" }
 
 @Composable
