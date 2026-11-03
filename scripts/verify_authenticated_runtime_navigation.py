@@ -1627,22 +1627,38 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                         ["Switch front/back camera"]
                     ) if post_options_xml else ""
                     if fresh_camera_xml:
-                        lens_switch = find_control(fresh_camera_xml, ["Switch front/back camera"])
-                        if lens_switch:
-                            _, lens_x, lens_y = lens_switch
-                            run("adb", "shell", "input", "tap", str(lens_x), str(lens_y))
-                            time.sleep(1.5)
-                            fresh_camera_xml = dump_ui(f"{prefix}-camera-after-status-reopen.xml") or fresh_camera_xml
+                        # This CI AVD is launched with -camera-front none. Do not switch
+                        # into an unavailable lens during the separate Next-to-post proof.
+                        # The rear-camera path has already been exercised above.
+                        fresh_camera_xml = camera_wait_for_control(
+                            fresh_camera_xml, ["Take photo"], enabled=True, timeout=20.0,
+                            prefix=f"{prefix}-camera-after-status-shutter-ready"
+                        )
+                        if not control_is_enabled(fresh_camera_xml, ["Take photo"]):
+                            home = camera_return_to_home(
+                                fresh_camera_xml, prefix + "-post-handoff-shutter-not-ready"
+                            )
+                            return capture_camera_video_journey(home, prefix)
                         next_editor = tap_control(
                             fresh_camera_xml, ["Take photo"], f"{prefix}-camera-after-status-photo",
-                            ["Retake", "Next"]
+                            ["Retake", "Next"], wait_attempts=80
                         )
                         if next_editor:
                             second_editor = next_editor
                         else:
-                            FAILURES.append(prefix + ": camera did not return to photo editing after the Your Story hand-off")
+                            FAILURES.append(prefix + ": shutter tap after Status hand-off did not reach the photo editor")
+                            # Do not continue with the older pre-Status editor hierarchy;
+                            # recover from the actual live-camera surface instead.
+                            home = camera_return_to_home(
+                                fresh_camera_xml, prefix + "-post-handoff-capture-failed"
+                            )
+                            return capture_camera_video_journey(home, prefix)
                     else:
                         FAILURES.append(prefix + ": could not reopen the Home camera after closing the Status composer")
+                        home = camera_return_to_home(
+                            status_close_xml, prefix + "-post-handoff-camera-missing"
+                        )
+                        return capture_camera_video_journey(home, prefix)
                 else:
                     FAILURES.append(prefix + ": could not close the unpublished Status composer after hand-off")
             else:
