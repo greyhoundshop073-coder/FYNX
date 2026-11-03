@@ -1045,7 +1045,7 @@ private fun FynxFeedTextureVideo(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    "\${formatHomeVideoDuration(playbackPositionMs)} / $durationLabel",
+                    "${formatHomeVideoDuration(playbackPositionMs)} / $durationLabel",
                     color = Color.White,
                     style = MaterialTheme.typography.labelSmall
                 )
