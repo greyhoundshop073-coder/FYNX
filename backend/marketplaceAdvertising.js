@@ -95,7 +95,7 @@ async function ensureAdvertisingSchema() {
     ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS promotion_type TEXT NOT NULL DEFAULT 'SEASONAL';
     ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS destination_type TEXT NOT NULL DEFAULT 'MARKETPLACE';
     ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS destination_value TEXT;
-    DO $
+    DO $$
     BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
@@ -106,8 +106,8 @@ async function ensureAdvertisingSchema() {
           ADD CONSTRAINT marketplace_seasonal_promotions_type_check
           CHECK (promotion_type IN ('SEASONAL', 'ANNOUNCEMENT', 'OFFER'));
       END IF;
-    END $;
-    DO $
+    END $$;
+    DO $$
     BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
@@ -118,7 +118,7 @@ async function ensureAdvertisingSchema() {
           ADD CONSTRAINT marketplace_seasonal_promotions_destination_type_check
           CHECK (destination_type IN ('MARKETPLACE', 'CATEGORY', 'PRODUCT', 'SHOP'));
       END IF;
-    END $;
+    END $$;
   `);
 }
 
