@@ -31,6 +31,53 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun pendingWalletBalanceCaptionDoesNotPromiseSpendableFunds() {
+        val pending = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":0.0,"reservedBalance":0.0,"withdrawalPendingBalance":0.0,"canFund":false,"canSpend":false,"canWithdraw":false,"testMode":false}"""
+        )
+        assertEquals(
+            "Wallet setup pending — this balance cannot be spent or withdrawn yet",
+            buyerWalletBalanceCaption(pending, summaryLoading = false, summaryError = null)
+        )
+    }
+
+    @Test
+    fun activeWalletBalanceCaptionDescribesClearedFunds() {
+        val active = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"ACTIVE","currency":"NGN","availableBalance":125.0,"canSpend":false,"canWithdraw":false}"""
+        )
+        assertEquals(
+            "Cleared funds available to use",
+            buyerWalletBalanceCaption(active, summaryLoading = false, summaryError = null)
+        )
+    }
+
+    @Test
+    fun firstVisitPendingWalletShowsOnlyItsLedgerDerivedZeroBalance() {
+        val summary = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":0.0,"reservedBalance":0.0,"withdrawalPendingBalance":0.0,"canFund":false,"canSpend":false,"canWithdraw":false,"testMode":false}"""
+        )
+        assertEquals(0.0, summary.availableBalance!!, 0.0)
+        assertTrue(shouldShowBuyerWalletBalance(summary))
+        assertFalse(summary.canFund)
+        assertFalse(summary.canSpend)
+        assertFalse(summary.canWithdraw)
+    }
+
+    @Test
+    fun restrictedAndClosedWalletBalancesRemainHidden() {
+        val restricted = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"RESTRICTED","currency":"NGN","availableBalance":350.0,"canFund":false,"canSpend":false,"canWithdraw":false}"""
+        )
+        val closed = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"CLOSED","currency":"NGN","availableBalance":0.0,"canFund":false,"canSpend":false,"canWithdraw":false}"""
+        )
+        assertFalse(shouldShowBuyerWalletBalance(restricted))
+        assertFalse(shouldShowBuyerWalletBalance(closed))
+        assertFalse(shouldShowBuyerWalletBalance(null))
+    }
+
+    @Test
     fun testModeWalletShowsSimulatedBalanceWithoutEnablingSpendingOrWithdrawals() {
         val summary = FynxBuyerWalletClient.parseSummary(
             """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":1500.0,"reservedBalance":0,"withdrawalPendingBalance":0,"canFund":true,"canSpend":true,"canWithdraw":true,"canFundByBankTransfer":true,"canFundByCard":true,"canFundByUssd":true,"testMode":true,"notice":"TEST MODE ONLY"}"""
@@ -103,6 +150,36 @@ class FynxBuyerWalletClientTest {
         assertEquals("CARD", session.paymentMethod)
         assertEquals(5000.0, session.amount, 0.0)
         assertEquals("https://checkout.paystack.com/session", session.authorizationUrl)
+    }
+
+    @Test
+    fun hostedWalletFundingSessionParsesRecoverableProcessingAndTerminalStates() {
+        val processing = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"PROCESSING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":1000.0,"paymentMethod":"CARD","message":"Check payment status"}"""
+        )
+        assertEquals("PROCESSING", processing.status)
+        assertNull(processing.authorizationUrl)
+
+        val failed = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"FAILED","reference":"fwd_abcdef0123456789abcdef0123456789","amount":1000.0,"paymentMethod":"CARD","message":"No credit"}"""
+        )
+        assertEquals("FAILED", failed.status)
+        assertNull(failed.authorizationUrl)
+
+        val blocked = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"BLOCKED","reference":"fwd_0123456789abcdef0123456789abcdef","amount":1000.0,"paymentMethod":"USSD","message":"Checkout blocked"}"""
+        )
+        assertEquals("BLOCKED", blocked.status)
+        assertNull(blocked.authorizationUrl)
+    }
+
+    @Test
+    fun hostedWalletFundingSessionRejectsMissingPaymentMethod() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWalletFundingSession(
+                """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":1000.0}"""
+            )
+        }
     }
 
     @Test
