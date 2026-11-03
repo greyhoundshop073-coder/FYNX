@@ -9,6 +9,17 @@ workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8
 
 checks = [
     (
+        "normal authenticated Marketplace journey captures private My Shop overview and all seller sections",
+        '# Continue in the same real, server-authenticated session into the private' in navigation
+        and 'shop_xml = tap_control(' in navigation
+        and all(
+            f'"authenticated-marketplace-my-shop-{slug}.png"' in navigation
+            for slug in ("overview", "profile", "listings", "orders", "delivery-drivers", "earnings-payouts")
+        )
+        and "runtime report was missing real screenshot files:" in navigation
+        and "This is read-only: do not save a shop profile" in navigation,
+    ),
+    (
         "Android CI attempts focused Marketplace/My Shop capture after instrumentation failure",
         'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
         and 'else\n  # A red instrumentation test must not suppress Marketplace/My Shop screenshot evidence.' in runner,

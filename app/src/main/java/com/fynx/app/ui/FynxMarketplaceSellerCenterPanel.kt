@@ -120,51 +120,55 @@ private fun marketplaceDescriptionWithSubcategory(description: String, subcatego
 fun FynxMarketplaceSellerCenterPanel() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var listings by remember { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
-    var archivedListings by remember { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
-    var loading by remember { mutableStateOf(true) }
+    val sellerAccountKey = FynxAuthStore.accountStorageKey(context).orEmpty().ifBlank { "signed-out" }
+    var listings by remember(sellerAccountKey) { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
+    var archivedListings by remember(sellerAccountKey) { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
+    var loading by remember(sellerAccountKey) { mutableStateOf(true) }
     var refreshGeneration by remember { mutableIntStateOf(0) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var deletingId by remember { mutableStateOf<String?>(null) }
-    var republishingId by remember { mutableStateOf<String?>(null) }
-    var listingActionError by remember { mutableStateOf<String?>(null) }
-    var listingActionMessage by remember { mutableStateOf<String?>(null) }
-    var editingListing by remember { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
-    var editTitle by rememberSaveable { mutableStateOf("") }
-    var editDescription by rememberSaveable { mutableStateOf("") }
-    var editCategory by rememberSaveable { mutableStateOf("") }
-    var editSubcategory by rememberSaveable { mutableStateOf("") }
-    var editMediaUris by remember { mutableStateOf(emptyList<Uri>()) }
+    var error by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var deletingId by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var republishingId by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var listingActionError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var listingActionMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var editingListing by remember(sellerAccountKey) { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
+    var editTitle by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var editDescription by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var editCategory by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var editSubcategory by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var editMediaUris by remember(sellerAccountKey) { mutableStateOf(emptyList<Uri>()) }
     val editMediaPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA)
     ) { uris ->
         if (uris.isNotEmpty()) editMediaUris = FynxMarketplaceSellerFlowSupport.normalizedMedia(context, uris)
     }
-    var editCategoryExpanded by remember { mutableStateOf(false) }
-    var editCondition by rememberSaveable { mutableStateOf("NEW") }
-    var editLocation by rememberSaveable { mutableStateOf("") }
-    var editPrice by rememberSaveable { mutableStateOf("") }
-    var editQuantity by rememberSaveable { mutableStateOf("") }
-    var editSaving by remember { mutableStateOf(false) }
-    var editError by remember { mutableStateOf<String?>(null) }
-    var payoutAccount by remember { mutableStateOf<JSONObject?>(null) }
-    var payoutAccounts by remember { mutableStateOf(emptyList<JSONObject>()) }
-    var payoutCurrency by rememberSaveable { mutableStateOf("NGN") }
-    var accountLoading by remember { mutableStateOf(true) }
-    var accountSaving by remember { mutableStateOf(false) }
-    var accountMessage by remember { mutableStateOf<String?>(null) }
-    var showPayoutAccount by remember { mutableStateOf(false) }
-    var bankCode by remember { mutableStateOf("") }
-    var accountNumber by remember { mutableStateOf("") }
-    var accountName by remember { mutableStateOf("") }
-    var moneyLoading by remember { mutableStateOf(true) }
+    var editCategoryExpanded by remember(sellerAccountKey) { mutableStateOf(false) }
+    var editCondition by rememberSaveable(sellerAccountKey) { mutableStateOf("NEW") }
+    var editLocation by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var editPrice by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var editQuantity by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var editSaving by remember(sellerAccountKey) { mutableStateOf(false) }
+    var editError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var payoutAccount by remember(sellerAccountKey) { mutableStateOf<JSONObject?>(null) }
+    var payoutAccounts by remember(sellerAccountKey) { mutableStateOf(emptyList<JSONObject>()) }
+    var payoutCurrency by rememberSaveable(sellerAccountKey) { mutableStateOf("NGN") }
+    var accountLoading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var accountSaving by remember(sellerAccountKey) { mutableStateOf(false) }
+    var accountMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var showPayoutAccount by remember(sellerAccountKey) { mutableStateOf(false) }
+    var bankCode by remember(sellerAccountKey) { mutableStateOf("") }
+    var accountNumber by remember(sellerAccountKey) { mutableStateOf("") }
+    var accountName by remember(sellerAccountKey) { mutableStateOf("") }
+    var moneyLoading by remember(sellerAccountKey) { mutableStateOf(true) }
     var moneyRequestGeneration by remember { mutableIntStateOf(0) }
-    var moneyError by remember { mutableStateOf<String?>(null) }
-    var moneyRecords by remember { mutableStateOf(emptyList<SellerMoneyRecord>()) }
-    var moneyTotals by remember { mutableStateOf(emptyMap<String, SellerMoneyTotals>()) }
-    var moneyTotalsFromBackend by remember { mutableStateOf(false) }
-    var showDriverAssignments by remember { mutableStateOf(false) }
-    var activeSection by rememberSaveable { mutableStateOf("Overview") }
+    var moneyError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var moneyRecords by remember(sellerAccountKey) { mutableStateOf(emptyList<SellerMoneyRecord>()) }
+    var moneyTotals by remember(sellerAccountKey) { mutableStateOf(emptyMap<String, SellerMoneyTotals>()) }
+    var moneyTotalsFromBackend by remember(sellerAccountKey) { mutableStateOf(false) }
+    var showDriverAssignments by remember(sellerAccountKey) { mutableStateOf(false) }
+    var activeSection by rememberSaveable(sellerAccountKey) { mutableStateOf("Overview") }
+    var weeklySellerAwards by remember(sellerAccountKey) { mutableStateOf<List<FynxMarketplaceSellerWeeklyAward>>(emptyList()) }
+    var weeklyAwardsLoading by remember(sellerAccountKey) { mutableStateOf(false) }
+    var weeklyAwardsError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     val selectedChipColors = fynxMarketplaceSelectedChipColors()
     val standardMarketplaceCategories = listOf(
         "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property",
@@ -177,14 +181,14 @@ fun FynxMarketplaceSellerCenterPanel() {
         editCategory.isNotBlank() &&
         standardMarketplaceCategories.none { it.equals(editCategory.trim(), ignoreCase = true) }
     ) standardMarketplaceCategories + editCategory else standardMarketplaceCategories
-    var shopName by rememberSaveable { mutableStateOf("") }
-    var shopDescription by rememberSaveable { mutableStateOf("") }
-    var shopLocation by rememberSaveable { mutableStateOf("") }
-    var shopContactPhone by rememberSaveable { mutableStateOf("") }
-    var shopLoading by remember { mutableStateOf(true) }
-    var shopSaving by remember { mutableStateOf(false) }
-    var shopError by remember { mutableStateOf<String?>(null) }
-    var shopMessage by remember { mutableStateOf<String?>(null) }
+    var shopName by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopDescription by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopLocation by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopContactPhone by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopLoading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var shopSaving by remember(sellerAccountKey) { mutableStateOf(false) }
+    var shopError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var shopMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
 
     fun loadMoney() {
         val requestGeneration = ++moneyRequestGeneration
@@ -228,7 +232,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             title = row.optString("title").ifBlank { "FYNX order" },
                             currency = currency,
                             sellerNet = marketplaceRequiredAmount(row.opt("sellerNetAmount")),
-                            marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFee")),
+                            marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFeeSeller")),
                             funds = funds,
                             payoutStatus = payoutStatus,
                             updatedAt = row.optString("updatedAt")
@@ -260,13 +264,21 @@ fun FynxMarketplaceSellerCenterPanel() {
         shopError = null
         accountLoading = true
         accountMessage = null
-        // Do not show stale shop identity while the current account is being refreshed.
-        shopName = ""
-        shopDescription = ""
-        shopLocation = ""
-        shopContactPhone = ""
+        // Keep this account's last confirmed shop details visible while the profile refreshes.
         // Hide stale amounts/history immediately; earnings manage their own request lifetime.
         loadMoney()
+        weeklyAwardsLoading = true
+        weeklyAwardsError = null
+        scope.launch {
+            FynxMarketplaceWeeklySellerClient.currentSellerHistory(context)
+                .onSuccess { awards ->
+                    if (requestGeneration == refreshGeneration) weeklySellerAwards = awards
+                }
+                .onFailure { failure ->
+                    if (requestGeneration == refreshGeneration) weeklyAwardsError = marketplaceSafeError(failure, "Weekly seller awards could not load.")
+                }
+            if (requestGeneration == refreshGeneration) weeklyAwardsLoading = false
+        }
 
         // Inventory owns the Listings loading state. Profile/payout requests must not keep
         // the Listings screen spinning after its inventory request has already finished.
@@ -281,11 +293,13 @@ fun FynxMarketplaceSellerCenterPanel() {
                     listingActionMessage = null
                 }
                 .onFailure { failure ->
-                    listings = emptyList()
-                    archivedListings = emptyList()
                     listingActionError = null
                     listingActionMessage = null
-                    error = marketplaceSafeError(failure, "Could not load your listings.")
+                    error = if (listings.isNotEmpty() || archivedListings.isNotEmpty()) {
+                        "Could not refresh your inventory. Previously loaded listings are shown; check availability before relying on them."
+                    } else {
+                        marketplaceSafeError(failure, "Could not load your listings.")
+                    }
                 }
             loading = false
         }
@@ -306,11 +320,11 @@ fun FynxMarketplaceSellerCenterPanel() {
                     shopContactPhone = profile.optString("contactPhone")
                 }
                 .onFailure { failure ->
-                    shopName = ""
-                    shopDescription = ""
-                    shopLocation = ""
-                    shopContactPhone = ""
-                    shopError = marketplaceSafeError(failure, "Shop profile could not load.")
+                    shopError = if (shopName.isNotBlank()) {
+                        "Shop profile could not be refreshed. Previously saved details are still shown."
+                    } else {
+                        marketplaceSafeError(failure, "Shop profile could not load.")
+                    }
                 }
             shopLoading = false
         }
@@ -348,7 +362,7 @@ fun FynxMarketplaceSellerCenterPanel() {
         }
     }
 
-    LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(sellerAccountKey) { refresh() }
 
     // Include currencies from all-history totals even if recent detail rows omit them.
     val currencies = (moneyRecords.map { it.currency } + moneyTotals.keys).distinct().sorted()
@@ -429,6 +443,64 @@ fun FynxMarketplaceSellerCenterPanel() {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 CircularProgressIndicator(Modifier.size(16.dp))
                                 Text("Refreshing your shop information…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+            item(key = "seller-weekly-recognition") {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🏆", style = MaterialTheme.typography.titleLarge)
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("Weekly seller recognition", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text("Your verified FYNX Marketplace awards", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = { refresh() }, enabled = !weeklyAwardsLoading) { Text("Refresh") }
+                        }
+                        when {
+                            weeklyAwardsLoading && weeklySellerAwards.isEmpty() -> CircularProgressIndicator(Modifier.size(20.dp))
+                            weeklyAwardsError != null && weeklySellerAwards.isEmpty() -> {
+                                Text(weeklyAwardsError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = { refresh() }, enabled = !weeklyAwardsLoading) { Text("Retry") }
+                            }
+                            weeklySellerAwards.isEmpty() -> Text(
+                                "Your Best Seller of the Week or Top Seller recognition will appear here when your completed orders qualify.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            else -> {
+                                weeklySellerAwards.take(8).forEach { award ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (award.rank == 1) FynxDesign.PremiumGold.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Text(
+                                            if (award.rank == 1) "WINNER" else "TOP ${award.rank}",
+                                            Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(if (award.rank == 1) "Best Seller of the Week" else "Weekly Top Seller", fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            award.weekLabel + " · " + award.completedOrders + " completed orders · " + award.uniqueBuyers + " buyers",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                }
+                                if (weeklyAwardsError != null) Text(weeklyAwardsError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -633,7 +705,7 @@ fun FynxMarketplaceSellerCenterPanel() {
         }
         if (error != null && activeSection == "Listings") item { Text(error!!, color = MaterialTheme.colorScheme.error) }
         if (activeSection == "Listings") {
-        if (loading) {
+        if (loading && listings.isEmpty() && archivedListings.isEmpty()) {
             item { Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
         } else if (listings.isEmpty() && error != null) {
             item {
@@ -655,6 +727,13 @@ fun FynxMarketplaceSellerCenterPanel() {
                 }
             }
         } else {
+            if (loading) item {
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Refreshing your inventory…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             item { Text("Your listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
             items(listings, key = { it.id }) { listing ->
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {

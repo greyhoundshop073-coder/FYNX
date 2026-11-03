@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.util.Locale
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /** A Marketplace-native seller storefront, backed only by current FYNX listing/reputation data. */
@@ -85,49 +87,72 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var storefrontLoading by remember(username) { mutableStateOf(true) }
     var storefrontError by remember(username) { mutableStateOf<String?>(null) }
     var storefrontReloadKey by remember(username) { mutableStateOf(0) }
+    var weeklyAwards by remember(username) { mutableStateOf<List<FynxMarketplaceSellerWeeklyAward>>(emptyList()) }
     LaunchedEffect(username, viewerUsername, storefrontReloadKey) {
         storefrontLoading = true
         storefrontError = null
         profileLoading = true
         shopProfileError = null
         followError = null
-        FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())
-            .onSuccess { fetched ->
-                storefrontListings = fetched.filter { it.active && it.quantity > 0 }
-                storefrontError = null
-            }
-            .onFailure {
-                storefrontListings = null
-                storefrontError = "Products could not load. Check your connection and try again."
-            }
-        storefrontLoading = false
-        FynxProfileRemoteClient.get(context, username.removePrefix("@").trim())
-            .onSuccess { profile ->
-                profileName = profile.displayName.orEmpty()
-                profileBio = profile.bio.orEmpty()
-                followedByViewer = profile.followedByCurrentUser
-                followerCount = profile.followerCount
-                followError = null
-            }
-            .onFailure { failure ->
-                followedByViewer = null
-                followerCount = null
-                followError = marketplaceSafeError(failure, "Follow status could not load.")
-            }
         storeName = listings.firstOrNull()?.storeName.orEmpty()
-        FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())
-            .mapCatching { raw ->
-                org.json.JSONObject(raw).optJSONObject("shop")
-                    ?: throw IllegalStateException("Public shop profile response was incomplete.")
+
+        // Products, profile/follow state and shop identity are independent requests.
+        // Fetch them concurrently so a slow endpoint cannot delay the whole storefront.
+        var authoritativeShopBio: String? = null
+        coroutineScope {
+            launch {
+                FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())
+                    .onSuccess { fetched ->
+                        storefrontListings = fetched.filter { it.active && it.quantity > 0 }
+                        storefrontError = null
+                    }
+                    .onFailure { failure ->
+                        storefrontError = if (storefrontListings.isNullOrEmpty()) {
+                            marketplaceSafeError(failure, "Products could not load. Check your connection and try again.")
+                        } else {
+                            "Showing previously loaded products. Product availability could not be refreshed."
+                        }
+                    }
+                storefrontLoading = false
             }
-            .onSuccess { shop ->
-                storeName = shop.optString("shopName").ifBlank { storeName }
-                profileBio = shop.optString("description").ifBlank { profileBio }
-                shopLocation = shop.optString("location")
-                shopContactPhone = shop.optString("contactPhone")
+            launch {
+                FynxProfileRemoteClient.get(context, username.removePrefix("@").trim())
+                    .onSuccess { profile ->
+                        profileName = profile.displayName.orEmpty()
+                        profileBio = profile.bio.orEmpty()
+                        followedByViewer = profile.followedByCurrentUser
+                        followerCount = profile.followerCount
+                        followError = null
+                    }
+                    .onFailure { failure ->
+                        followError = marketplaceSafeError(failure, "Follow status could not load.")
+                    }
+                profileLoading = false
             }
-            .onFailure { failure -> shopProfileError = marketplaceSafeError(failure, "Shop details could not load.") }
-        profileLoading = false
+            launch {
+                FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())
+                    .mapCatching { raw ->
+                        org.json.JSONObject(raw).optJSONObject("shop")
+                            ?: throw IllegalStateException("Public shop profile response was incomplete.")
+                    }
+                    .onSuccess { shop ->
+                        storeName = shop.optString("shopName").ifBlank { storeName }
+                        authoritativeShopBio = shop.optString("description").takeIf { it.isNotBlank() }
+                        shopLocation = shop.optString("location")
+                        shopContactPhone = shop.optString("contactPhone")
+                    }
+                    .onFailure { failure ->
+                        shopProfileError = marketplaceSafeError(failure, "Shop details could not load.")
+                    }
+            }
+        }
+        // The persistent shop description is authoritative over the account bio.
+        authoritativeShopBio?.let { profileBio = it }
+    }
+    LaunchedEffect(username) {
+        FynxMarketplaceWeeklySellerClient.history(context, username)
+            .onSuccess { weeklyAwards = it }
+        // Award history is optional reputation content and must not delay profile or product loading.
     }
     val sellerListings = remember(storefrontListings) {
         storefrontListings.orEmpty().filter { it.active && it.quantity > 0 }.distinctBy { it.id }
@@ -242,6 +267,76 @@ internal fun FynxMarketplaceSellerStoreDialog(
                         }
                     }
                 }
+                if (weeklyAwards.isNotEmpty()) {
+                    item(key = "seller-weekly-awards-$username") {
+                        Card(
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Column(
+                                Modifier.fillMaxWidth().padding(15.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🏆", style = MaterialTheme.typography.titleLarge)
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("FYNX Seller Hall of Fame", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("Verified weekly Marketplace recognition", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Surface(color = Color(0xFFD4AF37), shape = RoundedCornerShape(50)) {
+                                        Text(
+                                            weeklyAwards.size.toString() + if (weeklyAwards.size == 1) " award" else " awards",
+                                            Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                            color = Color(0xFF1C2434),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                weeklyAwards.take(12).forEach { award ->
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Surface(
+                                            color = if (award.rank == 1) Color(0xFFD4AF37) else MaterialTheme.colorScheme.surface,
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Text(
+                                                if (award.rank == 1) "WINNER" else "TOP ${award.rank}",
+                                                Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+                                                color = if (award.rank == 1) Color(0xFF1C2434) else MaterialTheme.colorScheme.onSurface,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                if (award.rank == 1) "Best Seller of the Week" else "Weekly Top Seller",
+                                                fontWeight = FontWeight.SemiBold,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                award.weekLabel.ifBlank { "Weekly award" } + " · " +
+                                                    award.completedOrders + " completed orders · " +
+                                                    award.uniqueBuyers + " buyers",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                                Text(
+                                    "Recognition is based on completed Marketplace orders, not advertising spend.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("Products", "About").forEach { label ->
@@ -270,7 +365,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             }
                         }
                     }
-                } else if (storefrontLoading) {
+                } else if (storefrontLoading && sellerListings.isEmpty()) {
                     item {
                         Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(20.dp))
@@ -278,7 +373,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             Text("Loading this seller’s products…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                } else if (storefrontError != null) {
+                } else if (storefrontError != null && sellerListings.isEmpty()) {
                     item {
                         Card(shape = RoundedCornerShape(18.dp)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -290,6 +385,23 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 } else if (sellerListings.isEmpty()) {
                     item { Text("This seller has no active products available right now.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else {
+                    if (storefrontLoading) item {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Refreshing seller products…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    storefrontError?.let { message ->
+                        item {
+                            Card(shape = RoundedCornerShape(14.dp)) {
+                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(message, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                    TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading) { Text("Retry") }
+                                }
+                            }
+                        }
+                    }
                     items(sellerListings, key = { "seller-store-${it.id}" }) { listing ->
                         Surface(
                             onClick = { onOpenListing(listing) },

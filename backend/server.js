@@ -502,6 +502,22 @@ app.get("/api/media/:id", auth, async (req, res) => {
     const mediaId = Number(req.params.id);
     if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: "invalid media id" });
     let privateEvidenceMedia = false;
+    // Seasonal campaigns are provisioned by the advertising module. Check the
+    // table before referencing it so an early media request remains safe while
+    // optional campaign schema setup is still in progress.
+    const seasonalPromotionTable = await pool.query(
+      "SELECT to_regclass('public.marketplace_seasonal_promotions') AS relation"
+    );
+    const seasonalMediaAuthorization = seasonalPromotionTable.rows[0]?.relation
+      ? `OR EXISTS (
+          SELECT 1
+          FROM marketplace_seasonal_promotions sp
+          WHERE sp.artwork_media_id = mm.id
+            AND sp.active = TRUE
+            AND sp.starts_at <= NOW()
+            AND sp.ends_at > NOW()
+        )`
+      : "";
     let result = await pool.query(`
       SELECT mm.mime_type, mm.data
       FROM message_media mm
@@ -536,6 +552,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
                    OR (b.blocked_id = $2 AND b.blocker_id = ml.seller_id)
               )
           )
+          ${seasonalMediaAuthorization}
           OR EXISTS (
             SELECT 1
             FROM users u

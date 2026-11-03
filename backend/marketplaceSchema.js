@@ -28,6 +28,7 @@ export function ensureMarketplaceSchemaForPool(pool) {
       "  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),",
       "  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
       ");",
+      "ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0);",
       "CREATE INDEX IF NOT EXISTS marketplace_listings_active_idx ON marketplace_listings (active, created_at DESC);",
       "CREATE INDEX IF NOT EXISTS marketplace_listings_seller_idx ON marketplace_listings (seller_id, active, created_at DESC);",
       "CREATE INDEX IF NOT EXISTS marketplace_listings_category_idx ON marketplace_listings (category, active, created_at DESC);",
@@ -37,7 +38,25 @@ export function ensureMarketplaceSchemaForPool(pool) {
       "  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),",
       "  PRIMARY KEY (user_id, listing_id)",
       ");",
-      "CREATE INDEX IF NOT EXISTS marketplace_price_watches_listing_idx ON marketplace_price_watches (listing_id, created_at DESC);"
+      "CREATE INDEX IF NOT EXISTS marketplace_price_watches_listing_idx ON marketplace_price_watches (listing_id, created_at DESC);",
+      "CREATE TABLE IF NOT EXISTS marketplace_weekly_seller_awards (",
+      "  week_start TIMESTAMPTZ NOT NULL,",
+      "  week_end TIMESTAMPTZ NOT NULL,",
+      "  weekly_rank INTEGER NOT NULL CHECK (weekly_rank BETWEEN 1 AND 5),",
+      "  seller_id BIGINT REFERENCES users(id) ON DELETE SET NULL,",
+      "  username TEXT NOT NULL,",
+      "  display_name TEXT NOT NULL DEFAULT '',",
+      "  completed_orders INTEGER NOT NULL CHECK (completed_orders > 0),",
+      "  unique_buyers INTEGER NOT NULL CHECK (unique_buyers > 0),",
+      "  featured_listing_id BIGINT,",
+      "  featured_product_title TEXT NOT NULL DEFAULT '',",
+      "  featured_product_price NUMERIC(14,2),",
+      "  featured_product_currency TEXT,",
+      "  archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),",
+      "  PRIMARY KEY (week_start, weekly_rank),",
+      "  UNIQUE (week_start, seller_id)",
+      ");",
+      "CREATE INDEX IF NOT EXISTS marketplace_weekly_seller_awards_username_idx ON marketplace_weekly_seller_awards (lower(username), week_start DESC);"
     ].join("\n");
     pending = pool.query(sql).catch((error) => {
       schemaPromises.delete(pool);
