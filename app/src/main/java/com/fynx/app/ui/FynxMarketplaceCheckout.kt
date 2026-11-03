@@ -54,6 +54,25 @@ internal data class FynxMarketplaceCheckoutQuote(
 
 internal fun marketplaceQuoteExpired(expiresAt: String, now: Instant = Instant.now()): Boolean = runCatching { !Instant.parse(expiresAt).isAfter(now) }.getOrDefault(true)
 
+internal fun marketplaceWalletPaymentUnavailableMessage(
+    orderCurrency: String,
+    walletSummary: FynxBuyerWalletSummary?,
+    summaryLoading: Boolean
+): String? = when {
+    summaryLoading -> "Checking Wallet payment availability…"
+    !orderCurrency.equals("NGN", ignoreCase = true) ->
+        "FYNX Wallet currently supports NGN Marketplace orders only. Choose card/bank for this order."
+    walletSummary == null ->
+        "Wallet payment availability could not be checked. Choose card/bank payment or try again."
+    walletSummary.testMode ->
+        "Wallet payments are disabled in Test Mode. Simulated balances cannot be used for Marketplace purchases."
+    walletSummary.walletStatus != "ACTIVE" ->
+        "Wallet payments will open after your Wallet is active."
+    !walletSummary.canSpend ->
+        "Wallet payments are currently unavailable until provider, custody, compliance and spending approvals are complete."
+    else -> null
+}
+
 internal data class FynxMarketplaceCheckoutAddress(
     val name: String,
     val phone: String,
