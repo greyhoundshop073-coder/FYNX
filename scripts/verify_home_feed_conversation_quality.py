@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOME = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text(encoding="utf-8")
 COMMENTS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt").read_text(encoding="utf-8")
 BOOTSTRAP = (ROOT / "backend/realtimeIsolationBootstrap.js").read_text(encoding="utf-8")
+RUNTIME_NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 checks = [
     ("feed video is laid out against available width", "BoxWithConstraints(Modifier.fillMaxWidth())" in HOME),
@@ -24,6 +25,8 @@ checks = [
     ("reply endpoints validate post and parent visibility", "visiblePost(postId, req.user.sub)" in BOOTSTRAP and "NOT EXISTS (SELECT 1 FROM blocks" in BOOTSTRAP),
     ("both reply-parent visibility queries close their NOT EXISTS predicates", BOOTSTRAP.count("OR (b.blocker_id=c.author_id AND b.blocked_id=$3))") >= 2),
     ("runtime screenshot flow captures a visible inline video card", 'def capture_home_feed_visuals(home_xml: str)' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8") and 'authenticated-home-inline-video.png' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")),
+    ("Home feed scan preserves the Home navigation shell", "is_home_feed_navigation_visible(current)" in RUNTIME_NAVIGATION and "refusing to continue on another screen" in RUNTIME_NAVIGATION),
+    ("Home screenshot capture scans multiple real feed viewports", "def scroll_home_feed_page(index: int)" in RUNTIME_NAVIGATION and "for page in range(1, 9)" in RUNTIME_NAVIGATION),
     ("runtime screenshot flow opens a real Comments conversation without sending content", 'authenticated-home-comments.png' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8") and "No comment or reply was sent." in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")),
 ]
 

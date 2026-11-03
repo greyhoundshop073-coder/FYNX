@@ -1449,51 +1449,111 @@ def find_exact_home_action(xml_text: str, label: str):
     return None
 
 
-def capture_home_feed_visuals(home_xml: str) -> str:
-    """Capture real Home video/comment surfaces without creating or sending feed content."""
-    current = home_xml
-    video_control = find_control(current, ["Open video full screen"]) or find_control(current, ["Play video"])
-    if video_control:
-        (ROOT / "authenticated-home-inline-video.xml").write_text(current + "\n", encoding="utf-8")
-        screenshot("authenticated-home-inline-video.png")
-        report.append("- PASS: captured the real inline Home video card and its visible playback controls.")
-    else:
-        report.append("- NOTE: inline-video screenshot skipped because no real video post was visible in the current Home feed viewport.")
+def is_home_feed_navigation_visible(xml_text: str) -> bool:
+    """Recognize the Home shell even when a scrolled LazyColumn hides its header."""
+    return bool(
+        xml_text and PACKAGE in xml_text
+        and find_control(xml_text, ["Open FYNX camera"])
+        and find_control(xml_text, ["Home"])
+    )
 
-    comment_control = find_exact_home_action(current, "Comment")
-    if not comment_control:
-        report.append("- NOTE: comments screenshot skipped because no real post comment action was visible; no sample post was created.")
+
+def scroll_home_feed_page(index: int) -> str:
+    """Scroll the Home feed viewport to expose the next real post; never change tabs."""
+    run("adb", "shell", "input", "swipe", "720", "2450", "720", "1050", "500")
+    time.sleep(0.8)
+    candidate = dump_ui(f"authenticated-home-feed-scan-page-{index}.xml")
+    return candidate if is_home_feed_navigation_visible(candidate) else ""
+
+
+def capture_home_feed_visuals(home_xml: str) -> str:
+    """Capture real Home video/comment surfaces across the feed without creating content."""
+    current = home_xml
+    if not is_authenticated_home_surface(current):
+        FAILURES.append("Authenticated Home was not visible when Home Feed visual certification began.")
         return current
 
-    _, x, y = comment_control
-    run("adb", "logcat", "-c")
-    run("adb", "shell", "input", "tap", str(x), str(y))
-    deadline = time.monotonic() + 12.0
-    conversation_xml = ""
-    while time.monotonic() < deadline:
-        candidate = dump_ui("authenticated-home-comments-probe.xml")
-        if candidate and find_control(candidate, ["Comments"]) and find_control(candidate, ["Write a comment"]):
-            conversation_xml = candidate
+    video_captured = False
+    comments_captured = False
+    comment_action_seen = False
+    scanned_pages = 0
+    previous_xml = ""
+
+    for page in range(1, 9):
+        scanned_pages = page
+        if not is_home_feed_navigation_visible(current):
+            FAILURES.append("Home feed scan lost the Home navigation shell; refusing to continue on another screen.")
             break
-        time.sleep(0.5)
 
-    if conversation_xml:
-        (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
-        screenshot("authenticated-home-comments.png")
-        report.append("- PASS: opened a real post's Comments conversation and captured its post context, thread area and composer. No comment or reply was sent.")
-    else:
-        screenshot("authenticated-home-comments-open-failed.png")
-        FAILURES.append("Home Feed comment action was visible but the Comments conversation/composer did not open within 12 seconds.")
+        video_control = (
+            find_control(current, ["Open video full screen"])
+            or find_control(current, ["Play video"])
+        )
+        if video_control and not video_captured:
+            (ROOT / "authenticated-home-inline-video.xml").write_text(current + "\n", encoding="utf-8")
+            time.sleep(1.0)
+            screenshot("authenticated-home-inline-video.png")
+            video_captured = True
+            report.append("- PASS: captured a real inline Home video card and its feed playback controls; the video was not forced full-screen.")
 
-    run("adb", "shell", "input", "keyevent", "4")
-    return_home_deadline = time.monotonic() + 15.0
-    while time.monotonic() < return_home_deadline:
-        candidate = dump_ui("authenticated-home-after-comments.xml")
-        if candidate and is_authenticated_home_surface(candidate):
-            return candidate
-        time.sleep(0.5)
-    FAILURES.append("Home Feed visual capture could not return safely from the Comments conversation.")
-    return dump_ui("authenticated-home-after-comments-timeout.xml") or current
+        comment_control = find_exact_home_action(current, "Comment")
+        if comment_control and not comments_captured:
+            comment_action_seen = True
+            _, x, y = comment_control
+            run("adb", "logcat", "-c")
+            run("adb", "shell", "input", "tap", str(x), str(y))
+            deadline = time.monotonic() + 12.0
+            conversation_xml = ""
+            while time.monotonic() < deadline:
+                candidate = dump_ui("authenticated-home-comments-probe.xml")
+                if candidate and find_control(candidate, ["Comments"]) and find_control(candidate, ["Write a comment"]):
+                    conversation_xml = candidate
+                    break
+                time.sleep(0.5)
+
+            if not conversation_xml:
+                screenshot("authenticated-home-comments-open-failed.png")
+                FAILURES.append("A real Home post Comment action was visible but its Comments conversation/composer did not open within 12 seconds.")
+                return current
+
+            (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
+            screenshot("authenticated-home-comments.png")
+            comments_captured = True
+            report.append("- PASS: opened and captured a real post Comments conversation with post context, thread area and composer. No comment or reply was sent.")
+
+            run("adb", "shell", "input", "keyevent", "4")
+            return_home_deadline = time.monotonic() + 15.0
+            home_after_comments = ""
+            while time.monotonic() < return_home_deadline:
+                candidate = dump_ui("authenticated-home-after-comments.xml")
+                if candidate and is_home_feed_navigation_visible(candidate):
+                    home_after_comments = candidate
+                    break
+                time.sleep(0.5)
+            if not home_after_comments:
+                FAILURES.append("Home Feed visual capture could not return safely from the Comments conversation.")
+                return dump_ui("authenticated-home-after-comments-timeout.xml") or current
+            current = home_after_comments
+
+        if video_captured and comments_captured:
+            break
+        if page == 8:
+            break
+
+        next_xml = scroll_home_feed_page(page)
+        if not next_xml or next_xml == current or next_xml == previous_xml:
+            break
+        previous_xml, current = current, next_xml
+
+    if not video_captured:
+        report.append(
+            f"- NOTE: no real video post with visible playback controls was found in {scanned_pages} Home feed viewport(s); no synthetic post was created."
+        )
+    if not comments_captured and not comment_action_seen:
+        report.append(
+            f"- NOTE: no real post Comment action was found in {scanned_pages} Home feed viewport(s); no synthetic post or comment was created."
+        )
+    return current
 
 
 
