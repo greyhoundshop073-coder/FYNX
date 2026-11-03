@@ -46,8 +46,8 @@ checks = [
      and 'error = "Transcript ready. Caption timing is approximate; review it before sending."' not in camera),
     ("Runtime types and preserves a real manual video caption when speech recognition is unavailable",
      'find_control(caption_xml, ["Video captions"])' in runtime
-     and 'run("adb", "shell", "input", "text", "FYNXcamcaptiontest")' in runtime
-     and "FYNXcamcaptiontest" in runtime
+     and 'run("adb", "shell", "input", "text", "FYNXcap")' in runtime
+     and "FYNXcap" in runtime
      and "manually entered video caption survives keyboard dismissal" in runtime),
     ("On-device captions transcode supported device audio formats to PCM16 WAV before speech recognition",
      'fynx_caption_audio_" + System.currentTimeMillis() + ".wav"' in video_effects
@@ -433,7 +433,9 @@ checks.extend([
      and ".coerceIn(0f, (bitmap.width - layout.width)" not in overlay
      and ".coerceIn(0f, (bitmap.height - layout.height)" not in overlay),
     ("Runtime exercises direct-on-media photo/video typing and video timing controls",
-     "FYNXoverlaytest" in runtime and "FYNXvideooverlay" in runtime
+     "FYNXoverlaytest" in runtime
+     and 'run("adb", "shell", "input", "text", "FYNXvideo")' in runtime
+     and "FYNXvideo" in runtime
      and "FYNXdraftoverlay" in runtime
      and "camera-post-draft-edit-text-open" in runtime
      and "video text timing dialog did not expose Show from and Show until" in runtime),
