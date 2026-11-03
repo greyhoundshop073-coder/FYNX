@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -127,8 +128,8 @@ private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String {
 @Composable
 fun FynxBuyerWalletPanel() {
     val context = LocalContext.current
-    var activeAction by remember { mutableStateOf("HOME") }
-    var fundingAmount by remember { mutableStateOf("") }
+    var activeAction by rememberSaveable { mutableStateOf("HOME") }
+    var fundingAmount by rememberSaveable { mutableStateOf("") }
     var summary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
     var activity by remember { mutableStateOf(emptyList<FynxBuyerWalletActivity>()) }
     var summaryLoading by remember { mutableStateOf(true) }

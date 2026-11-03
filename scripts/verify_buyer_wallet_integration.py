@@ -228,6 +228,21 @@ checks.extend([
   and 'setOf("PENDING", "PROCESSING", "SUCCEEDED", "FAILED", "BLOCKED")' in client)
 ])
 
+checks.extend([
+ ("hosted Wallet funding form, idempotency key and exact provider session survive Android process recreation",
+  "rememberSaveable(method) { mutableStateOf(\"\") }" in actions
+  and "stateSaver = FynxWalletFundingSessionSaver" in actions
+  and "\"reference\" to it.reference" in actions
+  and "\"authorizationUrl\" to it.authorizationUrl.orEmpty()" in actions
+  and "idempotencyKey by rememberSaveable(method)" in actions
+  and "activeAction by rememberSaveable" in panel
+  and "fundingAmount by rememberSaveable" in panel),
+ ("Wallet funding recovery does not generate a new idempotency key when Android restores the saved payment state",
+  "idempotencyKey by rememberSaveable(method)" in actions
+  and "idempotencyKey = UUID.randomUUID().toString().replace(\"-\", \"\")" in actions
+  and "Start a new payment" in actions)
+])
+
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
 if failed: raise SystemExit("FYNX buyer wallet Android integration failed: "+", ".join(failed))

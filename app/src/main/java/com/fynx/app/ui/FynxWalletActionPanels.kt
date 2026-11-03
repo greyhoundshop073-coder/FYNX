@@ -48,6 +48,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.mapSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,6 +65,41 @@ import java.util.Locale
 
 private fun walletActionMoney(amount: Double?): String =
     amount?.takeIf { it.isFinite() && it >= 0.0 }?.let { "₦" + String.format(Locale.US, "%,.2f", it) } ?: "Unavailable"
+
+private val FynxWalletFundingSessionSaver = mapSaver<FynxWalletFundingSession?>(
+    save = { session ->
+        session?.let {
+            mapOf(
+                "status" to it.status,
+                "reference" to it.reference,
+                "amount" to it.amount,
+                "authorizationUrl" to it.authorizationUrl.orEmpty(),
+                "paymentMethod" to it.paymentMethod,
+                "message" to it.message,
+                "testMode" to it.testMode
+            )
+        } ?: emptyMap()
+    },
+    restore = { saved ->
+        val status = saved["status"] as? String
+        val reference = saved["reference"] as? String
+        val amount = saved["amount"] as? Double
+        val paymentMethod = saved["paymentMethod"] as? String
+        if (status == null || reference == null || amount == null || paymentMethod == null) {
+            null
+        } else {
+            FynxWalletFundingSession(
+                status = status,
+                reference = reference,
+                amount = amount,
+                authorizationUrl = (saved["authorizationUrl"] as? String)?.takeIf { it.isNotBlank() },
+                paymentMethod = paymentMethod,
+                message = saved["message"] as? String ?: "",
+                testMode = saved["testMode"] as? Boolean ?: false
+            )
+        }
+    }
+)
 
 @Composable
 internal fun FynxWalletActionPanel(
@@ -235,9 +272,15 @@ private fun FynxWalletHostedFundingPanel(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val methodName = if (method == "CARD") "Debit card" else "USSD"
-    var email by remember { mutableStateOf("") }
-    var session by remember(method) { mutableStateOf<FynxWalletFundingSession?>(null) }
-    var idempotencyKey by remember(method) { mutableStateOf(UUID.randomUUID().toString().replace("-", "")) }
+    // Keep the customer, idempotency key and provider reference across rotation and process recreation.
+    // A return from Paystack must resume the same attempt, never silently generate a second charge.
+    var email by rememberSaveable(method) { mutableStateOf("") }
+    var session by rememberSaveable(method, stateSaver = FynxWalletFundingSessionSaver) {
+        mutableStateOf<FynxWalletFundingSession?>(null)
+    }
+    var idempotencyKey by rememberSaveable(method) {
+        mutableStateOf(UUID.randomUUID().toString().replace("-", ""))
+    }
     var submitting by remember { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
