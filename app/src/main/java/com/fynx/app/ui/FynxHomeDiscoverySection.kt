@@ -187,7 +187,7 @@ private fun FynxDiscoveryPreviewCard(video: FynxDiscoveryClient.TrendingPost, on
         mediaLoading = false
     }
     LaunchedEffect(file) {
-        visual = file?.let { readFynxVideoVisual(it) }
+        visual = file?.let { media -> withContext(Dispatchers.IO) { readFynxVideoVisual(media) } }
     }
     Box(
         Modifier.width(180.dp).aspectRatio(9f / 16f)
@@ -484,6 +484,7 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
     var playing by remember(video.id) { mutableStateOf(false) }
     var mediaLoading by remember(video.id) { mutableStateOf(true) }
     var mediaFailed by remember(video.id) { mutableStateOf(false) }
+    var playbackError by remember(video.id) { mutableStateOf(false) }
     var retryNonce by remember(video.id) { mutableIntStateOf(0) }
     val viewState = remember(video.id) { mutableStateOf<VideoView?>(null) }
     val activeState = rememberUpdatedState(isActive)
@@ -491,19 +492,31 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
     LaunchedEffect(video.id, retryNonce) {
         mediaLoading = true
         mediaFailed = false
-        file = video.mediaId?.let {
-            FynxMediaCache.getOrDownload(context, "/api/social/media/$it", "video")
+        playbackError = false
+        prepared = false
+        playing = false
+        file = video.mediaId?.let { mediaId ->
+            withContext(Dispatchers.IO) {
+                FynxMediaCache.getOrDownload(context, "/api/social/media/$mediaId", "video")
+            }
         }
         mediaFailed = file == null
         mediaLoading = false
     }
     LaunchedEffect(file) {
-        visual = file?.let { readFynxVideoVisual(it) }
+        visual = file?.let { media -> withContext(Dispatchers.IO) { readFynxVideoVisual(media) } }
     }
     DisposableEffect(video.id) {
         onDispose {
             runCatching { viewState.value?.stopPlayback() }
             viewState.value = null
+        }
+    }
+    DisposableEffect(file, retryNonce) {
+        val attachedView = viewState.value
+        onDispose {
+            runCatching { attachedView?.stopPlayback() }
+            if (viewState.value === attachedView) viewState.value = null
         }
     }
     LaunchedEffect(isActive, prepared, viewState.value) {
@@ -527,39 +540,55 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
         val fittedWidth = if (containerAspect > aspect) maxHeight * aspect else maxWidth
         val fittedHeight = if (containerAspect > aspect) maxHeight else maxWidth / aspect
         if (file != null) {
-            AndroidView(
-                factory = { ctx ->
-                    VideoView(ctx).apply {
-                        viewState.value = this
-                        layoutParams = ViewGroup.LayoutParams(-1, -1)
-                        setVideoPath(file!!.absolutePath)
-                        setOnPreparedListener { player ->
-                            player.isLooping = true
-                            prepared = true
-                            if (activeState.value) {
-                                start()
-                                playing = true
+            key(file, retryNonce) {
+                AndroidView(
+                    factory = { ctx ->
+                        VideoView(ctx).apply {
+                            viewState.value = this
+                            layoutParams = ViewGroup.LayoutParams(-1, -1)
+                            setVideoPath(file!!.absolutePath)
+                            setOnPreparedListener { player ->
+                                player.isLooping = true
+                                prepared = true
+                                playbackError = false
+                                if (activeState.value) {
+                                    start()
+                                    playing = true
+                                }
+                            }
+                            setOnErrorListener { _, _, _ ->
+                                prepared = false
+                                playing = false
+                                playbackError = true
+                                true
                             }
                         }
+                    },
+                    modifier = Modifier.width(fittedWidth).height(fittedHeight).align(Alignment.Center),
+                    update = { viewState.value = it }
+                )
+            }
+        }
+        when {
+            mediaLoading || (file != null && !prepared && !playbackError) -> {
+                CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
+            }
+            mediaFailed || playbackError -> {
+                Column(
+                    Modifier.align(Alignment.Center).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.14f)) {
+                        Text("!", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.White, style = MaterialTheme.typography.headlineSmall)
                     }
-                },
-                modifier = Modifier.width(fittedWidth).height(fittedHeight).align(Alignment.Center),
-                update = { viewState.value = it }
-            )
-        } else if (mediaLoading) {
-            CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
-        } else if (mediaFailed) {
-            Column(
-                Modifier.align(Alignment.Center).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.14f)) {
-                    Text("!", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.White, style = MaterialTheme.typography.headlineSmall)
-                }
-                Text("This video could not be loaded", color = Color.White)
-                TextButton(onClick = { retryNonce++ }) {
-                    Text("Retry video", color = Color.White)
+                    Text(
+                        if (playbackError) "This video could not start" else "This video could not be loaded",
+                        color = Color.White
+                    )
+                    TextButton(onClick = { retryNonce++ }) {
+                        Text("Retry video", color = Color.White)
+                    }
                 }
             }
         }
