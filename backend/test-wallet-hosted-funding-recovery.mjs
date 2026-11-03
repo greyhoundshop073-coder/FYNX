@@ -4,6 +4,10 @@ import {
   isBuyerWalletProviderReferenceNotFound,
   isBuyerWalletTrustedCheckoutUrl
 } from './buyerWallet.js';
+import {
+  isValidWalletMarketplacePin,
+  walletMarketplaceSpendingApproved
+} from './buyerWalletMarketplace.js';
 
 assert.equal(classifyBuyerWalletFundingInitializationFailure({ status: 400 }), 'FAILED');
 assert.equal(classifyBuyerWalletFundingInitializationFailure({ status: 401 }), 'FAILED');
@@ -29,4 +33,32 @@ for (const url of [
   assert.equal(isBuyerWalletTrustedCheckoutUrl(url), false, url);
 }
 
-console.log('FYNX Wallet hosted-funding recovery unit tests GREEN (17 assertions)');
+const approvedSpendingEnvironment = {
+  FYNX_WALLET_TEST_MODE_ENABLED: 'false',
+  FYNX_WALLET_PROVIDER_APPROVED: 'true',
+  FYNX_WALLET_CUSTODY_APPROVED: 'true',
+  FYNX_WALLET_COMPLIANCE_APPROVED: 'true',
+  FYNX_WALLET_SPENDING_ENABLED: 'true',
+  PAYSTACK_SECRET_KEY: 'sk_live_unit_test_only'
+};
+assert.equal(walletMarketplaceSpendingApproved(approvedSpendingEnvironment), true);
+assert.equal(walletMarketplaceSpendingApproved({
+  ...approvedSpendingEnvironment,
+  FYNX_WALLET_TEST_MODE_ENABLED: 'true'
+}), false);
+assert.equal(walletMarketplaceSpendingApproved({
+  ...approvedSpendingEnvironment,
+  FYNX_WALLET_CUSTODY_APPROVED: 'false'
+}), false);
+assert.equal(walletMarketplaceSpendingApproved({
+  ...approvedSpendingEnvironment,
+  FYNX_WALLET_SPENDING_ENABLED: 'false'
+}), false);
+
+assert.equal(isValidWalletMarketplacePin('123456'), true);
+assert.equal(isValidWalletMarketplacePin('000000'), true);
+for (const invalidPin of ['12345', '1234567', '12345a', '12 456', '', null, 123456]) {
+  assert.equal(isValidWalletMarketplacePin(invalidPin), false);
+}
+
+console.log('FYNX Wallet hosted-funding recovery and Marketplace safety tests GREEN (31 assertions)');
