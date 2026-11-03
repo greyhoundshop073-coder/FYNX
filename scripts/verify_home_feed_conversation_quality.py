@@ -23,6 +23,7 @@ checks = [
     ("users can reply directly to another reply", "replyingToId = reply.id" in COMMENTS and "availableComments.firstOrNull" in COMMENTS),
     ("reply composer remains keyboard-safe", ".imePadding()" in COMMENTS and "KeyboardActions(onSend = { send() })" in COMMENTS),
     ("comment composer announces whether it sends a comment or reply", '"Send comment" else "Send reply"' in COMMENTS),
+    ("Home post identity presents an explicit X-style account handle", 'Text("@${post.authorUsername.removePrefix("@")} • ${relative(post.timestamp)}"' in HOME),
     ("all five X-style emoji reactions remain visible", all(token in HOME for token in ('ReactionChoice("👍", "LIKE"', 'ReactionChoice("❤️", "LOVE"', 'ReactionChoice("😂", "LAUGH"', 'ReactionChoice("😮", "WOW"', 'ReactionChoice("😢", "SAD"'))),
     ("emoji reactions have meaningful accessible labels", 'contentDescription = "React with $reactionLabel"' in HOME and "role = Role.Button" in HOME and "import androidx.compose.ui.semantics.role" in HOME),
     ("reaction selection and removal use the real backend client", "FynxHomePostReactionsClient.set(context, id, reaction)" in HOME and "FynxHomePostReactionsClient.clear(context, id)" in HOME),
