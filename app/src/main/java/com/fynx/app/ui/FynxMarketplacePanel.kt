@@ -1247,7 +1247,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     }
                     OutlinedButton(
                         onClick = { sellerStoreUsername = currentUsername.removePrefix("@").trim() },
-                        enabled = currentUsername.isNotBlank(),
+                        enabled = currentUsername.isNotBlank() && !currentUsername.trim().equals("preview", ignoreCase = true),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
