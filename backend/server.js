@@ -145,9 +145,11 @@ async function initDatabase() {
       object_key TEXT NOT NULL UNIQUE,
       expires_at TIMESTAMPTZ NOT NULL,
       completed_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL,
+      completed_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS message_media_upload_intents_owner_idx ON message_media_upload_intents (owner_id, expires_at DESC);
+    ALTER TABLE message_media_upload_intents ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS message_media_upload_intents_expiry_idx ON message_media_upload_intents (expires_at) WHERE completed_media_id IS NULL;
     CREATE INDEX IF NOT EXISTS message_media_owner_idx ON message_media (owner_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
@@ -436,7 +438,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     await client.query("BEGIN");
     inTransaction = true;
     const selected = await client.query(
-      "SELECT id, owner_id, mime_type, byte_size, object_key, expires_at, completed_media_id FROM message_media_upload_intents WHERE id = $1 AND owner_id = $2 FOR UPDATE",
+      "SELECT id, owner_id, mime_type, byte_size, object_key, expires_at, completed_media_id, completed_at FROM message_media_upload_intents WHERE id = $1 AND owner_id = $2 FOR UPDATE",
       [intentId, req.user.sub]
     );
     const intent = selected.rows[0];
@@ -446,20 +448,25 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
       return res.status(404).json({ error: "media upload intent not found" });
     }
 
-    if (intent.completed_media_id != null) {
-      const existing = await client.query(
-        "SELECT id, mime_type, byte_size FROM message_media WHERE id = $1 AND owner_id = $2",
-        [intent.completed_media_id, req.user.sub]
-      );
-      if (existing.rows[0]) {
-        await client.query("COMMIT");
-        inTransaction = false;
-        const row = existing.rows[0];
-        return res.json({
-          media: { id: String(row.id), mimeType: row.mime_type, byteSize: row.byte_size },
-          idempotent: true
-        });
+    if (intent.completed_at != null) {
+      if (intent.completed_media_id != null) {
+        const existing = await client.query(
+          "SELECT id, mime_type, byte_size FROM message_media WHERE id = $1 AND owner_id = $2",
+          [intent.completed_media_id, req.user.sub]
+        );
+        if (existing.rows[0]) {
+          await client.query("COMMIT");
+          inTransaction = false;
+          const row = existing.rows[0];
+          return res.json({
+            media: { id: String(row.id), mimeType: row.mime_type, byteSize: row.byte_size },
+            idempotent: true
+          });
+        }
       }
+      await client.query("ROLLBACK");
+      inTransaction = false;
+      return res.status(410).json({ error: "this upload intent was already completed but its media record is no longer available" });
     }
 
     if (new Date(intent.expires_at).getTime() <= Date.now()) {
@@ -493,7 +500,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     );
     const media = inserted.rows[0];
     await client.query(
-      "UPDATE message_media_upload_intents SET completed_media_id = $2 WHERE id = $1",
+      "UPDATE message_media_upload_intents SET completed_media_id = $2, completed_at = NOW() WHERE id = $1",
       [intentId, media.id]
     );
     await client.query("COMMIT");
@@ -1069,7 +1076,7 @@ if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 async function cleanupExpiredMediaUploadIntents() {
   if (!pool || mediaStorage.provider !== "r2" || !mediaStorage.isConfigured) return;
   const expired = await pool.query(
-    "SELECT id, object_key FROM message_media_upload_intents WHERE completed_media_id IS NULL AND expires_at < NOW() - INTERVAL '15 minutes' ORDER BY expires_at ASC LIMIT 50"
+    "SELECT id, object_key FROM message_media_upload_intents WHERE completed_at IS NULL AND expires_at < NOW() - INTERVAL '15 minutes' ORDER BY expires_at ASC LIMIT 50"
   );
   let removed = 0;
   for (const intent of expired.rows) {
@@ -1086,7 +1093,7 @@ async function cleanupExpiredMediaUploadIntents() {
     }
   }
   await pool.query(
-    "DELETE FROM message_media_upload_intents WHERE completed_media_id IS NOT NULL AND created_at < NOW() - INTERVAL '30 days'"
+    "DELETE FROM message_media_upload_intents WHERE completed_at IS NOT NULL AND completed_at < NOW() - INTERVAL '30 days'"
   );
   if (removed > 0) console.log("[fynx-media] removed expired incomplete upload intents:", removed);
 }

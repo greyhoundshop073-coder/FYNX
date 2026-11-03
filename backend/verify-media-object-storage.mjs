@@ -68,6 +68,10 @@ assert.match(pkg, /verify-media-object-storage\.mjs/);
 assert.match(server, /mediaStorage\.createUploadUrl/);
 assert.match(server, /mediaStorage\.inspectMediaObject/);
 assert.match(server, /completed_media_id/);
+assert.match(server, /completed_at TIMESTAMPTZ/);
+assert.match(server, /completed_media_id = \$2, completed_at = NOW\(\)/);
+assert.match(server, /completed_at IS NULL AND expires_at/);
+assert.match(server, /completed_at IS NOT NULL AND completed_at < NOW\(\) - INTERVAL '30 days'/);
 assert.match(pkg, /test-media-storage\.mjs/);
 
 console.log("FYNX MEDIA STORAGE INTEGRATION CONTRACT: GREEN");
