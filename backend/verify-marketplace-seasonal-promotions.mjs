@@ -49,7 +49,15 @@ const checks = [
   ["fixed-date fallback is suppressed when a matching admin schedule is active", banner.includes("seasonalPromotions.none { it.occasionKey.equals(celebration.first")],
   ["Owner/Admin center exposes the seasonal scheduler", adminCenter.includes("FynxMarketplaceSeasonalPromotionAdminPanel()")],
   ["scheduler uploads optional celebration artwork to authenticated FYNX media storage", adminUi.includes("Choose photo") && adminUi.includes("uploadArtwork(context, artworkUri!!)") && client.includes("FynxProductionMessaging.uploadMedia")],
-  ["seasonal schedules are independent of Best Seller scoring", seasonalFeedRoute.length > 0 && !seasonalFeedRoute.includes("marketplace_ad_metrics") && banner.includes("BEST SELLER OF THE WEEK")]
+  ["seasonal schedules are independent of Best Seller scoring", seasonalFeedRoute.length > 0 && !seasonalFeedRoute.includes("marketplace_ad_metrics") && banner.includes("BEST SELLER OF THE WEEK")],
+  ["campaign destinations persist across fresh schema creation and legacy database upgrades", advertising.includes("destination_type TEXT NOT NULL DEFAULT 'MARKETPLACE'") && advertising.includes("ADD COLUMN IF NOT EXISTS destination_type TEXT NOT NULL DEFAULT 'MARKETPLACE'") && advertising.includes("ADD COLUMN IF NOT EXISTS destination_value TEXT")],
+  ["campaign destinations are constrained to supported in-app targets by PostgreSQL", advertising.includes("marketplace_seasonal_promotions_destination_type_check") && advertising.includes("CHECK (destination_type IN ('MARKETPLACE', 'CATEGORY', 'PRODUCT', 'SHOP'))")],
+  ["Owner/Admin campaign endpoint validates destination types and non-empty target values", advertising.includes('["MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)') && advertising.includes("the selected campaign destination requires a matching destination value")],
+  ["campaign product destinations must resolve to active in-stock Marketplace listings", advertising.includes("destinationType === \"PRODUCT\"") && advertising.includes("COALESCE(active,TRUE)=TRUE AND GREATEST(0, quantity-COALESCE(reserved_quantity,0)) > 0")],
+  ["campaign shop destinations must resolve to a real FYNX username", advertising.includes("destinationType === \"SHOP\"") && advertising.includes("SELECT id FROM users WHERE LOWER(username)=LOWER($1)")],
+  ["seasonal campaign payload and Android client preserve the selected destination", advertising.includes("destinationType: row.destination_type") && advertising.includes("destinationValue: row.destination_value") && client.includes('optString("destinationType", "MARKETPLACE")') && client.includes('put("destinationValue"')],
+  ["Owner/Admin scheduler lets operators choose Marketplace, category, product or shop destinations", adminUi.includes('listOf("MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP")') && adminUi.includes("Button destination") && adminUi.includes("Product listing ID")],
+  ["banner CTAs route campaign product/category/shop destinations to real in-app navigation", banner.includes('slide.destinationType == "PRODUCT"') && banner.includes('slide.destinationType == "CATEGORY"') && banner.includes('slide.destinationType == "SHOP"') && panel.includes("onOpenProduct =") && panel.includes("onOpenCategory =") && panel.includes("loadExactMarketplaceListing(context, listingId)")]
 ];
 
 for (const [name, ok] of checks) {
