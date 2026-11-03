@@ -1956,6 +1956,79 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 report.append("- FAIL: My Shop overview remained in a loading state after 20 seconds; the screenshot is retained for diagnosis.")
                 FAILURES.append("My Shop overview remained loading after 20 seconds")
 
+            # Exercise the exact owner route added by the Marketplace-profile update.
+            # This is read-only: it does not save shop details or mutate listings/orders.
+            public_profile_xml = tap_control(
+                shop_xml,
+                ["View public Marketplace profile"],
+                "marketplace-public-profile",
+                ["Marketplace profile", "Available products"]
+            )
+            if public_profile_xml:
+                profile_deadline = time.monotonic() + 25.0
+                profile_terminal_markers = (
+                    "This seller has no active products available right now.",
+                    "Products could not load.",
+                    "Contact seller",
+                    "Retry products",
+                )
+                profile_ready_xml = public_profile_xml
+                while time.monotonic() < profile_deadline:
+                    profile_ready_xml = dump_ui("marketplace-public-profile-settled.xml") or profile_ready_xml
+                    has_header = bool(find_control(profile_ready_xml, ["Marketplace profile"]))
+                    has_count = bool(find_control(profile_ready_xml, ["Available products"]))
+                    has_product_state = any(
+                        find_control(profile_ready_xml, [marker])
+                        for marker in profile_terminal_markers
+                    ) or bool(find_control(profile_ready_xml, ["NGN", "USD"]))
+                    if has_header and has_count and has_product_state:
+                        break
+                    time.sleep(0.5)
+                if (
+                    find_control(profile_ready_xml, ["Marketplace profile"])
+                    and find_control(profile_ready_xml, ["Available products"])
+                    and (
+                        any(find_control(profile_ready_xml, [marker]) for marker in profile_terminal_markers)
+                        or find_control(profile_ready_xml, ["NGN", "USD"])
+                    )
+                ):
+                    screenshot("authenticated-marketplace-public-profile.png")
+                    (ROOT/"authenticated-marketplace-public-profile.xml").write_text(
+                        profile_ready_xml + chr(10), encoding="utf-8"
+                    )
+                    report.append("- PASS: My Shop -> View public Marketplace profile opened the actual seller storefront; identity and a real product/empty/error state were captured.")
+                else:
+                    screenshot("authenticated-marketplace-public-profile-incomplete.png")
+                    (ROOT/"authenticated-marketplace-public-profile-incomplete.xml").write_text(
+                        profile_ready_xml + chr(10), encoding="utf-8"
+                    )
+                    FAILURES.append("My Shop public Marketplace profile did not settle to its identity and real product/empty/error state")
+                run("adb", "shell", "input", "keyevent", "4")
+                marketplace_return_xml = ""
+                return_deadline = time.monotonic() + 10.0
+                while time.monotonic() < return_deadline:
+                    marketplace_return_xml = dump_ui("marketplace-public-profile-return.xml") or marketplace_return_xml
+                    if find_control(marketplace_return_xml, ["Search products, sellers or categories"]):
+                        break
+                    time.sleep(0.4)
+                if find_control(marketplace_return_xml, ["Search products, sellers or categories"]):
+                    returned_shop_xml = tap_control(
+                        marketplace_return_xml,
+                        ["My Shop"],
+                        "marketplace-my-shop-after-public-profile",
+                        ["Your shop at a glance", "Manage your storefront", "Shop profile"]
+                    )
+                    if returned_shop_xml:
+                        shop_xml, overview_returned_settled = wait_for_my_shop_section_settled("overview", timeout=20.0)
+                        if not overview_returned_settled:
+                            FAILURES.append("My Shop overview did not settle after returning from the public Marketplace profile")
+                    else:
+                        FAILURES.append("Could not return from public Marketplace profile to My Shop")
+                else:
+                    FAILURES.append("Public Marketplace profile Back did not return to Marketplace")
+            else:
+                FAILURES.append("My Shop public Marketplace profile action could not be opened")
+
             shop_sections = [
                 ("profile", "Shop profile", ["Shop identity"]),
                 ("listings", "Listings", ["Your listings", "You have no active listings yet", "Retry loading listings", "Archived listings"]),

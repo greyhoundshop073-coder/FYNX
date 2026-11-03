@@ -115,9 +115,20 @@ private fun marketplaceDescriptionWithSubcategory(description: String, subcatego
     ).take(maximumDescriptionLength)
 }
 
+private fun marketplaceShopProfileSignature(
+    shopName: String,
+    description: String,
+    location: String,
+    contactPhone: String
+): String = JSONObject().put("shopName", shopName)
+    .put("description", description)
+    .put("location", location)
+    .put("contactPhone", contactPhone)
+    .toString()
+
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
-fun FynxMarketplaceSellerCenterPanel() {
+fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sellerAccountKey = FynxAuthStore.accountStorageKey(context).orEmpty().ifBlank { "signed-out" }
@@ -191,6 +202,12 @@ fun FynxMarketplaceSellerCenterPanel() {
     var shopSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var shopError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var shopProfileSavedSignature by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    val currentShopProfileSignature = marketplaceShopProfileSignature(
+        shopName, shopDescription, shopLocation, shopContactPhone
+    )
+    val shopProfilePreviewReady = shopProfileSavedSignature.isNotBlank() &&
+        currentShopProfileSignature == shopProfileSavedSignature
 
     fun loadMoney() {
         val requestGeneration = ++moneyRequestGeneration
@@ -316,10 +333,17 @@ fun FynxMarketplaceSellerCenterPanel() {
             if (requestGeneration != refreshGeneration) return@launch
             shopResult
                 .onSuccess { profile ->
-                    shopName = profile.optString("shopName")
-                    shopDescription = profile.optString("description")
-                    shopLocation = profile.optString("location")
-                    shopContactPhone = profile.optString("contactPhone")
+                    val savedName = profile.optString("shopName")
+                    val savedDescription = profile.optString("description")
+                    val savedLocation = profile.optString("location")
+                    val savedContactPhone = profile.optString("contactPhone")
+                    shopName = savedName
+                    shopDescription = savedDescription
+                    shopLocation = savedLocation
+                    shopContactPhone = savedContactPhone
+                    shopProfileSavedSignature = marketplaceShopProfileSignature(
+                        savedName, savedDescription, savedLocation, savedContactPhone
+                    )
                 }
                 .onFailure { failure ->
                     shopError = if (shopName.isNotBlank()) {
@@ -447,6 +471,9 @@ fun FynxMarketplaceSellerCenterPanel() {
                             OutlinedButton(onClick = { activeSection = "Delivery & drivers" }, modifier = Modifier.weight(1f)) { Text("Delivery & drivers") }
                         }
                         OutlinedButton(onClick = { activeSection = "Earnings & payouts" }, modifier = Modifier.fillMaxWidth()) { Text("Earnings & payouts") }
+                        Button(onClick = onViewPublicShop, modifier = Modifier.fillMaxWidth()) {
+                            Text("View public Marketplace profile")
+                        }
                         OutlinedButton(onClick = { showDriverAssignments = true }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
@@ -560,6 +587,21 @@ fun FynxMarketplaceSellerCenterPanel() {
                     OutlinedTextField(value = shopLocation, onValueChange = { shopLocation = it.take(160); shopMessage = null; shopError = null }, label = { Text("Shop location (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null; shopError = null }, label = { Text("Public shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
+                    OutlinedButton(
+                        onClick = onViewPublicShop,
+                        enabled = !shopLoading && !shopSaving &&
+                            shopName.trim().length >= 2 && shopProfilePreviewReady,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Preview public Marketplace profile")
+                    }
+                    if (!shopLoading && shopName.trim().length >= 2 && !shopProfilePreviewReady) {
+                        Text(
+                            "Save your latest shop details before previewing the public profile.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Button(
                         onClick = {
                             shopSaving = true
@@ -577,10 +619,17 @@ fun FynxMarketplaceSellerCenterPanel() {
                                             ?: throw IllegalStateException("Shop profile response was incomplete.")
                                     }
                                     .onSuccess { profile ->
-                                        shopName = profile.optString("shopName")
-                                        shopDescription = profile.optString("description")
-                                        shopLocation = profile.optString("location")
-                                        shopContactPhone = profile.optString("contactPhone")
+                                        val savedName = profile.optString("shopName")
+                                        val savedDescription = profile.optString("description")
+                                        val savedLocation = profile.optString("location")
+                                        val savedContactPhone = profile.optString("contactPhone")
+                                        shopName = savedName
+                                        shopDescription = savedDescription
+                                        shopLocation = savedLocation
+                                        shopContactPhone = savedContactPhone
+                                        shopProfileSavedSignature = marketplaceShopProfileSignature(
+                                            savedName, savedDescription, savedLocation, savedContactPhone
+                                        )
                                         shopMessage = "Shop profile saved."
                                         shopError = null
                                     }

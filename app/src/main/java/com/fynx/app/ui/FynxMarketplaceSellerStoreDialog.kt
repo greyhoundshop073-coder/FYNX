@@ -165,7 +165,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, contentDescription = "Back to Marketplace") }
                 Column(Modifier.weight(1f)) {
-                    Text("Seller store", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Marketplace profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("@${username.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

@@ -84,6 +84,17 @@ checks = [
         and "remained in a loading state after 20 seconds; the screenshot is retained for diagnosis." in navigation,
     ),
     (
+        "My Shop public profile entry is exercised on Android and captures only a settled real storefront state",
+        '["View public Marketplace profile"]' in navigation
+        and 'screenshot("authenticated-marketplace-public-profile.png")' in navigation
+        and '["Marketplace profile"]' in navigation
+        and '["Available products"]' in navigation
+        and "This seller has no active products available right now." in navigation
+        and "Contact seller" in navigation
+        and "My Shop -> View public Marketplace profile" in navigation
+        and "Public Marketplace profile Back did not return to Marketplace" in navigation,
+    ),
+    (
         "dark Home mirror-glass capture keeps the active session and recovers through the real debug UI entry",
         'dark_home_xml = dismiss_runtime_permission_prompt() or dump_ui("home-mirror-glass-dark-probe.xml")' in navigation
         and 'dark_home_xml, dark_login_error = login()' in navigation
@@ -122,7 +133,9 @@ checks = [
         "full runtime certification remains explicitly runnable on integration and deliberate home-cert pushes",
         "inputs.full_runtime == 'true'" in workflow
         and "refs/heads/integration/fynx-single-apk-20261013" in workflow
-        and "contains(github.event.head_commit.message, '[home-cert]')" in workflow,
+        and "contains(github.event.head_commit.message, '[home-cert]')" in workflow
+        and "startsWith(github.head_ref, 'feature/marketplace-public-shop-entry-20261103')" in workflow
+        and "FYNX_MARKETPLACE_VISUALS_ONLY" in workflow,
     ),
     (
         "Android emulator userdata is capped to fit the hosted runner AVD storage",

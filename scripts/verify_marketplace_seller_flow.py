@@ -303,7 +303,7 @@ checks.extend([
     ("failed storefront requests do not silently substitute a partial Marketplace feed as the seller's complete catalogue", "storefrontListings.orEmpty()" in storefront and "storefrontListings ?: listings.filter" not in storefront),
     ("public seller storefront distinguishes initial loading, failed requests and a successful empty catalogue", "else if (storefrontLoading && sellerListings.isEmpty())" in storefront and "else if (storefrontError != null && sellerListings.isEmpty())" in storefront and "else if (sellerListings.isEmpty())" in storefront),
     ("public seller storefront shows real follow state, follower count, and safe follow/unfollow recovery without allowing self-follow", "viewerUsername: String" in storefront and "profile.followedByCurrentUser" in storefront and "profile.followerCount" in storefront and "FynxRemoteSocialClient.follow(context, username, wasFollowing)" in storefront and 'followedByViewer == false -> "Follow shop"' in storefront and 'followedByViewer == true -> "Following"' in storefront and "!isOwnStore" in storefront and "followError" in storefront and 'Text("Retry follow status")' in storefront),
-    ("Marketplace, My Shop and Saved Products discard account-scoped transient UI state when the signed-in account changes", "val marketplaceAccountKey = authSession.username?.removePrefix(\"@\")?.trim()?.lowercase(java.util.Locale.US)" in app_shell and '"Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(' in app_shell and '"Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel() }' in app_shell and '"Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(' in app_shell),
+    ("Marketplace, My Shop and Saved Products discard account-scoped transient UI state when the signed-in account changes", "val marketplaceAccountKey = authSession.username?.removePrefix(\"@\")?.trim()?.lowercase(java.util.Locale.US)" in app_shell and '"Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(' in app_shell and '"Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel(onViewPublicShop = { marketplaceProfileUsername = authSession.username; selected = "Marketplace" }) }' in app_shell and '"Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(' in app_shell),
 ])
 
 checks.extend([
@@ -542,7 +542,7 @@ checks.extend([
      and "The product was accepted, but its saved listing could not be read yet." in publish_flow),
     ("server-confirmed published product stays at the top only in the unfiltered discovery feed and pin state is account-scoped",
      "requestQuery.isBlank() && requestCategory.equals(\"All\", ignoreCase = true) && !requestNearbyMode" in marketplace
-     and "listOfNotNull(pinned) + items).distinctBy { it.id }" in marketplace
+     and "listOfNotNull(pinned) + resolvedItems).distinctBy { it.id }" in marketplace
      and "listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }" in publish_flow
      and "remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }" in marketplace
      and "remember(currentUsername) { mutableIntStateOf(0) }" in marketplace
