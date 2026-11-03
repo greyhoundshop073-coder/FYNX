@@ -124,6 +124,12 @@ checks = [
         and "refs/heads/integration/fynx-single-apk-20261013" in workflow
         and "contains(github.event.head_commit.message, '[home-cert]')" in workflow,
     ),
+    (
+        "Android emulator userdata is capped to fit the hosted runner AVD storage",
+        "profile: pixel_7_pro" in workflow
+        and "disk-size: 4G" in workflow
+        and "emulator-boot-timeout" not in workflow.split("uses: reactivecircus/android-emulator-runner@", 1)[1].split("script: bash scripts/run_android_runtime_certification.sh", 1)[0],
+    ),
 ]
 
 marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
