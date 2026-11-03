@@ -29,4 +29,4 @@ for (const url of [
   assert.equal(isBuyerWalletTrustedCheckoutUrl(url), false, url);
 }
 
-console.log('FYNX Wallet hosted-funding recovery unit tests GREEN (18 assertions)');
+console.log('FYNX Wallet hosted-funding recovery unit tests GREEN (17 assertions)');

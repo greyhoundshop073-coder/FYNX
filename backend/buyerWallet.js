@@ -1328,13 +1328,15 @@ export function registerBuyerWalletRoutes({ app }) {
       `, [reference, req.user.sub])).rows[0];
       if (!intent) return res.status(404).json({ error: 'Wallet funding request was not found' });
       const outcome = await reconcileWalletHostedFunding(reference, String(req.user.sub), { allowNotFoundFailure: true });
+      const effectiveStatus = String(outcome.status || intent.status).toUpperCase();
+      const checkoutCanBeReopened = ['PENDING', 'PROCESSING'].includes(effectiveStatus);
       return res.json({
-        status: outcome.status || intent.status,
+        status: effectiveStatus,
         reference,
         amount: Number(intent.amount),
         paymentMethod: intent.payment_method,
-        ...(intent.authorization_url ? { authorizationUrl: intent.authorization_url } : {}),
-        ...(intent.access_code ? { accessCode: intent.access_code } : {}),
+        ...(checkoutCanBeReopened && intent.authorization_url ? { authorizationUrl: intent.authorization_url } : {}),
+        ...(checkoutCanBeReopened && intent.access_code ? { accessCode: intent.access_code } : {}),
         testMode: walletTestModeEnabled(),
         message: outcome.status === 'SUCCEEDED'
           ? walletTestModeEnabled()
