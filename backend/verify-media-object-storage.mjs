@@ -78,6 +78,7 @@ assert.match(server, /mediaStorage\.inspectMediaObject\(intent\.upload_object_ke
 assert.match(server, /mediaStorage\.promoteUploadedObject\(intent\.upload_object_key, intent\.object_key\)/);
 assert.match(server, /const permanentInfo = await mediaStorage\.inspectMediaObject\(intent\.object_key\)/);
 assert.match(server, /completedTemporary/);
+assert.match(server, /completed_at IS NOT NULL AND upload_object_key <> object_key AND expires_at < NOW\(\)/);
 assert.match(server, /upload_object_key = object_key/);
 assert.match(adapter, /CopyObjectCommand/);
 assert.match(adapter, /validateUploadObjectKey/);

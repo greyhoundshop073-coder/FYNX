@@ -521,9 +521,8 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     );
     await client.query("COMMIT");
     inTransaction = false;
-    await mediaStorage.deleteMediaObject(intent.upload_object_key).then(() =>
-      pool.query("UPDATE message_media_upload_intents SET upload_object_key = object_key WHERE id = $1 AND completed_at IS NOT NULL", [intentId])
-    ).catch((cleanupError) => console.error("completed upload temporary object cleanup failed", intentId, cleanupError));
+    // Keep the temporary key recorded until its five-minute signed PUT URL has expired;
+    // the sweeper will then remove it without leaving a replay-created orphan behind.
     return res.status(201).json({
       media: { id: String(media.id), mimeType: media.mime_type, byteSize: media.byte_size },
       idempotent: false
@@ -1119,7 +1118,7 @@ async function cleanupExpiredMediaUploadIntents() {
       }
     }
     const completedTemporary = await client.query(
-      "SELECT id, object_key, upload_object_key FROM message_media_upload_intents WHERE completed_at IS NOT NULL AND upload_object_key <> object_key ORDER BY completed_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED"
+      "SELECT id, object_key, upload_object_key FROM message_media_upload_intents WHERE completed_at IS NOT NULL AND upload_object_key <> object_key AND expires_at < NOW() ORDER BY completed_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED"
     );
     for (const intent of completedTemporary.rows) {
       try {
