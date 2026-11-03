@@ -289,6 +289,7 @@ private fun typeLabel(type: FynxNotificationType): String = when (type) {
     FynxNotificationType.STORY -> "Stories"
     FynxNotificationType.REMINDER -> "Reminders"
     FynxNotificationType.SAFETY -> "Safety"
+    FynxNotificationType.SUPPORT -> "Support"
     FynxNotificationType.GROUP -> "Groups"
     FynxNotificationType.REACTION -> "Reactions"
     FynxNotificationType.COMMENT -> "Comments"
@@ -303,6 +304,7 @@ private fun notificationIcon(type: FynxNotificationType) = when (type) {
     FynxNotificationType.STORY -> Icons.Default.AutoStories
     FynxNotificationType.REMINDER -> Icons.Default.Schedule
     FynxNotificationType.SAFETY -> Icons.Default.Security
+    FynxNotificationType.SUPPORT -> Icons.Default.HelpOutline
     FynxNotificationType.GROUP -> Icons.Default.Group
     FynxNotificationType.REACTION -> Icons.Default.Favorite
     FynxNotificationType.COMMENT -> Icons.Default.Comment

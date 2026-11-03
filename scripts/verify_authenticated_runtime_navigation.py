@@ -145,7 +145,9 @@ DIAGNOSTIC_MARKERS = (
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
-    "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
+    "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password",
+    "Help & Support", "Report a problem", "Submit support request", "My support requests",
+    "Attach screenshot (optional)", "Contact FYNX Support", "Support Centre"
 )
 
 def visible_marker_summary(xml_text:str)->str:
@@ -390,6 +392,68 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         return ""
     return next_xml
 
+
+
+def capture_support_center_from_settings(settings_xml: str, prefix: str) -> bool:
+    """Capture the real user Help & Support form without submitting test content."""
+    # Help & Support appears lower in the Settings list on a phone-sized viewport.
+    latest_settings = settings_xml
+    for attempt in range(6):
+        if find_control(latest_settings, ["Help & Support"]):
+            break
+        run("adb", "shell", "input", "swipe", "700", "2200", "700", "900", "400")
+        time.sleep(0.35)
+        latest_settings = dump_ui(prefix + "-settings-scroll-" + str(attempt) + ".xml") or latest_settings
+    help_dialog = tap_control(
+        latest_settings, ["Help & Support"], prefix + "-help-support",
+        ["Contact FYNX Support"]
+    )
+    if not help_dialog:
+        FAILURES.append(prefix + ": Settings -> Help & Support dialog did not open")
+        return False
+    support_xml = tap_control(
+        help_dialog, ["Contact FYNX Support"], prefix + "-open-user-support",
+        ["Report a problem", "Attach screenshot (optional)"]
+    )
+    if not support_xml:
+        FAILURES.append(prefix + ": Help & Support -> Contact FYNX Support did not open the request form")
+        return False
+    deadline = time.monotonic() + 12.0
+    latest = support_xml
+    form_markers = [
+        ("Report a problem", ["Report a problem"]),
+        ("Describe the problem", ["Describe the problem"]),
+        ("Attach screenshot (optional)", ["Attach screenshot (optional)"]),
+        ("Submit support request", ["Submit support request"])
+    ]
+    while time.monotonic() < deadline:
+        if all(find_control(latest, labels) for _, labels in form_markers):
+            break
+        time.sleep(0.5)
+        latest = dump_ui(prefix + "-support-form-wait.xml") or latest
+    screenshot(prefix + "-user-support-request-form.png")
+    (ROOT / (prefix + "-user-support-request-form.xml")).write_text(latest + chr(10), encoding="utf-8")
+    missing_form = [label for label, labels in form_markers if not find_control(latest, labels)]
+    if missing_form:
+        FAILURES.append(prefix + ": Support request form is missing visible controls: " + ", ".join(missing_form))
+        return False
+
+    # Capture case history separately because the request form is intentionally scrollable.
+    for attempt in range(4):
+        history_xml = dump_ui(prefix + "-support-history-scroll-" + str(attempt) + ".xml") or latest
+        if find_control(history_xml, ["My support requests"]):
+            latest = history_xml
+            break
+        run("adb", "shell", "input", "swipe", "700", "2200", "700", "850", "450")
+        time.sleep(0.4)
+    history_xml = dump_ui(prefix + "-support-history.xml") or latest
+    screenshot(prefix + "-user-support-request-history.png")
+    (ROOT / (prefix + "-user-support-request-history.xml")).write_text(history_xml + chr(10), encoding="utf-8")
+    if not find_control(history_xml, ["My support requests"]):
+        FAILURES.append(prefix + ": the Support request history section was not reachable below the request form")
+        return False
+    report.append("- PASS captured the real FYNX Help & Support request form and case-history section from the running APK; no request was submitted.")
+    return True
 
 def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
     """Read the actual accessibility enabled state of a visible control."""
@@ -1994,6 +2058,30 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         report.append("- BLOCKED: "+wallet_message)
         FAILURES.append("Read-only Wallet screen capture: "+wallet_message)
 
+    # Navigate the existing Profile -> Settings -> Help & Support route and capture
+    # the real request form. This is read-only: no dummy case is submitted.
+    support_home = dump_ui("support-home-entry.xml")
+    for step in range(5):
+        if (find_control(support_home, ["Open FYNX camera"])
+                and find_control(support_home, ["Chat"])
+                and find_control(support_home, ["Friends"])):
+            break
+        run("adb", "shell", "input", "keyevent", "4")
+        time.sleep(0.6)
+        support_home = dump_ui("support-return-home-" + str(step) + ".xml")
+    if support_home and find_control(support_home, ["Open FYNX camera"]):
+        support_profile = tap_control(support_home, ["Open FYNX profile"], "support-open-profile", ["Edit profile", "Settings"])
+        if support_profile:
+            support_settings = tap_control(support_profile, ["Settings"], "support-open-settings", ["Search settings", "Account & Profile", "Notifications"])
+            if support_settings:
+                capture_support_center_from_settings(support_settings, "authenticated")
+            else:
+                FAILURES.append("Support Centre visual capture could not open Profile -> Settings")
+        else:
+            FAILURES.append("Support Centre visual capture could not open the existing Profile entry")
+    else:
+        FAILURES.append("Support Centre visual capture could not return to the authenticated Home surface")
+
     report += [
         "",
         "## Evidence boundary",
@@ -2025,6 +2113,7 @@ if not FAILURES:
         settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
         if settings_xml:
             report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
+            capture_support_center_from_settings(settings_xml, "authenticated")
         else:
             FAILURES.append("profile -> Settings home did not open")
     else:
