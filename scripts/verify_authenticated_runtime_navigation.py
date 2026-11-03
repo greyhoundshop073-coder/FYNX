@@ -1418,6 +1418,82 @@ report=["# FYNX Authenticated Runtime Visual Certification","",
         ("Marketplace-only visual capture may use the APK's explicit debug-only local UI entry; it is not server authentication." if VISUALS_ONLY else "This journey uses a real FYNX account supplied through GitHub Actions secrets."),
         "No fabricated users, posts, messages, listings or application records are created.",
         "Credentials are never written to the APK or repository."]
+def find_exact_home_action(xml_text: str, label: str):
+    """Find an exact labeled Home action, not text inside a user's caption."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+    for node in root.iter("node"):
+        values = (
+            (node.attrib.get("text") or "").strip(),
+            (node.attrib.get("content-desc") or "").strip(),
+        )
+        if not any(value.casefold() == label.casefold() for value in values):
+            continue
+        target = node
+        current = node
+        while current is not None:
+            if current.attrib.get("clickable", "false").lower() == "true" and _center(current):
+                target = current
+                break
+            current = parents.get(id(current))
+        center = _center(target)
+        if center:
+            return label, center[0], center[1]
+    return None
+
+
+def capture_home_feed_visuals(home_xml: str) -> str:
+    """Capture real Home video/comment surfaces without creating or sending feed content."""
+    current = home_xml
+    video_control = find_control(current, ["Open video full screen"]) or find_control(current, ["Play video"])
+    if video_control:
+        (ROOT / "authenticated-home-inline-video.xml").write_text(current + "\n", encoding="utf-8")
+        screenshot("authenticated-home-inline-video.png")
+        report.append("- PASS: captured the real inline Home video card and its visible playback controls.")
+    else:
+        report.append("- NOTE: inline-video screenshot skipped because no real video post was visible in the current Home feed viewport.")
+
+    comment_control = find_exact_home_action(current, "Comment")
+    if not comment_control:
+        report.append("- NOTE: comments screenshot skipped because no real post comment action was visible; no sample post was created.")
+        return current
+
+    _, x, y = comment_control
+    run("adb", "logcat", "-c")
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    deadline = time.monotonic() + 12.0
+    conversation_xml = ""
+    while time.monotonic() < deadline:
+        candidate = dump_ui("authenticated-home-comments-probe.xml")
+        if candidate and find_control(candidate, ["Comments"]) and find_control(candidate, ["Write a comment"]):
+            conversation_xml = candidate
+            break
+        time.sleep(0.5)
+
+    if conversation_xml:
+        (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
+        screenshot("authenticated-home-comments.png")
+        report.append("- PASS: opened a real post's Comments conversation and captured its post context, thread area and composer. No comment or reply was sent.")
+    else:
+        screenshot("authenticated-home-comments-open-failed.png")
+        FAILURES.append("Home Feed comment action was visible but the Comments conversation/composer did not open within 12 seconds.")
+
+    run("adb", "shell", "input", "keyevent", "4")
+    return_home_deadline = time.monotonic() + 15.0
+    while time.monotonic() < return_home_deadline:
+        candidate = dump_ui("authenticated-home-after-comments.xml")
+        if candidate and is_authenticated_home_surface(candidate):
+            return candidate
+        time.sleep(0.5)
+    FAILURES.append("Home Feed visual capture could not return safely from the Comments conversation.")
+    return dump_ui("authenticated-home-after-comments-timeout.xml") or current
+
 
 if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     report += ["","## Result: BLOCKED","- FYNX_E2E_USERNAME and FYNX_E2E_PASSWORD repository secrets are required for authenticated visual certification."]
@@ -1458,6 +1534,8 @@ if install.returncode!=0:
 # system dialog from intercepting taps intended for the real Marketplace surface.
 prepare_debug_visual_capture_permissions()
 xml,error=login()
+if not error:
+    xml = capture_home_feed_visuals(xml) or xml
 if not error and not VISUALS_ONLY and LOGIN_MODE != "server credential login":
     error = "Wallet runtime certification requires a server-credential login; debug-only local UI entry does not authenticate with the backend."
     FAILURES.append(error)
