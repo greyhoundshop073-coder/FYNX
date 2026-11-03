@@ -31,6 +31,31 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun firstVisitPendingWalletShowsOnlyItsLedgerDerivedZeroBalance() {
+        val summary = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":0.0,"reservedBalance":0.0,"withdrawalPendingBalance":0.0,"canFund":false,"canSpend":false,"canWithdraw":false,"testMode":false}"""
+        )
+        assertEquals(0.0, summary.availableBalance!!, 0.0)
+        assertTrue(shouldShowBuyerWalletBalance(summary))
+        assertFalse(summary.canFund)
+        assertFalse(summary.canSpend)
+        assertFalse(summary.canWithdraw)
+    }
+
+    @Test
+    fun restrictedAndClosedWalletBalancesRemainHidden() {
+        val restricted = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"RESTRICTED","currency":"NGN","availableBalance":350.0,"canFund":false,"canSpend":false,"canWithdraw":false}"""
+        )
+        val closed = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"CLOSED","currency":"NGN","availableBalance":0.0,"canFund":false,"canSpend":false,"canWithdraw":false}"""
+        )
+        assertFalse(shouldShowBuyerWalletBalance(restricted))
+        assertFalse(shouldShowBuyerWalletBalance(closed))
+        assertFalse(shouldShowBuyerWalletBalance(null))
+    }
+
+    @Test
     fun testModeWalletShowsSimulatedBalanceWithoutEnablingSpendingOrWithdrawals() {
         val summary = FynxBuyerWalletClient.parseSummary(
             """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":1500.0,"reservedBalance":0,"withdrawalPendingBalance":0,"canFund":true,"canSpend":true,"canWithdraw":true,"canFundByBankTransfer":true,"canFundByCard":true,"canFundByUssd":true,"testMode":true,"notice":"TEST MODE ONLY"}"""

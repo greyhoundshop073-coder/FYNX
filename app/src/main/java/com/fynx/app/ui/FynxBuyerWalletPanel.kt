@@ -66,6 +66,12 @@ import kotlinx.coroutines.launch
 private fun fynxWalletMoney(amount: Double): String =
     "₦" + String.format(Locale.US, "%,.2f", amount)
 
+/** Show only a real ledger balance; a newly provisioned pending Wallet has a truthful zero. */
+internal fun shouldShowBuyerWalletBalance(wallet: FynxBuyerWalletSummary?): Boolean =
+    wallet != null &&
+        wallet.availableBalance != null &&
+        (wallet.walletStatus == "ACTIVE" || wallet.walletStatus == "PENDING_PROVIDER" || wallet.testMode)
+
 private fun fynxWalletTransactionTitle(type: String): String = when (type) {
     "FUNDING" -> "Money received"
     "MARKETPLACE_PAYMENT" -> "Marketplace purchase"
@@ -230,8 +236,7 @@ fun FynxBuyerWalletPanel() {
     val wallet = summary
     val isWalletReady = wallet != null && wallet.walletStatus == "ACTIVE" &&
         wallet.canFund && wallet.canSpend && wallet.canWithdraw
-    val canShowBalance = wallet != null && wallet.availableBalance != null &&
-        (wallet.walletStatus == "ACTIVE" || wallet.testMode)
+    val canShowBalance = shouldShowBuyerWalletBalance(wallet)
     // The backend filters the complete history before applying its page cursor.
     val visibleActivity = activity
 
