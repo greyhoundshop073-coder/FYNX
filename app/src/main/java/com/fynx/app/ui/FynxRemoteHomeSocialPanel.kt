@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import android.view.ViewGroup
 import android.view.Surface
@@ -271,7 +273,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (discoveryVideos.isEmpty()) return
         homeDiscoveryViewerIndex = index.coerceIn(0, discoveryVideos.lastIndex)
         homeDiscoveryViewerOpen = true
-        scope.launch { discoveryVideos.getOrNull(homeDiscoveryViewerIndex)?.let { FynxDiscoveryClient.recordView(context, it.id) } }
+        // The viewer's pager records the initial page and each subsequent page exactly once.
     }
     fun mergeDiscoveryPosts(base: List<FynxRemoteSocialClient.RemotePost>, suggested: List<FynxRemoteSocialClient.RemotePost>): List<FynxRemoteSocialClient.RemotePost> {
         val existing = base.map { it.id }.toSet()
@@ -459,17 +461,24 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             posts.size < 8 -> 1
             else -> 2
         }
-        val selected = ordered.take(count)
-        if (selected.isEmpty()) {
+        // Discovery stays reachable whenever real trending videos exist. Other
+        // feed insertions keep their deterministic order in any remaining slot.
+        val selected = if (discoveryVideos.isNotEmpty() && "discovery" in ordered) {
+            listOf("discovery") + ordered.filterNot { it == "discovery" }.take((count - 1).coerceAtLeast(0))
+        } else {
+            ordered.take(count)
+        }
+        if (selected.isEmpty() || posts.isEmpty()) {
             emptyMap()
         } else {
             val first = (2 + (seed % 5L).toInt()).coerceAtMost(posts.lastIndex)
             val second = if (posts.size > 8) {
                 (8 + ((seed / 11L) % (posts.size - 8).toLong()).toInt()).coerceAtMost(posts.lastIndex)
-            } else posts.lastIndex
-            selected.mapIndexed { index, type ->
-                (if (index == 0) first else maxOf(first + 2, second).coerceAtMost(posts.lastIndex)) to type
-            }.toMap()
+            } else {
+                (first + 1).coerceAtMost(posts.lastIndex)
+            }
+            val positions = listOf(first, second).distinct()
+            selected.take(positions.size).mapIndexed { index, type -> positions[index] to type }.toMap()
         }
     }
 
@@ -509,6 +518,17 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading Home feed" }) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
+        if (!loading && posts.isEmpty() && discoveryVideos.isNotEmpty()) {
+            item(key = "home_discovery_empty_feed") {
+                FynxHomeDiscoverySection(
+                    videos = discoveryVideos,
+                    loadingMore = discoveryVideosLoading,
+                    hasMore = discoveryVideosHasMore,
+                    onLoadMore = { loadDiscoveryVideos() },
+                    onOpenVideo = { index -> openHomeDiscoveryViewer(index) }
+                )
+            }
+        }
         posts.forEachIndexed { postIndex, post ->
             item(key = post.id) {
             val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]; val state = interactionStates[post.id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0); val reaction = reactionStates[post.id] ?: FynxHomePostReactionsClient.ReactionState(); val busy = post.id in interactionBusy || "follow:${post.authorUsername.removePrefix("@").trim().lowercase()}" in interactionBusy
@@ -872,7 +892,30 @@ private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, pl
 }
 
 @Composable
-private fun ReactionChoice(emoji: String, reaction: String, active: Boolean, onReact: (String) -> Unit) { TextButton(onClick = { onReact(reaction) }, modifier = Modifier.heightIn(min = 48.dp), colors = ButtonDefaults.textButtonColors(contentColor = if (active) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary)) { Text(emoji, style = MaterialTheme.typography.titleLarge) } }
+private fun ReactionChoice(emoji: String, reaction: String, active: Boolean, onReact: (String) -> Unit) {
+    val reactionLabel = when (reaction) {
+        "LIKE" -> "like"
+        "LOVE" -> "love"
+        "LAUGH" -> "laugh"
+        "WOW" -> "wow"
+        "SAD" -> "sad"
+        else -> "reaction"
+    }
+    TextButton(
+        onClick = { onReact(reaction) },
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "React with $reactionLabel"
+                role = Role.Button
+            },
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = if (active) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary
+        )
+    ) {
+        Text(emoji, style = MaterialTheme.typography.titleLarge)
+    }
+}
 private fun reactionSummary(state: FynxHomePostReactionsClient.ReactionState): String { val order = listOf("LIKE" to "👍", "LOVE" to "❤️", "LAUGH" to "😂", "WOW" to "😮", "SAD" to "😢"); val visible = order.filter { (key, _) -> (state.counts[key] ?: 0) > 0 }.take(5); return "${visible.joinToString(" ") { it.second }}  ${state.total} reaction${if (state.total == 1) "" else "s"}" }
 
 @Composable
@@ -890,35 +933,88 @@ private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost)
 @Composable
 private fun FynxFeedTextureVideo(
     file: File,
+    poster: Bitmap?,
+    aspectRatio: Float,
     playbackActive: Boolean,
     muted: Boolean,
+    retryNonce: Int,
+    onRetryMedia: () -> Unit,
     onPlayingChanged: (Boolean) -> Unit,
     onMutedChanged: (Boolean) -> Unit,
     onOpenMedia: (() -> Unit)?,
     onOpenFullscreen: () -> Unit
 ) {
     val textureState = remember(file) { mutableStateOf<android.graphics.SurfaceTexture?>(null) }
+    val textureViewState = remember(file) { mutableStateOf<TextureView?>(null) }
     val surface = remember(textureState.value) { textureState.value?.let(::Surface) }
     val player = remember(file) { MediaPlayer() }
     var prepared by remember(file) { mutableStateOf(false) }
     var playing by remember(file) { mutableStateOf(false) }
+    var hasVideoFrame by remember(file) { mutableStateOf(false) }
+    var playbackError by remember(file) { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
+        // Letterboxed areas use a softened frame from this clip rather than empty black bars.
+        // Keep a crisp first-frame poster over the player until Android confirms that
+        // decoded video pixels have reached the TextureView. A prepared MediaPlayer
+        // alone is not proof that a frame was rendered (some H.264 files prepare but
+        // produce a black surface for a moment or fail before the first frame).
+        FynxVideoAmbientBackdrop(poster = poster, modifier = Modifier.fillMaxSize())
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
+                    textureViewState.value = this
                     isClickable = false
                     isFocusable = false
+                    // A transparent TextureView lets the matching blurred video frame show through its fitted side areas.
+                    setOpaque(false)
+                    // TextureView does not support background drawables; the parent Box provides the black video background.
                     setSurfaceTextureListener(object : TextureView.SurfaceTextureListener {
-                        override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) { textureState.value = texture }
-                        override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) = Unit
-                        override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean { textureState.value = null; return true }
-                        override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) = Unit
+                        override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                            textureState.value = texture
+                            textureViewState.value?.let { applyFynxFeedVideoFit(it, aspectRatio) }
+                        }
+                        override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                            textureViewState.value?.let { applyFynxFeedVideoFit(it, aspectRatio) }
+                        }
+                        override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean {
+                            if (textureViewState.value?.surfaceTexture === texture) textureViewState.value = null
+                            textureState.value = null
+                            return true
+                        }
+                        override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) {
+                            hasVideoFrame = true
+                        }
                     })
                 }
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            update = { textureViewState.value = it }
         )
+        if (!hasVideoFrame) {
+            poster?.let { frame ->
+                Image(
+                    bitmap = frame.asImageBitmap(),
+                    contentDescription = "Video preview",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+        if (playbackError) {
+            Column(
+                Modifier.align(Alignment.Center)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.72f))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("This video could not start", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                TextButton(onClick = onRetryMedia) {
+                    Text("Retry video", color = Color.White)
+                }
+            }
+        }
         Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.BottomEnd) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onOpenMedia != null) IconButton(onClick = onOpenMedia) { Icon(Icons.Default.OpenInNew, "Open video", tint = Color.White) }
@@ -927,22 +1023,36 @@ private fun FynxFeedTextureVideo(
             }
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            FilledIconButton(
-                onClick = {
-                    if (!prepared) return@FilledIconButton
-                    runCatching {
-                        if (playing) { player.pause(); playing = false } else { player.start(); playing = true }
-                        onPlayingChanged(playing)
-                    }
-                },
-                modifier = Modifier.size(56.dp)
-            ) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video") }
+            if (!prepared) {
+                CircularProgressIndicator(Modifier.size(34.dp), color = Color.White, strokeWidth = 3.dp)
+            } else {
+                FilledIconButton(
+                    onClick = {
+                        runCatching {
+                            if (playing) { player.pause(); playing = false } else { player.start(); playing = true }
+                            onPlayingChanged(playing)
+                        }
+                    },
+                    modifier = Modifier.size(56.dp)
+                ) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video") }
+            }
         }
     }
 
-    LaunchedEffect(file, surface) {
+    LaunchedEffect(textureViewState.value, aspectRatio) {
+        textureViewState.value?.let { applyFynxFeedVideoFit(it, aspectRatio) }
+    }
+    DisposableEffect(surface) {
+        onDispose { runCatching { surface?.release() } }
+    }
+
+    LaunchedEffect(file, surface, retryNonce) {
         if (surface == null) return@LaunchedEffect
-        prepared = false; playing = false; onPlayingChanged(false)
+        prepared = false
+        playing = false
+        hasVideoFrame = false
+        playbackError = false
+        onPlayingChanged(false)
         runCatching {
             player.reset()
             player.setDataSource(file.absolutePath)
@@ -953,10 +1063,25 @@ private fun FynxFeedTextureVideo(
                 prepared = true
                 if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
+            player.setOnInfoListener { _, what, _ ->
+                if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) hasVideoFrame = true
+                false
+            }
             player.setOnCompletionListener { playing = false; onPlayingChanged(false) }
-            player.setOnErrorListener { _, _, _ -> prepared = false; playing = false; onPlayingChanged(false); true }
+            player.setOnErrorListener { _, _, _ ->
+                prepared = false
+                playing = false
+                playbackError = true
+                onPlayingChanged(false)
+                true
+            }
             player.prepareAsync()
-        }.onFailure { prepared = false; playing = false; onPlayingChanged(false) }
+        }.onFailure {
+            prepared = false
+            playing = false
+            playbackError = true
+            onPlayingChanged(false)
+        }
     }
     LaunchedEffect(playbackActive, prepared) {
         if (!prepared) return@LaunchedEffect
@@ -973,6 +1098,17 @@ private fun FynxFeedTextureVideo(
     }
 }
 
+private fun applyFynxFeedVideoFit(view: TextureView, sourceAspectRatio: Float) {
+    val width = view.width.toFloat()
+    val height = view.height.toFloat()
+    if (width <= 0f || height <= 0f) return
+    val sourceRatio = sourceAspectRatio.takeIf { it.isFinite() && it > 0f } ?: (16f / 9f)
+    val containerRatio = width / height
+    val scaleX = if (sourceRatio < containerRatio) sourceRatio / containerRatio else 1f
+    val scaleY = if (sourceRatio > containerRatio) containerRatio / sourceRatio else 1f
+    view.setTransform(Matrix().apply { setScale(scaleX, scaleY, width / 2f, height / 2f) })
+}
+
 @Composable
 internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (() -> Unit)? = null, onOpenMedia: (() -> Unit)? = null, playbackActive: Boolean = true) {
     val context = LocalContext.current
@@ -981,28 +1117,24 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     var mediaFailed by remember(path) { mutableStateOf(false) }
     var reloadNonce by remember(path) { mutableIntStateOf(0) }
     var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }
+    var videoPoster by remember(path) { mutableStateOf<Bitmap?>(null) }
     var playing by remember(path) { mutableStateOf(false) }
     var muted by remember(path) { mutableStateOf(true) }
     var fullscreen by remember(path) { mutableStateOf(false) }
     LaunchedEffect(path, reloadNonce) {
         mediaLoading = true
         mediaFailed = false
-        file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) }
+        file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type, forceRefresh = reloadNonce > 0) }
         mediaFailed = file == null
         mediaLoading = false
     }
     LaunchedEffect(file, type) {
-        if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) {
-            runCatching {
-                MediaMetadataRetriever().run {
-                    setDataSource(file!!.absolutePath)
-                    val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f
-                    val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f
-                    val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-                    release()
-                    if (rotation == 90 || rotation == 270) height / width else width / height
-                }.coerceIn(0.56f, 1.91f)
-            }.getOrDefault(16f / 9f)
+        if (file != null && type == "video") {
+            val visual = readFynxVideoVisual(file!!)
+            videoAspectRatio = visual.aspectRatio
+            videoPoster = visual.poster
+        } else {
+            videoPoster = null
         }
     }
     if (mediaLoading) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -1015,16 +1147,32 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     }
     else if (type == "audio") AudioPostPlayer(file!!)
     else if (type == "video") {
-        Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio)) {
-            FynxFeedTextureVideo(
-                file = file!!,
-                playbackActive = playbackActive && !fullscreen,
-                muted = muted,
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val feedFrameHeight = (maxWidth / videoAspectRatio).coerceAtMost(420.dp)
+            Box(
+                Modifier.fillMaxWidth()
+                    .height(feedFrameHeight)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.Black)
+            ) {
+                FynxFeedTextureVideo(
+                    file = file!!,
+                    poster = videoPoster,
+                    aspectRatio = videoAspectRatio,
+                    playbackActive = playbackActive && !fullscreen,
+                    muted = muted,
+                    retryNonce = reloadNonce,
+                    onRetryMedia = {
+                        mediaLoading = true
+                        file = null
+                        reloadNonce++
+                    },
                 onPlayingChanged = { playing = it },
                 onMutedChanged = { muted = it },
-                onOpenMedia = onOpenMedia,
-                onOpenFullscreen = { fullscreen = true }
-            )
+                    onOpenMedia = onOpenMedia,
+                    onOpenFullscreen = { fullscreen = true }
+                )
+            }
         }
     } else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }

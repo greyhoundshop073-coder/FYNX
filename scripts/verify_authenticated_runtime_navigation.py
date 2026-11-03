@@ -145,6 +145,7 @@ DIAGNOSTIC_MARKERS = (
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
+    "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Close Discovery",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
@@ -421,6 +422,47 @@ def camera_wait_for_control(
     screenshot(f"{prefix}-timeout.png")
     (ROOT / f"{prefix}-timeout.xml").write_text(latest + chr(10), encoding="utf-8")
     return latest
+
+def restore_home_header(current_xml: str, prefix: str, attempts: int = 6) -> tuple[str, bool]:
+    """Physically scroll Home to its first content section before tapping the collapsing header.
+
+    Compose may keep alpha-zero header semantics in UIAutomator while the feed
+    is scrolled. Therefore node existence alone is not proof that the header
+    is actually on screen: always issue a real scroll-to-top gesture and require
+    the first Home sections to be present before accepting the header controls.
+    """
+    latest = current_xml
+    # A single swipe is not reliable when the feed is several screens deep.
+    # Repeating it is safe at the top and does not navigate away from Home.
+    for attempt in range(max(2, attempts)):
+        run("adb", "shell", "input", "swipe", "720", "520", "720", "2600", "450")
+        time.sleep(0.9)
+        latest = dump_ui(f"{prefix}-scroll-top-{attempt}.xml") or latest
+        first_home_sections_visible = (
+            find_control(latest, ["Status"])
+            and find_control(latest, ["FYNX Assistance"])
+            and find_control(latest, ["Your feed"])
+        )
+        header_controls_present = (
+            find_control(latest, ["Open FYNX camera"])
+            and find_control(latest, ["Profile menu, three dots"])
+            and find_control(latest, ["Chat"])
+            and find_control(latest, ["Friends"])
+        )
+        if first_home_sections_visible and header_controls_present:
+            screenshot(prefix + "-home-header-restored.png")
+            (ROOT / (prefix + "-home-header-restored.xml")).write_text(
+                latest + chr(10), encoding="utf-8"
+            )
+            return latest, True
+
+    screenshot(prefix + "-home-header-not-restored.png")
+    (ROOT / (prefix + "-home-header-not-restored.xml")).write_text(
+        latest + chr(10), encoding="utf-8"
+    )
+    FAILURES.append(prefix + ": Home did not return to its visible first sections/header after real scroll gestures")
+    return latest, False
+
 
 def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> str:
     """Dismiss camera/editor surfaces using Back until the real Home camera entry returns."""
@@ -1419,6 +1461,198 @@ report=["# FYNX Authenticated Runtime Visual Certification","",
         "No fabricated users, posts, messages, listings or application records are created.",
         "Credentials are never written to the APK or repository."]
 
+def find_exact_home_action(xml_text: str, label: str):
+    """Find an exact labeled Home action, not text inside a user's caption."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+    for node in root.iter("node"):
+        values = (
+            (node.attrib.get("text") or "").strip(),
+            (node.attrib.get("content-desc") or "").strip(),
+        )
+        if not any(value.casefold() == label.casefold() for value in values):
+            continue
+        target = node
+        current = node
+        while current is not None:
+            if current.attrib.get("clickable", "false").lower() == "true" and _center(current):
+                target = current
+                break
+            current = parents.get(id(current))
+        center = _center(target)
+        if center:
+            return label, center[0], center[1]
+    return None
+
+
+def is_home_feed_navigation_visible(xml_text: str) -> bool:
+    """Recognize the Home shell even when a scrolled LazyColumn hides its header."""
+    return bool(
+        xml_text and PACKAGE in xml_text
+        and find_control(xml_text, ["Open FYNX camera"])
+        and find_control(xml_text, ["Home"])
+    )
+
+
+def scroll_home_feed_page(index: int) -> str:
+    """Scroll the Home feed viewport to expose the next real post; never change tabs."""
+    run("adb", "shell", "input", "swipe", "720", "2450", "720", "1050", "500")
+    time.sleep(0.8)
+    candidate = dump_ui(f"authenticated-home-feed-scan-page-{index}.xml")
+    return candidate if is_home_feed_navigation_visible(candidate) else ""
+
+
+def capture_home_feed_visuals(home_xml: str) -> str:
+    """Capture real Home video/comment surfaces across the feed without creating content."""
+    current = home_xml
+    if not is_authenticated_home_surface(current):
+        FAILURES.append("Authenticated Home was not visible when Home Feed visual certification began.")
+        return current
+
+    video_captured = False
+    comments_captured = False
+    discovery_viewer_captured = False
+    comment_action_seen = False
+    scanned_pages = 0
+    previous_xml = ""
+
+    for page in range(1, 9):
+        scanned_pages = page
+        if not is_home_feed_navigation_visible(current):
+            FAILURES.append("Home feed scan lost the Home navigation shell; refusing to continue on another screen.")
+            break
+
+        video_control = (
+            find_control(current, ["Open video full screen"])
+            or find_control(current, ["Play video"])
+        )
+        if video_control and not video_captured:
+            (ROOT / "authenticated-home-inline-video.xml").write_text(current + "\n", encoding="utf-8")
+            time.sleep(1.0)
+            screenshot("authenticated-home-inline-video.png")
+            video_captured = True
+            report.append("- PASS: captured a real inline Home video card and its feed playback controls; the video was not forced full-screen.")
+
+        discovery_control = find_control(current, ["Open Discovery video"])
+        if discovery_control and not discovery_viewer_captured:
+            viewer_xml = tap_control(
+                current,
+                ["Open Discovery video"],
+                "authenticated-home-discovery-video-open",
+                ["Like video", "Unlike video", "Open comments", "Share video"]
+            )
+            if viewer_xml:
+                missing_actions = []
+                if not find_control(viewer_xml, ["Like video", "Unlike video"]):
+                    missing_actions.append("Like / Unlike")
+                if not find_control(viewer_xml, ["Open comments"]):
+                    missing_actions.append("Comments")
+                if not find_control(viewer_xml, ["Share video"]):
+                    missing_actions.append("Share")
+                if missing_actions:
+                    screenshot("authenticated-discovery-video-actions-missing.png")
+                    (ROOT / "authenticated-discovery-video-actions-missing.xml").write_text(
+                        viewer_xml + chr(10), encoding="utf-8"
+                    )
+                    FAILURES.append(
+                        "Discovery video viewer is missing visible action controls: "
+                        + ", ".join(missing_actions)
+                    )
+                else:
+                    screenshot("authenticated-discovery-video-viewer.png")
+                    (ROOT / "authenticated-discovery-video-viewer.xml").write_text(
+                        viewer_xml + chr(10), encoding="utf-8"
+                    )
+                    discovery_viewer_captured = True
+                    report.append(
+                        "- PASS: opened a real Discovery video and captured its viewer with Like, Comments and Share controls; no interaction or post was submitted."
+                    )
+                run("adb", "shell", "input", "keyevent", "4")
+                return_deadline = time.monotonic() + 15.0
+                discovery_home = ""
+                while time.monotonic() < return_deadline:
+                    candidate = dump_ui("authenticated-discovery-return-home.xml")
+                    if candidate and is_home_feed_navigation_visible(candidate):
+                        discovery_home = candidate
+                        break
+                    time.sleep(0.5)
+                if not discovery_home:
+                    FAILURES.append("Discovery video viewer did not return to the Home feed safely.")
+                    return dump_ui("authenticated-discovery-return-home-timeout.xml") or viewer_xml
+                current = discovery_home
+
+        comment_control = find_exact_home_action(current, "Comment")
+        if comment_control and not comments_captured:
+            comment_action_seen = True
+            _, x, y = comment_control
+            run("adb", "logcat", "-c")
+            run("adb", "shell", "input", "tap", str(x), str(y))
+            deadline = time.monotonic() + 12.0
+            conversation_xml = ""
+            while time.monotonic() < deadline:
+                candidate = dump_ui("authenticated-home-comments-probe.xml")
+                if candidate and find_control(candidate, ["Comments"]) and find_control(candidate, ["Write a comment"]):
+                    conversation_xml = candidate
+                    break
+                time.sleep(0.5)
+
+            if not conversation_xml:
+                screenshot("authenticated-home-comments-open-failed.png")
+                FAILURES.append("A real Home post Comment action was visible but its Comments conversation/composer did not open within 12 seconds.")
+                return current
+
+            (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
+            screenshot("authenticated-home-comments.png")
+            comments_captured = True
+            report.append("- PASS: opened and captured a real post Comments conversation with post context, thread area and composer. No comment or reply was sent.")
+
+            run("adb", "shell", "input", "keyevent", "4")
+            return_home_deadline = time.monotonic() + 15.0
+            home_after_comments = ""
+            while time.monotonic() < return_home_deadline:
+                candidate = dump_ui("authenticated-home-after-comments.xml")
+                if candidate and is_home_feed_navigation_visible(candidate):
+                    home_after_comments = candidate
+                    break
+                time.sleep(0.5)
+            if not home_after_comments:
+                FAILURES.append("Home Feed visual capture could not return safely from the Comments conversation.")
+                return dump_ui("authenticated-home-after-comments-timeout.xml") or current
+            current = home_after_comments
+
+        if video_captured and comments_captured and discovery_viewer_captured:
+            break
+        if page == 8:
+            break
+
+        next_xml = scroll_home_feed_page(page)
+        if not next_xml or next_xml == current or next_xml == previous_xml:
+            break
+        previous_xml, current = current, next_xml
+
+    if not video_captured:
+        report.append(
+            f"- NOTE: no real video post with visible playback controls was found in {scanned_pages} Home feed viewport(s); no synthetic post was created."
+        )
+    if not comments_captured and not comment_action_seen:
+        report.append(
+            f"- NOTE: no real post Comment action was found in {scanned_pages} Home feed viewport(s); no synthetic post or comment was created."
+        )
+    if not discovery_viewer_captured:
+        report.append(
+            f"- NOTE: no real Discovery video card with an accessible open action was found in {scanned_pages} Home feed viewport(s); no synthetic media was created."
+        )
+    return current
+
+
+
+
 if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     report += ["","## Result: BLOCKED","- FYNX_E2E_USERNAME and FYNX_E2E_PASSWORD repository secrets are required for authenticated visual certification."]
     (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
@@ -1458,6 +1692,8 @@ if install.returncode!=0:
 # system dialog from intercepting taps intended for the real Marketplace surface.
 prepare_debug_visual_capture_permissions()
 xml,error=login()
+if not error:
+    xml = capture_home_feed_visuals(xml) or xml
 if not error and not VISUALS_ONLY and LOGIN_MODE != "server credential login":
     error = "Wallet runtime certification requires a server-credential login; debug-only local UI entry does not authenticate with the backend."
     FAILURES.append(error)
@@ -2034,34 +2270,78 @@ else:
             report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
-    # Capture the real Settings home from the authenticated running APK.
-    profile_xml=tap_control(xml,["Open FYNX profile"],"settings-open-profile",["Edit profile","Settings"])
-    if profile_xml:
-        settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
-        if settings_xml:
-            report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
+    # The Home header collapses while scrolling through long video posts. Restore
+    # it before tapping header-only controls so stale coordinates cannot hit feed media.
+    xml, home_header_ready = restore_home_header(xml, "authenticated-before-settings")
+    if home_header_ready:
+        # Capture the restored Home header before tapping the profile avatar.
+        # The avatar itself is the primary, direct route to Profile; do not
+        # depend on the overflow menu's transient dropdown semantics.
+        screenshot("authenticated-before-settings-profile-entry.png")
+        (ROOT / "authenticated-before-settings-profile-entry.xml").write_text(
+            xml + chr(10), encoding="utf-8"
+        )
+        profile_xml=tap_control(
+            xml, ["Open FYNX profile"], "settings-open-profile",
+            ["Edit profile", "Settings"]
+        )
+        if profile_xml:
+            settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
+            if settings_xml:
+                report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
+            else:
+                FAILURES.append("profile -> Settings home did not open")
         else:
-            FAILURES.append("profile -> Settings home did not open")
-    else:
-        FAILURES.append("Home -> profile entry did not open for Settings visual capture")
-    # Return through the app's own back stack. Do not force-stop/relaunch here:
-    # offline/local test sessions may be in-memory and a cold start can send the
-    # emulator back to the sign-in gate, making unrelated navigation checks fail.
+            FAILURES.append("Visible Home avatar -> Profile did not open")
+    # Settings and Profile are separate in-app destinations. First leave the
+    # destination with Back; only after Home is confirmed should we scroll its feed.
+    home_xml = dump_ui("authenticated-after-settings-return-initial.xml") or xml
     for step in range(3):
-        current=dump_ui(f"authenticated-after-settings-back-{step}.xml")
-        if find_control(current,["Open FYNX camera"]) or find_control(current,["Chat"]) and find_control(current,["Friends"]):
-            xml=current
+        if (find_control(home_xml, ["Open FYNX camera"])
+                and find_control(home_xml, ["Chat"])
+                and find_control(home_xml, ["Friends"])):
             break
-        run("adb","shell","input","keyevent","4")
+        if find_control(home_xml, ["Profile"]) or find_control(home_xml, ["Search settings", "Account & Profile"]):
+            run("adb", "shell", "input", "keyevent", "4")
+            time.sleep(0.8)
+            home_xml = dump_ui(f"authenticated-after-settings-back-{step}.xml") or home_xml
+            continue
+        # If a transient destination has no stable marker, allow one Back action,
+        # then inspect again. Never send repeated Back presses after Home appears.
+        run("adb", "shell", "input", "keyevent", "4")
         time.sleep(0.8)
+        home_xml = dump_ui(f"authenticated-after-settings-back-{step}.xml") or home_xml
+
+    home_header_ready = (
+        find_control(home_xml, ["Open FYNX camera"])
+        and find_control(home_xml, ["Chat"])
+        and find_control(home_xml, ["Friends"])
+    )
+    if home_header_ready:
+        xml, home_header_ready = restore_home_header(
+            home_xml, "authenticated-after-settings-back", attempts=6
+        )
+    else:
+        xml = home_xml
+        FAILURES.append(
+            "Settings visual capture did not return to the authenticated Home destination"
+        )
+
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
+    if home_header_ready:
+        # A permission prompt can momentarily change the UI hierarchy; restore the
+        # actual Home top after dismissal, without using Back on a Home screen.
+        xml, home_header_ready = restore_home_header(xml, "authenticated-before-camera")
     if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
-    xml = capture_camera_post_journey(xml, "authenticated-camera")
-    if xml and find_control(xml, ["Open FYNX camera"]):
-        report.append("- PASS Home -> camera effects, photo editing, safe Retake and video-effects journey")
+    if home_header_ready:
+        xml = capture_camera_post_journey(xml, "authenticated-camera")
+        if xml and find_control(xml, ["Open FYNX camera"]):
+            report.append("- PASS Home -> camera effects, photo editing, safe Retake and video-effects journey")
+        else:
+            FAILURES.append("authenticated camera effects journey did not return to Home")
     else:
-        FAILURES.append("authenticated camera effects journey did not return to Home")
+        FAILURES.append("camera journey was not attempted because the authenticated Home header was not restored")
     # The debug saved-device entry is intentionally a local UI-only route, not
     # server authentication. Do not cold-start it: that returns to Sign In and
     # makes unrelated navigation checks fail for the wrong reason. Certify the

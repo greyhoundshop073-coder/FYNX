@@ -35,7 +35,7 @@ object FynxDiscoveryClient {
             buildList {
                 for (i in 0 until array.length()) {
                     val o = array.getJSONObject(i)
-                    add(TrendingPost(o.optString("id"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("text"), o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optDouble("timestamp").toLong(), o.optInt("likeCount"), o.optInt("commentCount"), o.optInt("shareCount"), o.optInt("saveCount"), o.optDouble("discoveryScore")))
+                    add(TrendingPost(o.optString("id"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("text"), o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optDouble("timestamp").toLong(), o.optInt("likeCount"), o.optInt("commentCount"), o.optInt("shareCount"), o.optInt("saveCount"), o.optDouble("discoveryScore"), authorId = o.optString("authorId"), visibility = o.optString("visibility", "PUBLIC"), likedByCurrentUser = o.optBoolean("likedByCurrentUser")))
                 }
             }
         }
@@ -53,7 +53,7 @@ object FynxDiscoveryClient {
     suspend fun marketplaceDiscovery(context: Context, query: String = "", category: String = "All", limit: Int = 30, location: String = ""): Result<List<FynxMarketplaceClient.Listing>> =
         marketplaceDiscoveryPage(context, query, category, limit, 0, location).map { it.items }
 
-    data class TrendingPost(val id: String, val authorUsername: String, val authorDisplayName: String, val text: String, val mediaId: String?, val mediaType: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val shareCount: Int, val saveCount: Int, val score: Double)
+    data class TrendingPost(val id: String, val authorUsername: String, val authorDisplayName: String, val text: String, val mediaId: String?, val mediaType: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val shareCount: Int, val saveCount: Int, val score: Double, val authorId: String = "", val visibility: String = "PUBLIC", val likedByCurrentUser: Boolean = false)
 
     private fun encode(value: String): String = URLEncoder.encode(value.trim(), "UTF-8")
     private val EVENT_TYPES = setOf("VIEW", "LIKE", "COMMENT", "SHARE", "SAVE", "FOLLOW", "PROFILE_VIEW", "PRODUCT_CLICK", "MESSAGE", "PURCHASE", "INTERESTED", "NOT_INTERESTED", "REPORT")
