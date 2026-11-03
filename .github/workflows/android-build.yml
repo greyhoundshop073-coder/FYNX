@@ -297,8 +297,8 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
-          profile: pixel_7_pro # [home-cert]
-          disk-size: 3G # Keep the actual userdata partition below the hosted runner's free storage.
+          profile: pixel_2 # Smaller CI profile; accessibility-driven certification does not require a Pro-sized AVD.
+          disk-size: 2G # Match the pre-launch AVD normalization and hosted runner storage budget.
           pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh
           script: bash scripts/run_android_runtime_certification.sh
         env:
