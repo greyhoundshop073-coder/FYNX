@@ -70,6 +70,14 @@ checks.push(
     walletMarketplace.includes("export function isValidWalletMarketplacePin(value)") &&
     walletMarketplace.includes("isValidWalletMarketplacePin(pin)") &&
     walletMarketplace.includes("walletMarketplaceSpendingApproved()")],
+  ["multi-product Wallet payment is server-gated and reconciles group/child accounting before atomically debiting each child to escrow",
+    walletMarketplace.includes("app.post('/api/wallet/marketplace-checkout-groups/:id/pay'") &&
+    walletMarketplace.includes("buildWalletMarketplaceCheckoutAllocations(group, children)") &&
+    walletMarketplace.includes("walletMarketplaceSpendingApproved()") &&
+    walletMarketplace.includes("metadata->>'checkoutGroupId'") &&
+    walletMarketplace.includes("'MARKETPLACE_ESCROW','CREDIT'") &&
+    walletMarketplace.includes("wallet_payment_reference") &&
+    walletMarketplace.includes("payment_method='FYNX_WALLET'")],
   ["wallet balances are derived only from succeeded append-only ledger postings",
     summaryRoute.includes("t.status='SUCCEEDED'") &&
     summaryRoute.includes("FROM buyer_wallet_ledger_entries e") &&
