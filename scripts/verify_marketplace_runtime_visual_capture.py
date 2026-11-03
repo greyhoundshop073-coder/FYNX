@@ -5,6 +5,8 @@ import sys
 
 runner = Path("scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 navigation = Path("scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+status_runtime = Path("scripts/verify_status_creator_runtime.py").read_text(encoding="utf-8")
+status_contract = Path("scripts/verify_status_creator_runtime_contract.py").read_text(encoding="utf-8")
 workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
@@ -129,11 +131,15 @@ checks.extend([
         and "WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)" not in camera_source,
     ),
     (
-        "Home Status creator receives runtime coverage for its visible actions and text composer",
-        '["Create your status"]' in navigation
-        and 'authenticated-status-creator.png' in navigation
-        and 'authenticated-status-text-composer.png' in navigation
-        and all(label in navigation for label in ("Take photo", "Record video", "Gallery", "Text", "Voice", "Music", "Home", "Chat", "Friends", "Marketplace")),
+        "Home Status creator receives isolated runtime coverage for Voice/Text and safe dismissal",
+        'find_click_target(xml_text, "Create your status")' in status_runtime
+        and 'screenshot("authenticated-status-home.png")' in status_runtime
+        and 'tap("Create your status", "create", ("Voice", "Text"))' in status_runtime
+        and 'authenticated-status-{stage}.png' in status_runtime
+        and 'Android Back dismisses the creator and returns to Home without creating a Status.' in status_runtime
+        and 'python3 scripts/verify_status_creator_runtime.py' in runner
+        and 'verify_status_creator_runtime_contract.py' in workflow
+        and 'Voice' in status_contract and 'Text' in status_contract,
     ),
     (
         "Seller orders and Driver deliveries dialogs are captured without mutations",
