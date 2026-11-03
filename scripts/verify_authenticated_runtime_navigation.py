@@ -1507,6 +1507,77 @@ def find_exact_home_action(xml_text: str, label: str):
 
 
 
+
+def has_visible_home_comment_row(xml_text: str) -> bool:
+    """Require an actual rendered comment body and its Reply/Replies actions, not just the composer."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    parents = {}
+    all_nodes = list(root.iter("node"))
+    for parent in all_nodes:
+        for child in list(parent):
+            parents[id(child)] = parent
+
+    visible = [
+        node for node in all_nodes
+        if node.attrib.get("visible-to-user", "true").lower() != "false"
+    ]
+    reply_controls = [
+        node for node in visible
+        if (node.attrib.get("text") or "").strip().casefold() == "reply"
+        or (node.attrib.get("content-desc") or "").strip().casefold() == "reply"
+    ]
+    replies_controls = [
+        node for node in visible
+        if re.fullmatch(
+            r"(?:\d+\s+)?(?:replies|no replies)",
+            " ".join(((node.attrib.get("text") or "") + " " + (node.attrib.get("content-desc") or "")).split()).casefold()
+        )
+    ]
+    if not reply_controls or not replies_controls:
+        return False
+
+    excluded = {
+        "comments", "post conversation", "reply", "replies", "no replies",
+        "write a comment…", "write a comment...", "send comment", "close comments",
+        "refresh comments", "started by", "comment", "like", "share", "save",
+    }
+
+    def ancestor_chain(node):
+        chain = []
+        current = node
+        while current is not None:
+            chain.append(current)
+            current = parents.get(id(current))
+        return chain
+
+    for body_node in visible:
+        body = (body_node.attrib.get("text") or "").strip()
+        if len(body) < 2 or body.casefold() in excluded:
+            continue
+        body_path = ancestor_chain(body_node)
+        for reply_node in reply_controls:
+            reply_path = ancestor_chain(reply_node)
+            reply_ids = {id(item) for item in reply_path}
+            row = next((item for item in body_path if id(item) in reply_ids), None)
+            if row is None or row is root:
+                continue
+            row_ids = {id(item) for item in row.iter("node")}
+            has_replies_action = any(id(item) in row_ids for item in replies_controls)
+            if not has_replies_action:
+                continue
+            row_texts = {
+                (item.attrib.get("text") or "").strip()
+                for item in row.iter("node")
+                if item.attrib.get("visible-to-user", "true").lower() != "false"
+            }
+            meaningful = [value for value in row_texts if value and value.casefold() not in excluded]
+            if len(meaningful) >= 2:
+                return True
+    return False
+
 def find_home_video_post_comment_action(xml_text: str):
     """Return Comment only when its node shares a post-card ancestor with a real video duration."""
     try:
@@ -1809,20 +1880,27 @@ def capture_home_feed_visuals(home_xml: str) -> str:
             conversation_xml = ""
             while time.monotonic() < deadline:
                 candidate = dump_ui("authenticated-home-comments-probe.xml")
-                if candidate and find_control(candidate, ["Comments"]) and find_control(candidate, ["Write a comment"]):
+                if (
+                    candidate
+                    and find_control(candidate, ["Comments"])
+                    and find_control(candidate, ["Write a comment"])
+                    and has_visible_home_comment_row(candidate)
+                ):
                     conversation_xml = candidate
                     break
                 time.sleep(0.5)
 
             if not conversation_xml:
                 screenshot("authenticated-home-comments-open-failed.png")
-                FAILURES.append("A real Home post Comment action was visible but its Comments conversation/composer did not open within 12 seconds.")
+                FAILURES.append(
+                    "A real Home video post Comment action was visible, but its conversation did not render an existing comment row with Reply/Replies actions within 12 seconds."
+                )
                 return current
 
             (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
             screenshot("authenticated-home-comments.png")
             comments_captured = True
-            report.append("- PASS: opened and captured a real post Comments conversation with post context, thread area and composer. No comment or reply was sent.")
+            report.append("- PASS: opened the video post's own Comments conversation and verified an existing comment body plus Reply/Replies actions alongside the post context and composer. No comment or reply was sent.")
 
             run("adb", "shell", "input", "keyevent", "4")
             return_home_deadline = time.monotonic() + 15.0
