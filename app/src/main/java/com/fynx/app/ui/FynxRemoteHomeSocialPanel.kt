@@ -877,14 +877,17 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
 private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, playbackActive: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideoDiscovery: (() -> Unit)?) {
     val visual = items.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }.take(4)
     if (visual.isEmpty()) return
-    @Composable fun Cell(item: FynxHomePostMediaClient.PostMediaItem, index: Int) {
-        Box(Modifier.clip(RoundedCornerShape(4.dp)).clickable { onOpenMedia(index) }) {
+    @Composable fun Cell(item: FynxHomePostMediaClient.PostMediaItem, index: Int, modifier: Modifier = Modifier) {
+        Box(modifier.clip(RoundedCornerShape(4.dp)).clickable { onOpenMedia(index) }) {
             RemoteSocialMedia(item.mediaUrl, item.mediaType, onOpenMedia = { onOpenMedia(index) }, playbackActive = playbackActive && index == visual.indexOfFirst { it.mediaType.equals("video", true) })
         }
     }
     when (visual.size) {
         1 -> Cell(visual[0], 0)
-        2 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Cell(visual[0], 0); Cell(visual[1], 1) }
+        2 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Cell(visual[0], 0, Modifier.weight(1f))
+            Cell(visual[1], 1, Modifier.weight(1f))
+        }
         3 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) { Cell(visual[1], 1); Cell(visual[2], 2) } }
         else -> Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Box(Modifier.weight(1f)) { Cell(visual[1], 1) } }; Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[2], 2) }; Box(Modifier.weight(1f)) { Cell(visual[3], 3) } } }
     }
