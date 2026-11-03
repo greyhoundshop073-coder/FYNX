@@ -2293,21 +2293,45 @@ if not FAILURES:
                 FAILURES.append("profile -> Settings home did not open")
         else:
             FAILURES.append("Visible Home avatar -> Profile did not open")
-    # Return through at most the two expected in-app destinations (Settings/Profile).
-    # Never issue repeated Back presses against a Home screen: that exits FYNX to Launcher.
-    home_header_ready = False
-    for step in range(2):
-        current=dump_ui(f"authenticated-after-settings-back-{step}.xml")
-        current, home_header_ready = restore_home_header(
-            current, f"authenticated-after-settings-back-{step}", attempts=2
-        )
-        if home_header_ready:
-            xml=current
+    # Settings and Profile are separate in-app destinations. First leave the
+    # destination with Back; only after Home is confirmed should we scroll its feed.
+    home_xml = dump_ui("authenticated-after-settings-return-initial.xml") or xml
+    for step in range(3):
+        if (find_control(home_xml, ["Open FYNX camera"])
+                and find_control(home_xml, ["Chat"])
+                and find_control(home_xml, ["Friends"])):
             break
-        run("adb","shell","input","keyevent","4")
+        if find_control(home_xml, ["Profile"]) or find_control(home_xml, ["Search settings", "Account & Profile"]):
+            run("adb", "shell", "input", "keyevent", "4")
+            time.sleep(0.8)
+            home_xml = dump_ui(f"authenticated-after-settings-back-{step}.xml") or home_xml
+            continue
+        # If a transient destination has no stable marker, allow one Back action,
+        # then inspect again. Never send repeated Back presses after Home appears.
+        run("adb", "shell", "input", "keyevent", "4")
         time.sleep(0.8)
+        home_xml = dump_ui(f"authenticated-after-settings-back-{step}.xml") or home_xml
+
+    home_header_ready = (
+        find_control(home_xml, ["Open FYNX camera"])
+        and find_control(home_xml, ["Chat"])
+        and find_control(home_xml, ["Friends"])
+    )
+    if home_header_ready:
+        xml, home_header_ready = restore_home_header(
+            home_xml, "authenticated-after-settings-back", attempts=6
+        )
+    else:
+        xml = home_xml
+        FAILURES.append(
+            "Settings visual capture did not return to the authenticated Home destination"
+        )
+
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
-    xml, home_header_ready = restore_home_header(xml, "authenticated-before-camera")
+    if home_header_ready:
+        # A permission prompt can momentarily change the UI hierarchy; restore the
+        # actual Home top after dismissal, without using Back on a Home screen.
+        xml, home_header_ready = restore_home_header(xml, "authenticated-before-camera")
     if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
     if home_header_ready:
