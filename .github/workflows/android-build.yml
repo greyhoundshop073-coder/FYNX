@@ -298,7 +298,8 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_7_pro # [home-cert]
-          disk-size: 4G # Keep AVD userdata below the GitHub runner's available AVD storage.
+          disk-size: 3G # Keep the actual userdata partition below the hosted runner's free storage.
+          pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh
           script: bash scripts/run_android_runtime_certification.sh
         env:
           FYNX_MARKETPLACE_VISUALS_ONLY: ${{ (github.event_name == 'pull_request' && contains(github.event.pull_request.head.ref, 'fix/real-wallet-runtime-screen-capture-20261101') || github.ref == 'refs/heads/fix/real-wallet-runtime-screen-capture-20261101') && '1' || '0' }}
