@@ -50,7 +50,7 @@ fun SecureMoneyVaultPanel() {
                         Text(if (hideBalance) "Balances hidden" else "Balances visible")
                         Switch(checked = !hideBalance, onCheckedChange = { hideBalance = !it })
                     }
-                    OutlinedButton(onClick = { unlocked = false; message = "Vault locked" }) { Text("Lock Vault") }
+                    FynxSoftActionButton(onClick = { unlocked = false; message = "Vault locked" }) { Text("Lock Vault") }
                 }
 
                 if (enabled && pin.isEmpty()) {

@@ -139,7 +139,7 @@ fun FynxMoneyTransferPanel() {
                     Icon(Icons.Default.SwapHoriz, contentDescription = null)
                     Spacer(Modifier.width(6.dp)); Text("Transfer")
                 }
-                OutlinedButton(onClick = { showPayment = true }, modifier = Modifier.weight(1f)) {
+                FynxSoftActionButton(onClick = { showPayment = true }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.ReceiptLong, contentDescription = null)
                     Spacer(Modifier.width(6.dp)); Text("Payment")
                 }
@@ -270,7 +270,7 @@ fun FynxMoneyTransferPanel() {
 private fun AccountPicker(label: String, selected: FynxMoneyAccount?, accounts: List<FynxMoneyAccount>, onSelect: (FynxMoneyAccount) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+        FynxSoftActionButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
             Text(if (selected == null) "$label account" else "$label: ${selected.name} (${formatTransferMoney(selected.balance)})")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

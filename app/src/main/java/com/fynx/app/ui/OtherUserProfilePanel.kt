@@ -103,7 +103,7 @@ fun OtherUserProfilePanel(
             profile == null -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Text(error ?: "User not found", color = FynxDesign.TextSecondary, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = { scope.launch { loadProfile() } }) { Text("Retry") }
+                FynxSoftActionButton(onClick = { scope.launch { loadProfile() } }) { Text("Retry") }
             }
             else -> {
                 val person = profile!!
@@ -215,7 +215,7 @@ fun OtherUserProfilePanel(
                                         )
                                     }
                                     if (person.canMessage) {
-                                        OutlinedButton(enabled = !busy, onClick = { onMessage(person.username) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), shape = RoundedCornerShape(22.dp)) {
+                                        FynxSoftActionButton(enabled = !busy, onClick = { onMessage(person.username) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), shape = RoundedCornerShape(22.dp)) {
                                             Icon(Icons.Default.Message, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(Modifier.width(6.dp))
                                             Text("Message")

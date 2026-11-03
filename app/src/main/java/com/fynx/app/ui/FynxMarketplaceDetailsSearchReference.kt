@@ -77,11 +77,11 @@ internal fun FynxMarketplaceReferenceProductDetails(
                 Text("FYNX protected payment", color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(14.dp))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Share, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Share") }
-                OutlinedButton(onClick = onContact, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Contact") }
+                FynxSoftActionButton(onClick = onShare, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Share, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Share") }
+                FynxSoftActionButton(onClick = onContact, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Contact") }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onAddToCart, enabled = listing.quantity > 0, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Add to cart") }
+                FynxSoftActionButton(onClick = onAddToCart, enabled = listing.quantity > 0, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Add to cart") }
                 Button(onClick = onBuyNow, enabled = listing.quantity > 0, modifier = Modifier.weight(1f)) { Text("Buy now") }
             }
             Spacer(Modifier.height(120.dp))

@@ -117,9 +117,9 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
         AlertDialog(onDismissRequest = onDismiss, title = { Text("Group tools") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Share and organize things your group can come back to.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick = { showContent = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Poll, null); Spacer(Modifier.width(8.dp)); Text("Posts, polls & events") }
-                OutlinedButton(onClick = { showFriends = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.PersonAdd, null); Spacer(Modifier.width(8.dp)); Text("Invite friends") }
-                OutlinedButton(onClick = onStoryShare, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(8.dp)); Text("Share a story to group") }
+                FynxSoftActionButton(onClick = { showContent = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Poll, null); Spacer(Modifier.width(8.dp)); Text("Posts, polls & events") }
+                FynxSoftActionButton(onClick = { showFriends = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.PersonAdd, null); Spacer(Modifier.width(8.dp)); Text("Invite friends") }
+                FynxSoftActionButton(onClick = onStoryShare, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(8.dp)); Text("Share a story to group") }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Group camera", modifier = Modifier.weight(1f)); FynxGroupCameraPicker(context) { uri, type -> handleCaptured(uri, type) } }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Video note", modifier = Modifier.weight(1f)); FynxGroupCameraPicker(context, videoNoteMode = true) { uri, type -> handleCaptured(uri, type) } }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Group media", modifier = Modifier.weight(1f)); FynxGroupMediaPicker(context) { uri, type -> handleCaptured(uri, type) } }
@@ -154,8 +154,8 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
             Text("Posts, polls and events stay with the group and sync across devices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (canManage) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showPoll = true }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Poll, null); Spacer(Modifier.width(5.dp)); Text("Poll") }
-                    OutlinedButton(onClick = { showEvent = true }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Event, null); Spacer(Modifier.width(5.dp)); Text("Event") }
+                    FynxSoftActionButton(onClick = { showPoll = true }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Poll, null); Spacer(Modifier.width(5.dp)); Text("Poll") }
+                    FynxSoftActionButton(onClick = { showEvent = true }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Event, null); Spacer(Modifier.width(5.dp)); Text("Event") }
                 }
             }
             if (loading) CircularProgressIndicator(Modifier.size(24.dp))
@@ -174,7 +174,7 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
                         post.poll?.let { poll ->
                             Text(poll.question, style = MaterialTheme.typography.titleMedium)
                             poll.options.forEach { option ->
-                                OutlinedButton(onClick = { scope.launch { FynxGroupRemoteClient.votePoll(context, groupId, poll.id, option.id).onSuccess { reload() } } }, modifier = Modifier.fillMaxWidth()) {
+                                FynxSoftActionButton(onClick = { scope.launch { FynxGroupRemoteClient.votePoll(context, groupId, poll.id, option.id).onSuccess { reload() } } }, modifier = Modifier.fillMaxWidth()) {
                                     Text("${option.text}  •  ${option.voteCount}")
                                 }
                             }

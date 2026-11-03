@@ -99,7 +99,7 @@ fun FynxConversationMomentsSheet(
             }
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
+                FynxSoftActionButton(
                     onClick = { if (selected.isNotEmpty()) clipboard.setText(AnnotatedString(momentText)) },
                     enabled = selected.isNotEmpty(),
                     modifier = Modifier.weight(1f)

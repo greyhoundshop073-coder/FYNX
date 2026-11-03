@@ -29,7 +29,7 @@ private suspend fun loadSellerReputation(context: Context, username: String): Re
 @Composable
 fun FynxMarketplaceReviews(context: Context, orders: List<FynxRemoteSocialClient.MarketplaceOrder>, onChanged: () -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
-    OutlinedButton(onClick = { open = true }) { Text("Seller reviews") }
+    FynxSoftActionButton(onClick = { open = true }) { Text("Seller reviews") }
     if (!open) return
     val completed = orders.filter { it.status == "COMPLETED" }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }

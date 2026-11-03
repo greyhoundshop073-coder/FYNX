@@ -912,7 +912,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                 Icon(Icons.Default.Poll, "Poll", tint = MaterialTheme.colorScheme.primary)
                                                 Text(message.messagePayload["question"].orEmpty(), style = MaterialTheme.typography.titleSmall)
                                                 options.forEachIndexed { optionIndex, option ->
-                                                    OutlinedButton(onClick = {
+                                                    FynxSoftActionButton(onClick = {
                                                         conversationScope.launch {
                                                             FynxProductionMessaging.votePoll(context, message.id, optionIndex)
                                                                 .onSuccess { pollVoteNotice = "Vote recorded" }

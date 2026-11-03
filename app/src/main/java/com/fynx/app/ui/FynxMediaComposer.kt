@@ -71,7 +71,7 @@ fun FynxMediaComposer(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            OutlinedButton(
+            FynxSoftActionButton(
                 onClick = onDelete,
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp)
             ) { Text("Retake") }

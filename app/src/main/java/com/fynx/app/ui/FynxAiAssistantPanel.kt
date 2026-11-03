@@ -401,7 +401,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                         Text("To ${pendingMessageAction!!.recipientDisplayName.ifBlank { pendingMessageAction!!.recipientUsername }}: “${pendingMessageAction!!.message}”")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { confirmPendingMessage() }) { Text("Send") }
-                            OutlinedButton(onClick = { cancelPendingMessage() }) { Text("Cancel") }
+                            FynxSoftActionButton(onClick = { cancelPendingMessage() }) { Text("Cancel") }
                         }
                     }
                 }
