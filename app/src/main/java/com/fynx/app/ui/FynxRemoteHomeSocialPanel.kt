@@ -939,6 +939,7 @@ private fun FynxFeedTextureVideo(
     file: File,
     poster: Bitmap?,
     aspectRatio: Float,
+    durationMs: Long,
     playbackActive: Boolean,
     muted: Boolean,
     retryNonce: Int,
@@ -954,6 +955,7 @@ private fun FynxFeedTextureVideo(
     val player = remember(file) { MediaPlayer() }
     var prepared by remember(file) { mutableStateOf(false) }
     var playing by remember(file) { mutableStateOf(false) }
+    var playbackPositionMs by remember(file) { mutableLongStateOf(0L) }
     var hasVideoFrame by remember(file) { mutableStateOf(false) }
     var playbackError by remember(file) { mutableStateOf(false) }
 
@@ -1019,6 +1021,42 @@ private fun FynxFeedTextureVideo(
                 }
             }
         }
+        if (durationMs > 0L) {
+            val durationLabel = formatHomeVideoDuration(durationMs)
+            Surface(
+                modifier = Modifier.align(Alignment.TopEnd).padding(10.dp)
+                    .semantics { contentDescription = "Video duration $durationLabel" },
+                shape = RoundedCornerShape(8.dp),
+                color = Color.Black.copy(alpha = 0.72f),
+                tonalElevation = 0.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Text(durationLabel, color = Color.White, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            Column(
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                    .padding(start = 12.dp, end = 124.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    "\${formatHomeVideoDuration(playbackPositionMs)} / $durationLabel",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall
+                )
+                LinearProgressIndicator(
+                    progress = { (playbackPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.32f)
+                )
+            }
+        }
         Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.BottomEnd) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onOpenMedia != null) IconButton(onClick = onOpenMedia) { Icon(Icons.Default.OpenInNew, "Open video", tint = Color.White) }
@@ -1065,13 +1103,18 @@ private fun FynxFeedTextureVideo(
             player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
             player.setOnPreparedListener {
                 prepared = true
+                playbackPositionMs = it.currentPosition.toLong().coerceAtLeast(0L)
                 if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
             player.setOnInfoListener { _, what, _ ->
                 if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) hasVideoFrame = true
                 false
             }
-            player.setOnCompletionListener { playing = false; onPlayingChanged(false) }
+            player.setOnCompletionListener {
+                playing = false
+                playbackPositionMs = 0L
+                onPlayingChanged(false)
+            }
             player.setOnErrorListener { _, _, _ ->
                 prepared = false
                 playing = false
@@ -1094,11 +1137,34 @@ private fun FynxFeedTextureVideo(
             else if (!playbackActive && playing) { player.pause(); playing = false; onPlayingChanged(false) }
         }
     }
+    LaunchedEffect(playing, prepared, player) {
+        while (playing && prepared) {
+            playbackPositionMs = runCatching { player.currentPosition.toLong().coerceAtLeast(0L) }
+                .getOrDefault(playbackPositionMs)
+            delay(250L)
+        }
+        if (prepared) {
+            playbackPositionMs = runCatching { player.currentPosition.toLong().coerceAtLeast(0L) }
+                .getOrDefault(playbackPositionMs)
+        }
+    }
     LaunchedEffect(muted, prepared) {
         if (prepared) runCatching { player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f) }
     }
     DisposableEffect(file) {
         onDispose { runCatching { player.stop() }; runCatching { player.release() }; textureState.value = null }
+    }
+}
+
+private fun formatHomeVideoDuration(durationMs: Long): String {
+    val totalSeconds = (durationMs.coerceAtLeast(0L) / 1000L).toInt()
+    val seconds = totalSeconds % 60
+    val minutes = (totalSeconds / 60) % 60
+    val hours = totalSeconds / 3600
+    return if (hours > 0) {
+        "$hours:\${minutes.toString().padStart(2, '0')}:\${seconds.toString().padStart(2, '0')}"
+    } else {
+        "$minutes:\${seconds.toString().padStart(2, '0')}"
     }
 }
 
@@ -1121,6 +1187,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     var mediaFailed by remember(path) { mutableStateOf(false) }
     var reloadNonce by remember(path) { mutableIntStateOf(0) }
     var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }
+    var videoDurationMs by remember(path) { mutableLongStateOf(0L) }
     var videoPoster by remember(path) { mutableStateOf<Bitmap?>(null) }
     var playing by remember(path) { mutableStateOf(false) }
     var muted by remember(path) { mutableStateOf(true) }
@@ -1133,9 +1200,10 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
         mediaLoading = false
     }
     LaunchedEffect(file, type) {
-        if (file != null && type == "video") {
+        if (file != null && type.equals("video", ignoreCase = true)) {
             val visual = readFynxVideoVisual(file!!)
             videoAspectRatio = visual.aspectRatio
+            videoDurationMs = visual.durationMs
             videoPoster = visual.poster
         } else {
             videoPoster = null
@@ -1149,8 +1217,8 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
             TextButton(onClick = { reloadNonce++ }) { Text("Retry media") }
         }
     }
-    else if (type == "audio") AudioPostPlayer(file!!)
-    else if (type == "video") {
+    else if (type.equals("audio", ignoreCase = true)) AudioPostPlayer(file!!)
+    else if (type.equals("video", ignoreCase = true)) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val feedFrameHeight = (maxWidth / videoAspectRatio).coerceAtMost(420.dp)
             Box(
@@ -1163,6 +1231,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     file = file!!,
                     poster = videoPoster,
                     aspectRatio = videoAspectRatio,
+                    durationMs = videoDurationMs,
                     playbackActive = playbackActive && !fullscreen,
                     muted = muted,
                     retryNonce = reloadNonce,
