@@ -13,11 +13,17 @@ def check(name, condition):
     checks.append((name, bool(condition)))
 
 check("backend transport requires HTTPS", 'startsWith("https://")' in client)
-# Production HTTP uses the shared INTERNET transport gate; the request itself proves reachability.
-# Utility paths must use the same central backend transport instead of inventing a second gate.
-check("backend transport uses INTERNET-based network gate", "hasNetwork(context)" in client and "NET_CAPABILITY_INTERNET" in client and "allNetworks" in client and "NET_CAPABILITY_VALIDATED" not in client.split("private fun hasNetwork", 1)[-1].split("private fun isRetryableFailure", 1)[0])
+# HttpURLConnection uses Android's default network, so availability must inspect that route.
+# INTERNET identifies a candidate transport; the actual request proves reachability.
+# Do not count secondary networks or require VALIDATED before making the request.
+network_gate = client.split("private fun hasNetwork", 1)[-1].split("private fun isRetryableFailure", 1)[0]
+check("backend transport uses the default INTERNET network gate", "hasNetwork(context)" in client and "activeNetwork" in network_gate and "NET_CAPABILITY_INTERNET" in network_gate and "allNetworks" not in network_gate and "NET_CAPABILITY_VALIDATED" not in network_gate)
 check("idempotent backend requests have bounded retries", "MAX_IDEMPOTENT_RETRIES = 2" in client and "attempt >= MAX_IDEMPOTENT_RETRIES" in client)
 check("non-idempotent POST/PATCH are not automatically retried", 'val retryable = method == "GET" || method == "DELETE"' in client)
+retry_classifier = client.split("private fun isRetryableFailure", 1)[-1].split("private fun migrateLegacyAccessToken", 1)[0]
+check("HTTP status is classified before generic IOException", "if (current is FynxHttpException)" in retry_classifier and retry_classifier.index("if (current is FynxHttpException)") < retry_classifier.index("if (current is IOException)"))
+check("only transient HTTP statuses are retried", "setOf(408, 425, 429, 500, 502, 503, 504)" in retry_classifier and "return current.status in setOf" in retry_classifier)
+
 check("backend responses have a size limit", "MAX_RESPONSE_BYTES" in client and "total > MAX_RESPONSE_BYTES" in client)
 check("backend cancellation disconnects the request", "invokeOnCompletion" in client and "connection.disconnect()" in client)
 check("HTTP 401 clears the authenticated session", "HTTP_UNAUTHORIZED" in client and "FynxAuthStore.clear(context)" in client)

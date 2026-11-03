@@ -10,32 +10,18 @@ object FynxNetworkQuality {
 
     fun current(context: Context): Level {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return Level.OFFLINE
-        var sawInternetNetwork = false
-        var sawUnknownBandwidth = false
-        var bestDownstreamKbps = 0
-        val active = manager.activeNetwork
-        val orderedNetworks = buildList {
-            if (active != null) add(active)
-            manager.allNetworks.filter { it != active }.forEach(::add)
-        }
+        // HttpURLConnection routes over Android's default network. Evaluate that
+        // same network rather than borrowing bandwidth from a secondary network
+        // that the current request is not using.
+        val active = manager.activeNetwork ?: return Level.OFFLINE
+        val capabilities = manager.getNetworkCapabilities(active) ?: return Level.OFFLINE
+        if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return Level.OFFLINE
 
-        orderedNetworks.forEach { network ->
-            val capabilities = manager.getNetworkCapabilities(network) ?: return@forEach
-            if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return@forEach
-            sawInternetNetwork = true
-            val downstream = capabilities.linkDownstreamBandwidthKbps
-            if (downstream <= 0) {
-                sawUnknownBandwidth = true
-            } else {
-                bestDownstreamKbps = maxOf(bestDownstreamKbps, downstream)
-            }
-        }
-
-        if (!sawInternetNetwork) return Level.OFFLINE
+        val downstream = capabilities.linkDownstreamBandwidthKbps
         // Unknown bandwidth must not be treated as a fast connection. Using the
         // weak-network path is safer because it gives requests longer timeouts
         // and tighter concurrency while the real link quality is uncertain.
-        if (sawUnknownBandwidth && bestDownstreamKbps == 0) return Level.WEAK
-        return if (bestDownstreamKbps < 1_000) Level.WEAK else Level.GOOD
+        if (downstream <= 0) return Level.WEAK
+        return if (downstream < 1_000) Level.WEAK else Level.GOOD
     }
 }

@@ -22,8 +22,8 @@ for (const [name, relative, required] of checks) {
 const backendClient = read('app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt');
 const realtimeClient = read('app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt');
 const networkGate = backendClient.match(/private fun hasNetwork\(context: Context\): Boolean \{[\s\S]*?\n    \}/)?.[0] || '';
-if (!networkGate.includes('NET_CAPABILITY_INTERNET') || !networkGate.includes('allNetworks')) {
-  failures.push('Android production transport is missing the INTERNET-based network gate');
+if (!networkGate.includes('NET_CAPABILITY_INTERNET') || !networkGate.includes('activeNetwork') || networkGate.includes('allNetworks')) {
+  failures.push('Android production transport must gate requests on the active default INTERNET network');
 }
 if (networkGate.includes('NET_CAPABILITY_VALIDATED')) {
   failures.push('Android HTTP transport still hard-requires NET_CAPABILITY_VALIDATED before attempting production requests');
