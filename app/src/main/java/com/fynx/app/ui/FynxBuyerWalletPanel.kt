@@ -365,7 +365,7 @@ fun FynxBuyerWalletPanel() {
                         Text(
                             when {
                                 summaryLoading -> "Checking…"
-                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet.availableBalance ?: 0.0)
+                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet?.availableBalance ?: 0.0)
                                 canShowBalance -> "₦ ••••••"
                                 summaryError != null -> "Unavailable"
                                 else -> "—"

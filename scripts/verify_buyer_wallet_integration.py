@@ -54,7 +54,8 @@ checks = [
   and "Wallet setup pending — this balance cannot be spent or withdrawn yet" in panel
   and "pendingWalletBalanceCaptionDoesNotPromiseSpendableFunds" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
   and "firstVisitPendingWalletShowsOnlyItsLedgerDerivedZeroBalance" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
-  and "restrictedAndClosedWalletBalancesRemainHidden" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()),
+  and "restrictedAndClosedWalletBalancesRemainHidden" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
+  and "fynxWalletMoney(wallet?.availableBalance ?: 0.0)" in panel),
  ("Azure wallet card with white text", "FynxDesign.AzureBlue" in panel and "contentColor = Color.White" in panel and "Color.White" in panel),
  ("hide/show balance control", "balanceVisible" in panel and "Hide balance" in panel and "Show balance" in panel),
  ("reserved and withdrawal-pending balance separated", "reservedBalance" in client and "withdrawalPendingBalance" in client and '"Reserved"' in panel and '"Withdrawal pending"' in panel),
