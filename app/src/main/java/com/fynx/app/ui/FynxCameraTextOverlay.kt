@@ -398,12 +398,81 @@ internal fun CameraTextOverlayTools(
     )
     val showTimingDialog = remember(selected?.id, isVideo, videoDurationMs) { mutableStateOf(false) }
     Column(
-        modifier = Modifier.fillMaxWidth().then(
-            if (compact) Modifier.heightIn(max = 156.dp).verticalScroll(rememberScrollState()) else Modifier
-        ),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 7.dp)
     ) {
-        if (!compact) {
+        if (compact) {
+            // Keep the editor actions in two compact rows so they remain visible above
+            // the Android keyboard instead of scrolling Done or formatting off-screen.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Text on media", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = onAdd,
+                        modifier = Modifier.heightIn(min = 32.dp).semantics { contentDescription = "Add text overlay" },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                    ) { Text("+ Add", style = MaterialTheme.typography.labelSmall) }
+                    if (isVideo && selected != null && videoDurationMs > 1L) {
+                        OutlinedButton(
+                            onClick = { showTimingDialog.value = true },
+                            modifier = Modifier.heightIn(min = 32.dp),
+                            contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp)
+                        ) { Text("Timing", style = MaterialTheme.typography.labelSmall) }
+                    }
+                    Button(
+                        onClick = onDone,
+                        enabled = selected != null || overlayCount == 0,
+                        modifier = Modifier.heightIn(min = 32.dp),
+                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp)
+                    ) { Text("Done", style = MaterialTheme.typography.labelSmall) }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                swatches.forEach { swatch ->
+                    Surface(
+                        onClick = { onColor(swatch) },
+                        modifier = Modifier.size(24.dp)
+                            .semantics { contentDescription = "Text colour " + cameraTextColorName(swatch) },
+                        shape = CircleShape,
+                        color = ComposeColor(swatch),
+                        border = androidx.compose.foundation.BorderStroke(
+                            if (selected?.color == swatch) 3.dp else 1.dp,
+                            if (selected?.color == swatch) ComposeColor(0xFFB8A7FF) else ComposeColor.White.copy(alpha = 0.55f)
+                        ),
+                        tonalElevation = 1.dp
+                    ) {}
+                }
+                Spacer(Modifier.width(2.dp))
+                listOf("Modern", "Serif", "Mono", "Hand").forEach { font ->
+                    FilterChip(
+                        selected = selected?.font == font,
+                        onClick = { onFont(font) },
+                        label = { Text(font) },
+                        enabled = selected != null
+                    )
+                }
+                FilterChip(selected = selected?.backgroundColor != null, onClick = onToggleBackground, label = { Text("Highlight") }, enabled = selected != null)
+                FilterChip(selected = selected?.bold == true, onClick = onToggleBold, label = { Text("Bold") }, enabled = selected != null)
+                FilterChip(
+                    selected = selected?.alignment != "CENTER",
+                    onClick = onAlignment,
+                    label = { Text("Align") },
+                    enabled = selected != null
+                )
+                if (selected != null) OutlinedButton(
+                    onClick = onDelete,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) { Text("Delete") }
+            }
+        } else {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -419,97 +488,71 @@ internal fun CameraTextOverlayTools(
                 }
                 OutlinedButton(onClick = onAdd) { Text("+ Add text") }
             }
-        } else {
-            // Done remains fixed and visible; it is never placed inside a horizontal carousel.
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Text on media", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (isVideo && selected != null && videoDurationMs > 1L) {
-                        OutlinedButton(
-                            onClick = { showTimingDialog.value = true },
-                            modifier = Modifier.heightIn(min = 36.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                        ) { Text("Text timing", style = MaterialTheme.typography.labelSmall) }
-                    }
-                    Button(
-                        onClick = onDone,
-                        enabled = selected != null || overlayCount == 0,
-                        modifier = Modifier.heightIn(min = 36.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) { Text("Done", style = MaterialTheme.typography.labelSmall) }
-                }
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            swatches.forEach { swatch ->
-                Surface(
-                    onClick = { onColor(swatch) },
-                    modifier = Modifier.size(if (compact) 25.dp else 29.dp)
-                        .semantics { contentDescription = "Text colour " + cameraTextColorName(swatch) },
-                    shape = CircleShape,
-                    color = ComposeColor(swatch),
-                    border = androidx.compose.foundation.BorderStroke(
-                        if (selected?.color == swatch) 3.dp else 1.dp,
-                        if (selected?.color == swatch) ComposeColor(0xFFB8A7FF) else ComposeColor.White.copy(alpha = 0.55f)
-                    ),
-                    tonalElevation = 1.dp
-                ) {}
-            }
-            Spacer(Modifier.width(2.dp))
-            listOf("Modern", "Serif", "Mono", "Hand").forEach { font ->
-                FilterChip(
-                    selected = selected?.font == font,
-                    onClick = { onFont(font) },
-                    label = { Text(font) },
-                    enabled = selected != null
-                )
-            }
-        }
-        if (!compact && isVideo && selected != null && videoDurationMs > 1L) {
-            val duration = videoDurationMs.coerceAtLeast(2L)
-            val start = selected.startMs.coerceIn(0L, duration - 1L)
-            val end = selected.endMs.coerceIn(start + 1L, duration)
-            Column(
-                modifier = Modifier.fillMaxWidth()
-                    .background(ComposeColor(0xFF25364A).copy(alpha = 0.42f), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Text timing", style = MaterialTheme.typography.labelLarge, color = ComposeColor.White)
-                    Text(formatCameraOverlayTime(start) + " – " + formatCameraOverlayTime(end), style = MaterialTheme.typography.labelSmall, color = ComposeColor(0xFFB8A7FF))
-                }
-                Text("Show from", style = MaterialTheme.typography.labelSmall, color = ComposeColor.White.copy(alpha = 0.76f))
-                Slider(value = start.toFloat(), onValueChange = { value -> onTiming(value.toLong().coerceIn(0L, end - 1L), end) }, valueRange = 0f..(duration - 1L).toFloat())
-                Text("Show until", style = MaterialTheme.typography.labelSmall, color = ComposeColor.White.copy(alpha = 0.76f))
-                Slider(value = end.toFloat(), onValueChange = { value -> onTiming(start, value.toLong().coerceIn(start + 1L, duration)) }, valueRange = (start + 1L).toFloat()..duration.toFloat())
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                FilterChip(selected = selected?.backgroundColor != null, onClick = onToggleBackground, label = { Text("Highlight") }, enabled = selected != null)
-                FilterChip(selected = selected?.bold == true, onClick = onToggleBold, label = { Text("Bold") }, enabled = selected != null)
-                FilterChip(
-                    selected = selected?.alignment != "CENTER",
-                    onClick = onAlignment,
-                    label = { Text("Align: " + (selected?.alignment?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Center")) },
-                    enabled = selected != null
-                )
-                if (selected != null) OutlinedButton(onClick = onDelete) { Text("Delete") }
+                swatches.forEach { swatch ->
+                    Surface(
+                        onClick = { onColor(swatch) },
+                        modifier = Modifier.size(29.dp)
+                            .semantics { contentDescription = "Text colour " + cameraTextColorName(swatch) },
+                        shape = CircleShape,
+                        color = ComposeColor(swatch),
+                        border = androidx.compose.foundation.BorderStroke(
+                            if (selected?.color == swatch) 3.dp else 1.dp,
+                            if (selected?.color == swatch) ComposeColor(0xFFB8A7FF) else ComposeColor.White.copy(alpha = 0.55f)
+                        ),
+                        tonalElevation = 1.dp
+                    ) {}
+                }
+                Spacer(Modifier.width(2.dp))
+                listOf("Modern", "Serif", "Mono", "Hand").forEach { font ->
+                    FilterChip(
+                        selected = selected?.font == font,
+                        onClick = { onFont(font) },
+                        label = { Text(font) },
+                        enabled = selected != null
+                    )
+                }
             }
-            if (!compact) {
+            if (isVideo && selected != null && videoDurationMs > 1L) {
+                val duration = videoDurationMs.coerceAtLeast(2L)
+                val start = selected.startMs.coerceIn(0L, duration - 1L)
+                val end = selected.endMs.coerceIn(start + 1L, duration)
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(ComposeColor(0xFF25364A).copy(alpha = 0.42f), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Text timing", style = MaterialTheme.typography.labelLarge, color = ComposeColor.White)
+                        Text(formatCameraOverlayTime(start) + " – " + formatCameraOverlayTime(end), style = MaterialTheme.typography.labelSmall, color = ComposeColor(0xFFB8A7FF))
+                    }
+                    Text("Show from", style = MaterialTheme.typography.labelSmall, color = ComposeColor.White.copy(alpha = 0.76f))
+                    Slider(value = start.toFloat(), onValueChange = { value -> onTiming(value.toLong().coerceIn(0L, end - 1L), end) }, valueRange = 0f..(duration - 1L).toFloat())
+                    Text("Show until", style = MaterialTheme.typography.labelSmall, color = ComposeColor.White.copy(alpha = 0.76f))
+                    Slider(value = end.toFloat(), onValueChange = { value -> onTiming(start, value.toLong().coerceIn(start + 1L, duration)) }, valueRange = (start + 1L).toFloat()..duration.toFloat())
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(selected = selected?.backgroundColor != null, onClick = onToggleBackground, label = { Text("Highlight") }, enabled = selected != null)
+                    FilterChip(selected = selected?.bold == true, onClick = onToggleBold, label = { Text("Bold") }, enabled = selected != null)
+                    FilterChip(
+                        selected = selected?.alignment != "CENTER",
+                        onClick = onAlignment,
+                        label = { Text("Align: " + (selected?.alignment?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Center")) },
+                        enabled = selected != null
+                    )
+                    if (selected != null) OutlinedButton(onClick = onDelete) { Text("Delete") }
+                }
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = onDone, enabled = selected != null || overlayCount == 0) { Text("Done") }
             }
