@@ -415,7 +415,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
                         }
                     }
                 }
-                }
                 if (weeklyAwards.isNotEmpty()) {
                     item(key = "seller-weekly-awards-$username") {
                         Card(
