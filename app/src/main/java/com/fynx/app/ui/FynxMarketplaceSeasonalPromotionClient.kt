@@ -42,7 +42,7 @@ object FynxMarketplaceSeasonalPromotionClient {
             response.getOrThrow()
         } else {
             withContext(Dispatchers.IO) {
-                FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 24L * 60L * 60L * 1000L)
+                FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 5L * 60L * 1000L)
             } ?: return Result.failure(response.exceptionOrNull() ?: IllegalStateException("Seasonal promotion feed is unavailable."))
         }
         if (response.isSuccess) {

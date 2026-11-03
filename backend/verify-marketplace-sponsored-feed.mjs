@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 const advertising = await readFile(new URL("./marketplaceAdvertising.js", import.meta.url), "utf8");
 const marketplaceSchema = await readFile(new URL("./marketplaceSchema.js", import.meta.url), "utf8");
 const advertisingClient = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxAdvertisingClient.kt", import.meta.url), "utf8");
+const marketplaceFeedClient = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSponsoredPromotionClient.kt", import.meta.url), "utf8");
 const start = advertising.indexOf('app.get("/api/advertising/marketplace-feed"');
 const end = advertising.lastIndexOf("\n}");
 assert.ok(start >= 0 && end > start, "Marketplace sponsored feed route must be registered");
@@ -27,6 +28,7 @@ const checks = [
   ["audience-targeted campaigns are not broadcast to everyone", route.includes("c.targeting ? 'ageMin'") && route.includes("jsonb_array_length(c.targeting->'locations')") && route.includes("jsonb_array_length(c.targeting->'interests')")],
   ["promotional feed returns real listing media IDs and prices", route.includes("l.media_ids") && route.includes("l.price") && route.includes("mediaIds: Array.isArray(row.media_ids)")],
   ["sponsored campaign selection is budget-balanced rather than used for seller awards", route.includes("ORDER BY c.spent_kobo ASC") && !route.includes("marketplace_seller_reviews")],
+  ["paid sponsored feed fails closed offline instead of replaying stale approval, budget, schedule or inventory data", marketplaceFeedClient.includes('FynxBackendClient.get(context, "/api/advertising/marketplace-feed")') && marketplaceFeedClient.includes("response.getOrElse { return Result.failure(it) }") && !marketplaceFeedClient.includes("readResponse(") && !marketplaceFeedClient.includes("writeResponse(")],
   ["the weekly seller award remains separate from advertising data", !advertising.slice(start, end).includes("weekly_rank")]
 ];
 for (const [name, ok] of checks) {

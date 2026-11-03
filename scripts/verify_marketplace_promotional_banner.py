@@ -58,8 +58,8 @@ checks = [
     ("cached Marketplace products render while the live request refreshes", "Showing saved products while FYNX checks for updates." in PANEL and "FynxMarketplaceFeedCache.read(context, requestQuery, requestCategory, cacheLocation)" in PANEL),
     ("stale Marketplace cache does not revive listings that are no longer active", 'val active = row.optBoolean("active", true)' in FEED_CACHE and "|| !active) continue" in FEED_CACHE and "active=active" in FEED_CACHE),
     ("stale Marketplace cache never revives listings with zero available stock", "quantity <= 0" in FEED_CACHE and "cachedListingsWithNoAvailableStockAreNotRestored" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceFeedCacheTest.kt").read_text(encoding="utf-8")),
-    ("sponsored promotions retain a bounded last-known feed during temporary outages", '"sponsored_promotions"' in SPONSORED_CLIENT and "readResponse(" in SPONSORED_CLIENT and "writeResponse(" in SPONSORED_CLIENT),
-    ("weekly seller awards retain a bounded last-known result during temporary outages", '"weekly_sellers"' in WEEKLY_CLIENT and "readResponse(" in WEEKLY_CLIENT and "writeResponse(" in WEEKLY_CLIENT),
+    ("paid sponsored promotions fail closed offline rather than replaying stale campaigns", 'FynxBackendClient.get(context, "/api/advertising/marketplace-feed")' in SPONSORED_CLIENT and "response.getOrElse { return Result.failure(it) }" in SPONSORED_CLIENT and "readResponse(" not in SPONSORED_CLIENT and "writeResponse(" not in SPONSORED_CLIENT),
+    ("weekly seller awards use a short cache and reject a previous Lagos week", '"weekly_sellers"' in WEEKLY_CLIENT and "15L * 60L * 1000L" in WEEKLY_CLIENT and 'root.optString("periodStart")' in WEEKLY_CLIENT and 'root.optString("periodEnd")' in WEEKLY_CLIENT and "!now.isBefore(periodEnd)" in WEEKLY_CLIENT),
     ("Marketplace browsing does not request order history until Orders is opened", "reloadOrders()" not in MARKETPLACE_RELOAD and "showOrders = true; reloadOrders()" in PANEL),
     ("failed refresh preserves saved products and warns that availability may have changed", "Showing saved products from your last visit." in PANEL and "product availability may have changed" in PANEL),
     ("filter changes do not show another search's products as matching results", "Never present another search/filter" in PANEL and "listings = listOfNotNull(pinned)" in PANEL),
@@ -73,7 +73,7 @@ checks = [
     ("seasonal banner artwork receives the same image-readable overlay treatment as real listing media",
      "val hasRemoteArtwork = listing?.mediaIds?.isNotEmpty() == true || !slide.artworkMediaId.isNullOrBlank()" in BANNER
      and "alpha = if (hasRemoteArtwork) 0.18f else 0.58f" in BANNER),
-    ("seasonal promotions retain a last-known schedule for offline display", "writeResponse(context" in SEASONAL_CLIENT and "seasonal_promotions" in SEASONAL_CLIENT and "readResponse(" in SEASONAL_CLIENT),
+    ("seasonal promotions retain only a short-lived last-known schedule for offline display", "writeResponse(context" in SEASONAL_CLIENT and "seasonal_promotions" in SEASONAL_CLIENT and "5L * 60L * 1000L" in SEASONAL_CLIENT and "readResponse(" in SEASONAL_CLIENT),
     ("cached seasonal promotions require valid timestamps and an active, in-window campaign", "isMarketplaceSeasonalPromotionEligible(promotion, now)" in SEASONAL_CLIENT and "starts.isBefore(ends) && !now.isBefore(starts) && now.isBefore(ends)" in PROMOTION_MODELS and "if (!promotion.active" in PROMOTION_MODELS),
 
     ("Marketplace listing cache serialization and parsing run off the UI thread", "withContext(Dispatchers.IO) { FynxMarketplaceFeedCache.read(" in PANEL and "withContext(Dispatchers.IO) {" in PANEL and "FynxMarketplaceFeedCache.write(context" in PANEL),

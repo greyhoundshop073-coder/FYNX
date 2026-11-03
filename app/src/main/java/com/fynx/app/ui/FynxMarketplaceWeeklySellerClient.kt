@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import org.json.JSONObject
+import java.time.Instant
 
 /** A weekly seller award backed by completed Marketplace orders, never ad spend. */
 data class FynxMarketplaceWeeklySeller(
@@ -32,13 +33,22 @@ object FynxMarketplaceWeeklySellerClient {
     suspend fun load(context: Context): Result<List<FynxMarketplaceWeeklySeller>> {
         val response = FynxBackendClient.get(context, "/api/marketplace/sellers/weekly")
         val raw = response.getOrNull() ?: FynxMarketplaceFeedCache.readResponse(
-            context, "weekly_sellers", 6L * 60L * 60L * 1000L
+            context, "weekly_sellers", 15L * 60L * 1000L
         ) ?: return Result.failure(response.exceptionOrNull() ?: IllegalStateException("Weekly seller awards are unavailable."))
         if (response.isSuccess) FynxMarketplaceFeedCache.writeResponse(context, "weekly_sellers", raw)
         return runCatching {
             val root = JSONObject(raw)
             val rows = root.optJSONArray("winners")
                 ?: throw IllegalStateException("Weekly seller response is incomplete.")
+            val periodStart = runCatching { Instant.parse(root.optString("periodStart")) }.getOrNull()
+                ?: return@runCatching emptyList()
+            val periodEnd = runCatching { Instant.parse(root.optString("periodEnd")) }.getOrNull()
+                ?: return@runCatching emptyList()
+            val now = Instant.now()
+            // A cached ranking from a previous week must never be presented as the current winner.
+            if (!periodStart.isBefore(periodEnd) || now.isBefore(periodStart) || !now.isBefore(periodEnd)) {
+                return@runCatching emptyList()
+            }
             (0 until rows.length()).mapNotNull { index ->
                 val row = rows.optJSONObject(index) ?: return@mapNotNull null
                 val sellerId = row.optString("sellerId").trim()

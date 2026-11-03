@@ -29,10 +29,9 @@ object FynxMarketplaceSponsoredPromotionClient {
 
     suspend fun load(context: Context): Result<List<FynxMarketplaceSponsoredPromotion>> {
         val response = FynxBackendClient.get(context, "/api/advertising/marketplace-feed")
-        val raw = response.getOrNull() ?: FynxMarketplaceFeedCache.readResponse(
-            context, "sponsored_promotions", 6L * 60L * 60L * 1000L
-        ) ?: return Result.failure(response.exceptionOrNull() ?: IllegalStateException("Sponsored promotions are unavailable."))
-        if (response.isSuccess) FynxMarketplaceFeedCache.writeResponse(context, "sponsored_promotions", raw)
+        // Paid placements must be verified against live approval, payment, budget, schedule and inventory.
+        // Never replay a cached advertisement when the server cannot confirm that it is still eligible.
+        val raw = response.getOrElse { return Result.failure(it) }
         return runCatching {
             val root = JSONObject(raw)
             val rows = root.optJSONArray("promotions") ?: JSONArray()
