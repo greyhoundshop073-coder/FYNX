@@ -82,6 +82,12 @@ assert.equal(walletGroupAllocation.totalCents, 115000);
 assert.deepEqual(walletGroupAllocation.children.map((child) => child.amountCents), [62500, 52500]);
 assert.throws(() => buildWalletMarketplaceCheckoutAllocations({ ...walletGroup, currency: 'USD' }, walletGroupChildren));
 assert.throws(() => buildWalletMarketplaceCheckoutAllocations({ ...walletGroup, buyer_total: '1151.00' }, walletGroupChildren));
+assert.throws(() => buildWalletMarketplaceCheckoutAllocations(
+  { ...walletGroup, buyer_total: '1151.00' },
+  walletGroupChildren.map((child, index) => index === 0
+    ? { ...child, total_amount: '626.00', buyer_total: '626.00', seller_net_amount: '576.00' }
+    : child)
+));
 assert.throws(() => buildWalletMarketplaceCheckoutAllocations(walletGroup, walletGroupChildren.map((child, index) => index === 0 ? { ...child, buyer_id: '101' } : child)));
 assert.throws(() => buildWalletMarketplaceCheckoutAllocations(walletGroup, walletGroupChildren.map((child, index) => index === 0 ? { ...child, status: 'PAID' } : child)));
 assert.throws(() => buildWalletMarketplaceCheckoutAllocations(walletGroup, walletGroupChildren.map((child, index) => index === 0 ? { ...child, payment_reference: 'FYNX-ORDER-REF' } : child)));
