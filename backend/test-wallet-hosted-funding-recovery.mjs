@@ -5,6 +5,7 @@ import {
   isBuyerWalletTrustedCheckoutUrl
 } from './buyerWallet.js';
 import {
+  buildWalletMarketplaceCheckoutAllocations,
   isValidWalletMarketplacePin,
   walletMarketplaceSpendingApproved
 } from './buyerWalletMarketplace.js';
@@ -61,4 +62,35 @@ for (const invalidPin of ['12345', '1234567', '12345a', '12 456', '', null, 1234
   assert.equal(isValidWalletMarketplacePin(invalidPin), false);
 }
 
-console.log('FYNX Wallet hosted-funding recovery and Marketplace safety tests GREEN (31 assertions)');
+
+const walletGroup = {
+  id: '550e8400-e29b-41d4-a716-446655440099', buyer_id: '100', currency: 'NGN',
+  status: 'PAYMENT_PENDING', subtotal: '1000.00', delivery_fee: '100.00',
+  marketplace_fee: '50.00', buyer_total: '1150.00'
+};
+const walletGroupChildren = [
+  { id: '550e8400-e29b-41d4-a716-446655440001', buyer_id: '100', currency: 'NGN', status: 'PAYMENT_PENDING', payment_reference: null,
+    product_subtotal: '500.00', delivery_fee: '100.00', marketplace_fee: '50.00', marketplace_fee_buyer: '25.00',
+    marketplace_fee_seller: '25.00', seller_net_amount: '575.00', buyer_total: '625.00', total_amount: '625.00' },
+  { id: '550e8400-e29b-41d4-a716-446655440002', buyer_id: '100', currency: 'NGN', status: 'PAYMENT_PENDING', payment_reference: null,
+    product_subtotal: '500.00', delivery_fee: '0.00', marketplace_fee: '50.00', marketplace_fee_buyer: '25.00',
+    marketplace_fee_seller: '25.00', seller_net_amount: '475.00', buyer_total: '525.00', total_amount: '525.00' }
+];
+const walletGroupAllocation = buildWalletMarketplaceCheckoutAllocations(walletGroup, walletGroupChildren);
+assert.equal(walletGroupAllocation.currency, 'NGN');
+assert.equal(walletGroupAllocation.totalCents, 115000);
+assert.deepEqual(walletGroupAllocation.children.map((child) => child.amountCents), [62500, 52500]);
+assert.throws(() => buildWalletMarketplaceCheckoutAllocations({ ...walletGroup, currency: 'USD' }, walletGroupChildren));
+assert.throws(() => buildWalletMarketplaceCheckoutAllocations({ ...walletGroup, buyer_total: '1151.00' }, walletGroupChildren));
+assert.throws(() => buildWalletMarketplaceCheckoutAllocations(
+  { ...walletGroup, buyer_total: '1151.00' },
+  walletGroupChildren.map((child, index) => index === 0
+    ? { ...child, total_amount: '626.00', buyer_total: '626.00', seller_net_amount: '576.00' }
+    : child)
+));
+assert.throws(() => buildWalletMarketplaceCheckoutAllocations(walletGroup, walletGroupChildren.map((child, index) => index === 0 ? { ...child, buyer_id: '101' } : child)));
+assert.throws(() => buildWalletMarketplaceCheckoutAllocations(walletGroup, walletGroupChildren.map((child, index) => index === 0 ? { ...child, status: 'PAID' } : child)));
+assert.throws(() => buildWalletMarketplaceCheckoutAllocations(walletGroup, walletGroupChildren.map((child, index) => index === 0 ? { ...child, payment_reference: 'FYNX-ORDER-REF' } : child)));
+assert.throws(() => buildWalletMarketplaceCheckoutAllocations(walletGroup, [{ ...walletGroupChildren[0], marketplace_fee_seller: '15.00' }, walletGroupChildren[1]]));
+
+console.log('FYNX Wallet hosted-funding, Marketplace order and group-payment regression tests GREEN');

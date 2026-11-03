@@ -5,6 +5,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const checkout = read('./marketplaceCheckout.js');
 const checkoutOrder = read('./marketplaceCheckoutOrder.js');
 const payment = read('./marketplaceReputation.js');
+const walletMarketplace = read('./buyerWalletMarketplace.js');
 const webhook = read('./marketplacePaystackWebhook.js');
 const completion = read('./marketplaceCompletion.js');
 const protection = read('./marketplaceProtection.js');
@@ -50,6 +51,8 @@ const checks = [
   ['buyer UI performs server quote before multi-order creation', panel.includes("requestMultiQuote") && panel.includes("createMultiOrder")],
   ['buyer UI verifies the payment before treating checkout as paid', panel.includes("initializeMarketplaceCheckoutGroupPayment") && panel.includes("verifyMarketplaceCheckoutGroupPayment") && panel.includes("onPaid()")],
   ['unconfigured Paystack blocks new stock reservations and tells both checkout flows no charge started', paymentUi.includes('No payment was started, and your cart is unchanged') && panel.includes('marketplacePaymentFailureMessage(it)') && singleCheckoutUi.includes('marketplacePaymentFailureMessage(it)') && panel.includes('onPaid()')],
+  ['multi-product checkout exposes an approved NGN FYNX Wallet option and posts group payment to the protected Wallet endpoint', panel.includes('FynxBuyerWalletClient.payMarketplaceCheckoutGroup') && panel.includes('marketplaceWalletCanCoverCheckout') && walletMarketplace.includes("/api/wallet/marketplace-checkout-groups/:id/pay") && walletMarketplace.includes("walletMarketplaceSpendingApproved()")],
+  ['group Wallet transactions remain per-child and refund/settlement compatible through orderId metadata', walletMarketplace.includes("orderId: child.orderId") && walletMarketplace.includes("checkoutGroupId: String(group.id)") && walletMarketplace.includes("'MARKETPLACE_ESCROW','CREDIT'")],
   ['buyer lifecycle remains server-authoritative', lifecycle.includes("FynxRemoteSocialClient") && !/UPDATE\s+marketplace_orders|INSERT\s+INTO\s+marketplace_orders/i.test(lifecycle)],
   ['seller lifecycle remains server-authoritative', seller.includes("FynxBackendClient") && !/UPDATE\s+marketplace_orders|INSERT\s+INTO\s+marketplace_orders/i.test(seller)]
 ];

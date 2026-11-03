@@ -97,6 +97,14 @@ internal data class FynxWalletMarketplacePayment(
     val amount: Double
 )
 
+internal data class FynxWalletMarketplaceCheckoutPayment(
+    val checkoutId: String,
+    val reference: String,
+    val amount: Double,
+    val currency: String,
+    val childOrderCount: Int
+)
+
 internal data class FynxWalletWithdrawalResult(
     val status: String,
     val reference: String,
@@ -403,6 +411,54 @@ internal object FynxBuyerWalletClient {
             }
             FynxWalletMarketplacePayment(returnedOrderId, reference, amount)
         }
+    }
+
+
+    suspend fun payMarketplaceCheckoutGroup(
+        context: Context,
+        checkoutId: String,
+        pin: String,
+        idempotencyKey: String
+    ): Result<FynxWalletMarketplaceCheckoutPayment> {
+        require(checkoutId.matches(Regex("^[0-9a-fA-F-]{36}$"))) { "Marketplace checkout reference is invalid." }
+        require(pin.matches(Regex("^\\d{6}$"))) { "Enter your six-digit Wallet PIN." }
+        require(idempotencyKey.matches(Regex("^[A-Za-z0-9_-]{8,100}$"))) { "Wallet payment reference is invalid." }
+        val body = JSONObject()
+            .put("pin", pin)
+            .put("idempotencyKey", idempotencyKey)
+        return FynxBackendClient.postJson(
+            context,
+            "/api/wallet/marketplace-checkout-groups/" + Uri.encode(checkoutId) + "/pay",
+            body.toString()
+        ).mapCatching { raw -> parseMarketplaceCheckoutGroupPayment(raw, checkoutId) }
+    }
+
+    internal fun parseMarketplaceCheckoutGroupPayment(
+        raw: String,
+        expectedCheckoutId: String
+    ): FynxWalletMarketplaceCheckoutPayment {
+        val json = JSONObject(raw)
+        require(json.optString("status").trim().uppercase(Locale.US) == "PAID") {
+            "Marketplace Wallet checkout payment was not confirmed."
+        }
+        val returnedCheckoutId = json.optString("checkoutId").trim()
+        val reference = json.optString("reference").trim()
+        val amount = json.optDouble("amount", Double.NaN)
+        val currency = json.optString("currency").trim().uppercase(Locale.US)
+        val childOrderCount = json.optInt("childOrderCount", -1)
+        require(returnedCheckoutId == expectedCheckoutId &&
+            reference.matches(Regex("^fwmpg_[a-fA-F0-9]{32}$")) &&
+            amount.isFinite() && amount > 0.0 &&
+            currency == "NGN" &&
+            childOrderCount in 1..20
+        ) { "Marketplace Wallet checkout payment confirmation is invalid." }
+        return FynxWalletMarketplaceCheckoutPayment(
+            checkoutId = returnedCheckoutId,
+            reference = reference,
+            amount = amount,
+            currency = currency,
+            childOrderCount = childOrderCount
+        )
     }
 
     suspend fun refreshWithdrawalStatus(
