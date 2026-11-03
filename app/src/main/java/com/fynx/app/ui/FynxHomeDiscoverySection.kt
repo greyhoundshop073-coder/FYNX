@@ -68,9 +68,16 @@ internal suspend fun readFynxVideoVisual(file: File): FynxVideoVisualFrame = wit
         val height = if (rotation == 90 || rotation == 270) rawWidth else rawHeight
         val ratio = (width / height).takeIf { it.isFinite() && it > 0f }?.coerceIn(0.45f, 2.4f) ?: (16f / 9f)
         val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-        val rawPoster = runCatching {
-            retriever.getFrameAtTime(250_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-        }.getOrNull()
+        // Some valid MP4s do not expose a sync frame at 250 ms (especially
+        // short clips or files whose first keyframe is later). Try several safe
+        // timestamps/modes so the feed can still paint the real clip as its
+        // ambient side-fill instead of leaving black letterbox areas.
+        val rawPoster = sequenceOf(
+            { retriever.getFrameAtTime(250_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) },
+            { retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST) },
+            { retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST) },
+            { retriever.getFrameAtTime(-1L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) }
+        ).mapNotNull { extract -> runCatching(extract).getOrNull() }.firstOrNull()
         val poster = rawPoster?.let { frame ->
             val longest = maxOf(frame.width, frame.height)
             if (longest <= 720) frame
@@ -102,7 +109,9 @@ internal fun FynxVideoAmbientBackdrop(poster: Bitmap?, modifier: Modifier = Modi
     Box(
         modifier.background(
             Brush.verticalGradient(
-                listOf(Color(0xFF27364B), Color(0xFF111A29), Color(0xFF080D16))
+                // Keep a deliberate FYNX-blue treatment visible even when a
+                // damaged/unsupported clip cannot provide a poster frame.
+                listOf(Color(0xFF174B78), Color(0xFF123451), Color(0xFF102B3C))
             )
         )
     ) {
