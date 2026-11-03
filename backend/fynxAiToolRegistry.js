@@ -1,4 +1,5 @@
 import { getFynxDatabasePool } from "./databasePool.js";
+import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
 import pg from "pg";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
@@ -209,7 +210,7 @@ export async function runAssistantAgent({ message, userId, history = [], context
 
 export function registerFynxAiRoutes({ app }) {
   if (!app) return;
-  app.post("/api/assistant/agent", async (req, res) => {
+  app.post("/api/assistant/agent", assistantJsonBodyParser, async (req, res) => {
     const userId = authenticate(req);
     if (!userId) return res.status(401).json({ error: "authentication required" });
     const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
@@ -234,7 +235,7 @@ export function registerFynxAiRoutes({ app }) {
     catch (error) { console.error("FYNX AI agent", error?.message || error); return res.status(502).json({ error: "FYNX AI is temporarily unavailable" }); }
   });
 
-  app.post("/api/assistant/tools", async (req, res) => {
+  app.post("/api/assistant/tools", assistantJsonBodyParser, async (req, res) => {
     const userId = authenticate(req);
     if (!userId) return res.status(401).json({ error: "authentication required" });
     const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
