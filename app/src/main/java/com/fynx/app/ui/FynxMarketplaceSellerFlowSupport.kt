@@ -19,6 +19,8 @@ internal object FynxMarketplaceSellerFlowSupport {
     const val DEFAULT_CURRENCY = "NGN"
     val SUPPORTED_CURRENCIES = listOf("NGN")
     fun isSupportedCurrency(currency: String): Boolean = currency.trim().uppercase() in SUPPORTED_CURRENCIES
+    // Older USD orders and receipts must remain readable after new activity became NGN-only.
+    fun isReadableCurrency(currency: String): Boolean = currency.trim().uppercase() in setOf("NGN", "USD")
 
     fun normalizedMedia(context: Context, uris: List<Uri>): List<Uri> =
         uris.asSequence()
@@ -114,7 +116,7 @@ internal fun marketplaceRequiredListingActive(value: Any?): Boolean =
 /** Listing currencies are restricted to the two currencies the Marketplace currently supports. */
 internal fun marketplaceRequiredMarketplaceCurrency(value: Any?): String {
     val currency = (value as? String)?.trim()?.uppercase(Locale.US).orEmpty()
-    if (!FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency)) {
+    if (!FynxMarketplaceSellerFlowSupport.isReadableCurrency(currency)) {
         throw IllegalStateException("A product currency is missing or unsupported.")
     }
     return currency
