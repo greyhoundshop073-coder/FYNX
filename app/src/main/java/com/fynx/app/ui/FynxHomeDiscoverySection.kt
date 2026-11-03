@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -487,6 +489,9 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
     var playbackError by remember(video.id) { mutableStateOf(false) }
     var retryNonce by remember(video.id) { mutableIntStateOf(0) }
     val viewState = remember(video.id) { mutableStateOf<VideoView?>(null) }
+    val playerState = remember(video.id) { mutableStateOf<android.media.MediaPlayer?>(null) }
+    var muted by remember(video.id) { mutableStateOf(true) }
+    val mutedState = rememberUpdatedState(muted)
     val activeState = rememberUpdatedState(isActive)
 
     LaunchedEffect(video.id, retryNonce) {
@@ -515,6 +520,7 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
         onDispose {
             runCatching { viewState.value?.stopPlayback() }
             viewState.value = null
+            playerState.value = null
         }
     }
     DisposableEffect(file, retryNonce) {
@@ -555,7 +561,9 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
                             layoutParams = ViewGroup.LayoutParams(-1, -1)
                             setVideoPath(file!!.absolutePath)
                             setOnPreparedListener { player ->
+                                playerState.value = player
                                 player.isLooping = true
+                                player.setVolume(if (mutedState.value) 0f else 1f, if (mutedState.value) 0f else 1f)
                                 prepared = true
                                 playbackError = false
                                 if (activeState.value) {
@@ -564,6 +572,7 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
                                 }
                             }
                             setOnErrorListener { _, _, _ ->
+                                playerState.value = null
                                 prepared = false
                                 playing = false
                                 playbackError = true
@@ -601,6 +610,29 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
                         Text("Retry video", color = Color.White)
                     }
                 }
+            }
+        }
+        if (prepared) {
+            IconButton(
+                onClick = {
+                    muted = !muted
+                    runCatching {
+                        playerState.value?.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 18.dp, bottom = 24.dp)
+                    .size(48.dp),
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.42f),
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(
+                    if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                    if (muted) "Unmute Discovery video" else "Mute Discovery video"
+                )
             }
         }
         if (prepared) {
