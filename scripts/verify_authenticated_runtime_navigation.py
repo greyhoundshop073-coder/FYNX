@@ -1935,6 +1935,32 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                             ["New post", test_caption, "Post"]
                         )
                         if opened_xml:
+                            # Draft reopens in the composer, whose scroll state may still be
+                            # below the caption/media controls from the previous visit. Return
+                            # to the top before checking caption, URL, and media editor actions.
+                            for draft_top_attempt in range(8):
+                                if find_control(opened_xml, ["Edit text on media"]) and test_caption in opened_xml:
+                                    break
+                                draft_scroll_nodes = []
+                                for node in nodes(opened_xml):
+                                    if node.attrib.get("scrollable", "false").lower() != "true":
+                                        continue
+                                    bounds = _node_bounds(node)
+                                    if not bounds:
+                                        continue
+                                    left, top, right, bottom = bounds
+                                    if right > left and bottom - top >= 180:
+                                        draft_scroll_nodes.append((right-left, bottom-top, left, top, right, bottom))
+                                if draft_scroll_nodes:
+                                    _, _, left, top, right, bottom = max(draft_scroll_nodes, key=lambda item: item[1])
+                                    x = (left + right) // 2
+                                    inset = max(28, min(56, (bottom-top)//12))
+                                    run("adb", "shell", "input", "swipe", str(x), str(top+inset), str(x), str(bottom-inset), "450")
+                                else:
+                                    run("adb", "shell", "input", "swipe", "540", "350", "540", "1450", "450")
+                                time.sleep(0.45)
+                                opened_xml = dump_ui(f"{prefix}-camera-post-draft-return-to-top-{draft_top_attempt+1}.xml") or opened_xml
+                            screenshot(f"{prefix}-camera-post-draft-reopened-top.png")
                             if find_control(opened_xml, ["Edit text on media"]):
                                 reopened_editor_xml = tap_control(
                                     opened_xml, ["Edit text on media"], f"{prefix}-camera-post-draft-edit-text-open",
@@ -2252,16 +2278,16 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         _, field_x, field_y = manual_caption_field
         run("adb", "shell", "input", "tap", str(field_x), str(field_y))
         time.sleep(0.6)
-        run("adb", "shell", "input", "text", "FYNXcamcaptiontest")
+        run("adb", "shell", "input", "text", "FYNXcap")
         manual_keyboard_xml = ""
         caption_deadline = time.monotonic() + 6.0
         while time.monotonic() < caption_deadline:
             time.sleep(0.4)
             manual_keyboard_xml = dump_ui(f"{prefix}-camera-video-manual-caption-keyboard.xml") or manual_keyboard_xml
-            if "FYNXcamcaptiontest" in manual_keyboard_xml:
+            if "FYNXcap" in manual_keyboard_xml:
                 break
         screenshot(f"{prefix}-camera-video-manual-caption-keyboard.png")
-        if "FYNXcamcaptiontest" in manual_keyboard_xml:
+        if "FYNXcap" in manual_keyboard_xml:
             report.append("- PASS video editor exposes the entered caption while the keyboard is open")
         else:
             # Gboard can own the accessibility root while visible and omit the app EditText node.
@@ -2278,72 +2304,79 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         caption_deadline = time.monotonic() + 5.0
         while time.monotonic() < caption_deadline:
             caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-dismissed.xml") or caption_xml
-            if "FYNXcamcaptiontest" in caption_xml:
+            if "FYNXcap" in caption_xml:
                 break
             time.sleep(0.4)
-        if "FYNXcamcaptiontest" in caption_xml:
+        if "FYNXcap" in caption_xml:
             report.append("- PASS manually entered video caption survives keyboard dismissal")
         else:
             FAILURES.append(prefix + ": video caption text was lost after dismissing the keyboard")
         screenshot(f"{prefix}-camera-video-captions.png")
         editor = caption_xml
 
-    # Exercise video overlay typing and verify its duration-aware Show from/Show until controls.
+    # Timing is available only after a text overlay is created and selected. The
+    # previous verifier searched for the timing title before selecting any overlay.
     video_text_xml = tap_control(
         editor, ["Text"], f"{prefix}-camera-video-text-tool", ["Text on media"]
     )
     if video_text_xml:
-        video_text_xml = camera_wait_for_control(
-            video_text_xml, ["Text timing"], enabled=None, timeout=20.0,
-            prefix=f"{prefix}-camera-video-text-timing-ready"
+        add_overlay_xml = tap_control(
+            video_text_xml, ["Add text overlay", "+ Add"], f"{prefix}-camera-video-text-add",
+            ["Text on media"]
         )
-        timing_dialog = tap_control(
-            video_text_xml, ["Text timing"], f"{prefix}-camera-video-text-timing-open",
-            ["Show from", "Show until", "Apply timing"]
-        )
-        if timing_dialog and find_control(timing_dialog, ["Show from"]) and find_control(timing_dialog, ["Show until"]):
-            report.append("- PASS compact video text editor opens reachable Show from and Show until timing controls")
-            timing_closed = tap_control(
-                timing_dialog, ["Apply timing"], f"{prefix}-camera-video-text-timing-apply",
-                ["Text on media"]
-            )
-            if timing_closed:
-                video_text_xml = timing_closed
-            else:
-                FAILURES.append(prefix + ": video text timing dialog did not close after Apply timing")
-        else:
-            FAILURES.append(prefix + ": video text timing dialog did not expose Show from and Show until")
-        video_text_field = find_control(video_text_xml, ["Text on media"])
-        if video_text_field:
-            _, vx, vy = video_text_field
-            run("adb", "shell", "input", "tap", str(vx), str(vy))
-            run("adb", "shell", "input", "text", "FYNXvideooverlay")
-            typed_video = ""
-            overlay_deadline = time.monotonic() + 6.0
-            while time.monotonic() < overlay_deadline:
-                typed_video = dump_ui(f"{prefix}-camera-video-text-typing.xml") or typed_video
-                if "FYNXvideooverlay" in typed_video:
-                    break
-                time.sleep(0.4)
-            screenshot(f"{prefix}-camera-video-text-overlay-typing.png")
-            if "FYNXvideooverlay" in typed_video:
-                report.append("- PASS video text is typed directly over the clip")
-                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-                time.sleep(0.5)
-                after_video_keyboard = dump_ui(f"{prefix}-camera-video-text-keyboard-dismissed.xml") or typed_video
-                done_video = tap_control(
-                    after_video_keyboard, ["Done"], f"{prefix}-camera-video-text-done",
-                    ["Apply text / effects"]
-                )
-                if done_video:
-                    editor = done_video
-                    report.append("- PASS video overlay remains editable after Done and is ready for export")
+        if add_overlay_xml:
+            video_text_field = find_control(add_overlay_xml, ["Text on media"])
+            if video_text_field:
+                _, vx, vy = video_text_field
+                run("adb", "shell", "input", "tap", str(vx), str(vy))
+                run("adb", "shell", "input", "text", "FYNXvideo")
+                typed_video = ""
+                overlay_deadline = time.monotonic() + 6.0
+                while time.monotonic() < overlay_deadline:
+                    typed_video = dump_ui(f"{prefix}-camera-video-text-typing.xml") or typed_video
+                    if "FYNXvideo" in typed_video:
+                        break
+                    time.sleep(0.4)
+                screenshot(f"{prefix}-camera-video-text-overlay-typing.png")
+                if "FYNXvideo" in typed_video:
+                    report.append("- PASS video text is typed directly over the clip")
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(0.5)
+                    after_video_keyboard = dump_ui(f"{prefix}-camera-video-text-keyboard-dismissed.xml") or typed_video
+                    timing_ready = camera_wait_for_control(
+                        after_video_keyboard, ["Timing"], enabled=True, timeout=12.0,
+                        prefix=f"{prefix}-camera-video-text-timing-ready"
+                    )
+                    timing_dialog = tap_control(
+                        timing_ready, ["Timing"], f"{prefix}-camera-video-text-timing-open",
+                        ["Show from", "Show until", "Apply timing"]
+                    )
+                    if timing_dialog and find_control(timing_dialog, ["Show from"]) and find_control(timing_dialog, ["Show until"]):
+                        report.append("- PASS compact video text editor opens reachable Show from and Show until timing controls")
+                        timing_closed = tap_control(
+                            timing_dialog, ["Apply timing"], f"{prefix}-camera-video-text-timing-apply",
+                            ["Text on media"]
+                        )
+                        if timing_closed:
+                            after_timing = tap_control(
+                                timing_closed, ["Done"], f"{prefix}-camera-video-text-done",
+                                ["Apply text / effects"]
+                            )
+                            if after_timing:
+                                editor = after_timing
+                                report.append("- PASS video overlay remains editable after Done and is ready for export")
+                            else:
+                                FAILURES.append(prefix + ": video text Done did not return to the editor export controls")
+                        else:
+                            FAILURES.append(prefix + ": video text timing dialog did not close after Apply timing")
+                    else:
+                        FAILURES.append(prefix + ": video text timing dialog did not expose Show from and Show until")
                 else:
-                    FAILURES.append(prefix + ": video text Done did not return to the editor export controls")
+                    FAILURES.append(prefix + ": direct-on-media video typing did not retain the entered text")
             else:
-                FAILURES.append(prefix + ": direct-on-media video typing did not retain the entered text")
+                FAILURES.append(prefix + ": video Text tool did not expose its live typing surface")
         else:
-            FAILURES.append(prefix + ": video Text tool did not expose its live typing surface")
+            FAILURES.append(prefix + ": video Text tool did not expose its Add overlay action")
     else:
         FAILURES.append(prefix + ": video Text tool did not open")
 
