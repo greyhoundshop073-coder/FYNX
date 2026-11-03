@@ -925,9 +925,16 @@ private fun FynxFeedTextureVideo(
     val player = remember(file) { MediaPlayer() }
     var prepared by remember(file) { mutableStateOf(false) }
     var playing by remember(file) { mutableStateOf(false) }
+    var hasVideoFrame by remember(file) { mutableStateOf(false) }
+    var playbackError by remember(file) { mutableStateOf(false) }
+    var retryToken by remember(file) { mutableIntStateOf(0) }
 
     Box(Modifier.fillMaxSize()) {
         // Letterboxed areas use a softened frame from this clip rather than empty black bars.
+        // Keep a crisp first-frame poster over the player until Android confirms that
+        // decoded video pixels have reached the TextureView. A prepared MediaPlayer
+        // alone is not proof that a frame was rendered (some H.264 files prepare but
+        // produce a black surface for a moment or fail before the first frame).
         FynxVideoAmbientBackdrop(poster = poster, modifier = Modifier.fillMaxSize())
         AndroidView(
             factory = { ctx ->
@@ -951,13 +958,25 @@ private fun FynxFeedTextureVideo(
                             textureState.value = null
                             return true
                         }
-                        override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) = Unit
+                        override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) {
+                            hasVideoFrame = true
+                        }
                     })
                 }
             },
             modifier = Modifier.fillMaxSize(),
             update = { textureViewState.value = it }
         )
+        if (!hasVideoFrame) {
+            poster?.let { frame ->
+                Image(
+                    bitmap = frame.asImageBitmap(),
+                    contentDescription = "Video preview",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
         Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.BottomEnd) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onOpenMedia != null) IconButton(onClick = onOpenMedia) { Icon(Icons.Default.OpenInNew, "Open video", tint = Color.White) }
@@ -989,9 +1008,13 @@ private fun FynxFeedTextureVideo(
         onDispose { runCatching { surface?.release() } }
     }
 
-    LaunchedEffect(file, surface) {
+    LaunchedEffect(file, surface, retryToken) {
         if (surface == null) return@LaunchedEffect
-        prepared = false; playing = false; onPlayingChanged(false)
+        prepared = false
+        playing = false
+        hasVideoFrame = false
+        playbackError = false
+        onPlayingChanged(false)
         runCatching {
             player.reset()
             player.setDataSource(file.absolutePath)
@@ -1002,10 +1025,25 @@ private fun FynxFeedTextureVideo(
                 prepared = true
                 if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
+            player.setOnInfoListener { _, what, _ ->
+                if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) hasVideoFrame = true
+                false
+            }
             player.setOnCompletionListener { playing = false; onPlayingChanged(false) }
-            player.setOnErrorListener { _, _, _ -> prepared = false; playing = false; onPlayingChanged(false); true }
+            player.setOnErrorListener { _, _, _ ->
+                prepared = false
+                playing = false
+                playbackError = true
+                onPlayingChanged(false)
+                true
+            }
             player.prepareAsync()
-        }.onFailure { prepared = false; playing = false; onPlayingChanged(false) }
+        }.onFailure {
+            prepared = false
+            playing = false
+            playbackError = true
+            onPlayingChanged(false)
+        }
     }
     LaunchedEffect(playbackActive, prepared) {
         if (!prepared) return@LaunchedEffect
