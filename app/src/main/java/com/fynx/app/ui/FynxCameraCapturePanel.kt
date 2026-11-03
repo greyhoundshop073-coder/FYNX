@@ -670,6 +670,21 @@ fun FynxCameraCapturePanel(
         selectedCameraTool = "Text"
         showEditorToolOptions = true
     }
+    fun openCameraTextEditor() {
+        // Reopening Text edits the current overlay instead of creating a duplicate at
+        // the same coordinates. A second overlay is created only through the explicit
+        // "+ Add text" action in the editor toolbar.
+        val existing = cameraTextOverlays.firstOrNull { it.id == selectedTextOverlayId }
+            ?: cameraTextOverlays.lastOrNull()
+        if (existing == null) {
+            addCameraTextOverlay()
+        } else {
+            selectedTextOverlayId = existing.id
+            editingTextOverlayId = existing.id
+            selectedCameraTool = "Text"
+            showEditorToolOptions = true
+        }
+    }
     fun finishCameraTextEditing() {
         editingTextOverlayId = null
         keyboardController?.hide()
@@ -1239,7 +1254,7 @@ fun FynxCameraCapturePanel(
                         .widthIn(max = 196.dp)
                 )
             }
-            if (previewType == "image") {
+            if (editingTextOverlayId == null && previewType == "image") {
                 Column(
                     modifier = Modifier.align(Alignment.CenterEnd)
                         .offset(y = (-124).dp)
@@ -1265,10 +1280,10 @@ fun FynxCameraCapturePanel(
                         if (selectedCameraTool == "AI Studio") showEditorToolOptions = !showEditorToolOptions
                         else { selectedCameraTool = "AI Studio"; showEditorToolOptions = true }
                     }
-                    CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { addCameraTextOverlay() }
+                    CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { openCameraTextEditor() }
                     CameraEditorRailAction("Rotate", Icons.Default.RotateRight, selected = false, enabled = !enhancing && !applyingFilter) { rotatePhoto() }
                 }
-            } else {
+            } else if (editingTextOverlayId == null) {
                 Column(
                     modifier = Modifier.align(Alignment.CenterEnd)
                         .offset(y = (-70).dp)
@@ -1279,7 +1294,7 @@ fun FynxCameraCapturePanel(
                     verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     CameraEditorRailAction("Captions", Icons.Default.AutoAwesome, selected = generatingCaptions, enabled = !generatingCaptions && !applyingVideoEffects) { generateCaptionsForVideo() }
-                    CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { addCameraTextOverlay() }
+                    CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { openCameraTextEditor() }
                 }
             }
             Column(
