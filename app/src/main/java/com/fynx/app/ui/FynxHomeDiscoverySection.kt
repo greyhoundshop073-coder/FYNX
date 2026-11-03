@@ -252,7 +252,7 @@ private fun FynxDiscoveryPreviewCard(video: FynxDiscoveryClient.TrendingPost, on
                 shape = CircleShape,
                 color = Color.Black.copy(alpha = 0.68f)
             ) {
-                Icon(Icons.Default.BrokenImage, "Video preview unavailable", Modifier.padding(7.dp), tint = Color.White)
+                Text("!", modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = Color.White, style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -554,7 +554,9 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.BrokenImage, null, tint = Color.White, modifier = Modifier.size(36.dp))
+                Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.14f)) {
+                    Text("!", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                }
                 Text("This video could not be loaded", color = Color.White)
                 TextButton(onClick = { retryNonce++ }) {
                     Text("Retry video", color = Color.White)
