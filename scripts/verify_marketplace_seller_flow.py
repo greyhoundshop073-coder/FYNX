@@ -574,6 +574,25 @@ checks.append(
 )
 
 checks.append(
+    ("My Shop earnings breakdown displays authoritative gross sales, seller commission and net earnings before settlement buckets",
+     all(fragment in seller_center for fragment in (
+         'grossSales = marketplaceRequiredBalance(row.opt("grossSales"))',
+         'marketplaceFees = marketplaceRequiredBalance(row.opt("marketplaceFees"))',
+         'netEarnings = marketplaceRequiredBalance(row.opt("netEarnings"))',
+         'MoneySummaryRow("Gross sales", grossSales, currency)',
+         'MoneySummaryRow("FYNX commission", marketplaceFees, currency)',
+         'MoneySummaryRow("Net seller earnings", netEarnings, currency)',
+     ))
+     and all(fragment in settlement_routes for fragment in (
+         'grossSales: Number(row.gross_sales || 0)',
+         'marketplaceFees: Number(row.marketplace_fees || 0)',
+         'netEarnings: Number(row.net_earnings || 0)',
+     ))
+     and 'val reportableRows = rows.filter' in seller_center
+     and 'latest 100 settlements' in seller_center),
+)
+
+checks.append(
     ("My Shop disables payout setup until server confirms Registered Business and FYNX payout approval",
      "marketplacePayoutsEnabled" in seller_center
      and "payoutsEnabled" in seller_center
