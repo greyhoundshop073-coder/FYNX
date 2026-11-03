@@ -977,6 +977,20 @@ private fun FynxFeedTextureVideo(
                 )
             }
         }
+        if (playbackError) {
+            Column(
+                Modifier.align(Alignment.Center)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.72f))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("This video could not start", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                TextButton(onClick = { retryToken++ }) {
+                    Text("Retry video", color = Color.White)
+                }
+            }
+        }
         Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.BottomEnd) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onOpenMedia != null) IconButton(onClick = onOpenMedia) { Icon(Icons.Default.OpenInNew, "Open video", tint = Color.White) }
