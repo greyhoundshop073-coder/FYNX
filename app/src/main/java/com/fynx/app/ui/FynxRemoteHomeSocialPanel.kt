@@ -1139,7 +1139,11 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     playbackActive = playbackActive && !fullscreen,
                     muted = muted,
                     retryNonce = reloadNonce,
-                    onRetryMedia = { reloadNonce++ },
+                    onRetryMedia = {
+                        mediaLoading = true
+                        file = null
+                        reloadNonce++
+                    },
                 onPlayingChanged = { playing = it },
                 onMutedChanged = { muted = it },
                     onOpenMedia = onOpenMedia,
