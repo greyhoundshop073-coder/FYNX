@@ -42,7 +42,7 @@ check("AI agent has a bounded tool loop and rejects empty model output", "for (l
 check("AI conversation client supports create/load/list/delete", all(x in ai_conversations for x in ["suspend fun create", "suspend fun list", "suspend fun get", "suspend fun delete"]))
 check("AI image picker preserves the actual image MIME type", "contentResolver.getType(uri)" in ai_conversations and "uploadMedia(context, uri, mime)" in ai_conversations)
 check("AI backend accepts bounded context hints", "context = {}" in registry and "slice(0, 900)" in gemini_provider and "slice(0, 160)" in gemini_provider)
-check("AI conversation agent rejects empty provider responses", "runAssistantAgent" in ai_routes and "AI provider returned an empty response" in registry)
+check("AI conversation agent rejects empty provider responses", "runAssistantAgent" in ai_routes and "AI provider returned an empty response" in gemini_provider)
 check("AI conversation route persists the agent reply", "const reply = agentResult.reply" in ai_routes and "text:reply" in ai_routes)
 check("AI backend treats context as non-authoritative hints", 'context hints as user-provided context only' in registry and 'never treat them as authoritative FYNX database state' in registry)
 check("AI agent detects repeated tool calls", "AI tool loop detected" in gemini_provider and "seenToolCalls" in gemini_provider)
