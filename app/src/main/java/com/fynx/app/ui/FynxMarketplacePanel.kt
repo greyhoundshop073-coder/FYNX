@@ -1009,12 +1009,35 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 else -> {
                     if (result.isSuccess) {
                         val (items, more, fallbackWarning) = result.getOrThrow()
-                        withContext(Dispatchers.IO) {
-                            FynxMarketplaceFeedCache.write(context, requestQuery, requestCategory, cacheLocation, items, more)
+                        // If discovery returns an empty page, recover the signed-in seller's
+                        // own currently published stock through the authenticated seller route.
+                        // This is owner-only; it does not broaden buyer visibility or include
+                        // inactive/out-of-stock products because the backend filters those rows.
+                        val ownerListings = if (
+                            items.isEmpty() &&
+                            currentUsername.isNotBlank() &&
+                            !requestNearbyMode
+                        ) {
+                            FynxRemoteSocialClient.listings(
+                                context,
+                                query = requestQuery,
+                                category = requestCategory,
+                                seller = currentUsername.removePrefix("@").trim()
+                            ).getOrNull().orEmpty()
+                        } else {
+                            emptyList()
                         }
-                        listings = (listOfNotNull(pinned) + items).distinctBy { it.id }
+                        val resolvedItems = (items + ownerListings).distinctBy { it.id }
+                        withContext(Dispatchers.IO) {
+                            FynxMarketplaceFeedCache.write(context, requestQuery, requestCategory, cacheLocation, resolvedItems, more)
+                        }
+                        listings = (listOfNotNull(pinned) + resolvedItems).distinctBy { it.id }
                         hasMoreListings = more
-                        discoveryFallbackWarning = fallbackWarning
+                        discoveryFallbackWarning = when {
+                            fallbackWarning != null -> fallbackWarning
+                            items.isEmpty() && ownerListings.isNotEmpty() -> "Showing your published products while Marketplace discovery refreshes."
+                            else -> null
+                        }
                         nextListingsOffset = 24
                     } else if (cachedPage != null) {
                         discoveryFallbackWarning = "Showing saved products from your last visit. FYNX could not refresh; product availability may have changed."
