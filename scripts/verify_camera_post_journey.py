@@ -355,19 +355,28 @@ checks = [
 ]
 
 checks.extend([
-    ("While typing, the large media sheet collapses and a compact glass formatting toolbar sits above the keyboard",
+    ("While typing, the large media sheet collapses and a two-row glass toolbar stays above the keyboard",
      "compact = true" in camera
      and 'if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp' in camera
      and "imePadding()" in camera
-     and "if (!compact) {" in overlay
-     and "Done remains fixed and visible; it is never placed inside a horizontal carousel." in overlay
-     and "if (!compact && isVideo && selected != null && videoDurationMs > 1L)" in overlay),
-    ("Compact media text editor pins Done and exposes video timing without scrolling it off-screen",
-     'Text("Done", style = MaterialTheme.typography.labelSmall)' in overlay
-     and 'Text("Text timing", style = MaterialTheme.typography.labelSmall)' in overlay
+     and "if (compact) {" in overlay
+     and "Keep the editor actions in two compact rows" in overlay
+     and 'Text("Done", style = MaterialTheme.typography.labelSmall)' in overlay),
+    ("Compact media text editor keeps Add, Done, colours, fonts and formatting reachable",
+     'Text("+ Add", style = MaterialTheme.typography.labelSmall)' in overlay
+     and 'contentDescription = "Add text overlay"' in overlay
+     and 'Text("Timing", style = MaterialTheme.typography.labelSmall)' in overlay
      and 'Text("Apply timing")' in overlay
-     and "heightIn(max = 156.dp)" in overlay
-     and "if (!compact && isVideo && selected != null && videoDurationMs > 1L)" in overlay),
+     and 'label = { Text("Bold") }' in overlay
+     and 'label = { Text("Highlight") }' in overlay
+     and 'label = { Text("Delete") }' in overlay
+     and "Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())" in overlay),
+    ("Reopening the camera Text tool edits the selected overlay instead of stacking a duplicate",
+     "fun openCameraTextEditor()" in camera
+     and "cameraTextOverlays.lastOrNull()" in camera
+     and 'CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { openCameraTextEditor() }' in camera
+     and "editingTextOverlayId == null && previewType == \"image\"" in camera
+     and "} else if (editingTextOverlayId == null) {" in camera),
     ("Runtime accessibility helpers detect leaf controls and caption verification handles keyboard-owned hierarchies",
      'return node is not None and node.attrib.get("enabled", "true").lower() != "false"' in runtime
      and 'return node is not None and node.attrib.get("clickable", "false").lower() == "true"' in runtime
