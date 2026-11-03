@@ -86,14 +86,14 @@ const objectInfo = await storage.inspectMediaObject("media/" + UUID);
 assert.deepEqual(objectInfo, { byteSize: 15, mimeType: "image/webp" });
 await assert.rejects(
   storage.createUploadUrl({ objectKey: "media/" + UUID, mimeType: "image/webp" }),
-  /Invalid FYNX temporary upload object key/
+  /Invalid FYNX media object key/
 );
 await assert.rejects(
-  storage.createUploadUrl({ objectKey: "media/" + UUID, mimeType: "image/webp", expiresInSeconds: 30 }),
+  storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "image/webp", expiresInSeconds: 30 }),
   /expiry must be between 60 and 600 seconds/
 );
 await assert.rejects(
-  storage.createUploadUrl({ objectKey: "media/" + UUID, mimeType: "application/pdf" }),
+  storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "application/pdf" }),
   /Unsupported FYNX media type/
 );
 
