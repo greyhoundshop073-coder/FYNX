@@ -102,6 +102,34 @@ secret_pattern = re.compile(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[
 all_text = "\n".join(read(p) for p in ["app/src/main/java/com/fynx/app/ui/FynxApp.kt", "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt"])
 check("no common API secret pattern in client files", not secret_pattern.search(all_text))
 
+media_backend_client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
+media_shared_client = read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt")
+media_status_client = read("app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt")
+
+put_start = media_backend_client.find("suspend fun putSignedMedia(")
+put_end = media_backend_client.find("\n\n    suspend fun downloadToFile", put_start)
+put_method = media_backend_client[put_start:put_end] if put_start >= 0 and put_end > put_start else ""
+download_start = media_backend_client.find("private fun isTrustedR2Host")
+download_end = media_backend_client.find("\n\n    private suspend fun request(", download_start)
+download_method = media_backend_client[download_start:download_end] if download_start >= 0 and download_end > download_start else ""
+media_upload_start = media_shared_client.find("suspend fun uploadMedia(")
+media_upload_end = media_shared_client.find("\n\n    private fun readMediaBytes", media_upload_start)
+media_upload_method = media_shared_client[media_upload_start:media_upload_end] if media_upload_start >= 0 and media_upload_end > media_upload_start else ""
+status_upload_start = media_status_client.find("suspend fun uploadMedia(")
+status_upload_end = media_status_client.find("\n\n    suspend fun create(", status_upload_start)
+status_upload_method = media_status_client[status_upload_start:status_upload_end] if status_upload_start >= 0 and status_upload_end > status_upload_start else ""
+
+check("shared media uploader negotiates authenticated upload intents", "/api/media/upload-intent" in media_upload_method)
+check("shared media uploader sends bytes directly to the presigned URL", "FynxBackendClient.putSignedMedia" in media_upload_method)
+check("shared media uploader registers media only after successful direct upload", "/api/media/upload-complete" in media_upload_method)
+check("PostgreSQL-only backend keeps the explicit legacy Base64 fallback", "useLegacyUpload" in media_upload_method and "dataBase64" in media_upload_method)
+check("Status delegates to the shared optimized media uploader", "FynxProductionMessaging.uploadMedia(context, uri, mimeType)" in status_upload_method)
+check("R2 PUT client accepts only a Cloudflare HTTPS R2 endpoint", "isTrustedR2Host(target.host)" in put_method and "r2.cloudflarestorage.com" in media_backend_client)
+check("R2 PUT never receives the FYNX bearer token", "Authorization" not in put_method and "accessToken(context)" not in put_method)
+check("R2 PUT sends the signed MIME and cache headers", 'setRequestProperty("Content-Type", mimeType)' in put_method and 'setRequestProperty("Cache-Control", "private, max-age=60")' in put_method)
+check("media downloads follow only the allowlisted signed R2 redirect", "HTTP_MOVED_TEMP" in download_method and "isTrustedR2Host(signedTarget.host)" in download_method)
+check("FYNX bearer auth is not forwarded to the R2 download", "openConnection(signedTarget, false)" in download_method)
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks: print(("PASS: " if ok else "FAIL: ") + name)
 if failed: raise SystemExit("FYNX journey audit failed: " + "; ".join(failed))

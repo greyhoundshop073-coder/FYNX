@@ -2,11 +2,9 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
-import android.util.Base64
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
-import java.io.File
 import java.security.MessageDigest
 
 data class FynxStatusViewer(
@@ -30,28 +28,8 @@ data class FynxStatusInteractions(
 object FynxStatusClient {
     private val listMutex = Mutex()
 
-    suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> = runCatching {
-        val input = if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(uri)
-        val bytes = input?.use { stream ->
-            val out = java.io.ByteArrayOutputStream()
-            val buffer = ByteArray(32 * 1024)
-            var total = 0
-            while (true) {
-                val read = stream.read(buffer)
-                if (read <= 0) break
-                total += read
-                if (total > 12 * 1024 * 1024) error("Selected media is too large. Maximum size is 12 MB.")
-                out.write(buffer, 0, read)
-            }
-            out.toByteArray()
-        } ?: error("Could not read selected media.")
-        if (bytes.isEmpty()) error("Selected media is empty.")
-        val normalizedMime = mimeType.trim().lowercase()
-        if (!normalizedMime.startsWith("image/") && !normalizedMime.startsWith("video/") && !normalizedMime.startsWith("audio/")) error("Unsupported Status media type.")
-        val body = JSONObject().put("mimeType", normalizedMime).put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)).toString()
-        val raw = FynxBackendClient.postJson(context, "/api/media", body).getOrThrow()
-        JSONObject(raw).getJSONObject("media").getString("id")
-    }
+    suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> =
+        FynxProductionMessaging.uploadMedia(context, uri, mimeType).map { it.id }
 
     suspend fun create(context: Context, status: FynxStatus, mediaId: String?): Result<Unit> = runCatching {
         if (status.type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaId.isNullOrBlank()) error("Status media is missing.")
