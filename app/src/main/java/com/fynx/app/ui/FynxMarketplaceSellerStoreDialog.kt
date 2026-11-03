@@ -99,6 +99,9 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var likeError by remember(username, viewerUsername) { mutableStateOf<String?>(null) }
     LaunchedEffect(username, viewerUsername, storefrontReloadKey) {
         storefrontLoading = true
+        listingEngagement = null
+        listingEngagementError = null
+        likeError = null
         storefrontError = null
         profileLoading = true
         shopProfileError = null
@@ -154,12 +157,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
                         shopProfileError = marketplaceSafeError(failure, "Shop details could not load.")
                     }
             }
-        }
-    LaunchedEffect(username, viewerUsername, storefrontReloadKey) {
-        listingEngagement = null
-        listingEngagementError = null
-        likeError = null
-        coroutineScope {
             launch {
                 FynxRemoteSocialClient.marketplaceSellerListingEngagement(context, username)
                     .onSuccess { listingEngagement = it }
@@ -176,7 +173,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 }
             }
         }
-    }
         // The persistent shop description is authoritative over the account bio.
         authoritativeShopBio?.let { profileBio = it }
     }

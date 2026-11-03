@@ -20,6 +20,7 @@ checks = [
     ("product cards show private bought-before, live likes, price and stock", "Bought before" in storefront and "previouslyPurchasedListingIds" in storefront and "likeCount" in storefront and '"Available: " + listing.quantity' in storefront),
     ("seller medals map to existing reputation tiers", '"ELITE SELLER" -> "GOLD SELLER"' in storefront and '"TOP SELLER" -> "SILVER SELLER"' in storefront and '"TRUSTED SELLER" -> "BRONZE SELLER"' in storefront and '"RISING SELLER" -> "RISING SELLER"' in storefront),
     ("seller ranking and weekly awards use existing reputation records", "reputation?.let { MarketplaceSellerTierBadge(it.tier) }" in storefront and "FynxMarketplaceWeeklySellerClient.history" in storefront),
+    ("likes and buyer purchase history load inside the profile's structured parallel scope", storefront.count("LaunchedEffect(username, viewerUsername, storefrontReloadKey)") == 1 and "coroutineScope {" in storefront and storefront.index("FynxRemoteSocialClient.marketplaceSellerListingEngagement") < storefront.index("The persistent shop description") and storefront.index("FynxRemoteSocialClient.myPurchasedMarketplaceListingIds") < storefront.index("The persistent shop description")),
 ]
 failed = [name for name, passed in checks if not passed]
 for name, passed in checks:

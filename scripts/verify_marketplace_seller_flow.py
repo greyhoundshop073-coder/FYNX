@@ -296,7 +296,7 @@ checks = [
 ]
 
 checks.extend([
-    ("public seller storefront shows stale catalogue cards during loading and failure", "if (storefrontLoading) item {" in storefront and "storefrontError?.let { message ->" in storefront and "items(sellerListings, key =" in storefront and "Showing previously loaded products." in storefront),
+    ("public seller storefront shows stale catalogue cards during loading and failure", "if (storefrontLoading) item {" in storefront and "storefrontError?.let { message ->" in storefront and "items(sellerListings.chunked(3), key =" in storefront and "Showing previously loaded products." in storefront),
     ("public seller storefront has an explicit loading state for its own listing request", "var storefrontLoading by remember(username)" in storefront and "Loading this seller’s products…" in storefront),
     ("public seller storefront surfaces listing failures and provides a retry action", "storefrontError != null" in storefront and "Products could not load. Check your connection and try again." in storefront and "Retry products" in storefront and "storefrontReloadKey += 1" in storefront),
     ("public seller storefront retries by restarting the seller-specific request", "LaunchedEffect(username, viewerUsername, storefrontReloadKey)" in storefront and 'FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())' in storefront),
