@@ -122,6 +122,7 @@ status_upload_method = media_status_client[status_upload_start:status_upload_end
 check("shared media uploader negotiates authenticated upload intents", "/api/media/upload-intent" in media_upload_method)
 check("shared media uploader sends bytes directly to the presigned URL", "FynxBackendClient.putSignedMedia" in media_upload_method)
 check("shared media uploader registers media only after successful direct upload", "/api/media/upload-complete" in media_upload_method)
+check("media completion retries safely through an idempotent server POST", "postJsonIdempotent" in media_upload_method)
 check("PostgreSQL-only backend keeps the explicit legacy Base64 fallback", "useLegacyUpload" in media_upload_method and "dataBase64" in media_upload_method)
 check("Status delegates to the shared optimized media uploader", "FynxProductionMessaging.uploadMedia(context, uri, mimeType)" in status_upload_method)
 check("R2 PUT client accepts only a Cloudflare HTTPS R2 endpoint", "isTrustedR2Host(target.host)" in put_method and "r2.cloudflarestorage.com" in media_backend_client)

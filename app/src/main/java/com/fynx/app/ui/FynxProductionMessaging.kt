@@ -112,7 +112,7 @@ object FynxProductionMessaging {
                 val uploadUrl = intent.getString("uploadUrl")
                 val intentId = intent.getString("intentId")
                 FynxBackendClient.putSignedMedia(context, uploadUrl, effectiveMimeType, bytes).getOrThrow()
-                FynxBackendClient.postJson(
+                FynxBackendClient.postJsonIdempotent(
                     context,
                     "/api/media/upload-complete",
                     JSONObject().put("intentId", intentId).toString()

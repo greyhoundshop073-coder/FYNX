@@ -96,6 +96,8 @@ object FynxBackendClient {
     suspend fun health(context: Context): Result<String> = get(context, "/health")
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
+    /** Only use for POST routes whose server contract is explicitly idempotent. */
+    suspend fun postJsonIdempotent(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body, retrySafePost = true)
 
     /** PUTs bytes to a short-lived FYNX-issued Cloudflare R2 URL. No FYNX bearer token is sent to R2. */
     suspend fun putSignedMedia(context: Context, signedUrl: String, mimeType: String, bytes: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
@@ -258,7 +260,7 @@ object FynxBackendClient {
         }
     }
 
-    private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> {
+    private suspend fun request(context: Context, method: String, path: String, body: String?, retrySafePost: Boolean = false): Result<String> {
         return withContext(Dispatchers.IO) {
             try {
                 val root = baseUrl(context); require(root.isNotBlank()) { "FYNX backend is not configured." }; require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }; require(path.startsWith("/")) { "Backend path must start with /." }; awaitValidatedNetwork(context)
@@ -269,7 +271,7 @@ object FynxBackendClient {
                         completed = Result.success(response)
                     } catch (error: Exception) {
                         if (error is CancellationException) throw error
-                        val retryable = method == "GET" || method == "DELETE"
+                        val retryable = method == "GET" || method == "DELETE" || (method == "POST" && retrySafePost)
                         if (!retryable || !isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) completed = Result.failure(error) else { attempt++; delay(RETRY_DELAY_MS * attempt); awaitValidatedNetwork(context) }
                     }
                 }
