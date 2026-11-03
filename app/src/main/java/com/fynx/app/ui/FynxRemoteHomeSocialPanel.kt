@@ -913,7 +913,7 @@ private fun FynxFeedTextureVideo(
                     textureViewState.value = this
                     isClickable = false
                     isFocusable = false
-                    setBackgroundColor(android.graphics.Color.BLACK)
+                    // TextureView does not support background drawables; the parent Box provides the black video background.
                     setSurfaceTextureListener(object : TextureView.SurfaceTextureListener {
                         override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) {
                             textureState.value = texture
