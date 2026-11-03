@@ -5,6 +5,8 @@ import sys
 
 runner = Path("scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 navigation = Path("scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+status_runtime = Path("scripts/verify_status_creator_runtime.py").read_text(encoding="utf-8")
+status_contract = Path("scripts/verify_status_creator_runtime_contract.py").read_text(encoding="utf-8")
 workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
@@ -130,7 +132,52 @@ checks = [
         and "disk-size: 4G" in workflow
         and "emulator-boot-timeout" not in workflow.split("uses: reactivecircus/android-emulator-runner@", 1)[1].split("script: bash scripts/run_android_runtime_certification.sh", 1)[0],
     ),
+
 ]
+
+camera_source = Path("app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
+checks.extend([
+    (
+        "live camera shutter and captured-photo editor controls reserve Android navigation-bar space",
+        camera_source.count(".navigationBarsPadding()") >= 2
+        and ".heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)" in camera_source
+        and '.heightIn(max = if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp else LocalConfiguration.current.screenHeightDp.dp * 0.44f)' in camera_source
+        and camera_source.count("bottom = 84.dp") == 2
+        and ".weight(1f).verticalScroll(rememberScrollState())" in camera_source
+        and camera_source.count("onClick = ::applyVideoEdits") == 1
+        and camera_source.index("onClick = ::applyVideoEdits") > camera_source.index("Column(Modifier.weight(1f).verticalScroll(rememberScrollState()))")
+        and "WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)" not in camera_source,
+    ),
+    (
+        "Home Status creator receives isolated runtime coverage for Voice/Text and safe dismissal",
+        'find_click_target(xml_text, "Create your status")' in status_runtime
+        and 'screenshot("authenticated-status-home.png")' in status_runtime
+        and 'tap("Create your status", "create", ("Voice", "Text"))' in status_runtime
+        and 'authenticated-status-{stage}.png' in status_runtime
+        and 'Android Back dismisses the creator and returns to Home without creating a Status.' in status_runtime
+        and 'python3 scripts/verify_status_creator_runtime.py' in runner
+        and 'verify_status_creator_runtime_contract.py' in workflow
+        and 'Voice' in status_contract and 'Text' in status_contract,
+    ),
+    (
+        "Seller orders and Driver deliveries dialogs are captured without mutations",
+        'marketplace-seller-orders-dialog' in navigation
+        and 'authenticated-marketplace-seller-orders-dialog.png' in navigation
+        and 'marketplace-driver-assignments-dialog' in navigation
+        and 'authenticated-marketplace-driver-assignments-dialog.png' in navigation
+        and 'no order action was changed' in navigation
+        and 'no assignment was accepted' in navigation,
+    ),
+])
+
+camera_editor_source = camera_source.split("if(previewUri!=null && previewType!=null)", 1)[1].split("// Camera UI", 1)[0]
+checks.append((
+    "captured-photo and video editor share the live camera's dark high-contrast palette",
+    "MaterialTheme(" in camera_editor_source
+    and "darkColorScheme(" in camera_editor_source
+    and "primary = Color(0xFFB8A7FF)" in camera_editor_source
+    and "background = Color(0xFF080A10)" in camera_editor_source,
+))
 
 marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 app_source = Path("app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
@@ -149,7 +196,7 @@ checks.extend([
         'selected != "Home" && selected != "Marketplace"' in app_source
         and 'if (selected == "Marketplace") {' in app_source
         and '.height(52.dp * (1f - homeChromeProgress))' in app_source
-        and ('visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' in app_source or 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' in app_source),
+        and 'visible = !statusComposerImmersive && ((selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden)' in app_source,
     ),
     (
         "Great Deals uses the Home silver smoky mirror-glass palette with transparent card surface",

@@ -3,6 +3,14 @@ package com.fynx.app.ui
 import com.fynx.app.R
 
 import android.Manifest
+import android.app.Activity
+import android.content.ContextWrapper
+import android.graphics.drawable.ColorDrawable
+import android.view.View
+import android.view.ViewGroup
+import android.view.Gravity
+import android.view.Window
+import android.widget.FrameLayout
 import android.content.pm.PackageManager
 import android.content.Context
 import android.graphics.ColorMatrix
@@ -16,11 +24,11 @@ import androidx.compose.foundation.Image
 import android.graphics.RectF
 import android.graphics.Matrix
 import android.media.ExifInterface
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -49,6 +57,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOn
@@ -56,6 +71,7 @@ import androidx.compose.material.icons.filled.GridOff
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -71,15 +87,24 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -87,6 +112,137 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicInteger
+
+private const val FYNX_CAMERA_WINDOW_BACKGROUND_ARGB: Int = 0xFF080A10.toInt()
+
+/**
+ * Resolve the Window that hosts this composition. The camera normally lives inside
+ * a full-screen Compose Dialog, whose status-bar region is owned by a separate Window.
+ */
+private fun resolveFynxCameraWindow(view: View): Window? {
+    var currentView: View? = view
+    while (currentView != null) {
+        if (currentView is DialogWindowProvider) return currentView.window
+        currentView = currentView.parent as? View
+    }
+
+    var currentContext: android.content.Context = view.context
+    while (currentContext is ContextWrapper) {
+        if (currentContext is Activity) return currentContext.window
+        currentContext = currentContext.baseContext
+    }
+    return (currentContext as? Activity)?.window
+}
+
+/**
+ * Resolve the Activity window behind the full-screen camera Dialog. On Android 15 the
+ * status-bar strip can remain owned by this host window and be dimmed with the Activity,
+ * even when the Dialog itself draws edge-to-edge. Keep both windows in sync while the
+ * camera is open, then restore the host window exactly when the camera closes.
+ */
+private fun resolveFynxHostActivityWindow(view: View): Window? {
+    var currentContext: android.content.Context = view.context
+    while (currentContext is ContextWrapper) {
+        if (currentContext is Activity) return currentContext.window
+        val baseContext = currentContext.baseContext
+        if (baseContext === currentContext) break
+        currentContext = baseContext
+    }
+    return (currentContext as? Activity)?.window
+}
+
+
+/**
+ * Resolve the actual top status-bar inset on the host Activity decor view. The
+ * camera Dialog can be edge-to-edge while Android 15 leaves the system-bar strip
+ * attached to the Activity content surface; this height is used for a scoped scrim.
+ */
+private fun resolveFynxStatusBarHeightPx(view: View): Int {
+    val insetTop = ViewCompat.getRootWindowInsets(view)
+        ?.getInsets(WindowInsetsCompat.Type.statusBars())
+        ?.top
+        ?: 0
+    if (insetTop > 0) return insetTop
+
+    val resourceId = view.resources.getIdentifier("status_bar_height", "dimen", "android")
+    return if (resourceId != 0) {
+        runCatching { view.resources.getDimensionPixelSize(resourceId) }.getOrDefault(0)
+    } else {
+        0
+    }
+}
+
+@Composable
+private fun CameraEditorRailAction(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.width(58.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) Color(0xFF7869A6).copy(alpha = 0.78f) else Color(0xFF25364A).copy(alpha = 0.38f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 7.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Text(
+                label,
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 9.sp,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun CameraMusicChip(
+    selectedMusic: FynxMusicCatalogueTrack?,
+    onChooseMusic: () -> Unit,
+    onClearMusic: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onChooseMusic,
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFF25364A).copy(alpha = 0.46f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.26f))
+    ) {
+        Row(
+            Modifier.padding(start = 13.dp, end = 7.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+            Text(
+                selectedMusic?.title?.ifBlank { "Add music" } ?: "Add music",
+                modifier = Modifier.weight(1f),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (selectedMusic != null) {
+                Box(Modifier.width(1.dp).height(20.dp).background(Color.White.copy(alpha = 0.30f)))
+                IconButton(onClick = onClearMusic, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Remove selected music", tint = Color.White, modifier = Modifier.size(17.dp))
+                }
+            }
+        }
+    }
+}
 
 private const val MAX_CAMERA_GALLERY_IMAGE_BYTES = 96L * 1024 * 1024
 private const val MAX_CAMERA_GALLERY_VIDEO_BYTES = 512L * 1024 * 1024
@@ -164,6 +320,189 @@ private fun copyCameraGalleryMediaToCache(context: Context, uri: Uri): Triple<Fi
     }
 }
 
+ 
+private const val MAX_STATUS_PHOTO_UPLOAD_BYTES = 12L * 1024L * 1024L
+
+/**
+ * The regular Home camera is optimized for Feed recording, so validate Status constraints only
+ * when the user chooses the Status destination. Gallery selections and captured media share this
+ * same file-backed preview and validation path.
+ */
+private fun validateCameraStatusMedia(uri: Uri, mediaType: String): String? {
+    val path = uri.path?.takeIf { it.isNotBlank() }
+        ?: return "This media file is no longer available. Choose it again."
+    val file = File(path)
+    if (!file.isFile || file.length() <= 0L) {
+        return "This media file is no longer available. Choose it again."
+    }
+
+    return when (mediaType) {
+        "image" -> {
+            if (file.length() > MAX_STATUS_PHOTO_UPLOAD_BYTES) {
+                "This photo is over FYNX Status's 12 MB upload limit. Choose a smaller photo."
+            } else null
+        }
+        "video", "video_note" -> {
+            if (file.length() > FYNX_STATUS_MAX_VIDEO_BYTES) {
+                return "Status videos must be 10 MB or smaller. Choose a shorter or smaller clip."
+            }
+            val retriever = MediaMetadataRetriever()
+            val durationMs = try {
+                retriever.setDataSource(file.absolutePath)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+            } catch (_: Exception) {
+                null
+            } finally {
+                runCatching { retriever.release() }
+            }
+            when {
+                durationMs == null || durationMs <= 0L ->
+                    "FYNX couldn't verify this video's length. Choose another clip for Status."
+                durationMs > FYNX_STATUS_MAX_VIDEO_DURATION_MS ->
+                    "Status videos can be up to 90 seconds. Choose a shorter clip."
+                else -> null
+            }
+        }
+        else -> "Choose a photo or video for Status."
+    }
+}
+
+@Composable
+private fun FynxCameraWindowStyleEffect(cameraWindowView: View) {
+    // Apply system-bar presentation to the Dialog Window itself, not only the Activity.
+    // The scoped restore prevents camera settings leaking into the rest of FYNX.
+    DisposableEffect(cameraWindowView) {
+        val window = resolveFynxCameraWindow(cameraWindowView)
+        val hostActivityWindow = resolveFynxHostActivityWindow(cameraWindowView)
+        val previousBackground = window?.decorView?.background
+        val previousStatusBarColor = window?.statusBarColor
+        val previousNavigationBarColor = window?.navigationBarColor
+        val previousSystemUiVisibility = window?.decorView?.systemUiVisibility
+        val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
+        val previousLightStatusBars = controller?.isAppearanceLightStatusBars
+        val previousLightNavigationBars = controller?.isAppearanceLightNavigationBars
+        val previousStatusContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isStatusBarContrastEnforced else null
+        val previousNavigationContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isNavigationBarContrastEnforced else null
+
+        // A full-screen Dialog does not own the system status-bar surface on every API level.
+        // In particular, API 35 can leave that strip attached to the dimmed Activity window.
+        // Style the host window too; styling only the Dialog leaves a grey strip behind white icons.
+        val hostController = hostActivityWindow
+            ?.takeIf { it !== window }
+            ?.let { WindowInsetsControllerCompat(it, it.decorView) }
+        val hostDecorView = hostActivityWindow
+            ?.takeIf { it !== window }
+            ?.decorView as? ViewGroup
+        val previousDimAmount = window?.attributes?.dimAmount
+        val previousDimBehind = window?.attributes?.flags
+            ?.and(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0
+        val previousHostDecorBackground = hostActivityWindow?.takeIf { it !== window }?.decorView?.background
+        val previousHostStatusBarColor = hostActivityWindow?.takeIf { it !== window }?.statusBarColor
+        val previousHostNavigationBarColor = hostActivityWindow?.takeIf { it !== window }?.navigationBarColor
+        val previousHostLightStatusBars = hostController?.isAppearanceLightStatusBars
+        val previousHostLightNavigationBars = hostController?.isAppearanceLightNavigationBars
+        val previousHostStatusContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            hostActivityWindow?.takeIf { it !== window }?.isStatusBarContrastEnforced
+        } else null
+        val previousHostNavigationContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            hostActivityWindow?.takeIf { it !== window }?.isNavigationBarContrastEnforced
+        } else null
+
+        val cameraBackdrop = FYNX_CAMERA_WINDOW_BACKGROUND_ARGB
+        // Draw over the Activity's edge-to-edge Compose content only inside the
+        // system status-bar inset. Setting Window.statusBarColor/background alone
+        // does not cover a bright Compose root that is drawing behind transparent bars.
+        val statusBarScrim = hostDecorView?.let { decor ->
+            val height = resolveFynxStatusBarHeightPx(decor)
+            if (height <= 0) {
+                null
+            } else {
+                View(decor.context).apply {
+                    setBackgroundColor(cameraBackdrop)
+                    isClickable = false
+                    isFocusable = false
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    elevation = 24f * decor.resources.displayMetrics.density
+                }.also { scrim ->
+                    decor.addView(
+                        scrim,
+                        FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            height,
+                            Gravity.TOP
+                        )
+                    )
+                    scrim.bringToFront()
+                }
+            }
+        }
+        if (window != null) {
+            // This full-screen camera has no meaningful dimmed content behind it. Dimming
+            // the host Activity also dims Android 15's transparent status bar, which remains
+            // hosted by that Activity. Keep the host backdrop at full brightness while open.
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            window.setDimAmount(0f)
+            window.setBackgroundDrawable(ColorDrawable(cameraBackdrop))
+            window.statusBarColor = cameraBackdrop
+            window.navigationBarColor = cameraBackdrop
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                window.isStatusBarContrastEnforced = false
+                window.isNavigationBarContrastEnforced = false
+            }
+            controller?.isAppearanceLightStatusBars = false
+            controller?.isAppearanceLightNavigationBars = false
+        }
+        if (hostActivityWindow != null && hostActivityWindow !== window) {
+            // Android 15 makes the status bar transparent for edge-to-edge apps and can ignore
+            // statusBarColor. The decor background is the actual surface visible behind it.
+            hostActivityWindow.decorView.background = ColorDrawable(cameraBackdrop)
+            hostActivityWindow.statusBarColor = cameraBackdrop
+            hostActivityWindow.navigationBarColor = cameraBackdrop
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                hostActivityWindow.isStatusBarContrastEnforced = false
+                hostActivityWindow.isNavigationBarContrastEnforced = false
+            }
+            hostController?.isAppearanceLightStatusBars = false
+            hostController?.isAppearanceLightNavigationBars = false
+        }
+
+        onDispose {
+            if (window != null) {
+                previousDimAmount?.let { window.setDimAmount(it) }
+                if (previousDimBehind) {
+                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                } else {
+                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                }
+                window.setBackgroundDrawable(previousBackground)
+                window.statusBarColor = previousStatusBarColor ?: android.graphics.Color.TRANSPARENT
+                window.navigationBarColor = previousNavigationBarColor ?: android.graphics.Color.TRANSPARENT
+                if (previousSystemUiVisibility != null) {
+                    window.decorView.systemUiVisibility = previousSystemUiVisibility
+                }
+                controller?.isAppearanceLightStatusBars = previousLightStatusBars ?: false
+                controller?.isAppearanceLightNavigationBars = previousLightNavigationBars ?: false
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    previousStatusContrast?.let { window.isStatusBarContrastEnforced = it }
+                    previousNavigationContrast?.let { window.isNavigationBarContrastEnforced = it }
+                }
+            }
+            if (hostActivityWindow != null && hostActivityWindow !== window) {
+                statusBarScrim?.let { hostDecorView?.removeView(it) }
+                hostActivityWindow.decorView.background = previousHostDecorBackground
+                previousHostStatusBarColor?.let { hostActivityWindow.statusBarColor = it }
+                previousHostNavigationBarColor?.let { hostActivityWindow.navigationBarColor = it }
+                hostController?.isAppearanceLightStatusBars = previousHostLightStatusBars ?: false
+                hostController?.isAppearanceLightNavigationBars = previousHostLightNavigationBars ?: false
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    previousHostStatusContrast?.let { hostActivityWindow.isStatusBarContrastEnforced = it }
+                    previousHostNavigationContrast?.let { hostActivityWindow.isNavigationBarContrastEnforced = it }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun FynxCameraCapturePanel(
     onCaptured: (Uri, String) -> Unit,
@@ -175,11 +514,28 @@ fun FynxCameraCapturePanel(
     liveProofSellerUsername: String = "",
     onLiveProofStart: () -> Unit = {},
     onDismiss: () -> Unit = {},
-    statusCapture: Boolean = false
+    statusCapture: Boolean = false,
+    selectedMusic: FynxMusicCatalogueTrack? = null,
+    onChooseMusic: () -> Unit = {},
+    onClearMusic: () -> Unit = {},
+    showYourStoryAction: Boolean = false,
+    onShareToStatus: (Uri, String) -> Unit = { _, _ -> },
+    /** Optional initial local media used to reopen an editable media item from a post draft. */
+    initialMediaUri: Uri? = null,
+    initialMediaType: String? = null,
+    initialTextOverlays: List<FynxCameraTextOverlay> = emptyList(),
+    initialVideoStyle: String = "NATURAL",
+    initialVideoCaptionText: String = "",
+    /** Returns both the final shareable file and the clean editable media source/state. */
+    onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE; scaleType = PreviewView.ScaleType.FILL_CENTER } }
+    val cameraWindowView = LocalView.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    FynxCameraWindowStyleEffect(cameraWindowView)
+    val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.PERFORMANCE; scaleType = PreviewView.ScaleType.FILL_CENTER } }
     val scope = rememberCoroutineScope()
     var profilePhotoId by remember { mutableStateOf<String?>(null) }
     var profileDisplayName by remember { mutableStateOf("") }
@@ -202,7 +558,7 @@ fun FynxCameraCapturePanel(
     val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasAudio = granted || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
-    LaunchedEffect(Unit) { if (!hasCamera) permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) }
+    LaunchedEffect(initialMediaUri) { if (!hasCamera && initialMediaUri == null) permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) }
 
     var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
     var mode by remember(initialMode, videoNoteMode) { mutableStateOf(if (videoNoteMode) CameraMode.VIDEO else initialMode) }
@@ -212,6 +568,7 @@ fun FynxCameraCapturePanel(
     var cameraInfo by remember { mutableStateOf<androidx.camera.core.CameraInfo?>(null) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var bindGeneration by remember { mutableIntStateOf(0) }
+    var galleryRebindRequest by remember { mutableIntStateOf(0) }
     var torchEnabled by remember { mutableStateOf(false) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var exposure by remember { mutableIntStateOf(0) }
@@ -220,17 +577,30 @@ fun FynxCameraCapturePanel(
     var recordingNotice by remember { mutableStateOf<String?>(null) }
     var recordingStartedAt by remember { mutableLongStateOf(0L) }
     var recordingElapsed by remember { mutableLongStateOf(0L) }
-    BackHandler { if (recording == null) onDismiss() }
     var error by remember { mutableStateOf<String?>(null) }
-    var pendingUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingType by remember { mutableStateOf<String?>(null) }
+    var statusShareChecking by remember { mutableStateOf(false) }
+    var isPreparingInitialMedia by remember(initialMediaUri) { mutableStateOf(initialMediaUri != null) }
+    var initialMediaLoadFailed by remember(initialMediaUri) { mutableStateOf(false) }
+    var initialMediaHandedOff by remember(initialMediaUri) { mutableStateOf(false) }
+    var copiedInitialMediaFiles by remember(initialMediaUri) { mutableStateOf<List<Uri>>(emptyList()) }
+    var pendingUri by remember(initialMediaUri) { mutableStateOf<Uri?>(null) }
+    var pendingOriginalUri by remember(initialMediaUri) { mutableStateOf<Uri?>(null) }
+    var pendingType by remember(initialMediaUri, initialMediaType) { mutableStateOf<String?>(null) }
+    var cameraReady by remember { mutableStateOf(false) }
+    var cameraTextOverlays by remember(initialMediaUri) { mutableStateOf(initialTextOverlays) }
+    var cameraVideoDurationMs by remember { mutableLongStateOf(0L) }
+    var cameraMediaAspectRatio by remember { mutableFloatStateOf(9f / 16f) }
+    var selectedTextOverlayId by remember(initialMediaUri) { mutableStateOf(initialTextOverlays.lastOrNull()?.id) }
+    var editingTextOverlayId by remember { mutableStateOf<String?>(null) }
+    var videoEditsApplied by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
     var faceEffect by remember { mutableStateOf(CameraFaceEffect.OFF) }
     var backgroundEffect by remember { mutableStateOf(CameraBackgroundEffect.OFF) }
     var studioEffect by remember { mutableStateOf(CameraStudioEffect.OFF) }
-    var videoStyle by remember { mutableStateOf(CameraVideoStyle.NATURAL) }
-    var videoCaptionText by remember { mutableStateOf("") }
+    var videoStyle by remember(initialMediaUri, initialVideoStyle) {
+        mutableStateOf(runCatching { CameraVideoStyle.valueOf(initialVideoStyle) }.getOrDefault(CameraVideoStyle.NATURAL))
+    }
+    var videoCaptionText by remember(initialMediaUri, initialVideoCaptionText) { mutableStateOf(initialVideoCaptionText) }
     var applyingVideoEffects by remember { mutableStateOf(false) }
     var generatingCaptions by remember { mutableStateOf(false) }
     var trackedFaceBounds by remember { mutableStateOf<List<CameraFaceBounds>>(emptyList()) }
@@ -241,13 +611,110 @@ fun FynxCameraCapturePanel(
     var showEffectTray by remember { mutableStateOf(false) }
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
+    var timerCaptureJob by remember { mutableStateOf<Job?>(null) }
+    // A generation token prevents a stale countdown coroutine from capturing after Cancel.
+    val timerCaptureGeneration = remember { AtomicInteger(0) }
     var showGrid by remember { mutableStateOf(false) }
     var selectedCameraTool by remember { mutableStateOf("Looks") }
+    var showEditorToolOptions by remember { mutableStateOf(true) }
     var showAdjustments by remember { mutableStateOf(false) }
+    LaunchedEffect(videoStyle, videoCaptionText, cameraTextOverlays) {
+        if (videoEditsApplied) {
+            val renderedVideo = pendingUri
+            val cleanVideo = pendingOriginalUri
+            if (cleanVideo != null && renderedVideo != null && renderedVideo != cleanVideo) {
+                pendingUri = cleanVideo
+                if (renderedVideo.scheme == "file") File(renderedVideo.path ?: "").delete()
+            }
+        }
+        videoEditsApplied = false
+    }
+    LaunchedEffect(initialMediaUri, initialMediaType) {
+        val source = initialMediaUri ?: return@LaunchedEffect
+        isPreparingInitialMedia = true
+        initialMediaLoadFailed = false
+        val result = withContext(Dispatchers.IO) {
+            runCatching { copyCameraGalleryMediaToCache(context, source) }
+        }
+        result.onSuccess { copied ->
+            pendingUri = Uri.fromFile(copied.first)
+            pendingOriginalUri = Uri.fromFile(copied.second)
+            copiedInitialMediaFiles = listOf(Uri.fromFile(copied.first), Uri.fromFile(copied.second))
+            pendingType = initialMediaType ?: copied.third
+            isPreparingInitialMedia = false
+        }.onFailure { failure ->
+            initialMediaLoadFailed = true
+            isPreparingInitialMedia = false
+            error = failure.message ?: "The selected media could not be prepared for editing."
+        }
+    }
+    LaunchedEffect(pendingUri, pendingType) {
+        cameraVideoDurationMs = 0L
+        cameraMediaAspectRatio = 9f / 16f
+        val uri = pendingUri
+        val type = pendingType
+        if (uri != null && type != null) {
+            val metrics = withContext(Dispatchers.IO) { readFynxCameraMediaMetrics(uri, type) }
+            cameraVideoDurationMs = metrics.durationMs
+            cameraMediaAspectRatio = metrics.aspectRatio
+        }
+    }
+    fun updateCameraTextOverlay(updated: FynxCameraTextOverlay) {
+        cameraTextOverlays = cameraTextOverlays.map { if (it.id == updated.id) updated else it }
+    }
+    fun addCameraTextOverlay() {
+        val overlay = FynxCameraTextOverlay()
+        cameraTextOverlays = cameraTextOverlays + overlay
+        selectedTextOverlayId = overlay.id
+        editingTextOverlayId = overlay.id
+        selectedCameraTool = "Text"
+        showEditorToolOptions = true
+    }
+    fun openCameraTextEditor() {
+        // Reopening Text edits the current overlay instead of creating a duplicate at
+        // the same coordinates. A second overlay is created only through the explicit
+        // "+ Add text" action in the editor toolbar.
+        val existing = cameraTextOverlays.firstOrNull { it.id == selectedTextOverlayId }
+            ?: cameraTextOverlays.lastOrNull()
+        if (existing == null) {
+            addCameraTextOverlay()
+        } else {
+            selectedTextOverlayId = existing.id
+            editingTextOverlayId = existing.id
+            selectedCameraTool = "Text"
+            showEditorToolOptions = true
+        }
+    }
+    fun finishCameraTextEditing() {
+        editingTextOverlayId = null
+        keyboardController?.hide()
+    }
+    fun cancelCaptureTimer() {
+        // Invalidate first so even a coroutine already resuming cannot trigger capture.
+        timerCaptureGeneration.incrementAndGet()
+        timerCaptureJob?.cancel()
+        timerCaptureJob = null
+        timerCountingDown = 0
+        showAdjustments = false
+        showEffectTray = false
+        showCaptureControls = true
+    }
+    BackHandler {
+        if (recording == null) {
+            if (editingTextOverlayId != null) finishCameraTextEditing()
+            else if (timerCaptureJob?.isActive == true || timerCountingDown > 0) cancelCaptureTimer()
+            else onDismiss()
+        }
+    }
     val galleryPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
+        contract = ActivityResultContracts.OpenDocument()
     ) { selectedUri ->
-        if (selectedUri != null) {
+        if (selectedUri == null) {
+            // Returning from Gallery without a selection must restore the live CameraX session.
+            // The ActivityResult callback runs after the external picker returns to FYNX.
+            galleryRebindRequest += 1
+            showCaptureControls = true
+        } else {
             error = null
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
@@ -264,10 +731,16 @@ fun FynxCameraCapturePanel(
                     studioEffect = CameraStudioEffect.OFF
                     videoStyle = CameraVideoStyle.NATURAL
                     videoCaptionText = ""
+                    cameraTextOverlays = emptyList()
+                    selectedTextOverlayId = null
+                    editingTextOverlayId = null
+                    videoEditsApplied = false
                     filterIntensity = 1f
                     trackedFaceBounds = emptyList()
                     showCaptureControls = true
                 }.onFailure {
+                    galleryRebindRequest += 1
+                    showCaptureControls = true
                     error = it.message ?: "The selected media could not be opened."
                 }
             }
@@ -321,17 +794,26 @@ fun FynxCameraCapturePanel(
             delay(200L)
         }
     }
-    // Keep the shutter and capture tools visible; only the self-timer deliberately hides them during countdown.
-    LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
-    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled) {
+    // The self-timer uses one cancellable job so the visible countdown and shutter cannot drift apart.
+    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled, galleryRebindRequest, isPreparingInitialMedia) {
         val generation = bindGeneration + 1; bindGeneration = generation
-        if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
+        cameraReady = false
+        if (!hasCamera || pendingUri != null || isPreparingInitialMedia || initialMediaLoadFailed) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
-            if (generation != bindGeneration || !hasCamera || pendingUri != null) return@addListener
+            if (generation != bindGeneration || !hasCamera || pendingUri != null || isPreparingInitialMedia || initialMediaLoadFailed) return@addListener
             runCatching {
                 val provider = future.get(); val selector = CameraSelector.Builder().requireLensFacing(lens).build()
-                if (!provider.hasCamera(selector)) { error = if (lens == CameraSelector.LENS_FACING_FRONT) "Front camera is not available on this device." else "Back camera is not available on this device."; if (lens == CameraSelector.LENS_FACING_FRONT) lens = CameraSelector.LENS_FACING_BACK; return@runCatching }
+                if (!provider.hasCamera(selector)) {
+                    val fallbackLens = if (lens == CameraSelector.LENS_FACING_FRONT) CameraSelector.LENS_FACING_BACK else CameraSelector.LENS_FACING_FRONT
+                    val fallbackSelector = CameraSelector.Builder().requireLensFacing(fallbackLens).build()
+                    if (provider.hasCamera(fallbackSelector)) {
+                        lens = fallbackLens
+                        return@runCatching
+                    }
+                    error = "No camera is available on this device."
+                    return@runCatching
+                }
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
                 val targetRotation = previewView.display?.rotation ?: android.view.Surface.ROTATION_0
                 val capture = ImageCapture.Builder()
@@ -356,16 +838,70 @@ fun FynxCameraCapturePanel(
                 if (faceAnalysisEnabled && mode == CameraMode.PHOTO) useCases += faceImageAnalysis
                 val camera = provider.bindToLifecycle(lifecycleOwner, selector, *useCases.toTypedArray())
                 cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
+                cameraReady = true
                 cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 4f)); val range = cameraInfo?.exposureState?.exposureCompensationRange
                 exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2); cameraControl?.setExposureCompensationIndex(exposure)
                 if (torchEnabled && cameraInfo?.hasFlashUnit() == true) cameraControl?.enableTorch(true) else if (torchEnabled) torchEnabled = false
                 error = null
-            }.onFailure { if (generation == bindGeneration) error = it.message ?: "Camera could not start" }
+            }.onFailure {
+                if (generation == bindGeneration) {
+                    cameraReady = false
+                    error = it.message ?: "Camera could not start"
+                }
+            }
         }, ContextCompat.getMainExecutor(context))
     }
-    DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll(); faceAnalyzer.close() } }
+    DisposableEffect(Unit) {
+        onDispose {
+            timerCaptureJob?.cancel()
+            recording?.stop()
+            cameraProvider?.unbindAll()
+            faceAnalyzer.close()
+            if (!initialMediaHandedOff) {
+                copiedInitialMediaFiles.forEach { uri -> File(uri.path ?: "").delete() }
+            }
+        }
+    }
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
-    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; faceEffect = CameraFaceEffect.OFF; backgroundEffect = CameraBackgroundEffect.OFF; studioEffect = CameraStudioEffect.OFF; videoStyle = CameraVideoStyle.NATURAL; videoCaptionText = ""; recordingNotice = null; activeRecordingFile = null; selectedCameraTool = "Looks"; applyingVideoEffects = false; generatingCaptions = false; filterIntensity = 1f; enhancing = false; applyingFilter = false; error = null }
+    fun releaseUnneededInitialMediaCopies(retained: Set<Uri>) {
+        copiedInitialMediaFiles.filterNot { it in retained }.forEach(::deleteUri)
+        copiedInitialMediaFiles = copiedInitialMediaFiles.filter { it in retained }
+    }
+    fun retake() {
+        // Force a clean CameraX bind instead of depending on a PreviewView detach/attach race.
+        cameraReady = false
+        cameraProvider?.unbindAll()
+        imageCapture = null
+        videoCapture = null
+        cameraControl = null
+        cameraInfo = null
+        galleryRebindRequest += 1
+        deleteUri(pendingUri)
+        deleteUri(pendingOriginalUri)
+        pendingUri = null
+        pendingOriginalUri = null
+        pendingType = null
+        cameraTextOverlays = emptyList()
+        selectedTextOverlayId = null
+        editingTextOverlayId = null
+        videoEditsApplied = false
+        filter = CameraFilter.NATURAL
+        faceEffect = CameraFaceEffect.OFF
+        backgroundEffect = CameraBackgroundEffect.OFF
+        studioEffect = CameraStudioEffect.OFF
+        videoStyle = CameraVideoStyle.NATURAL
+        videoCaptionText = ""
+        recordingNotice = null
+        activeRecordingFile = null
+        selectedCameraTool = "Looks"
+        showEditorToolOptions = true
+        applyingVideoEffects = false
+        generatingCaptions = false
+        filterIntensity = 1f
+        enhancing = false
+        applyingFilter = false
+        error = null
+    }
     fun rotatePhoto() {
         val currentUri = pendingUri ?: return
         if (pendingType != "image") return
@@ -378,6 +914,11 @@ fun FynxCameraCapturePanel(
                 .distinctBy { it.absolutePath }
                 .forEach(::rotateCameraPhotoFile)
         }.onFailure { error = it.message ?: "Photo rotation failed" }
+        scope.launch {
+            cameraMediaAspectRatio = withContext(Dispatchers.IO) {
+                readFynxCameraMediaMetrics(currentUri, "image").aspectRatio
+            }
+        }
     }
     fun applyFilterToPhoto(
         selected: CameraFilter,
@@ -468,12 +1009,16 @@ fun FynxCameraCapturePanel(
         val source = pendingOriginalUri ?: current
         generatingCaptions = true
         error = null
+        recordingNotice = null
         scope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { generateFynxVideoTranscript(context, source) } }
             result.onSuccess {
                 videoCaptionText = it
-                error = "Transcript ready. Caption timing is approximate; review it before sending."
-            }.onFailure { error = it.message ?: "Automatic captions could not be generated." }
+                recordingNotice = "Transcript ready. Caption timing is approximate; review it before sending."
+            }.onFailure {
+                recordingNotice = null
+                error = it.message ?: "Automatic captions could not be generated."
+            }
             generatingCaptions = false
         }
     }
@@ -481,8 +1026,9 @@ fun FynxCameraCapturePanel(
     fun applyVideoEdits() {
         val current = pendingUri ?: return
         if (pendingType != "video" && pendingType != "video_note") return
-        if (videoStyle == CameraVideoStyle.NATURAL && videoCaptionText.isBlank()) {
-            error = "Choose a video style or generate captions first."
+        val visibleText = cameraTextOverlays.filter { it.text.isNotBlank() }
+        if (videoStyle == CameraVideoStyle.NATURAL && videoCaptionText.isBlank() && visibleText.isEmpty()) {
+            error = "Add text, choose a video style, or generate captions first."
             return
         }
         val source = pendingOriginalUri ?: current
@@ -491,10 +1037,17 @@ fun FynxCameraCapturePanel(
         scope.launch {
             // Media3 Transformer is main-thread confined for construction/start/callback wiring.
             // It performs export work asynchronously itself; do not invoke it from Dispatchers.IO.
-            val result = runCatching { withTimeout(120_000L) { applyFynxVideoEdits(context, source, videoStyle, videoCaptionText) } }
+            val result = runCatching {
+                withTimeout(120_000L) {
+                    val output = applyFynxVideoEdits(context, source, videoStyle, videoCaptionText, visibleText)
+                    withContext(Dispatchers.IO) { verifyFynxVideoEditOutput(source, output, videoStyle, visibleText) }
+                    output
+                }
+            }
             result.onSuccess { output ->
                 if (current != source) deleteUri(current)
                 pendingUri = output
+                videoEditsApplied = true
                 error = null
             }.onFailure { failure ->
                 error = if (failure is TimeoutCancellationException) "Video export timed out. Try a shorter clip." else failure.message ?: "Video effects could not be applied."
@@ -503,8 +1056,98 @@ fun FynxCameraCapturePanel(
         }
     }
 
+    fun finishCameraMedia(toStatus: Boolean) {
+        val current = pendingUri ?: return
+        val mediaType = pendingType ?: return
+        if (statusShareChecking || applyingVideoEffects || applyingFilter || enhancing || generatingCaptions) return
+        statusShareChecking = true
+        error = null
+        scope.launch {
+            var exportedPhoto: Uri? = null
+            try {
+                var finalUri = current
+                if (mediaType == "image" && cameraTextOverlays.any { it.text.isNotBlank() }) {
+                    recordingNotice = "Applying text to your photo…"
+                    finalUri = withContext(Dispatchers.IO) {
+                        renderFynxPhotoTextOverlays(context, current, cameraTextOverlays)
+                    }
+                    exportedPhoto = finalUri.takeIf { it != current }
+                } else if ((mediaType == "video" || mediaType == "video_note") && !videoEditsApplied) {
+                    val visibleText = cameraTextOverlays.filter { it.text.isNotBlank() }
+                    val hasVideoChanges = videoStyle != CameraVideoStyle.NATURAL || videoCaptionText.isNotBlank() || visibleText.isNotEmpty()
+                    if (hasVideoChanges) {
+                        val source = pendingOriginalUri ?: current
+                        applyingVideoEffects = true
+                        recordingNotice = "Rendering your video text and effects…"
+                        finalUri = withTimeout(120_000L) {
+                            val output = applyFynxVideoEdits(context, source, videoStyle, videoCaptionText, visibleText)
+                            withContext(Dispatchers.IO) { verifyFynxVideoEditOutput(source, output, videoStyle, visibleText) }
+                            output
+                        }
+                        if (current != source) deleteUri(current)
+                        pendingUri = finalUri
+                        videoEditsApplied = true
+                        applyingVideoEffects = false
+                    }
+                }
+
+                if (toStatus) {
+                    recordingNotice = "Checking your media…"
+                    val validationError = withContext(Dispatchers.IO) {
+                        validateCameraStatusMedia(finalUri, if (mediaType == "video_note") "video" else mediaType)
+                    }
+                    if (validationError != null) {
+                        exportedPhoto?.let(::deleteUri)
+                        error = validationError
+                    } else {
+                        statusShareChecking = false
+                        recordingNotice = null
+                        onShareToStatus(finalUri, if (mediaType == "video_note") "video" else mediaType)
+                    }
+                } else {
+                    statusShareChecking = false
+                    recordingNotice = null
+                    val editableOverlays = cameraTextOverlays.filter { it.text.isNotBlank() }
+                    val hasEditableState = editableOverlays.isNotEmpty() || videoStyle != CameraVideoStyle.NATURAL || videoCaptionText.isNotBlank()
+                    val editSource = when {
+                        !hasEditableState -> finalUri
+                        mediaType == "video" || mediaType == "video_note" -> pendingOriginalUri ?: current
+                        else -> current
+                    }
+                    val editCallback = onCapturedWithTextEdits
+                    if (editCallback != null) {
+                        releaseUnneededInitialMediaCopies(setOf(finalUri, editSource))
+                        initialMediaHandedOff = true
+                        editCallback(finalUri, mediaType, editSource, editableOverlays, videoStyle.name, videoCaptionText)
+                    } else {
+                        releaseUnneededInitialMediaCopies(setOf(finalUri))
+                        initialMediaHandedOff = true
+                        onCaptured(finalUri, mediaType)
+                    }
+                }
+            } catch (failure: Throwable) {
+                exportedPhoto?.let(::deleteUri)
+                error = if (failure is TimeoutCancellationException) {
+                    "Video export timed out. Try a shorter clip."
+                } else {
+                    failure.message ?: "Your edited media could not be prepared."
+                }
+            } finally {
+                applyingVideoEffects = false
+                statusShareChecking = false
+            }
+        }
+    }
+
     fun capturePhotoNow() {
-        val capture = imageCapture ?: run { error = "Camera is still starting"; return }
+        val capture = imageCapture ?: run {
+            // The countdown hides the capture controls; restore them on every early exit.
+            timerCountingDown = 0
+            timerCaptureJob = null
+            showCaptureControls = true
+            error = "Camera is still starting. Please try again."
+            return
+        }
         val stamp = System.currentTimeMillis()
         val file = File(context.cacheDir, "fynx_photo_"+stamp+".jpg")
         val original = File(context.cacheDir, "fynx_photo_original_"+stamp+".jpg")
@@ -515,6 +1158,10 @@ fun FynxCameraCapturePanel(
                     pendingUri = Uri.fromFile(file)
                     pendingOriginalUri = Uri.fromFile(original)
                     pendingType = "image"
+                    cameraTextOverlays = emptyList()
+                    selectedTextOverlayId = null
+                    editingTextOverlayId = null
+                    videoEditsApplied = false
                     selectedCameraTool = "Looks"
                     error = null
                     showCaptureControls = true
@@ -526,38 +1173,182 @@ fun FynxCameraCapturePanel(
         })
     }
 
-    if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
+    if (isPreparingInitialMedia) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF080A10)), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Preparing your media for text editing…", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                TextButton(onClick = onDismiss) { Text("Cancel", color = Color.White) }
+            }
+        }
+        return
+    }
+    if (initialMediaLoadFailed) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF080A10)), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(error ?: "The selected media could not be opened.", color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Button(onClick = onDismiss) { Text("Close") }
+            }
+        }
+        return
+    }
+    if (!hasCamera && initialMediaUri == null) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
+    val previewVideoView = remember(previewUri) { mutableStateOf<android.widget.VideoView?>(null) }
+    var previewVideoPositionMs by remember(previewUri) { mutableLongStateOf(0L) }
+    LaunchedEffect(previewUri, previewType, videoEditsApplied) {
+        if ((previewType == "video" || previewType == "video_note") && !videoEditsApplied) {
+            while (true) {
+                previewVideoPositionMs = previewVideoView.value?.currentPosition?.toLong() ?: 0L
+                delay(100L)
+            }
+        }
+    }
     if(previewUri!=null && previewType!=null){
+        MaterialTheme(
+            colorScheme = darkColorScheme(
+                primary = Color(0xFFB8A7FF),
+                secondary = Color(0xFF72D8C9),
+                background = Color(0xFF080A10),
+                surface = Color(0xFF171A22),
+                surfaceVariant = Color(0xFF292D38)
+            )
+        ) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
-            if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
+            if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.CENTER_CROP}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(
+                factory={ctx->android.widget.VideoView(ctx).apply{tag=previewUri.toString();setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()};previewVideoView.value=this}},
+                update={view->previewVideoView.value=view;if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.setOnPreparedListener{p->p.isLooping=true;view.start()}}},
+                modifier=Modifier.fillMaxSize()
+            )
+            if (previewType == "image" || !videoEditsApplied) {
+                CameraTextOverlayLayer(
+                    overlays = cameraTextOverlays,
+                    editingId = editingTextOverlayId,
+                    onChange = ::updateCameraTextOverlay,
+                    onSelect = { id ->
+                        selectedTextOverlayId = id
+                        editingTextOverlayId = id
+                        selectedCameraTool = "Text"
+                    },
+                    mediaAspectRatio = cameraMediaAspectRatio,
+                    centerCrop = previewType == "image",
+                    playbackPositionMs = if (previewType == "video" || previewType == "video_note") previewVideoPositionMs else null,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            IconButton(
+                onClick = { if (initialMediaUri != null) onDismiss() else { retake(); onDismiss() } },
+                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 8.dp, top = 4.dp)
+            ) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+            }
+            if (!statusCapture && !liveProofMode) {
+                // Replace the informational preview label with the useful Add music action.
+                CameraMusicChip(
+                    selectedMusic = selectedMusic,
+                    onChooseMusic = onChooseMusic,
+                    onClearMusic = onClearMusic,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 10.dp)
+                        .widthIn(max = 196.dp)
+                )
+            }
+            if (editingTextOverlayId == null && previewType == "image") {
+                Column(
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                        .offset(y = (-124).dp)
+                        .padding(end = 8.dp)
+                        .background(Color(0xFF172438).copy(alpha = 0.42f), RoundedCornerShape(24.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(24.dp))
+                        .padding(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    CameraEditorRailAction("Looks", Icons.Default.Tune, showEditorToolOptions && selectedCameraTool == "Looks") {
+                        if (selectedCameraTool == "Looks") showEditorToolOptions = !showEditorToolOptions
+                        else { selectedCameraTool = "Looks"; showEditorToolOptions = true }
+                    }
+                    CameraEditorRailAction("Face FX", Icons.Default.Face, showEditorToolOptions && selectedCameraTool == "Face FX") {
+                        if (selectedCameraTool == "Face FX") showEditorToolOptions = !showEditorToolOptions
+                        else { selectedCameraTool = "Face FX"; showEditorToolOptions = true }
+                    }
+                    CameraEditorRailAction("Background", Icons.Default.Layers, showEditorToolOptions && selectedCameraTool == "Background") {
+                        if (selectedCameraTool == "Background") showEditorToolOptions = !showEditorToolOptions
+                        else { selectedCameraTool = "Background"; showEditorToolOptions = true }
+                    }
+                    CameraEditorRailAction("AI Studio", Icons.Default.AutoAwesome, showEditorToolOptions && selectedCameraTool == "AI Studio") {
+                        if (selectedCameraTool == "AI Studio") showEditorToolOptions = !showEditorToolOptions
+                        else { selectedCameraTool = "AI Studio"; showEditorToolOptions = true }
+                    }
+                    CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { openCameraTextEditor() }
+                    CameraEditorRailAction("Rotate", Icons.Default.RotateRight, selected = false, enabled = !enhancing && !applyingFilter) { rotatePhoto() }
+                }
+            } else if (editingTextOverlayId == null) {
+                Column(
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                        .offset(y = (-70).dp)
+                        .padding(end = 8.dp)
+                        .background(Color(0xFF172438).copy(alpha = 0.42f), RoundedCornerShape(24.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(24.dp))
+                        .padding(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    CameraEditorRailAction("Captions", Icons.Default.AutoAwesome, selected = generatingCaptions, enabled = !generatingCaptions && !applyingVideoEffects) { generateCaptionsForVideo() }
+                    CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { openCameraTextEditor() }
+                }
+            }
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)
+                    .heightIn(max = if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp else LocalConfiguration.current.screenHeightDp.dp * 0.44f)
                     .navigationBarsPadding()
                     .imePadding()
-                    .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 14.dp)
+                    .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 84.dp)
             ) {
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};recordingNotice?.let{Text(it,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(bottom=8.dp))}
-                Column(Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 0.16f else 0.46f).verticalScroll(rememberScrollState())) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 if (previewType == "image") {
                     Text("Edit photo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        listOf("Looks", "Face FX", "Background", "AI Studio").forEach { category ->
-                            FilterChip(
-                                selected = selectedCameraTool == category,
-                                onClick = { selectedCameraTool = category },
-                                label = { Text(category) }
-                            )
-                        }
-                    }
+                    if (selectedCameraTool == "Text") {
+                        val selectedOverlay = cameraTextOverlays.firstOrNull { it.id == selectedTextOverlayId }
+                        CameraTextOverlayTools(
+                            selected = selectedOverlay,
+                            overlayCount = cameraTextOverlays.size,
+                            isVideo = false,
+                            onAdd = ::addCameraTextOverlay,
+                            onColor = { color -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(color = color)) } },
+                            onFont = { font -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(font = font)) } },
+                            onToggleBackground = { selectedOverlay?.let { updateCameraTextOverlay(it.copy(backgroundColor = if (it.backgroundColor == null) 0xB8000000.toInt() else null)) } },
+                            onToggleBold = { selectedOverlay?.let { updateCameraTextOverlay(it.copy(bold = !it.bold)) } },
+                            onAlignment = { selectedOverlay?.let {
+                                updateCameraTextOverlay(it.copy(alignment = when (it.alignment) {
+                                    "CENTER" -> "LEFT"
+                                    "LEFT" -> "RIGHT"
+                                    else -> "CENTER"
+                                }))
+                            } },
+                            videoDurationMs = cameraVideoDurationMs,
+                            onTiming = { start, end -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(startMs = start, endMs = end)) } },
+                            onDelete = {
+                                selectedOverlay?.let { removed ->
+                                    cameraTextOverlays = cameraTextOverlays.filterNot { it.id == removed.id }
+                                    selectedTextOverlayId = cameraTextOverlays.lastOrNull()?.id
+                                    editingTextOverlayId = null
+                                    keyboardController?.hide()
+                                }
+                            },
+                            onDone = {
+                                finishCameraTextEditing()
+                                selectedCameraTool = "Looks"
+                                if (cameraTextOverlays.none { it.text.isNotBlank() }) {
+                                    cameraTextOverlays = emptyList()
+                                    selectedTextOverlayId = null
+                                }
+                            }
+                        )
+                    } else if (showEditorToolOptions) {
                     when (selectedCameraTool) {
                         "Face FX" -> {
                             Text("Face FX", style = MaterialTheme.typography.labelLarge)
@@ -652,6 +1443,7 @@ fun FynxCameraCapturePanel(
                             }
                         }
                     }
+                    }
                     if (applyingFilter) {
                         Text("Applying selected effect on this device…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
@@ -663,7 +1455,70 @@ fun FynxCameraCapturePanel(
                         Text(if (enhancing) "Enhancing…" else "✨ Auto Enhance")
                     }
                 }
+                else if (selectedCameraTool == "Text") {
+                    val selectedOverlay = cameraTextOverlays.firstOrNull { it.id == selectedTextOverlayId }
+                    CameraTextOverlayTools(
+                        selected = selectedOverlay,
+                        overlayCount = cameraTextOverlays.size,
+                        isVideo = true,
+                        onAdd = ::addCameraTextOverlay,
+                        onColor = { color -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(color = color)) } },
+                        onFont = { font -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(font = font)) } },
+                        onToggleBackground = { selectedOverlay?.let { updateCameraTextOverlay(it.copy(backgroundColor = if (it.backgroundColor == null) 0xB8000000.toInt() else null)) } },
+                        onToggleBold = { selectedOverlay?.let { updateCameraTextOverlay(it.copy(bold = !it.bold)) } },
+                        onAlignment = { selectedOverlay?.let {
+                            updateCameraTextOverlay(it.copy(alignment = when (it.alignment) {
+                                "CENTER" -> "LEFT"
+                                "LEFT" -> "RIGHT"
+                                else -> "CENTER"
+                            }))
+                        } },
+                        videoDurationMs = cameraVideoDurationMs,
+                        onTiming = { start, end -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(startMs = start, endMs = end)) } },
+                        onDelete = {
+                            selectedOverlay?.let { removed ->
+                                cameraTextOverlays = cameraTextOverlays.filterNot { it.id == removed.id }
+                                selectedTextOverlayId = cameraTextOverlays.lastOrNull()?.id
+                                editingTextOverlayId = null
+                                keyboardController?.hide()
+                            }
+                        },
+                        onDone = {
+                            finishCameraTextEditing()
+                            selectedCameraTool = "Captions"
+                            if (cameraTextOverlays.none { it.text.isNotBlank() }) {
+                                cameraTextOverlays = emptyList()
+                                selectedTextOverlayId = null
+                            }
+                        }
+                    )
+                }
                 else {
+                    // Keep manual captions first in the editor scroll viewport. Large style
+                    // thumbnails previously pushed this field below the fold, making manual
+                    // caption entry difficult to discover and unreliable on compact screens.
+                    OutlinedTextField(
+                        value = videoCaptionText,
+                        onValueChange = { videoCaptionText = it },
+                        label = { Text("Video captions") },
+                        placeholder = { Text("Type captions for your video") },
+                        supportingText = {
+                            Text(
+                                if (videoCaptionText.isBlank()) {
+                                    "Type captions here, or generate them with a compatible on-device speech model."
+                                } else {
+                                    "Caption timing is approximate. Review the text before sending."
+                                }
+                            )
+                        },
+                        minLines = 2,
+                        maxLines = 4,
+                        enabled = !applyingVideoEffects,
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Video captions" }
+                    )
+                    OutlinedButton(onClick = ::generateCaptionsForVideo, enabled = !generatingCaptions && !applyingVideoEffects, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (generatingCaptions) "Generating captions…" else "✦ Generate on-device captions")
+                    }
                     Text("Video styles", style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         CameraVideoStyle.values().forEach { option ->
@@ -678,26 +1533,135 @@ fun FynxCameraCapturePanel(
                             )
                         }
                     }
-                    OutlinedButton(onClick = ::generateCaptionsForVideo, enabled = !generatingCaptions && !applyingVideoEffects, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (generatingCaptions) "Generating captions…" else "✦ Generate on-device captions")
-                    }
-                    if (videoCaptionText.isNotBlank()) {
-                        OutlinedTextField(
-                            value = videoCaptionText, onValueChange = { videoCaptionText = it },
-                            label = { Text("Review/edit transcript") },
-                            supportingText = { Text("Local transcription. Caption timing is estimated; review before sending.") },
-                            minLines = 2, maxLines = 4, enabled = !applyingVideoEffects, modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        Text("Captions require Android 12+ and a compatible on-device speech model.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Button(onClick = ::applyVideoEdits, enabled = !applyingVideoEffects && !generatingCaptions && (videoStyle != CameraVideoStyle.NATURAL || videoCaptionText.isNotBlank()), modifier = Modifier.fillMaxWidth()) {
-                        Text(if (applyingVideoEffects) "Processing video…" else "Apply style / captions")
-                    }
                 }
                 }
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)retake()},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing && !applyingFilter)rotatePhoto()},enabled=!enhancing && !applyingFilter,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions)onCaptured(previewUri,previewType)},enabled=!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
+                if (previewType != "image") {
+                    Button(
+                        onClick = ::applyVideoEdits,
+                        enabled = !applyingVideoEffects && !generatingCaptions && (videoStyle != CameraVideoStyle.NATURAL || videoCaptionText.isNotBlank() || cameraTextOverlays.any { it.text.isNotBlank() }),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                    ) {
+                        Text(if (applyingVideoEffects) "Processing video…" else "Apply text / effects")
+                    }
+                }
+                TextButton(
+                    onClick = { if (!enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions) { if (initialMediaUri != null) onDismiss() else retake() } },
+                    enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions,
+                    modifier = Modifier.align(Alignment.Start).padding(start = 4.dp)
+                ) { Text(if (initialMediaUri != null) "Cancel edit" else "Retake") }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (showYourStoryAction && !statusCapture && !liveProofMode) {
+                        OutlinedButton(
+                            onClick = { finishCameraMedia(toStatus = true) },
+                            enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions && !statusShareChecking,
+                            modifier = Modifier.weight(1f).heightIn(min = 56.dp).semantics { contentDescription = "Share to Status" },
+                            shape = RoundedCornerShape(28.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF17191F)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.88f))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    Modifier.size(34.dp)
+                                        .border(2.dp, Color(0xFF27B7D4), androidx.compose.foundation.shape.CircleShape)
+                                        .padding(2.dp)
+                                        .clip(androidx.compose.foundation.shape.CircleShape)
+                                ) {
+                                    if (!profilePhotoId.isNullOrBlank()) {
+                                        FynxRemoteMedia(
+                                            "/api/media/$profilePhotoId",
+                                            "image",
+                                            Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop,
+                                            rounded = true
+                                        )
+                                    } else {
+                                        Box(
+                                            Modifier.fillMaxSize().background(Color(0xFF273747), androidx.compose.foundation.shape.CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                                        }
+                                    }
+                                }
+                                Column(verticalArrangement = Arrangement.Center) {
+                                    Text("Status", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                                    Text("Your Story", style = MaterialTheme.typography.labelSmall, color = Color(0xFF596273), maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = { finishCameraMedia(toStatus = false) },
+                        enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions && !statusShareChecking,
+                        modifier = Modifier.weight(if (showYourStoryAction && !statusCapture && !liveProofMode) 1f else 1.2f).heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF2457), contentColor = Color.White)
+                    ) {
+                        Icon(Icons.Default.ArrowForward, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Next")
+                    }
+                }
             }
+            if (editingTextOverlayId != null && selectedCameraTool == "Text") {
+                val selectedOverlay = cameraTextOverlays.firstOrNull { it.id == selectedTextOverlayId }
+                Column(
+                    Modifier.align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .imePadding()
+                        .background(Color(0xFF172438).copy(alpha = 0.76f), RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.26f), RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    CameraTextOverlayTools(
+                        selected = selectedOverlay,
+                        overlayCount = cameraTextOverlays.size,
+                        isVideo = previewType == "video" || previewType == "video_note",
+                        compact = true,
+                        onAdd = ::addCameraTextOverlay,
+                        onColor = { color -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(color = color)) } },
+                        onFont = { font -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(font = font)) } },
+                        onToggleBackground = { selectedOverlay?.let { updateCameraTextOverlay(it.copy(backgroundColor = if (it.backgroundColor == null) 0xB8000000.toInt() else null)) } },
+                        onToggleBold = { selectedOverlay?.let { updateCameraTextOverlay(it.copy(bold = !it.bold)) } },
+                        onAlignment = { selectedOverlay?.let {
+                            updateCameraTextOverlay(it.copy(alignment = when (it.alignment) {
+                                "CENTER" -> "LEFT"
+                                "LEFT" -> "RIGHT"
+                                else -> "CENTER"
+                            }))
+                        } },
+                        onDelete = {
+                            selectedOverlay?.let { removed ->
+                                cameraTextOverlays = cameraTextOverlays.filterNot { it.id == removed.id }
+                                selectedTextOverlayId = cameraTextOverlays.lastOrNull()?.id
+                                editingTextOverlayId = null
+                                keyboardController?.hide()
+                            }
+                        },
+                        onDone = {
+                            finishCameraTextEditing()
+                            selectedCameraTool = if (previewType == "image") "Looks" else "Captions"
+                            if (cameraTextOverlays.none { it.text.isNotBlank() }) {
+                                cameraTextOverlays = emptyList()
+                                selectedTextOverlayId = null
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        }
         };return
     }
     // Camera UI is deliberately dark so preview controls remain legible on bright or dark
@@ -711,10 +1675,20 @@ fun FynxCameraCapturePanel(
             surfaceVariant = Color(0xFF292D38)
         )
     ) {
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).clickable { if (recording == null) showCaptureControls = true }){
         AndroidView(
             factory = { previewView },
             modifier = Modifier.fillMaxSize()
+        )
+        // Android 15 enforces transparent edge-to-edge system bars, so Window.statusBarColor
+        // alone cannot protect white icons from bright camera frames. Paint the status-bar
+        // inset in this Dialog's content while leaving the camera preview full-bleed below it.
+        Spacer(
+            Modifier.align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+                .background(Color(0xFF080A10))
         )
         if (faceAnalysisEnabled && faceEffect != CameraFaceEffect.OFF && trackedFaceBounds.isNotEmpty()) {
             Canvas(Modifier.fillMaxSize()) {
@@ -738,15 +1712,38 @@ fun FynxCameraCapturePanel(
             }
         }
         if (timerCountingDown > 0) {
-            Surface(modifier = Modifier.align(Alignment.Center), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)) {
-                Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge, modifier = Modifier.padding(horizontal = 28.dp, vertical = 18.dp))
+            Surface(
+                modifier = Modifier.align(Alignment.Center).border(
+                    1.dp, Color.White.copy(alpha = 0.26f), MaterialTheme.shapes.extraLarge
+                ),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = Color(0xFF25364A).copy(alpha = 0.88f)
+            ) {
+                Column(
+                    modifier = Modifier.width(240.dp).padding(horizontal = 20.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge)
+                    Button(
+                        onClick = ::cancelCaptureTimer,
+                        // Merge the label into the Button's own clickable semantics node.
+                        // A separate non-clickable description node caused automated taps
+                        // and assistive-technology activation to miss the countdown cancel.
+                        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                            contentDescription = "Cancel timer"
+                        }
+                    ) {
+                        Text("Cancel timer")
+                    }
+                }
             }
         }
         if (pendingUri == null && liveProofMode) {
             Surface(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 10.dp),
                 shape = RoundedCornerShape(18.dp),
-                color = Color.Black.copy(alpha = 0.62f)
+                color = Color(0xFF25364A).copy(alpha = 0.50f)
             ) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("LIVE PROOF", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
@@ -755,12 +1752,26 @@ fun FynxCameraCapturePanel(
                 }
             }
         }
+        if (pendingUri == null && !statusCapture && !liveProofMode) {
+            CameraMusicChip(
+                selectedMusic = selectedMusic,
+                onChooseMusic = onChooseMusic,
+                onClearMusic = onClearMusic,
+                // Center the live music action to match the captured-media editor while
+                // reserving side space for the camera rail on compact screens.
+                modifier = Modifier.align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(start = 64.dp, end = 64.dp, top = 74.dp)
+                    .widthIn(max = 196.dp)
+            )
+        }
+
         if (pendingUri == null) {
             Row(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { if (recording == null) onDismiss() }, enabled = recording == null, modifier = Modifier.background(Color.Black.copy(alpha = 0.58f), androidx.compose.foundation.shape.CircleShape)) {
+                IconButton(onClick = { if (recording == null) onDismiss() }, enabled = recording == null, modifier = Modifier.background(Color(0xFF25364A).copy(alpha = 0.34f), androidx.compose.foundation.shape.CircleShape).border(1.dp, Color.White.copy(alpha = 0.28f), androidx.compose.foundation.shape.CircleShape)) {
                     Icon(Icons.Default.Close, "Close camera")
                 }
                 if (!liveProofMode) {
@@ -789,7 +1800,8 @@ fun FynxCameraCapturePanel(
                 modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding()
                     .padding(end = 8.dp, top = 64.dp)
                     .width(58.dp)
-                    .background(Color.Black.copy(alpha = 0.42f), RoundedCornerShape(24.dp))
+                    .background(Color(0xFF25364A).copy(alpha = 0.32f), RoundedCornerShape(24.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(24.dp))
                     .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -843,9 +1855,9 @@ fun FynxCameraCapturePanel(
                 .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)
                     .navigationBarsPadding()
                 .imePadding()
-                .background(Color(0xF20A0C12), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 14.dp),
+                .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 84.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(horizontal=18.dp, vertical=4.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=18.dp))
@@ -856,7 +1868,7 @@ fun FynxCameraCapturePanel(
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp),
                         shape = RoundedCornerShape(18.dp),
-                        color = Color.Black.copy(alpha = 0.70f)
+                        color = Color(0xFF25364A).copy(alpha = 0.52f)
                     ) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -878,6 +1890,8 @@ fun FynxCameraCapturePanel(
                                 FilterChip(selected = captureTimerSeconds == 3, onClick = { captureTimerSeconds = 3 }, label = { Text("3 sec") })
                                 Spacer(Modifier.width(6.dp))
                                 FilterChip(selected = captureTimerSeconds == 10, onClick = { captureTimerSeconds = 10 }, label = { Text("10 sec") })
+                                Spacer(Modifier.width(6.dp))
+                                FilterChip(selected = captureTimerSeconds == 30, onClick = { captureTimerSeconds = 30 }, label = { Text("30 sec") })
                             }
                         }
                     }
@@ -887,8 +1901,8 @@ fun FynxCameraCapturePanel(
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).padding(bottom = 6.dp),
                     shape = RoundedCornerShape(20.dp),
-                    color = Color(0xD9232732),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                    color = Color(0xFF25364A).copy(alpha = 0.56f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
                     shadowElevation = 3.dp
                 ) {
                     Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
@@ -960,7 +1974,7 @@ fun FynxCameraCapturePanel(
                                         showCaptureControls = true
                                     },
                                     shape = RoundedCornerShape(18.dp),
-                                    color = if (selected) Color(0xFF3A315A) else Color(0xFF22252E),
+                                    color = if (selected) Color(0xFF7869A6).copy(alpha = 0.76f) else Color(0xFF25364A).copy(alpha = 0.48f),
                                     border = androidx.compose.foundation.BorderStroke(
                                         if (selected) 1.5.dp else 1.dp,
                                         if (selected) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.10f)
@@ -1021,6 +2035,9 @@ fun FynxCameraCapturePanel(
                     onClick = {
                         if (recording == null) {
                             mode = CameraMode.VIDEO
+                            selectedCameraTool = "Looks"
+                            selectedTextOverlayId = null
+                            editingTextOverlayId = null
                             showEffectTray = false
                             filter = CameraFilter.NATURAL
                             filterIntensity = 1f
@@ -1041,10 +2058,10 @@ fun FynxCameraCapturePanel(
                     onClick = { showEffectTray = !showEffectTray; showCaptureControls = true },
                     modifier = Modifier.size(width = 64.dp, height = 64.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = if (showEffectTray) Color(0xFF3A315A) else Color(0xFF22252E),
+                    color = if (showEffectTray) Color(0xFF7869A6).copy(alpha = 0.70f) else Color(0xFF25364A).copy(alpha = 0.38f),
                     border = androidx.compose.foundation.BorderStroke(
                         if (showEffectTray) 1.5.dp else 1.dp,
-                        if (showEffectTray) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.12f)
+                        if (showEffectTray) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.24f)
                     )
                 ) {
                     Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -1052,15 +2069,25 @@ fun FynxCameraCapturePanel(
                         Text(if (mode == CameraMode.VIDEO) "Video FX" else "Effects", style = MaterialTheme.typography.labelSmall, color = Color.White)
                     }
                 } else Spacer(Modifier.size(width = 64.dp, height = 64.dp))
-                FilledIconButton(onClick = {
+                FilledIconButton(
+                    enabled = recording != null || (cameraReady && (if (mode == CameraMode.PHOTO) imageCapture != null else videoCapture != null)),
+                    onClick = {
                     if (mode == CameraMode.PHOTO) {
                         if (captureTimerSeconds > 0) {
-                            if (timerCountingDown == 0) {
-                                timerCountingDown = captureTimerSeconds
+                            if (timerCaptureJob?.isActive != true) {
+                                val seconds = captureTimerSeconds
+                                val generation = timerCaptureGeneration.incrementAndGet()
                                 showCaptureControls = false
-                                scope.launch {
-                                    delay(captureTimerSeconds * 1000L)
+                                timerCaptureJob = scope.launch {
+                                    for (remaining in seconds downTo 1) {
+                                        if (generation != timerCaptureGeneration.get()) return@launch
+                                        timerCountingDown = remaining
+                                        delay(1000L)
+                                    }
+                                    // Check again after the final delay; Cancel invalidates this token.
+                                    if (generation != timerCaptureGeneration.get()) return@launch
                                     timerCountingDown = 0
+                                    timerCaptureJob = null
                                     capturePhotoNow()
                                 }
                             }
@@ -1088,6 +2115,9 @@ fun FynxCameraCapturePanel(
                                         pendingUri = Uri.fromFile(file)
                                         pendingOriginalUri = Uri.fromFile(file)
                                         pendingType = if (videoNoteMode) "video_note" else "video"
+                                        selectedCameraTool = "Looks"
+                                        selectedTextOverlayId = null
+                                        editingTextOverlayId = null
                                         error = null
                                     } else {
                                         file.delete()
@@ -1100,8 +2130,12 @@ fun FynxCameraCapturePanel(
                         }
                     }
                 }, modifier = Modifier.size(80.dp).semantics(mergeDescendants = true) {
-                    contentDescription = if (recording != null) "Stop video note"
-                    else if (mode == CameraMode.PHOTO) "Take photo" else "Record video note"
+                    contentDescription = when {
+                        recording != null -> "Stop recording"
+                        mode == CameraMode.PHOTO -> "Take photo"
+                        videoNoteMode -> "Record video note"
+                        else -> "Record video"
+                    }
                 }, shape = androidx.compose.foundation.shape.CircleShape,
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Color.Black)
                 ) {
@@ -1122,13 +2156,13 @@ fun FynxCameraCapturePanel(
                 }
                 if (!fastCapture && !liveProofMode) Surface(
                     onClick = {
-                        galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        galleryPicker.launch(arrayOf("image/*", "video/*"))
                         showCaptureControls = true
                     },
                     modifier = Modifier.size(width = 64.dp, height = 64.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFF22252E),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+                    color = Color(0xFF25364A).copy(alpha = 0.38f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
                 ) {
                     Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
@@ -1138,6 +2172,7 @@ fun FynxCameraCapturePanel(
             }
 
         }
+    }
     }
     }
 }
@@ -1153,10 +2188,10 @@ private data class CameraEffectOption(
 )
 
 /**
- * Nine bundled portrait references rotate through the camera and captured-photo effect
- * carousels. Six original portrait illustrations extend the three existing photo references.
+ * Twelve bundled portrait references rotate through the camera and captured-photo effect
+ * carousels. Nine original references are preserved and three additional portrait previews extend the set.
  */
-private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (Math.floorMod(previewStyle, 9)) {
+private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (Math.floorMod(previewStyle, 12)) {
     0 -> R.drawable.camera_effect_portrait_1
     1 -> R.drawable.camera_effect_portrait_2
     2 -> R.drawable.camera_effect_portrait_3
@@ -1165,7 +2200,10 @@ private fun cameraEffectPreviewPortraitRes(previewStyle: Int): Int = when (Math.
     5 -> R.drawable.camera_effect_portrait_6
     6 -> R.drawable.camera_effect_portrait_7
     7 -> R.drawable.camera_effect_portrait_8
-    else -> R.drawable.camera_effect_portrait_9
+    8 -> R.drawable.camera_effect_portrait_9
+    9 -> R.drawable.camera_effect_portrait_10
+    10 -> R.drawable.camera_effect_portrait_11
+    else -> R.drawable.camera_effect_portrait_12
 }
 
 @Composable

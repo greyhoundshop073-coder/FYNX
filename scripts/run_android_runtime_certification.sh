@@ -5,6 +5,18 @@
 set +e
 mkdir -p fynx-runtime-screenshots
 
+# Camera preview proof analyses actual screencaps; fail clearly if Pillow is unavailable.
+if ! python3 -c 'from PIL import Image' >/dev/null 2>&1; then
+  python3 -m pip install --quiet --user Pillow
+fi
+python3 -c 'from PIL import Image'
+
+# Camera preview proof analyses actual screencaps; fail clearly if Pillow is unavailable.
+if ! python3 -c 'from PIL import Image' >/dev/null 2>&1; then
+  python3 -m pip install --quiet --user Pillow
+fi
+python3 -c 'from PIL import Image'
+
 ./gradlew connectedDebugAndroidTest --no-daemon --build-cache
 TEST_EXIT=$?
 
@@ -13,7 +25,15 @@ adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.tx
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
-if [ "$TEST_EXIT" -eq 0 ]; then
+if [ "${FYNX_CAMERA_VISUALS_ONLY:-0}" = "1" ]; then
+  if [ "$TEST_EXIT" -ne 0 ]; then
+    echo "::warning::Camera visual diagnosis will run after instrumentation failure; instrumentation result remains authoritative."
+  fi
+  FYNX_MARKETPLACE_VISUALS_ONLY=1 FYNX_CAMERA_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  CAMERA_EXIT=$?
+  if [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$CAMERA_EXIT"; fi
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+elif [ "$TEST_EXIT" -eq 0 ]; then
   # Prefer real server authentication whenever CI credentials and a ready backend exist.
   # The Phase 1 switch narrows the inspected surfaces only after readiness succeeds;
   # it never silently downgrades a credentialed run to a local-only session.

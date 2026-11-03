@@ -113,7 +113,10 @@ require('mature text editor uses responsive full view','BoxWithConstraints(Modif
 require('mature composer Android back closes safely','BackHandler(enabled = !publishing)' in mature and 'recording -> finishVoiceRecordingToPreview()' in mature and 'showStatusEmoji -> showStatusEmoji = false' in mature and 'else -> onClose()' in mature)
 require('mature voice preview before publish','FynxLocalStatusAudioPreview(mediaUri!!, elapsed.coerceAtLeast(1_000L))' in mature and 'private fun FynxLocalStatusAudioPreview' in mature and 'Voice Status ready' in mature)
 require('mature authenticated publish','FynxStatusClient.create(context, status, mediaId)' in mature and 'FynxStatusClient.uploadMedia(context, source, mime)' in mature)
-require('status camera owns lifecycle and back navigation','BackHandler' in camera and 'BackHandler { if (recording == null) onDismiss() }' in camera and 'cameraProvider?.unbindAll()' in camera)
+require('status camera owns lifecycle and back navigation',
+        'BackHandler' in camera and 'recording == null' in camera
+        and 'cancelCaptureTimer()' in camera and 'else onDismiss()' in camera
+        and 'cameraProvider?.unbindAll()' in camera)
 require('status camera profile identity overlay','FynxProfileRemoteClient.get(context, username)' in camera and 'profilePhotoId' in camera and 'FynxRemoteMedia("/api/media/$photoId"' in camera)
 require('status camera dialog preserves full-screen surface','DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)' in hub and 'Box(Modifier.fillMaxSize())' in hub)
 require('status camera returns to editable composer','fun openCapturedStatus(uri: Uri, type: String)' in hub and 'composing = true' in hub and 'initialMediaUri = selectedInitialMedia?.uri' in hub)
@@ -122,7 +125,7 @@ require('add status media multi-select is functional','selectionMode' in hub and
 require('add status Layout creates real collage media','layoutMode' in hub and 'createFynxLayoutCollage' in hub and 'Bitmap.createBitmap(1200, 1200' in hub and 'FynxStatusToolPill' in hub)
 require('Add status exposes video recording and gallery selection','onRecordVideo = {' in hub and 'cameraInitialMode = CameraMode.VIDEO' in hub and 'var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }' in hub and 'Text("Record video"' in hub and 'deviceMediaPicker.launch(arrayOf("image/*", "video/*"))' in hub)
 require('Add status Voice opens the composer in voice mode','onVoice = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.VOICE; composing = true; addStatusOpen = false }' in hub and '?: selectedInitialType' in hub)
-require('Home Status plus opens the full Add status hub','startWithCreator = true' in app and 'onCreateStatus: (() -> Unit)? = null' in read('app/src/main/java/com/fynx/app/ui/HomePanel.kt') and 'onCreateStatus = openStatusCreator' in read('app/src/main/java/com/fynx/app/ui/HomePanel.kt') and 'onCreateStatus = { statusCreatorRequested = true' in app and 'selected == "Home" && statusCreatorRequested' in app and 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' in app)
+require('Home Status plus opens the full Add status hub','startWithCreator = true' in app and 'onCreateStatus: (() -> Unit)? = null' in read('app/src/main/java/com/fynx/app/ui/HomePanel.kt') and 'onCreateStatus = openStatusCreator' in read('app/src/main/java/com/fynx/app/ui/HomePanel.kt') and 'onCreateStatus = { statusCreatorRequested = true' in app and 'selected == "Home" && statusCreatorRequested' in app and 'visible = !statusComposerImmersive && ((selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden)' in app)
 require('mature 24-hour expiry','expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS' in mature)
 require('mature publish validation','Write something first.' in mature and 'Add your media first.' in mature)
 
