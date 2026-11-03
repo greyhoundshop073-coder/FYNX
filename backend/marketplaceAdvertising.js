@@ -14,6 +14,16 @@ const CAMPAIGN_STATUSES = new Set(["draft", "pending_review", "active", "paused"
 const TARGETING_KEYS = new Set(["locations", "ageMin", "ageMax", "interests"]);
 const CREATIVE_TYPES = new Set(["post", "product", "business"]);
 const SEASONAL_PROMOTION_TYPES = new Set(["SEASONAL", "ANNOUNCEMENT", "OFFER"]);
+const MARKETPLACE_CAMPAIGN_CATEGORIES = [
+  "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles",
+  "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture",
+  "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts",
+  "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local",
+  "Business & Workshop Supplies", "Other"
+];
+const MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY = new Map(
+  MARKETPLACE_CAMPAIGN_CATEGORIES.map(category => [category.toLowerCase(), category])
+);
 
 async function ensureAdvertisingSchema() {
   if (!pool) return;
@@ -282,7 +292,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
       const actionLabel = typeof req.body?.actionLabel === "string" ? req.body.actionLabel.trim() : "Explore Marketplace";
       const destinationType = typeof req.body?.destinationType === "string" ? req.body.destinationType.trim().toUpperCase() : "MARKETPLACE";
-      const destinationValue = typeof req.body?.destinationValue === "string" ? req.body.destinationValue.trim() : "";
+      let destinationValue = typeof req.body?.destinationValue === "string" ? req.body.destinationValue.trim() : "";
       const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positiveInt(req.body.artworkMediaId);
       const startsAt = typeof req.body?.startsAt === "string" ? new Date(req.body.startsAt) : null;
       const endsAt = typeof req.body?.endsAt === "string" ? new Date(req.body.endsAt) : null;
@@ -295,8 +305,10 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
           (destinationType !== "MARKETPLACE" && !destinationValue)) {
         return res.status(400).json({ error: "the selected campaign destination requires a matching destination value" });
       }
-      if (destinationType === "CATEGORY" && !/^[a-z0-9][a-z0-9 &'/-]{0,59}$/i.test(destinationValue)) {
-        return res.status(400).json({ error: "invalid Marketplace category destination" });
+      if (destinationType === "CATEGORY") {
+        const canonicalCategory = MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY.get(destinationValue.toLowerCase());
+        if (!canonicalCategory) return res.status(400).json({ error: "choose a category that exists in Marketplace" });
+        destinationValue = canonicalCategory;
       }
       if (destinationType === "PRODUCT" && !/^[1-9][0-9]{0,19}$/.test(destinationValue)) {
         return res.status(400).json({ error: "product destination must be a positive Marketplace listing ID" });
