@@ -33,6 +33,8 @@ object FynxBackendClient {
     private const val NETWORK_VALIDATION_POLL_MS = 500L
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
+    // Gemini may take longer than ordinary API calls; keep the mobile request alive beyond the server's 45s provider deadline.
+    private const val AI_RESPONSE_READ_TIMEOUT_MS = 90_000
     private const val WEAK_CONNECT_TIMEOUT_MS = 20_000
     private const val WEAK_READ_TIMEOUT_MS = 45_000
     private const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
@@ -157,7 +159,11 @@ object FynxBackendClient {
         val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS
-            readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS
+            readTimeout = when {
+                path.startsWith("/api/assistant/conversations/") && path.endsWith("/message") -> AI_RESPONSE_READ_TIMEOUT_MS
+                weakNetwork -> WEAK_READ_TIMEOUT_MS
+                else -> READ_TIMEOUT_MS
+            }
             useCaches = false
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Accept-Encoding", "identity")
