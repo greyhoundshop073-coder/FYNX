@@ -17,7 +17,7 @@ const metricRoute = advertising.slice(metricStart, metricEnd);
 const checks = [
   ["sponsored feed requires an authenticated FYNX session", route.includes("const auth = authenticate(req, res)") && route.includes("if (!auth) return")],
   ["sponsored feed initializes the shared listing schema before reading inventory", route.includes("await ensureMarketplaceSchemaForPool(pool)") && marketplaceSchema.includes("ADD COLUMN IF NOT EXISTS reserved_quantity")],
-  ["impression and click metrics require authentication and a currently eligible paid campaign", metricRoute.includes("const auth = authenticate(req, res)") && metricRoute.includes("c.status='active'") && metricRoute.includes("c.payment_status='paid'") && metricRoute.includes("c.approved_at IS NOT NULL") && metricRoute.includes("c.starts_at <= NOW()") && metricRoute.includes("c.ends_at > NOW()") && metricRoute.includes("c.spent_kobo < c.total_budget_kobo")],
+  ["impression and click metrics require authentication and a currently eligible paid campaign", metricRoute.includes("const auth = authenticate(req, res)") && metricRoute.includes("c.status='active'") && metricRoute.includes("c.payment_status='paid'") && metricRoute.includes("c.approved_at IS NOT NULL") && metricRoute.includes("c.starts_at <= NOW()") && metricRoute.includes("c.ends_at > NOW()") && metricRoute.includes("c.spent_kobo < c.total_budget_kobo") && metricRoute.includes("c.owner_id <> $3") && metricRoute.includes("[metric, id, auth.userId]")],
   ["successful ad payment returns the campaign shape consumed by Android", advertising.includes("return res.json({ paid: true, campaign: updated.rows[0] });") && advertisingClient.includes("optJSONObject(\"campaign\")")],
   ["only product campaigns can be displayed in the product banner", route.includes("c.creative_type = 'product'")],
   ["only approved and paid campaigns can be displayed", route.includes("c.status = 'active'") && route.includes("c.payment_status = 'paid'") && route.includes("c.approved_at IS NOT NULL")],
@@ -29,6 +29,7 @@ const checks = [
   ["promotional feed returns real listing media IDs and prices", route.includes("l.media_ids") && route.includes("l.price") && route.includes("mediaIds: Array.isArray(row.media_ids)")],
   ["sponsored campaign selection is budget-balanced rather than used for seller awards", route.includes("ORDER BY c.spent_kobo ASC") && !route.includes("marketplace_seller_reviews")],
   ["paid sponsored feed fails closed offline instead of replaying stale approval, budget, schedule or inventory data", marketplaceFeedClient.includes('FynxBackendClient.get(context, "/api/advertising/marketplace-feed")') && marketplaceFeedClient.includes("response.getOrElse { return Result.failure(it) }") && !marketplaceFeedClient.includes("readResponse(") && !marketplaceFeedClient.includes("writeResponse(")],
+  ["advertiser cannot inflate sponsored metrics by viewing or clicking their own campaign", metricRoute.includes("c.owner_id <> $3") && metricRoute.includes("[metric, id, auth.userId]")],
   ["the weekly seller award remains separate from advertising data", !advertising.slice(start, end).includes("weekly_rank")]
 ];
 for (const [name, ok] of checks) {

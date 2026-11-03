@@ -36,7 +36,7 @@ class FynxMarketplacePromotionModelsTest {
         endsAt: String,
         active: Boolean = true
     ) = FynxMarketplaceSeasonalPromotion(
-        id = "campaign-1", occasionKey = "test-season", headline = "Test seasonal promotion",
+        id = "campaign-1", promotionType = "SEASONAL", occasionKey = "test-season", headline = "Test seasonal promotion",
         body = "Test", actionLabel = "Explore Marketplace", artworkMediaId = "",
         startsAt = startsAt, endsAt = endsAt, active = active
     )
