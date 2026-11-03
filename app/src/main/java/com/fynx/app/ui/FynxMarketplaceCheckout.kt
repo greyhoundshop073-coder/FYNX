@@ -73,6 +73,19 @@ internal fun marketplaceWalletPaymentUnavailableMessage(
     else -> null
 }
 
+
+internal fun marketplaceWalletCanCoverCheckout(
+    orderCurrency: String,
+    totalAmount: Double,
+    walletSummary: FynxBuyerWalletSummary?,
+    summaryLoading: Boolean
+): Boolean {
+    if (marketplaceWalletPaymentUnavailableMessage(orderCurrency, walletSummary, summaryLoading) != null) return false
+    if (!totalAmount.isFinite() || totalAmount <= 0.0) return false
+    val available = walletSummary?.availableBalance ?: return false
+    return available >= totalAmount
+}
+
 internal data class FynxMarketplaceCheckoutAddress(
     val name: String,
     val phone: String,
