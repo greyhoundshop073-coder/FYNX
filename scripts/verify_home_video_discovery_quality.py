@@ -76,7 +76,7 @@ checks = [
     ),
     (
         "opening Discovery records each page view once rather than double-counting the first view",
-        "FynxDiscoveryClient.recordView(context, it.id)" in discovery
+        "FynxDiscoveryClient.recordView(context, video.id)" in discovery
         and "fun openHomeDiscoveryViewer(index: Int)" in home
         and "recordView(context, it.id)" not in home[
             home.index("fun openHomeDiscoveryViewer(index: Int)"):
