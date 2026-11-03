@@ -108,7 +108,7 @@ checks = [
     ("Marketplace discovery client sends category under the backend-supported query key", '&category=${URLEncoder.encode(category, "UTF-8")}' in remote_client and 'req.query?.category' in discovery_routes),
     ("Marketplace backend filters selected categories exactly and leaves All unfiltered", 'category.toLowerCase() !== "all"' in discovery_routes and 'where.push("l.category=$" + params.length)' in discovery_routes),
     ("seller form and discovery expose the same expanded category set",
-     _extract_string_list(r"val categories = listOf\(([^)]*)\)", marketplace) == EXPECTED_DISCOVERY_CATEGORIES
+     ["All"] + _extract_string_list(r"internal val MARKETPLACE_CAMPAIGN_CATEGORIES = listOf\(([^)]*)\)", promotion_models) == EXPECTED_DISCOVERY_CATEGORIES
      and _extract_string_list(r'Text\("Category"[\s\S]*?listOf\(([^)]*)\)\.forEach', marketplace) == EXPECTED_SELLER_CATEGORIES
      and '"REFURBISHED" to "Refurbished"' in marketplace),
     ("Marketplace seller flow exposes optional category-specific subcategories and resets stale selections when the main category changes",
