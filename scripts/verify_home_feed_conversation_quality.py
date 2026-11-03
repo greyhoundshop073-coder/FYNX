@@ -6,6 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 HOME = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text(encoding="utf-8")
 COMMENTS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt").read_text(encoding="utf-8")
 BOOTSTRAP = (ROOT / "backend/realtimeIsolationBootstrap.js").read_text(encoding="utf-8")
+REACTIONS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomePostReactionsClient.kt").read_text(encoding="utf-8")
+MEDIA_CACHE = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt").read_text(encoding="utf-8")
+DISCOVERY = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeDiscoverySection.kt").read_text(encoding="utf-8")
 RUNTIME_NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 checks = [
@@ -19,6 +22,14 @@ checks = [
     ("conversation supports expanded nested reply trees", "flattenHomeReplies(" in COMMENTS and "toggleReplies(reply)" in COMMENTS),
     ("users can reply directly to another reply", "replyingToId = reply.id" in COMMENTS and "availableComments.firstOrNull" in COMMENTS),
     ("reply composer remains keyboard-safe", ".imePadding()" in COMMENTS and "KeyboardActions(onSend = { send() })" in COMMENTS),
+    ("comment composer announces whether it sends a comment or reply", '"Send comment" else "Send reply"' in COMMENTS),
+    ("all five X-style emoji reactions remain visible", all(token in HOME for token in ('ReactionChoice("👍", "LIKE"', 'ReactionChoice("❤️", "LOVE"', 'ReactionChoice("😂", "LAUGH"', 'ReactionChoice("😮", "WOW"', 'ReactionChoice("😢", "SAD"'))),
+    ("emoji reactions have meaningful accessible labels", 'contentDescription = "React with $reactionLabel"' in HOME and "role = Role.Button" in HOME),
+    ("reaction selection and removal use the real backend client", "FynxHomePostReactionsClient.set(context, id, reaction)" in HOME and "FynxHomePostReactionsClient.clear(context, id)" in HOME),
+    ("reaction client accepts only the supported emoji reaction types", 'setOf("LIKE", "LOVE", "LAUGH", "WOW", "SAD")' in REACTIONS),
+    ("reaction changes roll back on API failure", "reactionStates = reactionStates + (id to previous)" in HOME),
+    ("manual video retry refreshes failed cached media", "forceRefresh: Boolean = false" in MEDIA_CACHE and "forceRefresh = reloadNonce > 0" in HOME and "forceRefresh = retryNonce > 0" in DISCOVERY),
+    ("media refresh preserves the last good cached file until replacement succeeds", '".refresh"' in MEDIA_CACHE and '".backup"' in MEDIA_CACHE and "if (hadPrevious) backup.renameTo(file)" in MEDIA_CACHE),
     ("comment pagination uses the last returned row as cursor", "String(result.rows[limit - 1].id)" in BOOTSTRAP),
     ("pagination does not skip the look-ahead row", "String(result.rows[result.rows.length - 1].id)" not in BOOTSTRAP),
     ("backend preserves the selected reply parent", "const directParentId = parentId;" in BOOTSTRAP and "[postId, req.user.sub, directParentId, text]" in BOOTSTRAP),
