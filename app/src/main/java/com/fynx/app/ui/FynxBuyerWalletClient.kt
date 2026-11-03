@@ -220,7 +220,7 @@ internal object FynxBuyerWalletClient {
             ) { "Wallet funding returned an untrusted Paystack checkout URL." }
         }
         val paymentMethod = json.optString("paymentMethod").trim().uppercase(Locale.US)
-        require(paymentMethod.isBlank() || paymentMethod in setOf("CARD", "USSD")) {
+        require(paymentMethod in setOf("CARD", "USSD")) {
             "Wallet funding method is invalid."
         }
         return FynxWalletFundingSession(

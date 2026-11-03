@@ -106,6 +106,36 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
+    fun hostedWalletFundingSessionParsesRecoverableProcessingAndTerminalStates() {
+        val processing = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"PROCESSING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":1000.0,"paymentMethod":"CARD","message":"Check payment status"}"""
+        )
+        assertEquals("PROCESSING", processing.status)
+        assertNull(processing.authorizationUrl)
+
+        val failed = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"FAILED","reference":"fwd_abcdef0123456789abcdef0123456789","amount":1000.0,"paymentMethod":"CARD","message":"No credit"}"""
+        )
+        assertEquals("FAILED", failed.status)
+        assertNull(failed.authorizationUrl)
+
+        val blocked = FynxBuyerWalletClient.parseWalletFundingSession(
+            """{"status":"BLOCKED","reference":"fwd_0123456789abcdef0123456789abcdef","amount":1000.0,"paymentMethod":"USSD","message":"Checkout blocked"}"""
+        )
+        assertEquals("BLOCKED", blocked.status)
+        assertNull(blocked.authorizationUrl)
+    }
+
+    @Test
+    fun hostedWalletFundingSessionRejectsMissingPaymentMethod() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FynxBuyerWalletClient.parseWalletFundingSession(
+                """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":1000.0}"""
+            )
+        }
+    }
+
+    @Test
     fun hostedWalletFundingSessionAcceptsVerifiedSuccessWithoutCheckoutUrl() {
         val session = FynxBuyerWalletClient.parseWalletFundingSession(
             """{"status":"SUCCEEDED","reference":"fwd_abcdef0123456789abcdef0123456789","amount":2000.0,"paymentMethod":"USSD"}"""

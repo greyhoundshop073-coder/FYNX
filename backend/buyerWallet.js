@@ -406,6 +406,30 @@ function walletWithdrawalLimits() {
   return { minimumPerTransfer: MINIMUM_WALLET_WITHDRAWAL_NGN, maximumPerTransfer: maximum, dailyAmountLimit: daily, dailyCountLimit: count };
 }
 
+export function classifyBuyerWalletFundingInitializationFailure(error) {
+  // Definitive provider rejections are terminal; timeouts and 5xx responses
+  // remain PROCESSING until a server-side verification resolves the outcome.
+  const status = Number(error?.status);
+  return Number.isInteger(status) && status >= 200 && status < 500 ? 'FAILED' : 'PROCESSING';
+}
+
+export function isBuyerWalletProviderReferenceNotFound(error) {
+  return Number(error?.status) === 404;
+}
+
+export function isBuyerWalletTrustedCheckoutUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'https:' &&
+      url.hostname.toLowerCase() === 'checkout.paystack.com' &&
+      !url.username &&
+      !url.password &&
+      (url.port === '' || url.port === '443');
+  } catch {
+    return false;
+  }
+}
+
 function walletTestModeEnabled() {
   return process.env.FYNX_WALLET_TEST_MODE_ENABLED === 'true' &&
     process.env.RAILWAY_ENVIRONMENT_NAME === 'testing' &&
@@ -706,7 +730,7 @@ export async function reconcileBuyerWalletTransferEvent(client, eventName, trans
   return reconcileWalletTransferEvent(client, eventName, transfer);
 }
 
-async function reconcileWalletHostedFunding(reference, userId = null) {
+async function reconcileWalletHostedFunding(reference, userId = null, { allowNotFoundFailure = false } = {}) {
   const normalizedReference = String(reference || '').trim();
   if (!/^fwd_[a-f0-9]{32}$/i.test(normalizedReference)) {
     throw Object.assign(new Error('Wallet funding reference is invalid'), { code: 'WALLET_FUNDING_REFERENCE_INVALID' });
@@ -725,7 +749,23 @@ async function reconcileWalletHostedFunding(reference, userId = null) {
     return { matched: true, status: String(existing.status), reference: normalizedReference, amount: Number(existing.amount) };
   }
 
-  const verified = await walletPaystackRequest('/transaction/verify/' + encodeURIComponent(normalizedReference));
+  let verified;
+  try {
+    verified = await walletPaystackRequest('/transaction/verify/' + encodeURIComponent(normalizedReference));
+  } catch (error) {
+    if (!isBuyerWalletProviderReferenceNotFound(error)) throw error;
+    const createdAt = new Date(existing.created_at).getTime();
+    const verificationGraceElapsed = Number.isFinite(createdAt) &&
+      Date.now() - createdAt >= 2 * 60 * 1000;
+    if (allowNotFoundFailure && verificationGraceElapsed) {
+      await pool.query(
+        "UPDATE buyer_wallet_funding_intents SET status='FAILED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status IN ('PENDING','PROCESSING')",
+        ['Paystack could not find this funding reference after the verification grace period', existing.id]
+      );
+      return { matched: true, status: 'FAILED', reference: normalizedReference, amount: Number(existing.amount) };
+    }
+    return { matched: true, status: 'PROCESSING', reference: normalizedReference, amount: Number(existing.amount) };
+  }
   const providerStatus = String(verified?.status || '').trim().toLowerCase();
   const providerReference = String(verified?.reference || '').trim();
   const providerCurrency = String(verified?.currency || '').trim().toUpperCase();
@@ -1141,24 +1181,39 @@ export function registerBuyerWalletRoutes({ app }) {
               idempotent: true
             });
           }
-          if (existing.status === 'PENDING' && existing.authorization_url) {
+          const existingStatus = String(existing.status || '').trim().toUpperCase();
+          if (['FAILED', 'BLOCKED'].includes(existingStatus)) {
             await client.query('COMMIT');
             return res.status(200).json({
-              status: 'PENDING',
+              status: existingStatus,
               reference: existing.reference,
               amount: Number(existing.amount),
               paymentMethod,
-              authorizationUrl: existing.authorization_url,
-              accessCode: existing.access_code,
               testMode: walletTestModeEnabled(),
-              message: walletTestModeEnabled()
-                ? 'TEST MODE: This simulated Paystack checkout is still pending. No test balance is credited until provider verification succeeds.'
-                : 'Continue through the secure Paystack checkout.',
+              message: existingStatus === 'FAILED'
+                ? 'Paystack did not create a payment session. No Wallet credit was made. Start a new payment to try again.'
+                : 'Paystack did not return an approved checkout link. No Wallet credit was made. Start a new payment to try again.',
+              idempotent: true
+            });
+          }
+          if (['PENDING', 'PROCESSING'].includes(existingStatus)) {
+            await client.query('COMMIT');
+            return res.status(200).json({
+              status: existingStatus,
+              reference: existing.reference,
+              amount: Number(existing.amount),
+              paymentMethod,
+              ...(existing.authorization_url ? { authorizationUrl: existing.authorization_url } : {}),
+              ...(existing.access_code ? { accessCode: existing.access_code } : {}),
+              testMode: walletTestModeEnabled(),
+              message: existing.authorization_url
+                ? 'Continue through the secure Paystack checkout.'
+                : 'Paystack has not confirmed whether this checkout session is ready. Check payment status before trying again. No Wallet credit has been made.',
               idempotent: true
             });
           }
           await client.query('ROLLBACK');
-          return res.status(409).json({ error: 'previous funding request is not reusable; check its payment status first' });
+          return res.status(409).json({ error: 'previous funding request has an unsupported state; contact FYNX support before paying again' });
         }
 
         const intentId = crypto.randomUUID();
@@ -1199,13 +1254,20 @@ export function registerBuyerWalletRoutes({ app }) {
       });
       const authorizationUrl = String(initialized.authorization_url || '').trim();
       const accessCode = String(initialized.access_code || '').trim();
-      if (!authorizationUrl.startsWith('https://') || !accessCode) {
+      if (!isBuyerWalletTrustedCheckoutUrl(authorizationUrl) || !accessCode) {
         await pool.query(`
           UPDATE buyer_wallet_funding_intents
-             SET status='BLOCKED',failure_reason='Paystack initialization did not return a secure hosted authorization URL',updated_at=NOW()
+             SET status='BLOCKED',failure_reason='Paystack initialization did not return an approved hosted authorization URL',updated_at=NOW()
            WHERE id=$1 AND status='PENDING'
         `, [intent.id]);
-        return res.status(502).json({ error: 'payment provider did not return a secure checkout session' });
+        return res.status(200).json({
+          status: 'BLOCKED',
+          reference: intent.reference,
+          amount: Number(intent.amount),
+          paymentMethod,
+          testMode: walletTestModeEnabled(),
+          message: 'Paystack did not return a trusted checkout link. No Wallet credit was made. Start a new payment to try again.'
+        });
       }
       await pool.query(`
         UPDATE buyer_wallet_funding_intents
@@ -1227,11 +1289,26 @@ export function registerBuyerWalletRoutes({ app }) {
     } catch (error) {
       console.error('buyer wallet hosted funding initialization', error);
       if (intent?.id) {
-        await pool.query(`
-          UPDATE buyer_wallet_funding_intents
-             SET status='FAILED',failure_reason=$1,updated_at=NOW()
-           WHERE id=$2 AND status='PENDING'
-        `, [String(error?.message || 'provider initialization failed').slice(0, 240), intent.id]).catch(() => {});
+        const outcomeStatus = classifyBuyerWalletFundingInitializationFailure(error);
+        const reason = outcomeStatus === 'FAILED'
+          ? 'Paystack rejected hosted funding initialization'
+          : 'Paystack hosted funding initialization outcome is unconfirmed';
+        await pool.query(
+          "UPDATE buyer_wallet_funding_intents SET status=$1,failure_reason=$2,updated_at=NOW() WHERE id=$3 AND status IN ('PENDING','PROCESSING')",
+          [outcomeStatus, reason, intent.id]
+        ).catch((stateError) => {
+          console.error('buyer wallet funding recovery state update', stateError);
+        });
+        return res.status(200).json({
+          status: outcomeStatus,
+          reference: intent.reference,
+          amount: Number(intent.amount),
+          paymentMethod,
+          testMode: walletTestModeEnabled(),
+          message: outcomeStatus === 'FAILED'
+            ? 'Paystack rejected the checkout request. No Wallet credit was made. Start a new payment to try again.'
+            : 'Paystack did not confirm whether checkout was created. Check payment status before trying again. No Wallet credit is made until provider verification succeeds.'
+        });
       }
       return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 502)
         .json({ error: 'FYNX Wallet payment could not be initialized' });
@@ -1244,18 +1321,20 @@ export function registerBuyerWalletRoutes({ app }) {
     try {
       await ensureBuyerWalletSchema();
       const intent = (await pool.query(`
-        SELECT user_id,amount,status,payment_method
+        SELECT user_id,amount,status,payment_method,authorization_url,access_code
           FROM buyer_wallet_funding_intents
          WHERE reference=$1 AND user_id=$2
          LIMIT 1
       `, [reference, req.user.sub])).rows[0];
       if (!intent) return res.status(404).json({ error: 'Wallet funding request was not found' });
-      const outcome = await reconcileWalletHostedFunding(reference, String(req.user.sub));
+      const outcome = await reconcileWalletHostedFunding(reference, String(req.user.sub), { allowNotFoundFailure: true });
       return res.json({
         status: outcome.status || intent.status,
         reference,
         amount: Number(intent.amount),
         paymentMethod: intent.payment_method,
+        ...(intent.authorization_url ? { authorizationUrl: intent.authorization_url } : {}),
+        ...(intent.access_code ? { accessCode: intent.access_code } : {}),
         testMode: walletTestModeEnabled(),
         message: outcome.status === 'SUCCEEDED'
           ? walletTestModeEnabled()

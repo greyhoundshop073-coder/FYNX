@@ -209,6 +209,17 @@ checks.extend([
   and "Wallet PIN status is private account information." in actions)
 ])
 
+checks.extend([
+ ("hosted Wallet retry UI differentiates a terminal failure from an unresolved provider status",
+  'current.status == "FAILED" || current.status == "BLOCKED"' in actions
+  and 'FynxBuyerWalletClient.refreshWalletFunding(context, current.reference)' in actions
+  and 'idempotencyKey = UUID.randomUUID().toString().replace("-", "")' in actions),
+ ("Android Wallet parser requires a funding method and accepts recoverable provider states",
+  'require(paymentMethod in setOf("CARD", "USSD"))' in client
+  and 'require(paymentMethod.isBlank() ||' not in client
+  and 'setOf("PENDING", "PROCESSING", "SUCCEEDED", "FAILED", "BLOCKED")' in client)
+])
+
 failed=[name for name,ok in checks if not ok]
 for name,ok in checks: print(("PASS" if ok else "FAIL")+": "+name)
 if failed: raise SystemExit("FYNX buyer wallet Android integration failed: "+", ".join(failed))

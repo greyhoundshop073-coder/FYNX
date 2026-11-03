@@ -127,6 +127,8 @@ jobs:
         run: node verify-buyer-wallet-foundation.mjs
       - name: Run buyer wallet PostgreSQL schema and ledger tests
         run: node test-buyer-wallet-schema.mjs
+      - name: Run buyer wallet hosted-funding recovery unit tests
+        run: node test-wallet-hosted-funding-recovery.mjs
       - name: Syntax-check every backend JavaScript module
         run: |
           for file in *.js *.mjs; do
