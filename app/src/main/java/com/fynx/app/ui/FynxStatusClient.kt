@@ -28,8 +28,13 @@ data class FynxStatusInteractions(
 object FynxStatusClient {
     private val listMutex = Mutex()
 
-    suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> =
-        FynxProductionMessaging.uploadMedia(context, uri, mimeType).map { it.id }
+    suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> {
+        val normalizedMime = mimeType.trim().lowercase()
+        if (!normalizedMime.startsWith("image/") && !normalizedMime.startsWith("video/") && !normalizedMime.startsWith("audio/")) {
+            return Result.failure(IllegalArgumentException("Unsupported Status media type."))
+        }
+        return FynxProductionMessaging.uploadMedia(context, uri, normalizedMime).map { it.id }
+    }
 
     suspend fun create(context: Context, status: FynxStatus, mediaId: String?): Result<Unit> = runCatching {
         if (status.type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaId.isNullOrBlank()) error("Status media is missing.")
