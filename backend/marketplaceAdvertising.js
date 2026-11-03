@@ -91,7 +91,7 @@ async function ensureAdvertisingSchema() {
       ON marketplace_seasonal_promotions(active, starts_at, ends_at);
     ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS artwork_media_id BIGINT;
     ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS promotion_type TEXT NOT NULL DEFAULT 'SEASONAL';
-    DO $
+    DO $$
     BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
@@ -102,7 +102,7 @@ async function ensureAdvertisingSchema() {
           ADD CONSTRAINT marketplace_seasonal_promotions_type_check
           CHECK (promotion_type IN ('SEASONAL', 'ANNOUNCEMENT', 'OFFER'));
       END IF;
-    END $;
+    END $$;
   `);
 }
 
