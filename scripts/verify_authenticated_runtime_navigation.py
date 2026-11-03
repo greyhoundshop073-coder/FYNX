@@ -145,7 +145,7 @@ DIAGNOSTIC_MARKERS = (
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
-    "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Close Discovery",
+    "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video", "Close Discovery",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
@@ -1545,7 +1545,7 @@ def capture_home_feed_visuals(home_xml: str) -> str:
                 current,
                 ["Open Discovery video"],
                 "authenticated-home-discovery-video-open",
-                ["Like video", "Unlike video", "Open comments", "Share video"]
+                ["Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video"]
             )
             if viewer_xml:
                 missing_actions = []
@@ -1555,6 +1555,10 @@ def capture_home_feed_visuals(home_xml: str) -> str:
                     missing_actions.append("Comments")
                 if not find_control(viewer_xml, ["Share video"]):
                     missing_actions.append("Share")
+                if not find_control(viewer_xml, ["Unmute Discovery video", "Mute Discovery video"]):
+                    missing_actions.append("Mute / unmute")
+                if not find_control(viewer_xml, ["Pause Discovery video", "Play Discovery video"]):
+                    missing_actions.append("Playback controls")
                 if missing_actions:
                     screenshot("authenticated-discovery-video-actions-missing.png")
                     (ROOT / "authenticated-discovery-video-actions-missing.xml").write_text(
@@ -1571,7 +1575,7 @@ def capture_home_feed_visuals(home_xml: str) -> str:
                     )
                     discovery_viewer_captured = True
                     report.append(
-                        "- PASS: opened a real Discovery video and captured its viewer with Like, Comments and Share controls; no interaction or post was submitted."
+                        "- PASS: opened a real, prepared Discovery video and captured its viewer with playback, mute, Like, Comments and Share controls; no interaction or post was submitted."
                     )
                 run("adb", "shell", "input", "keyevent", "4")
                 return_deadline = time.monotonic() + 15.0
