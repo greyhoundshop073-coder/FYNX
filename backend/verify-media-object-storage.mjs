@@ -84,7 +84,7 @@ assert.match(adapter, /CopyObjectCommand/);
 assert.match(adapter, /validateUploadObjectKey/);
 assert.match(adapter, /validateStoredObjectKey/);
 
-assert.match(server, /completed_at IS NOT NULL AND completed_at < NOW\(\) - INTERVAL '30 days'/);
+assert.match(server, /completed_at IS NOT NULL AND upload_object_key = object_key AND completed_at < NOW\(\) - INTERVAL '30 days'/);
 assert.match(pkg, /test-media-storage\.mjs/);
 
 console.log("FYNX MEDIA STORAGE INTEGRATION CONTRACT: GREEN");
