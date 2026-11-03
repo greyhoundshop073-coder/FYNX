@@ -24,7 +24,7 @@ checks = [
     ("reply composer remains keyboard-safe", ".imePadding()" in COMMENTS and "KeyboardActions(onSend = { send() })" in COMMENTS),
     ("comment composer announces whether it sends a comment or reply", '"Send comment" else "Send reply"' in COMMENTS),
     ("all five X-style emoji reactions remain visible", all(token in HOME for token in ('ReactionChoice("👍", "LIKE"', 'ReactionChoice("❤️", "LOVE"', 'ReactionChoice("😂", "LAUGH"', 'ReactionChoice("😮", "WOW"', 'ReactionChoice("😢", "SAD"'))),
-    ("emoji reactions have meaningful accessible labels", 'contentDescription = "React with $reactionLabel"' in HOME and "role = Role.Button" in HOME),
+    ("emoji reactions have meaningful accessible labels", 'contentDescription = "React with $reactionLabel"' in HOME and "role = Role.Button" in HOME and "import androidx.compose.ui.semantics.role" in HOME),
     ("reaction selection and removal use the real backend client", "FynxHomePostReactionsClient.set(context, id, reaction)" in HOME and "FynxHomePostReactionsClient.clear(context, id)" in HOME),
     ("reaction client accepts only the supported emoji reaction types", 'setOf("LIKE", "LOVE", "LAUGH", "WOW", "SAD")' in REACTIONS),
     ("reaction changes roll back on API failure", "reactionStates = reactionStates + (id to previous)" in HOME),
