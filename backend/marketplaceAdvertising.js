@@ -46,6 +46,9 @@ async function ensureAdvertisingSchema() {
       daily_budget_kobo BIGINT NOT NULL CHECK (daily_budget_kobo >= 0),
       total_budget_kobo BIGINT NOT NULL CHECK (total_budget_kobo > 0),
       spent_kobo BIGINT NOT NULL DEFAULT 0 CHECK (spent_kobo >= 0),
+      cost_per_click_kobo BIGINT NOT NULL DEFAULT 500 CHECK (cost_per_click_kobo > 0),
+      daily_spent_kobo BIGINT NOT NULL DEFAULT 0 CHECK (daily_spent_kobo >= 0),
+      daily_spend_date DATE NOT NULL DEFAULT ((NOW() AT TIME ZONE 'Africa/Lagos')::date),
       status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'pending_review', 'active', 'paused', 'completed', 'rejected')),
       starts_at TIMESTAMPTZ,
       ends_at TIMESTAMPTZ,
@@ -58,6 +61,21 @@ async function ensureAdvertisingSchema() {
     ALTER TABLE marketplace_ad_campaigns ADD COLUMN IF NOT EXISTS payment_status TEXT;
     ALTER TABLE marketplace_ad_campaigns ADD COLUMN IF NOT EXISTS payment_reference TEXT;
     ALTER TABLE marketplace_ad_campaigns ADD COLUMN IF NOT EXISTS payment_amount_kobo BIGINT;
+    ALTER TABLE marketplace_ad_campaigns ADD COLUMN IF NOT EXISTS cost_per_click_kobo BIGINT NOT NULL DEFAULT 500;
+    ALTER TABLE marketplace_ad_campaigns ADD COLUMN IF NOT EXISTS daily_spent_kobo BIGINT NOT NULL DEFAULT 0;
+    ALTER TABLE marketplace_ad_campaigns ADD COLUMN IF NOT EXISTS daily_spend_date DATE NOT NULL DEFAULT ((NOW() AT TIME ZONE 'Africa/Lagos')::date);
+    UPDATE marketplace_ad_campaigns
+      SET cost_per_click_kobo = LEAST(500, GREATEST(1, daily_budget_kobo), GREATEST(1, total_budget_kobo))
+      WHERE cost_per_click_kobo > daily_budget_kobo OR cost_per_click_kobo > total_budget_kobo;
+    DO $cpc$ 
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='marketplace_ad_campaigns_cpc_positive_check' AND conrelid='marketplace_ad_campaigns'::regclass) THEN
+        ALTER TABLE marketplace_ad_campaigns ADD CONSTRAINT marketplace_ad_campaigns_cpc_positive_check CHECK (cost_per_click_kobo > 0);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='marketplace_ad_campaigns_daily_spent_nonnegative_check' AND conrelid='marketplace_ad_campaigns'::regclass) THEN
+        ALTER TABLE marketplace_ad_campaigns ADD CONSTRAINT marketplace_ad_campaigns_daily_spent_nonnegative_check CHECK (daily_spent_kobo >= 0);
+      END IF;
+    END $cpc$;
     CREATE INDEX IF NOT EXISTS marketplace_ad_campaigns_owner_idx ON marketplace_ad_campaigns(owner_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS marketplace_ad_campaigns_active_idx ON marketplace_ad_campaigns(status, starts_at, ends_at);
     CREATE INDEX IF NOT EXISTS marketplace_ad_campaigns_payment_reference_idx ON marketplace_ad_campaigns(payment_reference);
@@ -81,6 +99,21 @@ async function ensureAdvertisingSchema() {
       UNIQUE (owner_id, idempotency_key, operation_type)
     );
     CREATE INDEX IF NOT EXISTS marketplace_ad_operations_campaign_idx ON marketplace_ad_operations(campaign_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS marketplace_ad_click_events (
+      id BIGSERIAL PRIMARY KEY,
+      campaign_id BIGINT NOT NULL REFERENCES marketplace_ad_campaigns(id) ON DELETE CASCADE,
+      viewer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      click_day DATE NOT NULL,
+      click_key TEXT NOT NULL,
+      charge_kobo BIGINT NOT NULL CHECK (charge_kobo > 0),
+      clicked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (campaign_id, viewer_id, click_day),
+      UNIQUE (campaign_id, click_key)
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_ad_click_events_campaign_day_idx
+      ON marketplace_ad_click_events(campaign_id, click_day DESC);
+
     CREATE TABLE IF NOT EXISTS marketplace_seasonal_promotions (
       id BIGSERIAL PRIMARY KEY,
       occasion_key TEXT NOT NULL,
@@ -418,7 +451,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     if (!auth) return;
     const {
       name, creativeType, creativeRef = null, headline = "", body = "", destinationUrl = null,
-      targeting = {}, dailyBudgetKobo, totalBudgetKobo, startsAt = null, endsAt = null,
+      targeting = {}, dailyBudgetKobo, totalBudgetKobo, costPerClickKobo = 500, startsAt = null, endsAt = null,
       idempotencyKey = ""
     } = req.body || {};
     if (typeof name !== "string" || name.trim().length < 1 || name.length > 120) return res.status(400).json({ error: "invalid campaign name" });
@@ -430,7 +463,12 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     const parsedTargeting = parseTargeting(targeting);
     const daily = positiveInt(dailyBudgetKobo);
     const total = positiveInt(totalBudgetKobo);
-    if (!parsedTargeting || daily === null || total === null || daily < 1 || total < 1 || daily > total) return res.status(400).json({ error: "invalid advertising budget or targeting" });
+    const costPerClick = positiveInt(costPerClickKobo);
+    if (!parsedTargeting || daily === null || total === null || costPerClick === null ||
+        daily < 1 || total < 1 || daily > total || costPerClick < 1 ||
+        costPerClick > daily || costPerClick > total) {
+      return res.status(400).json({ error: "daily and total budgets must each cover at least one valid CPC click" });
+    }
     if (idempotencyKey && (typeof idempotencyKey !== "string" || idempotencyKey.length > 120)) return res.status(400).json({ error: "invalid idempotency key" });
     const client = await pool.connect();
     try {
@@ -447,9 +485,9 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         return res.status(404).json({ error: creativeReferenceError(creativeType) });
       }
       const inserted = await client.query(`INSERT INTO marketplace_ad_campaigns
-        (owner_id,name,creative_type,creative_ref,headline,body,destination_url,targeting,daily_budget_kobo,total_budget_kobo,starts_at,ends_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12) RETURNING *`,
-        [auth.userId, name.trim(), creativeType, creativeRef, headline, body, destinationUrl, JSON.stringify(parsedTargeting), daily, total, startsAt, endsAt]);
+        (owner_id,name,creative_type,creative_ref,headline,body,destination_url,targeting,daily_budget_kobo,total_budget_kobo,cost_per_click_kobo,starts_at,ends_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13) RETURNING *`,
+        [auth.userId, name.trim(), creativeType, creativeRef, headline, body, destinationUrl, JSON.stringify(parsedTargeting), daily, total, costPerClick, startsAt, endsAt]);
       const campaign = inserted.rows[0];
       await client.query("INSERT INTO marketplace_ad_metrics(campaign_id) VALUES($1)", [campaign.id]);
       if (idempotencyKey) await client.query("INSERT INTO marketplace_ad_operations(campaign_id,owner_id,idempotency_key,operation_type) VALUES($1,$2,$3,'CREATE_CAMPAIGN')", [campaign.id, auth.userId, idempotencyKey]);
@@ -564,6 +602,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         COUNT(*) FILTER (WHERE c.status='active')::int AS active_campaigns,
         COALESCE(SUM(c.spent_kobo),0)::bigint AS spent_kobo,
         COALESCE(SUM(c.total_budget_kobo),0)::bigint AS budget_kobo,
+        COALESCE(SUM(CASE WHEN c.daily_spend_date = (NOW() AT TIME ZONE 'Africa/Lagos')::date THEN c.daily_spent_kobo ELSE 0 END),0)::bigint AS today_spent_kobo,
+        COALESCE(SUM(c.daily_budget_kobo),0)::bigint AS daily_budget_kobo,
         COALESCE(SUM(m.impressions),0)::bigint AS impressions,
         COALESCE(SUM(m.clicks),0)::bigint AS clicks,
         COALESCE(SUM(m.engagements),0)::bigint AS engagements,
@@ -601,7 +641,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     finally { client.release(); }
   });
 
-  // Metrics ingestion is deliberately limited to active campaigns. Billing/spend remains server-owned.
+  // Impressions are free. A click is billed only once per authenticated buyer,
+  // campaign and Africa/Lagos calendar day, using the advertiser's prepaid balance.
   app.post("/api/advertising/campaigns/:id/metric", async (req, res) => {
     const auth = authenticate(req, res);
     if (!auth) return;
@@ -609,18 +650,124 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     if (!["impression", "click", "engagement", "conversion"].includes(metric)) return res.status(400).json({ error: "invalid metric" });
     const id = positiveInt(req.params.id);
     if (!id) return res.status(400).json({ error: "invalid campaign" });
+
+    if (metric === "click") {
+      const clickKey = String(req.body?.clickKey || crypto.randomUUID()).trim();
+      if (!/^[a-zA-Z0-9._:-]{16,120}$/.test(clickKey)) return res.status(400).json({ error: "invalid click idempotency key" });
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const locked = await client.query("SELECT * FROM marketplace_ad_campaigns WHERE id=$1 FOR UPDATE", [id]);
+        if (!locked.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ error: "campaign not found" });
+        }
+        const campaign = locked.rows[0];
+        if (String(campaign.owner_id) === String(auth.userId)) {
+          await client.query("ROLLBACK");
+          return res.status(403).json({ error: "advertisers cannot bill their own clicks" });
+        }
+
+        const dayResult = await client.query("SELECT (NOW() AT TIME ZONE 'Africa/Lagos')::date::text AS day");
+        const clickDay = dayResult.rows[0].day;
+        const duplicate = await client.query(
+          "SELECT 1 FROM marketplace_ad_click_events WHERE campaign_id=$1 AND ((viewer_id=$2 AND click_day=$3::date) OR click_key=$4) LIMIT 1",
+          [id, auth.userId, clickDay, clickKey]
+        );
+        if (duplicate.rowCount) {
+          await client.query("COMMIT");
+          return res.status(204).end();
+        }
+
+        const now = Date.now();
+        const startsAt = campaign.starts_at ? new Date(campaign.starts_at).getTime() : null;
+        const endsAt = campaign.ends_at ? new Date(campaign.ends_at).getTime() : null;
+        if (campaign.status !== "active" || campaign.payment_status !== "paid" || !campaign.approved_at ||
+            (startsAt !== null && startsAt > now) || (endsAt !== null && endsAt <= now)) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ error: "campaign not active" });
+        }
+
+        const clickCost = Number(campaign.cost_per_click_kobo);
+        const totalSpent = Number(campaign.spent_kobo);
+        const dailyBudget = Number(campaign.daily_budget_kobo);
+        const totalBudget = Number(campaign.total_budget_kobo);
+        const sameLagosDay = String(campaign.daily_spend_date).slice(0, 10) === clickDay;
+        const todaySpent = sameLagosDay ? Number(campaign.daily_spent_kobo) : 0;
+
+        if (!Number.isSafeInteger(clickCost) || clickCost < 1) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: "campaign CPC is not configured safely" });
+        }
+        if (totalSpent + clickCost > totalBudget) {
+          await client.query("UPDATE marketplace_ad_campaigns SET status='completed', updated_at=NOW() WHERE id=$1", [id]);
+          await client.query("COMMIT");
+          return res.status(409).json({ error: "campaign prepaid budget is exhausted" });
+        }
+        if (todaySpent + clickCost > dailyBudget) {
+          if (!sameLagosDay) {
+            await client.query("UPDATE marketplace_ad_campaigns SET daily_spend_date=$2::date, daily_spent_kobo=0, updated_at=NOW() WHERE id=$1", [id, clickDay]);
+          }
+          await client.query("COMMIT");
+          return res.status(429).json({ error: "campaign daily budget limit reached" });
+        }
+
+        const event = await client.query(
+          `INSERT INTO marketplace_ad_click_events (campaign_id,viewer_id,click_day,click_key,charge_kobo)
+           VALUES ($1,$2,$3::date,$4,$5)
+           ON CONFLICT DO NOTHING RETURNING id`,
+          [id, auth.userId, clickDay, clickKey, clickCost]
+        );
+        if (!event.rowCount) {
+          await client.query("COMMIT");
+          return res.status(204).end();
+        }
+        const nextSpent = totalSpent + clickCost;
+        await client.query(
+          `UPDATE marketplace_ad_campaigns
+           SET spent_kobo=$2, daily_spent_kobo=$3, daily_spend_date=$4::date,
+               status=CASE WHEN $2 >= total_budget_kobo THEN 'completed' ELSE status END,
+               updated_at=NOW()
+           WHERE id=$1`,
+          [id, nextSpent, todaySpent + clickCost, clickDay]
+        );
+        await client.query(
+          `INSERT INTO marketplace_ad_metrics (campaign_id, clicks, updated_at)
+           VALUES ($1,1,NOW())
+           ON CONFLICT (campaign_id) DO UPDATE
+             SET clicks=marketplace_ad_metrics.clicks+1, updated_at=NOW()`,
+          [id]
+        );
+        await client.query("COMMIT");
+        return res.status(204).end();
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        console.error("[fynx-ads] CPC click recording failed", error);
+        return res.status(500).json({ error: "unable to record CPC click" });
+      } finally {
+        client.release();
+      }
+    }
+
     try {
       const result = await pool.query(`UPDATE marketplace_ad_metrics m SET
         impressions = m.impressions + CASE WHEN $1='impression' THEN 1 ELSE 0 END,
-        clicks = m.clicks + CASE WHEN $1='click' THEN 1 ELSE 0 END,
         engagements = m.engagements + CASE WHEN $1='engagement' THEN 1 ELSE 0 END,
         conversions = m.conversions + CASE WHEN $1='conversion' THEN 1 ELSE 0 END,
         updated_at=NOW()
-        FROM marketplace_ad_campaigns c WHERE m.campaign_id=$2 AND c.id=m.campaign_id AND c.status='active' AND c.payment_status='paid' AND c.approved_at IS NOT NULL AND (c.starts_at IS NULL OR c.starts_at <= NOW()) AND (c.ends_at IS NULL OR c.ends_at > NOW()) AND c.spent_kobo < c.total_budget_kobo
+        FROM marketplace_ad_campaigns c
+        WHERE m.campaign_id=$2 AND c.id=m.campaign_id
+          AND c.status='active' AND c.payment_status='paid' AND c.approved_at IS NOT NULL
+          AND (c.starts_at IS NULL OR c.starts_at <= NOW())
+          AND (c.ends_at IS NULL OR c.ends_at > NOW())
+          AND c.spent_kobo + c.cost_per_click_kobo <= c.total_budget_kobo
+          AND (c.daily_spend_date <> (NOW() AT TIME ZONE 'Africa/Lagos')::date
+            OR c.daily_spent_kobo + c.cost_per_click_kobo <= c.daily_budget_kobo)
           AND c.owner_id <> $3 RETURNING m.*`, [metric, id, auth.userId]);
       if (!result.rowCount) return res.status(404).json({ error: "campaign not active" });
       return res.status(204).end();
-    } catch { return res.status(500).json({ error: "unable to record metric" });
+    } catch {
+      return res.status(500).json({ error: "unable to record metric" });
     }
   });
 
@@ -650,7 +797,10 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
           AND c.approved_at IS NOT NULL
           AND (c.starts_at IS NULL OR c.starts_at <= NOW())
           AND (c.ends_at IS NULL OR c.ends_at > NOW())
-          AND c.spent_kobo < c.total_budget_kobo
+          AND c.spent_kobo + c.cost_per_click_kobo <= c.total_budget_kobo
+          AND (c.daily_spend_date <> (NOW() AT TIME ZONE 'Africa/Lagos')::date
+            OR c.daily_spent_kobo + c.cost_per_click_kobo <= c.daily_budget_kobo)
+          AND c.owner_id <> $1
           AND NOT (c.targeting ? 'ageMin' OR c.targeting ? 'ageMax')
           AND COALESCE(jsonb_array_length(c.targeting->'locations'), 0) = 0
           AND COALESCE(jsonb_array_length(c.targeting->'interests'), 0) = 0
@@ -658,7 +808,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
           AND GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0
         ORDER BY c.spent_kobo ASC, c.updated_at ASC, c.id ASC
         LIMIT 12
-      `, []);
+      `, [auth.userId]);
       const promotions = result.rows.map((row) => ({
         campaignId: String(row.campaign_id),
         headline: String(row.headline || '').trim(),

@@ -28,6 +28,7 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
     var interests by remember { mutableStateOf("") }
     var daily by remember { mutableStateOf(1000L) }
     var total by remember { mutableStateOf(5000L) }
+    var costPerClick by remember { mutableStateOf(500L) }
     var message by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var campaigns by remember { mutableStateOf(listOf<JSONObject>()) }
@@ -64,12 +65,24 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(interests, { interests = it }, Modifier.fillMaxWidth(), label = { Text("Target interests (comma separated)") }, singleLine = true)
         Spacer(Modifier.height(8.dp))
+        Text("Cost per verified click: ₦" + (costPerClick / 100.0))
+        Text("Only one payable click per buyer, per campaign, each Lagos day. Impressions are free.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Slider(
+            value = costPerClick.toFloat(),
+            onValueChange = {
+                costPerClick = it.toLong().coerceAtLeast(100)
+                if (daily < costPerClick) daily = costPerClick
+                if (total < daily) total = daily
+            },
+            valueRange = 100f..5000f
+        )
         Text("Daily budget: ₦" + (daily / 100.0))
-        Slider(value = daily.toFloat(), onValueChange = { daily = it.toLong().coerceAtLeast(100) }, valueRange = 100f..100000f)
-        Text("Total budget: ₦" + (total / 100.0))
-        Slider(value = total.toFloat(), onValueChange = { total = it.toLong().coerceAtLeast(daily) }, valueRange = 1000f..1000000f)
+        Slider(value = daily.toFloat(), onValueChange = { daily = it.toLong().coerceAtLeast(costPerClick); if (total < daily) total = daily }, valueRange = 100f..100000f)
+        Text("Total prepaid campaign budget: ₦" + (total / 100.0))
+        Slider(value = total.toFloat(), onValueChange = { total = it.toLong().coerceAtLeast(maxOf(daily, costPerClick)) }, valueRange = 1000f..1000000f)
+        Text("Campaign delivery stops at either budget limit. Payment is required only after campaign review and approval.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
-        Button(enabled = !loading && name.isNotBlank() && headline.isNotBlank() && total >= daily, onClick = {
+        Button(enabled = !loading && name.isNotBlank() && headline.isNotBlank() && costPerClick > 0 && daily >= costPerClick && total >= daily, onClick = {
             loading = true; message = null
             val targeting = JSONObject().apply {
                 put("locations", JSONArray(location.split(',').map { it.trim() }.filter { it.isNotBlank() }))
@@ -78,6 +91,7 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
             val payload = JSONObject().apply {
                 put("name", name.trim()); put("creativeType", creativeType); put("headline", headline.trim()); put("body", body.trim())
                 put("targeting", targeting); put("dailyBudgetKobo", daily); put("totalBudgetKobo", total)
+                put("costPerClickKobo", costPerClick)
                 put("idempotencyKey", "android-" + System.currentTimeMillis())
             }
             scope.launch {
@@ -103,7 +117,9 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(campaign.optString("name"), style = MaterialTheme.typography.titleMedium)
                         Text("Status: $status")
-                        Text("Budget: ₦" + campaign.optLong("total_budget_kobo") / 100.0 + "  •  Payment: $payment")
+                        Text("CPC: ₦" + campaign.optLong("cost_per_click_kobo", 500L) / 100.0 + " per verified click")
+                        Text("Spent: ₦" + campaign.optLong("spent_kobo") / 100.0 + "  •  Today: ₦" + campaign.optLong("daily_spent_kobo") / 100.0 + " / ₦" + campaign.optLong("daily_budget_kobo") / 100.0)
+                        Text("Prepaid budget: ₦" + campaign.optLong("total_budget_kobo") / 100.0 + "  •  Payment: $payment")
                         if (status == "draft" || status == "rejected") {
                             Button(onClick = {
                                 scope.launch { FynxAdvertisingClient.submitReview(context, id).onSuccess { updated -> campaigns = campaigns.map { if (it.optLong("id") == id) updated else it }; message = "Campaign submitted for review." }.onFailure { message = it.message ?: "Unable to submit for review." } }

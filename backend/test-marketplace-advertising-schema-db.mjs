@@ -121,7 +121,60 @@ try {
     (error) => error?.code === "23514",
     "unsupported campaign destinations must be rejected by PostgreSQL"
   );
-  console.log("PostgreSQL Marketplace advertising schema migration passed (legacy upgrade, repeat migration, defaults, and campaign type/destination constraints).");
+  const cpcColumns = await db.query(`
+    SELECT column_name, column_default, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema=$1 AND table_name='marketplace_ad_campaigns'
+      AND column_name IN ('cost_per_click_kobo','daily_spent_kobo','daily_spend_date')
+    ORDER BY column_name
+  `, [schema]);
+  assert.equal(cpcColumns.rowCount, 3, "campaigns must persist CPC and daily-budget accounting fields");
+  const cpcDefault = cpcColumns.rows.find(row => row.column_name === "cost_per_click_kobo");
+  assert.match(cpcDefault.column_default, /500/, "new campaigns must receive the documented ₦5 pilot CPC default in kobo");
+  const clickLedger = await db.query(`
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema=$1 AND table_name='marketplace_ad_click_events'
+  `, [schema]);
+  assert.equal(clickLedger.rowCount, 1, "deduplicated CPC click ledger must be installed");
+
+  await db.query("INSERT INTO users(id) VALUES(2)");
+  const campaign = await db.query(`
+    INSERT INTO marketplace_ad_campaigns (owner_id,name,creative_type,daily_budget_kobo,total_budget_kobo)
+    VALUES (1,'CPC migration test','product',2000,5000)
+    RETURNING id,cost_per_click_kobo,daily_spent_kobo
+  `);
+  assert.equal(Number(campaign.rows[0].cost_per_click_kobo), 500, "CPC is stored in kobo, not trusted from metric calls");
+  assert.equal(Number(campaign.rows[0].daily_spent_kobo), 0, "new campaigns start with no daily spend");
+  await db.query(
+    `INSERT INTO marketplace_ad_click_events (campaign_id,viewer_id,click_day,click_key,charge_kobo)
+     VALUES ($1,2,(NOW() AT TIME ZONE 'Africa/Lagos')::date,'click-key-buyer-0001',500)`,
+    [campaign.rows[0].id]
+  );
+  await assert.rejects(
+    db.query(
+      `INSERT INTO marketplace_ad_click_events (campaign_id,viewer_id,click_day,click_key,charge_kobo)
+       VALUES ($1,2,(NOW() AT TIME ZONE 'Africa/Lagos')::date,'click-key-buyer-0002',500)`,
+      [campaign.rows[0].id]
+    ),
+    error => error?.code === "23505",
+    "a buyer must not be billed twice for the same campaign on the same Lagos day"
+  );
+  await assert.rejects(
+    db.query(
+      `INSERT INTO marketplace_ad_click_events (campaign_id,viewer_id,click_day,click_key,charge_kobo)
+       VALUES ($1,1,(NOW() AT TIME ZONE 'Africa/Lagos')::date,'click-key-buyer-0001',500)`,
+      [campaign.rows[0].id]
+    ),
+    error => error?.code === "23505",
+    "a retried click idempotency key must not create a second charge"
+  );
+  await assert.rejects(
+    db.query("UPDATE marketplace_ad_campaigns SET cost_per_click_kobo=0 WHERE id=$1", [campaign.rows[0].id]),
+    error => error?.code === "23514",
+    "database must reject a zero/negative CPC"
+  );
+
+  console.log("PostgreSQL Marketplace advertising schema migration passed (legacy upgrade, repeat migration, campaign destinations, CPC fields and click-ledger deduplication).");
 } finally {
   await db.query("SET search_path TO public").catch(() => {});
   await db.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});
