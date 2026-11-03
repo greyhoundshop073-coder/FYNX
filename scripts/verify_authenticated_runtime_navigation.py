@@ -422,6 +422,35 @@ def camera_wait_for_control(
     (ROOT / f"{prefix}-timeout.xml").write_text(latest + chr(10), encoding="utf-8")
     return latest
 
+def restore_home_header(current_xml: str, prefix: str, attempts: int = 6) -> tuple[str, bool]:
+    """Scroll the real Home feed back to its top before using header-only controls."""
+    latest = current_xml
+    for attempt in range(attempts):
+        if (find_control(latest, ["Open FYNX camera"])
+                and find_control(latest, ["Profile menu, three dots"])
+                and find_control(latest, ["Chat"])
+                and find_control(latest, ["Friends"])):
+            return latest, True
+        # Home is a vertically scrolling feed; a downward swipe returns it to
+        # the first item and reveals the collapsing Home header again.
+        run("adb", "shell", "input", "swipe", "720", "520", "720", "2600", "450")
+        time.sleep(0.55)
+        latest = dump_ui(f"{prefix}-scroll-top-{attempt}.xml") or latest
+    ready = (
+        find_control(latest, ["Open FYNX camera"])
+        and find_control(latest, ["Profile menu, three dots"])
+        and find_control(latest, ["Chat"])
+        and find_control(latest, ["Friends"])
+    )
+    if not ready:
+        FAILURES.append(prefix + ": Home header did not return after scrolling the feed to its top")
+        screenshot(prefix + "-home-header-not-restored.png")
+        (ROOT / (prefix + "-home-header-not-restored.xml")).write_text(
+            latest + chr(10), encoding="utf-8"
+        )
+    return latest, bool(ready)
+
+
 def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> str:
     """Dismiss camera/editor surfaces using Back until the real Home camera entry returns."""
     latest = current_xml
@@ -2175,34 +2204,53 @@ else:
             report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
-    # Capture the real Settings home from the authenticated running APK.
-    profile_xml=tap_control(xml,["Open FYNX profile"],"settings-open-profile",["Edit profile","Settings"])
-    if profile_xml:
-        settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
-        if settings_xml:
-            report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
+    # The Home header collapses while scrolling through long video posts. Restore
+    # it before tapping header-only controls so stale coordinates cannot hit feed media.
+    xml, home_header_ready = restore_home_header(xml, "authenticated-before-settings")
+    if home_header_ready:
+        # Use the visible, genuinely clickable overflow control. The avatar's
+        # content description can be exposed on a non-clickable image descendant.
+        profile_menu_xml=tap_control(
+            xml, ["Profile menu, three dots"], "settings-open-profile-menu",
+            ["Open profile", "Profile settings"]
+        )
+        profile_xml=tap_control(
+            profile_menu_xml, ["Open profile"], "settings-open-profile",
+            ["Edit profile", "Settings"]
+        ) if profile_menu_xml else ""
+        if profile_xml:
+            settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
+            if settings_xml:
+                report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
+            else:
+                FAILURES.append("profile -> Settings home did not open")
         else:
-            FAILURES.append("profile -> Settings home did not open")
-    else:
-        FAILURES.append("Home -> profile entry did not open for Settings visual capture")
-    # Return through the app's own back stack. Do not force-stop/relaunch here:
-    # offline/local test sessions may be in-memory and a cold start can send the
-    # emulator back to the sign-in gate, making unrelated navigation checks fail.
-    for step in range(3):
+            FAILURES.append("Home profile menu -> Open profile did not open")
+    # Return through at most the two expected in-app destinations (Settings/Profile).
+    # Never issue repeated Back presses against a Home screen: that exits FYNX to Launcher.
+    home_header_ready = False
+    for step in range(2):
         current=dump_ui(f"authenticated-after-settings-back-{step}.xml")
-        if find_control(current,["Open FYNX camera"]) or find_control(current,["Chat"]) and find_control(current,["Friends"]):
+        current, home_header_ready = restore_home_header(
+            current, f"authenticated-after-settings-back-{step}", attempts=2
+        )
+        if home_header_ready:
             xml=current
             break
         run("adb","shell","input","keyevent","4")
         time.sleep(0.8)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
+    xml, home_header_ready = restore_home_header(xml, "authenticated-before-camera")
     if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
-    xml = capture_camera_post_journey(xml, "authenticated-camera")
-    if xml and find_control(xml, ["Open FYNX camera"]):
-        report.append("- PASS Home -> camera effects, photo editing, safe Retake and video-effects journey")
+    if home_header_ready:
+        xml = capture_camera_post_journey(xml, "authenticated-camera")
+        if xml and find_control(xml, ["Open FYNX camera"]):
+            report.append("- PASS Home -> camera effects, photo editing, safe Retake and video-effects journey")
+        else:
+            FAILURES.append("authenticated camera effects journey did not return to Home")
     else:
-        FAILURES.append("authenticated camera effects journey did not return to Home")
+        FAILURES.append("camera journey was not attempted because the authenticated Home header was not restored")
     # The debug saved-device entry is intentionally a local UI-only route, not
     # server authentication. Do not cold-start it: that returns to Sign In and
     # makes unrelated navigation checks fail for the wrong reason. Certify the
