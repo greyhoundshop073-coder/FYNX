@@ -22,7 +22,13 @@ const checks = [
   ['successful payout records marketplace fee in ledger', worker.includes("'fynx_marketplace_fee','FEE'") && worker.includes('MARKETPLACE-FEE-${operation.order_id}')],
   ['Paystack provider fee is stored on payment confirmation', paymentState.includes('payment_provider_fee=$2') && paymentState.includes('providerFee')],
   ['Paystack webhook supplies provider fee to the transition layer', webhook.includes('providerFee: transaction.fees')],
-  ['payment verification supplies provider fee to the transition layer', read('./marketplaceReputation.js').includes('providerFee: transaction.fees')]
+  ['payment verification supplies provider fee to the transition layer', read('./marketplaceReputation.js').includes('providerFee: transaction.fees')],
+  ['seller earnings summary is authenticated and scoped to the signed-in seller', settlement.includes("app.get('/api/marketplace/settlement/seller/summary', auth") && settlement.includes('WHERE o.seller_id = $1')],
+  ['seller gross product sales exclude delivery charges', settlement.includes('COALESCE(o.product_subtotal, 0) AS product_subtotal') && settlement.includes('THEN product_subtotal ELSE 0 END), 0) AS gross_sales')],
+  ['seller delivery fees are reported separately from product sales', settlement.includes('COALESCE(o.delivery_fee, 0) AS delivery_fee') && settlement.includes('THEN delivery_fee ELSE 0 END), 0) AS delivery_fees')],
+  ['seller commission summary uses only the seller-paid fee share', settlement.includes('THEN marketplace_fee_seller ELSE 0 END), 0) AS marketplace_fees')],
+  ['seller net earnings summary uses the authoritative seller-net amount', settlement.includes('THEN seller_net_amount ELSE 0 END), 0) AS net_earnings')],
+  ['seller summary returns product, delivery, fee and net fields in aggregate and per-order history', settlement.includes('deliveryFees: Number(row.delivery_fees || 0)') && settlement.includes('productSubtotal: Number(row.product_subtotal || 0)') && settlement.includes('deliveryFee: Number(row.delivery_fee || 0)') && settlement.includes('marketplaceFees: Number(row.marketplace_fees || 0)') && settlement.includes('netEarnings: Number(row.net_earnings || 0)')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
