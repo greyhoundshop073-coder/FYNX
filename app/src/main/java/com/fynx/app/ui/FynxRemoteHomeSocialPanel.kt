@@ -1015,7 +1015,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     }
     else if (type == "audio") AudioPostPlayer(file!!)
     else if (type == "video") {
-        Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio)) {
+        Box(Modifier.fillMaxWidth().heightIn(max = 420.dp).aspectRatio(videoAspectRatio)) {
             FynxFeedTextureVideo(
                 file = file!!,
                 playbackActive = playbackActive && !fullscreen,

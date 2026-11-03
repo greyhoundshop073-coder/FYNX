@@ -52,7 +52,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
-    val replyingTo = replyingToId?.let { id -> comments.firstOrNull { it.id == id } }
+    val replyingTo = replyingToId?.let { id -> (comments + expandedReplies.values.flatten()).firstOrNull { it.id == id } }
 
     fun resolveCommenterPhotos(items: List<FynxRemoteSocialClient.RemoteComment>) {
         val names = items.map { it.authorUsername.removePrefix("@").trim() }
@@ -156,7 +156,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                 Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close comments") }
-                        Column(Modifier.weight(1f)) { Text("Comments", style = MaterialTheme.typography.titleLarge); Text("$commentCount comments", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Column(Modifier.weight(1f)) { Text("Comments", style = MaterialTheme.typography.titleLarge); Text("$commentCount comments", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text("${post.authorDisplayName.ifBlank { post.authorUsername }} · ${post.text.take(88)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
                         IconButton(onClick = { if (!loading && !sending && replyLoadingId == null) loadComments() }, enabled = !loading && !sending && replyLoadingId == null) { Icon(Icons.Default.Refresh, "Refresh comments") }
                     }
                     HorizontalDivider()
@@ -182,9 +182,33 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                         }
                                     }
                                     expandedReplies[comment.id].orEmpty().forEach { reply ->
-                                        Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
-                                            val photo = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
-                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); Text(reply.text, style = MaterialTheme.typography.bodyMedium); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                        Column(Modifier.fillMaxWidth().padding(start = 48.dp, top = 8.dp)) {
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                                                val photo = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
+                                                FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername)
+                                                Spacer(Modifier.width(8.dp))
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium)
+                                                    Text(reply.text, style = MaterialTheme.typography.bodyMedium)
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        TextButton(onClick = { if (!sending) replyingToId = reply.id }) { Text("Reply") }
+                                                        TextButton(onClick = { toggleReplies(reply) }, enabled = replyLoadingId == null && !sending) { Text(if (expandedReplies.containsKey(reply.id)) "${expandedReplies[reply.id].orEmpty().size} replies" else "Replies") }
+                                                    }
+                                                }
+                                            }
+                                            expandedReplies[reply.id].orEmpty().forEach { nested ->
+                                                Row(Modifier.fillMaxWidth().padding(start = 24.dp, top = 6.dp), verticalAlignment = Alignment.Top) {
+                                                    val nestedPhoto = authorPhotos[nested.authorUsername.removePrefix("@").trim().lowercase()]
+                                                    FynxRemoteProfileAvatar(nestedPhoto, nested.authorDisplayName.ifBlank { nested.authorUsername }, Modifier.size(26.dp).clip(CircleShape), ownerUsername = nested.authorUsername)
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(nested.authorDisplayName.ifBlank { nested.authorUsername }, style = MaterialTheme.typography.labelMedium)
+                                                        Text(nested.text, style = MaterialTheme.typography.bodyMedium)
+                                                        Text(relative(nested.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                     if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 48.dp, top = 4.dp))
