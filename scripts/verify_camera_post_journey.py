@@ -359,7 +359,8 @@ checks.extend([
      "compact = true" in camera
      and 'if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp' in camera
      and "imePadding()" in camera
-     and "if (!compact) Row(" in overlay
+     and "if (!compact) {" in overlay
+     and "Done remains fixed and visible; it is never placed inside a horizontal carousel." in overlay
      and "if (!compact && isVideo && selected != null && videoDurationMs > 1L)" in overlay),
     ("Compact media text editor pins Done and exposes video timing without scrolling it off-screen",
      'Text("Done", style = MaterialTheme.typography.labelSmall)' in overlay
