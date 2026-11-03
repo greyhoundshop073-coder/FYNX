@@ -573,6 +573,16 @@ checks.append(
      and "marketplaceWalletAvailabilityExplainsTestModePendingAndCurrencyLimits" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxMarketplaceCheckoutQuoteTest.kt").read_text()),
 )
 
+checks.append(
+    ("My Shop disables payout setup until server confirms Registered Business and FYNX payout approval",
+     "marketplacePayoutsEnabled" in seller_center
+     and "payoutsEnabled" in seller_center
+     and "payoutsNotice" in seller_center
+     and "enabled = !accountLoading && marketplacePayoutsEnabled" in seller_center
+     and 'Text(if (!marketplacePayoutsEnabled) "Not enabled"' in seller_center
+     and "payoutReadinessNotice" in seller_center),
+)
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)

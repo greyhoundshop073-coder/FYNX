@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { settleBuyerWalletMarketplaceOrder } from './buyerWalletMarketplace.js';
+import { marketplacePayoutsEnabled, marketplacePayoutsNotice } from './marketplacePayoutEligibility.js';
 
 const { Pool } = pg;
 
@@ -230,6 +231,11 @@ async function initiatePayout(payload) {
       response = existingTransfer.response;
       data = existingTransfer.data;
     } else {
+      // Reconcile any previously accepted deterministic transfer above, but never
+      // initiate a new Paystack transfer until both business and FYNX payout gates pass.
+      if (!marketplacePayoutsEnabled()) {
+        throw new Error(marketplacePayoutsNotice() || 'Marketplace seller payouts are not enabled.');
+      }
       ({ response, data } = await paystackJson('https://api.paystack.co/transfer', {
         method: 'POST',
         headers: providerHeaders(),

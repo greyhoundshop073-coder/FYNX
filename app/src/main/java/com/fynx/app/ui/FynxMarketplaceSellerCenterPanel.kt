@@ -150,6 +150,8 @@ fun FynxMarketplaceSellerCenterPanel() {
     var editError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var payoutAccount by remember(sellerAccountKey) { mutableStateOf<JSONObject?>(null) }
     var payoutAccounts by remember(sellerAccountKey) { mutableStateOf(emptyList<JSONObject>()) }
+    var marketplacePayoutsEnabled by remember(sellerAccountKey) { mutableStateOf(false) }
+    var payoutReadinessNotice by remember(sellerAccountKey) { mutableStateOf("Checking seller payout eligibility…") }
     var payoutCurrency by rememberSaveable(sellerAccountKey) { mutableStateOf("NGN") }
     var accountLoading by remember(sellerAccountKey) { mutableStateOf(true) }
     var accountSaving by remember(sellerAccountKey) { mutableStateOf(false) }
@@ -342,12 +344,21 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                 }
                 if (parsed.isEmpty()) payload.optJSONObject("payoutAccount")?.let { parsed += it }
-                parsed.toList()
+                Triple(
+                    parsed.toList(),
+                    payload.optBoolean("payoutsEnabled", false),
+                    payload.optString("payoutsNotice").trim().takeIf { it.isNotBlank() && it != "null" }.orEmpty()
+                )
             }
             if (requestGeneration != refreshGeneration) return@launch
             payoutResult
-                .onSuccess { parsed ->
+                .onSuccess { (parsed, payoutsEnabled, payoutsNotice) ->
                     payoutAccounts = parsed
+                    marketplacePayoutsEnabled = payoutsEnabled
+                    payoutReadinessNotice = payoutsNotice.ifBlank {
+                        if (payoutsEnabled) "Seller payouts are approved and remain subject to buyer completion and settlement eligibility."
+                        else "Seller payouts are not enabled yet. Complete the required business and FYNX payout approvals."
+                    }
                     payoutAccount = parsed.firstOrNull {
                         it.optString("currency").trim().uppercase() == payoutCurrency
                     } ?: parsed.firstOrNull()
@@ -356,6 +367,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                 .onFailure { failure ->
                     payoutAccounts = emptyList()
                     payoutAccount = null
+                    marketplacePayoutsEnabled = false
+                    payoutReadinessNotice = marketplaceSafeError(failure, "Payout eligibility could not be checked.")
                     accountMessage = marketplaceSafeError(failure, "Payout account status could not load.")
                 }
             accountLoading = false
@@ -686,15 +699,26 @@ fun FynxMarketplaceSellerCenterPanel() {
                         Column(Modifier.weight(1f)) {
                             Text("Payout account", fontWeight = FontWeight.SemiBold)
                             if (accountLoading) Text("Checking verification…", style = MaterialTheme.typography.bodySmall)
+                            else if (!marketplacePayoutsEnabled) Text("Awaiting payout approval", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             else if (payoutAccount == null) Text("No verified payout account connected", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                             else Text(
                                 "${payoutAccount?.optString("bankName").orEmpty().ifBlank { "Bank" }} •••• ${payoutAccount?.optString("accountLast4").orEmpty()} • ${if (payoutAccount?.optBoolean("verified") == true) "Verified" else "Not verified"}",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
-                        TextButton(onClick = { showPayoutAccount = true }) { Text(if (payoutAccount == null) "Set up" else "Manage") }
+                        TextButton(
+                            onClick = { showPayoutAccount = true },
+                            enabled = !accountLoading && marketplacePayoutsEnabled
+                        ) {
+                            Text(if (!marketplacePayoutsEnabled) "Not enabled" else if (payoutAccount == null) "Set up" else "Manage")
+                        }
                     }
-                    Text("Seller payouts remain blocked until FYNX confirms buyer completion and the protected settlement is eligible.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (marketplacePayoutsEnabled) "Seller payouts remain blocked until FYNX confirms buyer completion and the protected settlement is eligible."
+                        else payoutReadinessNotice,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -1177,7 +1201,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                 }
             },
             confirmButton = {
-                Button(enabled = !accountSaving, onClick = {
+                Button(enabled = !accountSaving && marketplacePayoutsEnabled, onClick = {
                     accountSaving = true
                     accountMessage = null
                     scope.launch {

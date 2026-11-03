@@ -216,6 +216,8 @@ jobs:
         run: node verify-marketplace-multi-checkout-lifecycle.mjs
       - name: Run Marketplace multi-product payout isolation guard
         run: node verify-marketplace-multi-payout-isolation.mjs
+      - name: Test Marketplace payout eligibility gates
+        run: node test-marketplace-payout-eligibility.mjs
       - name: Run Marketplace end-to-end verification
         run: node verify-marketplace-end-to-end.mjs
       - name: Run Marketplace refund dispute isolation guard
