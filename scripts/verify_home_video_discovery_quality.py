@@ -82,10 +82,13 @@ checks = [
     ),
     (
         "runtime navigation scrolls Home fully to its first sections before tapping the collapsing header",
-        "always issue a real scroll-to-top gesture" in navigation
+        "def _home_header_is_restored(xml_text: str)" in navigation
+        and "if _home_header_is_restored(latest):" in navigation
+        and "def _home_content_scroll_point(" in navigation
         and 'find_control(latest, ["FYNX Assistance"])' in navigation
         and 'find_control(latest, ["Your feed"])' in navigation
-        and '["Open FYNX profile"]' in navigation,
+        and '["Open FYNX profile"]' in navigation
+        and '"720", "520", "720", "2600"' not in navigation,
     ),
     (
         "runtime certification opens a real Discovery clip and verifies the action rail",
