@@ -1545,13 +1545,16 @@ def capture_home_feed_visuals(home_xml: str) -> str:
                 current,
                 ["Open Discovery video"],
                 "authenticated-home-discovery-video-open",
-                ["Like video", "Open comments", "Share video"]
+                ["Like video", "Unlike video", "Open comments", "Share video"]
             )
             if viewer_xml:
-                missing_actions = [
-                    label for label in ["Like video", "Open comments", "Share video"]
-                    if not find_control(viewer_xml, [label])
-                ]
+                missing_actions = []
+                if not find_control(viewer_xml, ["Like video", "Unlike video"]):
+                    missing_actions.append("Like / Unlike")
+                if not find_control(viewer_xml, ["Open comments"]):
+                    missing_actions.append("Comments")
+                if not find_control(viewer_xml, ["Share video"]):
+                    missing_actions.append("Share")
                 if missing_actions:
                     screenshot("authenticated-discovery-video-actions-missing.png")
                     (ROOT / "authenticated-discovery-video-actions-missing.xml").write_text(

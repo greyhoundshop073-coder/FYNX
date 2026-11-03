@@ -71,8 +71,17 @@ checks = [
     (
         "runtime certification opens a real Discovery clip and verifies the action rail",
         '"Open Discovery video"' in navigation
-        and '"Like video", "Open comments", "Share video"' in navigation
+        and '"Like video", "Unlike video", "Open comments", "Share video"' in navigation
         and '"authenticated-discovery-video-viewer.png"' in navigation,
+    ),
+    (
+        "opening Discovery records each page view once rather than double-counting the first view",
+        "FynxDiscoveryClient.recordView(context, it.id)" in discovery
+        and "fun openHomeDiscoveryViewer(index: Int)" in home
+        and "recordView(context, it.id)" not in home[
+            home.index("fun openHomeDiscoveryViewer(index: Int)"):
+            home.index("fun mergeDiscoveryPosts(")
+        ],
     ),
     (
         "Existing Home feed media and threaded conversation integration remains wired",

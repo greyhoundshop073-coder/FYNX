@@ -273,7 +273,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (discoveryVideos.isEmpty()) return
         homeDiscoveryViewerIndex = index.coerceIn(0, discoveryVideos.lastIndex)
         homeDiscoveryViewerOpen = true
-        scope.launch { discoveryVideos.getOrNull(homeDiscoveryViewerIndex)?.let { FynxDiscoveryClient.recordView(context, it.id) } }
+        // The viewer's pager records the initial page and each subsequent page exactly once.
     }
     fun mergeDiscoveryPosts(base: List<FynxRemoteSocialClient.RemotePost>, suggested: List<FynxRemoteSocialClient.RemotePost>): List<FynxRemoteSocialClient.RemotePost> {
         val existing = base.map { it.id }.toSet()
