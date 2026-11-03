@@ -88,6 +88,7 @@ jobs:
           node --check verify-marketplace-seasonal-promotions.mjs
           node --check verify-marketplace-sponsored-feed.mjs
           node --check verify-marketplace-weekly-sellers.mjs
+          node --check test-marketplace-advertising-schema-db.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs
           node --check verify-marketplace-batch2.mjs
           node --check verify-marketplace-batch3-security.mjs
@@ -136,6 +137,7 @@ jobs:
         run: |
           node verify-media-route.mjs
           node test-media-route-db.mjs
+          node test-marketplace-advertising-schema-db.mjs
       - name: Verify Marketplace advertising auth failure isolation
         run: node verify-marketplace-advertising-auth.mjs
       - name: Run Marketplace sponsored-feed verification

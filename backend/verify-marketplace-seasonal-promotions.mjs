@@ -7,6 +7,8 @@ const banner = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/Fynx
 const panel = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt", import.meta.url), "utf8");
 const client = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionClient.kt", import.meta.url), "utf8");
 const adminUi = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt", import.meta.url), "utf8");
+const seasonalDbTest = await readFile(new URL("./test-marketplace-advertising-schema-db.mjs", import.meta.url), "utf8");
+const backendWorkflow = await readFile(new URL("../.github/workflows/fynx-backend-ci.yml", import.meta.url), "utf8");
 const adminCenter = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt", import.meta.url), "utf8");
 const seasonalFeedStart = advertising.indexOf('app.get("/api/marketplace/seasonal-feed"');
 const seasonalFeedEnd = advertising.indexOf('app.post("/api/advertising/campaigns"', seasonalFeedStart);
@@ -23,6 +25,7 @@ const routes = [
 ];
 const checks = [
   ["campaign schedule has a persistent database table, typed campaign constraint and active-window index", advertising.includes("CREATE TABLE IF NOT EXISTS marketplace_seasonal_promotions") && advertising.includes("promotion_type TEXT NOT NULL DEFAULT 'SEASONAL'") && advertising.includes("marketplace_seasonal_promotions_type_check") && advertising.includes("DO $") && advertising.includes("END $;") && advertising.includes("marketplace_seasonal_promotions_active_window_idx")],
+  ["CI runs an actual PostgreSQL legacy-schema migration and idempotency test", seasonalDbTest.includes("CREATE TABLE marketplace_seasonal_promotions") && seasonalDbTest.includes("await db.query(migration);") && seasonalDbTest.includes("await assert.rejects(") && backendWorkflow.includes("node test-marketplace-advertising-schema-db.mjs")],
   ["all admin seasonal CRUD routes are registered", routes.every(route => advertising.includes(route))],
   ["seasonal create, update and delete require authenticated Owner/Admin access", advertising.includes("authenticate(req, res)") && advertising.includes("requireMarketplaceAdmin(req, res, auth)")],
   ["campaign creation validates campaign type, campaign key and headline lengths", advertising.includes("SEASONAL_PROMOTION_TYPES") && advertising.includes("ANNOUNCEMENT") && advertising.includes("OFFER") && advertising.includes("campaign key must use 2-60 letters") && advertising.includes("headline.length < 3")],
