@@ -2160,8 +2160,10 @@ private fun MarketplacePaymentDialog(
         walletSummaryLoading = false
     }
 
-    val walletOptionAvailable = order.currency.equals("NGN", ignoreCase = true) &&
-        walletSummary?.walletStatus == "ACTIVE" && walletSummary?.canSpend == true
+    val walletAvailabilityMessage = marketplaceWalletPaymentUnavailableMessage(
+        order.currency, walletSummary, walletSummaryLoading
+    )
+    val walletOptionAvailable = walletAvailabilityMessage == null
     val walletBalance = walletSummary?.availableBalance
     val hasEnoughWalletBalance = walletBalance != null && walletBalance >= order.totalAmount
     val canPayWithWallet = walletOptionAvailable && hasEnoughWalletBalance &&
@@ -2187,21 +2189,26 @@ private fun MarketplacePaymentDialog(
                             enabled = !busy,
                             label = { Text("Card / bank") }
                         )
-                        if (walletOptionAvailable) {
-                            FilterChip(
-                                selected = paymentMethod == "FYNX_WALLET",
-                                onClick = { paymentMethod = "FYNX_WALLET"; message = null },
-                                enabled = !busy,
-                                label = { Text("FYNX Wallet") }
-                            )
-                        }
+                        FilterChip(
+                            selected = paymentMethod == "FYNX_WALLET",
+                            onClick = { paymentMethod = "FYNX_WALLET"; message = null },
+                            enabled = !busy && walletOptionAvailable,
+                            label = { Text("FYNX Wallet") }
+                        )
                     }
                     if (walletSummaryLoading) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                             Text("Checking Wallet payment availability…", style = MaterialTheme.typography.bodySmall)
                         }
-                    } else if (paymentMethod == "FYNX_WALLET") {
+                    } else if (!walletOptionAvailable) {
+                        Text(
+                            walletAvailabilityMessage.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (paymentMethod == "FYNX_WALLET" && walletOptionAvailable) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(14.dp),

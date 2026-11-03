@@ -563,6 +563,16 @@ checks.append(
      and "mediaTypes = mediaTypes" in deep_link_client)
 )
 
+checks.append(
+    ("Marketplace checkout always shows the Wallet option with an accurate disabled reason when unavailable",
+     'label = { Text("FYNX Wallet") }' in marketplace
+     and "enabled = !busy && walletOptionAvailable" in marketplace
+     and "marketplaceWalletPaymentUnavailableMessage(" in marketplace
+     and "Wallet payments are disabled in Test Mode." in checkout
+     and "FYNX Wallet currently supports NGN Marketplace orders only." in checkout
+     and "marketplaceWalletAvailabilityExplainsTestModePendingAndCurrencyLimits" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxMarketplaceCheckoutQuoteTest.kt").read_text()),
+)
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
