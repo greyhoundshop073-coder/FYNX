@@ -497,7 +497,12 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
         playing = false
         file = video.mediaId?.let { mediaId ->
             withContext(Dispatchers.IO) {
-                FynxMediaCache.getOrDownload(context, "/api/social/media/$mediaId", "video")
+                FynxMediaCache.getOrDownload(
+                    context,
+                    "/api/social/media/$mediaId",
+                    "video",
+                    forceRefresh = retryNonce > 0
+                )
             }
         }
         mediaFailed = file == null
