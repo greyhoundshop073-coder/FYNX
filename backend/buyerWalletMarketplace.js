@@ -280,6 +280,38 @@ export async function settleBuyerWalletMarketplaceOrder(client, orderId) {
 }
 
 export function registerBuyerWalletMarketplaceRoutes({ app }) {
+  let walletCheckoutGroupSchemaPromise;
+  const ensureWalletCheckoutGroupSchema = async () => {
+    if (!walletCheckoutGroupSchemaPromise) {
+      walletCheckoutGroupSchemaPromise = (async () => {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          // Serialize the migration across backend instances; keep DDL off every payment request.
+          await client.query("SELECT pg_advisory_xact_lock(hashtext('fynx-wallet-marketplace-checkout-group-schema'))");
+          await client.query(
+            "ALTER TABLE marketplace_checkout_groups ADD COLUMN IF NOT EXISTS payment_method TEXT, ADD COLUMN IF NOT EXISTS wallet_payment_reference TEXT, ADD COLUMN IF NOT EXISTS wallet_idempotency_key TEXT"
+          );
+          await client.query(
+            "CREATE UNIQUE INDEX IF NOT EXISTS marketplace_checkout_groups_wallet_reference_idx ON marketplace_checkout_groups(wallet_payment_reference) WHERE wallet_payment_reference IS NOT NULL"
+          );
+          await client.query(
+            "CREATE UNIQUE INDEX IF NOT EXISTS marketplace_checkout_groups_wallet_idempotency_idx ON marketplace_checkout_groups(buyer_id,wallet_idempotency_key) WHERE wallet_idempotency_key IS NOT NULL"
+          );
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw error;
+        } finally {
+          client.release();
+        }
+      })().catch((error) => {
+        walletCheckoutGroupSchemaPromise = undefined;
+        throw error;
+      });
+    }
+    return walletCheckoutGroupSchemaPromise;
+  };
   app.post('/api/wallet/marketplace-orders/:id/pay', auth, async (req, res) => {
     const orderId = parseUuid(req.params.id);
     const idempotencyKey = typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey.trim() : '';
@@ -495,9 +527,7 @@ export function registerBuyerWalletMarketplaceRoutes({ app }) {
     try {
       await ensureBuyerWalletSchema();
       await ensureMarketplaceSettlementSchema();
-      await pool.query("ALTER TABLE marketplace_checkout_groups ADD COLUMN IF NOT EXISTS payment_method TEXT, ADD COLUMN IF NOT EXISTS wallet_payment_reference TEXT, ADD COLUMN IF NOT EXISTS wallet_idempotency_key TEXT");
-      await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS marketplace_checkout_groups_wallet_reference_idx ON marketplace_checkout_groups(wallet_payment_reference) WHERE wallet_payment_reference IS NOT NULL");
-      await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS marketplace_checkout_groups_wallet_idempotency_idx ON marketplace_checkout_groups(buyer_id,wallet_idempotency_key) WHERE wallet_idempotency_key IS NOT NULL");
+      await ensureWalletCheckoutGroupSchema();
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
