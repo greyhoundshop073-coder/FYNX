@@ -914,6 +914,8 @@ private fun FynxFeedTextureVideo(
     aspectRatio: Float,
     playbackActive: Boolean,
     muted: Boolean,
+    retryNonce: Int,
+    onRetryMedia: () -> Unit,
     onPlayingChanged: (Boolean) -> Unit,
     onMutedChanged: (Boolean) -> Unit,
     onOpenMedia: (() -> Unit)?,
@@ -927,7 +929,6 @@ private fun FynxFeedTextureVideo(
     var playing by remember(file) { mutableStateOf(false) }
     var hasVideoFrame by remember(file) { mutableStateOf(false) }
     var playbackError by remember(file) { mutableStateOf(false) }
-    var retryToken by remember(file) { mutableIntStateOf(0) }
 
     Box(Modifier.fillMaxSize()) {
         // Letterboxed areas use a softened frame from this clip rather than empty black bars.
@@ -986,7 +987,7 @@ private fun FynxFeedTextureVideo(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("This video could not start", color = Color.White, style = MaterialTheme.typography.labelLarge)
-                TextButton(onClick = { retryToken++ }) {
+                TextButton(onClick = onRetryMedia) {
                     Text("Retry video", color = Color.White)
                 }
             }
@@ -1022,7 +1023,7 @@ private fun FynxFeedTextureVideo(
         onDispose { runCatching { surface?.release() } }
     }
 
-    LaunchedEffect(file, surface, retryToken) {
+    LaunchedEffect(file, surface, retryNonce) {
         if (surface == null) return@LaunchedEffect
         prepared = false
         playing = false
@@ -1100,7 +1101,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     LaunchedEffect(path, reloadNonce) {
         mediaLoading = true
         mediaFailed = false
-        file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) }
+        file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type, forceRefresh = reloadNonce > 0) }
         mediaFailed = file == null
         mediaLoading = false
     }
@@ -1136,7 +1137,9 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     poster = videoPoster,
                     aspectRatio = videoAspectRatio,
                     playbackActive = playbackActive && !fullscreen,
-                muted = muted,
+                    muted = muted,
+                    retryNonce = reloadNonce,
+                    onRetryMedia = { reloadNonce++ },
                 onPlayingChanged = { playing = it },
                 onMutedChanged = { muted = it },
                     onOpenMedia = onOpenMedia,
