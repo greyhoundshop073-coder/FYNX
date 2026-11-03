@@ -172,12 +172,19 @@ private fun FynxDiscoveryPreviewCard(video: FynxDiscoveryClient.TrendingPost, on
     val context = LocalContext.current
     var file by remember(video.id) { mutableStateOf<File?>(null) }
     var visual by remember(video.id) { mutableStateOf<FynxVideoVisualFrame?>(null) }
-    LaunchedEffect(video.id) {
+    var mediaLoading by remember(video.id) { mutableStateOf(true) }
+    var mediaFailed by remember(video.id) { mutableStateOf(false) }
+    var retryNonce by remember(video.id) { mutableIntStateOf(0) }
+    LaunchedEffect(video.id, retryNonce) {
+        mediaLoading = true
+        mediaFailed = false
         file = video.mediaId?.let {
             withContext(Dispatchers.IO) {
                 FynxMediaCache.getOrDownload(context, "/api/social/media/$it", "video")
             }
         }
+        mediaFailed = file == null
+        mediaLoading = false
     }
     LaunchedEffect(file) {
         visual = file?.let { readFynxVideoVisual(it) }
@@ -233,12 +240,20 @@ private fun FynxDiscoveryPreviewCard(video: FynxDiscoveryClient.TrendingPost, on
                 maxLines = 1
             )
         }
-        if (file == null && visual == null) {
+        if (mediaLoading) {
             CircularProgressIndicator(
                 Modifier.align(Alignment.TopEnd).padding(10.dp).size(18.dp),
                 strokeWidth = 2.dp,
                 color = Color.White
             )
+        } else if (mediaFailed) {
+            Surface(
+                Modifier.align(Alignment.TopEnd).padding(8.dp),
+                shape = CircleShape,
+                color = Color.Black.copy(alpha = 0.68f)
+            ) {
+                Icon(Icons.Default.BrokenImage, "Video preview unavailable", Modifier.padding(7.dp), tint = Color.White)
+            }
         }
     }
 }
@@ -467,13 +482,20 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
     var visual by remember(video.id) { mutableStateOf<FynxVideoVisualFrame?>(null) }
     var prepared by remember(video.id) { mutableStateOf(false) }
     var playing by remember(video.id) { mutableStateOf(false) }
+    var mediaLoading by remember(video.id) { mutableStateOf(true) }
+    var mediaFailed by remember(video.id) { mutableStateOf(false) }
+    var retryNonce by remember(video.id) { mutableIntStateOf(0) }
     val viewState = remember(video.id) { mutableStateOf<VideoView?>(null) }
     val activeState = rememberUpdatedState(isActive)
 
-    LaunchedEffect(video.id) {
+    LaunchedEffect(video.id, retryNonce) {
+        mediaLoading = true
+        mediaFailed = false
         file = video.mediaId?.let {
             FynxMediaCache.getOrDownload(context, "/api/social/media/$it", "video")
         }
+        mediaFailed = file == null
+        mediaLoading = false
     }
     LaunchedEffect(file) {
         visual = file?.let { readFynxVideoVisual(it) }
@@ -524,8 +546,20 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
                 modifier = Modifier.width(fittedWidth).height(fittedHeight).align(Alignment.Center),
                 update = { viewState.value = it }
             )
-        } else {
+        } else if (mediaLoading) {
             CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
+        } else if (mediaFailed) {
+            Column(
+                Modifier.align(Alignment.Center).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.BrokenImage, null, tint = Color.White, modifier = Modifier.size(36.dp))
+                Text("This video could not be loaded", color = Color.White)
+                TextButton(onClick = { retryNonce++ }) {
+                    Text("Retry video", color = Color.White)
+                }
+            }
         }
         if (prepared) {
             Surface(
