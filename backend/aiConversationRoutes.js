@@ -1,4 +1,5 @@
 import { getFynxDatabasePool } from "./databasePool.js";
+import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
 import pg from "pg";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
@@ -114,7 +115,7 @@ export function registerFynxAiConversationRoutes({ app }) {
     } catch(error) { console.error("AI conversations list",error); return res.status(500).json({error:"conversation history unavailable"}); }
   });
 
-  app.post("/api/assistant/conversations", async (req,res)=>{
+  app.post("/api/assistant/conversations", assistantJsonBodyParser, async (req,res)=>{
     const userId=authenticate(req); if(!userId) return res.status(401).json({error:"authentication required"});
     try {
       const db=requireDb(); await ensureSchema(db);
@@ -145,7 +146,7 @@ export function registerFynxAiConversationRoutes({ app }) {
     } catch(error) { console.error("AI conversation delete",error); return res.status(500).json({error:"conversation deletion failed"}); }
   });
 
-  app.post("/api/assistant/conversations/:id/message", async (req,res)=>{
+  app.post("/api/assistant/conversations/:id/message", assistantJsonBodyParser, async (req,res)=>{
     const userId=authenticate(req); if(!userId) return res.status(401).json({error:"authentication required"});
     const message=ensureMessageText(req.body?.message);
     const mediaIds=Array.isArray(req.body?.mediaIds)?req.body.mediaIds:[];

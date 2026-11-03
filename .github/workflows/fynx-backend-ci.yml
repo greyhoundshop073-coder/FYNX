@@ -59,8 +59,10 @@ jobs:
           cache-dependency-path: backend/package.json
       - name: Install backend dependencies
         run: npm install --no-audit --no-fund
-      - name: Check and test Gemini assistant provider adapter
+      - name: Check and test FYNX assistant request parsing and Gemini provider
         run: |
+          node --check assistantJsonBodyParser.js
+          node test-assistant-json-body-parser.mjs
           node --check geminiAssistantProvider.js
           node test-gemini-assistant-provider.mjs
       - name: Run FYNX AI security and extension contracts
