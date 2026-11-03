@@ -16,6 +16,9 @@ checks = [
     ("portrait video height is capped inside the feed", "coerceAtMost(420.dp)" in HOME),
     ("video keeps its full source aspect ratio without stretching", "applyFynxFeedVideoFit" in HOME and "view.setTransform(Matrix()" in HOME),
     ("video controls expose an explicit full-screen action", '"Open video full screen"' in HOME and "onOpenFullscreen = { fullscreen = true }" in HOME),
+    ("Home video displays the measured clip duration", "videoDurationMs = visual.durationMs" in HOME and '"Video duration $durationLabel"' in HOME),
+    ("Home video shows elapsed time, total time and a live progress track", '"${formatHomeVideoDuration(playbackPositionMs)} / $durationLabel"' in HOME and "playbackPositionMs.toFloat() / durationMs.toFloat()" in HOME),
+    ("Home video duration formatting supports minute and hour lengths", "formatHomeVideoDuration(durationMs: Long)" in HOME and 'padStart(2, \'0\')' in HOME),
     ("player is automatically paused outside the focused item", "playbackActive = playbackActive && !fullscreen" in HOME),
     ("video surface and player are released safely", "DisposableEffect(surface)" in HOME and "player.release()" in HOME),
     ("comments preserve post context", '"POST CONVERSATION"' in COMMENTS and "post.authorDisplayName" in COMMENTS),
@@ -39,7 +42,12 @@ checks = [
     ("both reply-parent visibility queries close their NOT EXISTS predicates", BOOTSTRAP.count("OR (b.blocker_id=c.author_id AND b.blocked_id=$3))") >= 2),
     ("runtime screenshot flow captures a visible inline video card", 'def capture_home_feed_visuals(home_xml: str)' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8") and 'authenticated-home-inline-video.png' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")),
     ("Home feed scan preserves the Home navigation shell", "is_home_feed_navigation_visible(current)" in RUNTIME_NAVIGATION and "refusing to continue on another screen" in RUNTIME_NAVIGATION),
-    ("Home screenshot capture scans multiple real feed viewports", "def scroll_home_feed_page(index: int)" in RUNTIME_NAVIGATION and "for page in range(1, 9)" in RUNTIME_NAVIGATION),
+    ("Home screenshot capture scans multiple real feed viewports", "def scroll_home_feed_page(index: int, home_xml: str)" in RUNTIME_NAVIGATION and "for page in range(1, 9)" in RUNTIME_NAVIGATION),
+    ("Home scanner scrolls from safe non-clickable feed content", "def _home_content_scroll_point(" in RUNTIME_NAVIGATION),
+    ("Home scanner closes an accidentally opened media viewer safely", "def _dismiss_home_media_viewer(" in RUNTIME_NAVIGATION and 'find_control(xml_text, ["Close viewer"])' in RUNTIME_NAVIGATION),
+    ("video comments are matched to the same post card", "def find_home_video_post_comment_action(" in RUNTIME_NAVIGATION and "find_home_video_post_comment_action(current)" in RUNTIME_NAVIGATION),
+    ("comments capture verifies a real existing comment row", "def has_visible_home_comment_row(" in RUNTIME_NAVIGATION and "and has_visible_home_comment_row(candidate)" in RUNTIME_NAVIGATION),
+    ("Home header recovery does not repeat the unsafe fixed swipe", '"720", "520", "720", "2600"' not in RUNTIME_NAVIGATION),
     ("runtime screenshot flow opens a real Comments conversation without sending content", 'authenticated-home-comments.png' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8") and "No comment or reply was sent." in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")),
 ]
 
