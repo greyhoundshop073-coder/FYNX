@@ -181,7 +181,7 @@ assert.deepEqual(response.body.purchases, [{
 }]);
 const purchaseQuery = purchaseCalls.find(call => call.sql.includes('SELECT listing_id::TEXT AS listing_id'));
 assert.deepEqual(purchaseQuery?.params, ['123'], 'purchase history must be scoped to the signed-in buyer');
-assert.match(purchaseQuery?.sql || '', /status IN \\('PAID', 'SHIPPED', 'DELIVERED', 'INSPECTION', 'COMPLETED', 'DISPUTED'\\)/);
+assert.ok(purchaseQuery?.sql.includes("status IN ('PAID', 'SHIPPED', 'DELIVERED', 'INSPECTION', 'COMPLETED', 'DISPUTED')"));
 assert.doesNotMatch(purchaseQuery?.sql || '', /PAYMENT_PENDING|CANCELLED|REFUNDED/);
 
 console.log('Marketplace product engagement route tests GREEN (18 assertions)');
