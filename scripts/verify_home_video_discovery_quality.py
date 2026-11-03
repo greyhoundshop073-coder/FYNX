@@ -35,6 +35,25 @@ checks = [
         and "VideoView(ctx)" not in discovery[discovery.index("private fun FynxDiscoveryPreviewCard"):discovery.index("fun FynxHomeDiscoveryViewer")],
     ),
     (
+        "Home inline-video error state replaces the loading spinner with a clear retry message",
+        "if (!prepared && !playbackError)" in home
+        and "else if (prepared && !playbackError)" in home
+        and 'Text("This video could not start"' in home
+        and "TextButton(onClick = onRetryMedia)" in home,
+    ),
+    (
+        "Discovery viewer mute control updates the actual MediaPlayer volume",
+        "playerState.value = player" in discovery
+        and "playerState.value?.setVolume" in discovery
+        and 'if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp' in discovery
+        and '"Unmute Discovery video" else "Mute Discovery video"' in discovery,
+    ),
+    (
+        "Discovery player audio and view state are released on disposal",
+        "runCatching { viewState.value?.stopPlayback() }" in discovery
+        and "playerState.value = null" in discovery,
+    ),
+    (
         "full-screen Discovery player fits the source ratio inside the screen",
         "fittedWidth" in discovery
         and "fittedHeight" in discovery
