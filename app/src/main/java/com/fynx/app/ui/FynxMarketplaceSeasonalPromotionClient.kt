@@ -18,7 +18,9 @@ data class FynxMarketplaceSeasonalPromotion(
     val artworkMediaId: String,
     val startsAt: String,
     val endsAt: String,
-    val active: Boolean
+    val active: Boolean,
+    val destinationType: String = "MARKETPLACE",
+    val destinationValue: String = ""
 )
 
 object FynxMarketplaceSeasonalPromotionClient {
@@ -33,7 +35,9 @@ object FynxMarketplaceSeasonalPromotionClient {
             artworkMediaId = value.optString("artworkMediaId").trim(),
             startsAt = value.optString("startsAt"),
             endsAt = value.optString("endsAt"),
-            active = value.optBoolean("active")
+            active = value.optBoolean("active"),
+            destinationType = value.optString("destinationType", "MARKETPLACE").trim().uppercase().ifBlank { "MARKETPLACE" },
+            destinationValue = value.optString("destinationValue").trim()
         )
 
     suspend fun load(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> {
@@ -90,6 +94,8 @@ object FynxMarketplaceSeasonalPromotionClient {
         headline: String,
         body: String,
         actionLabel: String,
+        destinationType: String,
+        destinationValue: String,
         artworkMediaId: String,
         startsAt: String,
         endsAt: String
@@ -100,6 +106,8 @@ object FynxMarketplaceSeasonalPromotionClient {
             .put("headline", headline.trim())
             .put("body", body.trim())
             .put("actionLabel", actionLabel.trim())
+            .put("destinationType", destinationType.trim().uppercase())
+            .put("destinationValue", destinationValue.trim().ifBlank { JSONObject.NULL })
             .put("artworkMediaId", artworkMediaId.trim().ifBlank { JSONObject.NULL })
             .put("startsAt", startsAt.trim())
             .put("endsAt", endsAt.trim())
