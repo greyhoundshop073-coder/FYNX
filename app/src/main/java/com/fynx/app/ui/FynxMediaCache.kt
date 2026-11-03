@@ -54,8 +54,31 @@ internal object FynxMediaCache {
                 if (!FynxBackendClient.hasAccessToken(context)) {
                     return@withLock file.takeIf { hasUsableCachedFile() }
                 }
-                if (forceRefresh) file.delete()
-                download(context, normalizedPath, file)?.also { trim(directory, it) }
+                if (!forceRefresh) {
+                    return@withLock download(context, normalizedPath, file)?.also { trim(directory, it) }
+                }
+
+                // Download to a temporary sibling first. Do not discard a usable
+                // cached copy unless the replacement has arrived and can be swapped in.
+                val refreshed = File(directory, ".${file.name}.refresh")
+                val backup = File(directory, ".${file.name}.backup")
+                refreshed.delete()
+                val downloaded = download(context, normalizedPath, refreshed)
+                    ?: return@withLock file.takeIf { hasUsableCachedFile() }
+                backup.delete()
+                val hadPrevious = file.exists()
+                if (hadPrevious && !file.renameTo(backup)) {
+                    refreshed.delete()
+                    return@withLock file.takeIf { hasUsableCachedFile() }
+                }
+                if (!downloaded.renameTo(file)) {
+                    if (hadPrevious) backup.renameTo(file)
+                    refreshed.delete()
+                    return@withLock file.takeIf { hasUsableCachedFile() }
+                }
+                backup.delete()
+                trim(directory, file)
+                file
             }
         } finally {
             synchronized(downloadLocks) {
