@@ -76,7 +76,7 @@ object FynxDesign {
     /** Raised secondary actions used across all app surfaces and appearance modes. */
     val SoftActionLightContainer = Color(0xFFE3F2FC)
     val SoftActionLightForeground = Color(0xFF102A3A)
-    val SoftActionLightOutline = Color(0xFF5B9BB8)
+    val SoftActionLightOutline = Color(0xFF4C87A4)
     val SoftActionDarkContainer = Color(0xFF17365D)
     val SoftActionDarkForeground = Color(0xFFEAF1FF)
     val SoftActionDarkOutline = Color(0xFF6BAED6)

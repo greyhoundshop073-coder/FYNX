@@ -15,7 +15,7 @@ This document is the visual contract for all existing and future FYNX screens. I
 - Borders: subtle blue-grey, never heavy.
 - Cards: rounded, clean, consistent corner radius.
 - Controls: rounded/pill-like where appropriate.
-- Secondary action buttons: use the shared raised soft-blue treatment. In Light and System-light appearances use a pale blue fill (`#E3F2FC`), readable dark foreground and blue outline (`#5B9BB8`). In Dark/System-dark and Black AMOLED appearances use a deep blue fill (`#17365D`), light foreground and brighter blue outline (`#6BAED6`). Add a restrained 2dp raised elevation; keep the shape rounded and preserve adequate touch targets.
+- Secondary action buttons: use the shared raised soft-blue treatment. In Light and System-light appearances use a pale blue fill (`#E3F2FC`), readable dark foreground and blue outline (`#4C87A4`). In Dark/System-dark and Black AMOLED appearances use a deep blue fill (`#17365D`), light foreground and brighter blue outline (`#6BAED6`). Add a restrained 2dp raised elevation; keep the shape rounded and preserve adequate touch targets.
 - Primary actions remain solid Azure Blue (`#007FFF`); confirmed/success actions remain Classic Green (`#008000`); destructive actions remain Crimson Red (`#DC143C`) with contrast-safe soft red containers where appropriate. Do not recolor icon-only controls, text links, status labels or neutral content cards as if they were secondary action buttons.
 - Icons: professional Material/outline icons; do not use emoji as feature icons.
 
