@@ -33,7 +33,7 @@ internal object FynxMediaCache {
         // aside but before installing the replacement download.
         if (!hasUsableCachedFile() && backup.isFile && backup.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
             file.delete()
-            backup.renameTo(file)
+            if (!backup.renameTo(file)) return backup
         } else if (hasUsableCachedFile() && backup.exists()) {
             backup.delete()
         }
