@@ -17,6 +17,7 @@ import android.text.style.StyleSpan
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +25,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -36,15 +39,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -390,21 +396,53 @@ internal fun CameraTextOverlayTools(
         0xFF8B75FF.toInt(),
         android.graphics.Color.BLACK
     )
-    Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 7.dp)) {
-        if (!compact) Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text("Text on media", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (isVideo) "Visible on the video after export" else "Position it directly over your photo",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+    val showTimingDialog = remember(selected?.id, isVideo, videoDurationMs) { mutableStateOf(false) }
+    Column(
+        modifier = Modifier.fillMaxWidth().then(
+            if (compact) Modifier.heightIn(max = 156.dp).verticalScroll(rememberScrollState()) else Modifier
+        ),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 7.dp)
+    ) {
+        if (!compact) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text("Text on media", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isVideo) "Visible on the video after export" else "Position it directly over your photo",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                OutlinedButton(onClick = onAdd) { Text("+ Add text") }
             }
-            OutlinedButton(onClick = onAdd) { Text("+ Add text") }
+        } else {
+            // Done remains fixed and visible; it is never placed inside a horizontal carousel.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Text on media", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (isVideo && selected != null && videoDurationMs > 1L) {
+                        OutlinedButton(
+                            onClick = { showTimingDialog.value = true },
+                            modifier = Modifier.heightIn(min = 36.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) { Text("Text timing", style = MaterialTheme.typography.labelSmall) }
+                    }
+                    Button(
+                        onClick = onDone,
+                        enabled = selected != null || overlayCount == 0,
+                        modifier = Modifier.heightIn(min = 36.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) { Text("Done", style = MaterialTheme.typography.labelSmall) }
+                }
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -414,7 +452,8 @@ internal fun CameraTextOverlayTools(
             swatches.forEach { swatch ->
                 Surface(
                     onClick = { onColor(swatch) },
-                    modifier = Modifier.size(if (compact) 25.dp else 29.dp).semantics { contentDescription = "Text colour ${cameraTextColorName(swatch)}" },
+                    modifier = Modifier.size(if (compact) 25.dp else 29.dp)
+                        .semantics { contentDescription = "Text colour " + cameraTextColorName(swatch) },
                     shape = CircleShape,
                     color = ComposeColor(swatch),
                     border = androidx.compose.foundation.BorderStroke(
@@ -446,53 +485,56 @@ internal fun CameraTextOverlayTools(
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Text timing", style = MaterialTheme.typography.labelLarge, color = ComposeColor.White)
-                    Text("${formatCameraOverlayTime(start)} – ${formatCameraOverlayTime(end)}", style = MaterialTheme.typography.labelSmall, color = ComposeColor(0xFFB8A7FF))
+                    Text(formatCameraOverlayTime(start) + " – " + formatCameraOverlayTime(end), style = MaterialTheme.typography.labelSmall, color = ComposeColor(0xFFB8A7FF))
                 }
                 Text("Show from", style = MaterialTheme.typography.labelSmall, color = ComposeColor.White.copy(alpha = 0.76f))
-                Slider(
-                    value = start.toFloat(),
-                    onValueChange = { value -> onTiming(value.toLong().coerceIn(0L, end - 1L), end) },
-                    valueRange = 0f..(duration - 1L).toFloat()
-                )
+                Slider(value = start.toFloat(), onValueChange = { value -> onTiming(value.toLong().coerceIn(0L, end - 1L), end) }, valueRange = 0f..(duration - 1L).toFloat())
                 Text("Show until", style = MaterialTheme.typography.labelSmall, color = ComposeColor.White.copy(alpha = 0.76f))
-                Slider(
-                    value = end.toFloat(),
-                    onValueChange = { value -> onTiming(start, value.toLong().coerceIn(start + 1L, duration)) },
-                    valueRange = (start + 1L).toFloat()..duration.toFloat()
-                )
+                Slider(value = end.toFloat(), onValueChange = { value -> onTiming(start, value.toLong().coerceIn(start + 1L, duration)) }, valueRange = (start + 1L).toFloat()..duration.toFloat())
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilterChip(
-                selected = selected?.backgroundColor != null,
-                onClick = onToggleBackground,
-                label = { Text("Highlight") },
-                enabled = selected != null
-            )
-            FilterChip(
-                selected = selected?.bold == true,
-                onClick = onToggleBold,
-                label = { Text("Bold") },
-                enabled = selected != null
-            )
-            FilterChip(
-                selected = selected?.alignment != "CENTER",
-                onClick = onAlignment,
-                label = { Text("Align: ${selected?.alignment?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Center"}") },
-                enabled = selected != null
-            )
-            if (selected != null) {
-                OutlinedButton(onClick = onDelete) { Text("Delete") }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(selected = selected?.backgroundColor != null, onClick = onToggleBackground, label = { Text("Highlight") }, enabled = selected != null)
+                FilterChip(selected = selected?.bold == true, onClick = onToggleBold, label = { Text("Bold") }, enabled = selected != null)
+                FilterChip(
+                    selected = selected?.alignment != "CENTER",
+                    onClick = onAlignment,
+                    label = { Text("Align: " + (selected?.alignment?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Center")) },
+                    enabled = selected != null
+                )
+                if (selected != null) OutlinedButton(onClick = onDelete) { Text("Delete") }
             }
-            Button(onClick = onDone, enabled = selected != null || overlayCount == 0) { Text("Done") }
+            if (!compact) {
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = onDone, enabled = selected != null || overlayCount == 0) { Text("Done") }
+            }
         }
     }
+    if (showTimingDialog.value && compact && isVideo && selected != null && videoDurationMs > 1L) {
+        val duration = videoDurationMs.coerceAtLeast(2L)
+        val start = selected.startMs.coerceIn(0L, duration - 1L)
+        val end = selected.endMs.coerceIn(start + 1L, duration)
+        AlertDialog(
+            onDismissRequest = { showTimingDialog.value = false },
+            title = { Text("Text timing") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Show from")
+                    Slider(value = start.toFloat(), onValueChange = { value -> onTiming(value.toLong().coerceIn(0L, end - 1L), end) }, valueRange = 0f..(duration - 1L).toFloat())
+                    Text("Show until")
+                    Slider(value = end.toFloat(), onValueChange = { value -> onTiming(start, value.toLong().coerceIn(start + 1L, duration)) }, valueRange = (start + 1L).toFloat()..duration.toFloat())
+                }
+            },
+            confirmButton = { TextButton(onClick = { showTimingDialog.value = false }) { Text("Apply timing") } },
+            dismissButton = { TextButton(onClick = { showTimingDialog.value = false }) { Text("Cancel") } }
+        )
+    }
 }
-
 /** Apply text to a JPEG copy, leaving the editable source/baseline untouched. */
 internal fun renderFynxPhotoTextOverlays(
     context: Context,

@@ -520,7 +520,7 @@ def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
     except ET.ParseError:
         return False
     node = _find_control_node(root, [label.lower() for label in labels])
-    return bool(node) and node.attrib.get("enabled", "true").lower() != "false"
+    return node is not None and node.attrib.get("enabled", "true").lower() != "false"
 
 def control_is_clickable(xml_text: str, labels: list[str]) -> bool:
     """Require an accessibility node that can actually receive the intended tap."""
@@ -531,7 +531,7 @@ def control_is_clickable(xml_text: str, labels: list[str]) -> bool:
     except ET.ParseError:
         return False
     node = _find_control_node(root, [label.lower() for label in labels])
-    return bool(node) and node.attrib.get("clickable", "false").lower() == "true"
+    return node is not None and node.attrib.get("clickable", "false").lower() == "true"
 
 def camera_wait_for_control(
     initial_xml: str, labels: list[str], *, enabled: bool | None = None,
@@ -2233,9 +2233,11 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 break
         screenshot(f"{prefix}-camera-video-manual-caption-keyboard.png")
         if "FYNXcamcaptiontest" in manual_keyboard_xml:
-            report.append("- PASS video editor accepts manually typed caption text")
+            report.append("- PASS video editor exposes the entered caption while the keyboard is open")
         else:
-            FAILURES.append(prefix + ": manually typed video caption was not present in the actual field")
+            # Gboard can own the accessibility root while visible and omit the app EditText node.
+            # The authoritative field-value assertion runs after the keyboard is dismissed below.
+            report.append("- NOTE Gboard owned the keyboard-open accessibility hierarchy; caption value will be verified after keyboard dismissal.")
         keyboard_state = run("adb", "shell", "dumpsys", "input_method").stdout or ""
         if "mInputShown=true" in keyboard_state or "isInputViewShown=true" in keyboard_state:
             report.append("- PASS video caption field opens the keyboard for editing")
@@ -2266,10 +2268,22 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             video_text_xml, ["Text timing"], enabled=None, timeout=20.0,
             prefix=f"{prefix}-camera-video-text-timing-ready"
         )
-        if find_control(video_text_xml, ["Show from"]) and find_control(video_text_xml, ["Show until"]):
-            report.append("- PASS video text editor exposes Show from and Show until timing controls")
+        timing_dialog = tap_control(
+            video_text_xml, ["Text timing"], f"{prefix}-camera-video-text-timing-open",
+            ["Show from", "Show until", "Apply timing"]
+        )
+        if timing_dialog and find_control(timing_dialog, ["Show from"]) and find_control(timing_dialog, ["Show until"]):
+            report.append("- PASS compact video text editor opens reachable Show from and Show until timing controls")
+            timing_closed = tap_control(
+                timing_dialog, ["Apply timing"], f"{prefix}-camera-video-text-timing-apply",
+                ["Text on media"]
+            )
+            if timing_closed:
+                video_text_xml = timing_closed
+            else:
+                FAILURES.append(prefix + ": video text timing dialog did not close after Apply timing")
         else:
-            FAILURES.append(prefix + ": video text timing controls were not visible after clip metadata loaded")
+            FAILURES.append(prefix + ": video text timing dialog did not expose Show from and Show until")
         video_text_field = find_control(video_text_xml, ["Text on media"])
         if video_text_field:
             _, vx, vy = video_text_field

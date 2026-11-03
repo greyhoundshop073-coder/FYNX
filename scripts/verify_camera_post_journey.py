@@ -361,6 +361,18 @@ checks.extend([
      and "imePadding()" in camera
      and "if (!compact) Row(" in overlay
      and "if (!compact && isVideo && selected != null && videoDurationMs > 1L)" in overlay),
+    ("Compact media text editor pins Done and exposes video timing without scrolling it off-screen",
+     'Text("Done", style = MaterialTheme.typography.labelSmall)' in overlay
+     and 'Text("Text timing", style = MaterialTheme.typography.labelSmall)' in overlay
+     and 'Text("Apply timing")' in overlay
+     and "heightIn(max = 156.dp)" in overlay
+     and "if (!compact && isVideo && selected != null && videoDurationMs > 1L)" in overlay),
+    ("Runtime accessibility helpers detect leaf controls and caption verification handles keyboard-owned hierarchies",
+     'return node is not None and node.attrib.get("enabled", "true").lower() != "false"' in runtime
+     and 'return node is not None and node.attrib.get("clickable", "false").lower() == "true"' in runtime
+     and "Gboard owned the keyboard-open accessibility hierarchy" in runtime
+     and "camera-video-text-timing-open" in runtime
+     and "video text timing dialog did not expose Show from and Show until" in runtime),
     ("Media overlay geometry is anchored to intrinsic photo/video dimensions and preview crop mode",
      "readFynxCameraMediaMetrics" in overlay and "mediaAspectRatio" in overlay
      and "mediaWidthPx" in overlay and "mediaHeightPx" in overlay
@@ -405,7 +417,7 @@ checks.extend([
      "FYNXoverlaytest" in runtime and "FYNXvideooverlay" in runtime
      and "FYNXdraftoverlay" in runtime
      and "camera-post-draft-edit-text-open" in runtime
-     and "video text timing controls were not visible" in runtime),
+     and "video text timing dialog did not expose Show from and Show until" in runtime),
     ("Reopened draft media is edited from disposable copies, never directly from the saved source",
      'mutableStateOf<Uri?>(null)' in camera
      and "copyCameraGalleryMediaToCache(context, source)" in camera
