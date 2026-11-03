@@ -748,7 +748,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
@@ -1173,6 +1173,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             val saved = JSONArray().apply { recentSearches.forEach(::put) }
             context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
                 .edit().putString(recentSearchesKey, saved.toString()).apply()
+        }
+    }
+
+    LaunchedEffect(initialSellerUsername) {
+        val seller = initialSellerUsername?.trim().orEmpty()
+        if (seller.isNotBlank()) {
+            sellerStoreUsername = seller
+            onInitialSellerOpened()
         }
     }
 
