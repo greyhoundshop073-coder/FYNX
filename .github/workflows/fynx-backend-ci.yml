@@ -251,6 +251,8 @@ jobs:
         run: node verify-marketplace-state-machine.mjs
       - name: Run Marketplace persistent shop profile verification
         run: node verify-marketplace-shop-profile.mjs
+      - name: Exercise Marketplace likes, unlike, counts, self-like and buyer purchase-history routes
+        run: node test-marketplace-product-engagement.mjs
       - name: Verify Marketplace public storefront likes and buyer purchase history
         run: python3 ../scripts/verify_marketplace_public_storefront.py
       - name: Run R6-D buyer-protection lifecycle verification
