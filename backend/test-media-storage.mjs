@@ -7,6 +7,9 @@ const calls = [];
 const fakeClient = {
   async send(command) {
     calls.push(command);
+    if (command.constructor.name === "HeadObjectCommand") {
+      return { ContentLength: 15, ContentType: "image/webp" };
+    }
     if (command.constructor.name === "GetObjectCommand") {
       return {
         Body: (async function* () {
@@ -34,6 +37,13 @@ const storage = createMediaStorage({
   },
   async signUrlFactory(_client, command, options) {
     calls.push(command);
+    if (command.constructor.name === "PutObjectCommand") {
+      assert.equal(options.expiresIn, 300);
+      assert.equal(command.input.Bucket, "fynx-media");
+      assert.equal(command.input.Key, "media/" + UUID);
+      assert.equal(command.input.ContentType, "image/webp");
+      return "https://fynx-media.example.r2.cloudflarestorage.com/signed-write";
+    }
     assert.equal(command.constructor.name, "GetObjectCommand");
     assert.equal(options.expiresIn, 120);
     return "https://fynx-media.example.r2.cloudflarestorage.com/signed-read";
@@ -57,6 +67,23 @@ assert.equal(calls[0].input.ContentType, "image/webp");
 assert.equal(calls[0].input.ContentLength, Buffer.byteLength("new-media-bytes"));
 assert.equal(calls[0].input.CacheControl, "private, max-age=60");
 assert.equal(Buffer.from(calls[0].input.Body).toString(), "new-media-bytes");
+
+
+const uploadUrl = await storage.createUploadUrl({
+  objectKey: "media/" + UUID,
+  mimeType: "image/webp"
+});
+assert.equal(uploadUrl, "https://fynx-media.example.r2.cloudflarestorage.com/signed-write");
+const objectInfo = await storage.inspectMediaObject("media/" + UUID);
+assert.deepEqual(objectInfo, { byteSize: 15, mimeType: "image/webp" });
+await assert.rejects(
+  storage.createUploadUrl({ objectKey: "../invalid", mimeType: "image/webp" }),
+  /Invalid FYNX media object key/
+);
+await assert.rejects(
+  storage.createUploadUrl({ objectKey: "media/" + UUID, mimeType: "application/pdf" }),
+  /Unsupported FYNX media type/
+);
 
 const signedUrl = await storage.createDownloadUrl("media/" + UUID);
 assert.equal(signedUrl, "https://fynx-media.example.r2.cloudflarestorage.com/signed-read");

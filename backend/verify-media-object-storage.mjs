@@ -22,6 +22,15 @@ assert.match(server, /storage_provider TEXT NOT NULL DEFAULT 'postgres'/);
 assert.match(server, /object_key TEXT/);
 assert.match(server, /ALTER COLUMN data DROP NOT NULL/);
 assert.match(server, /message_media_object_key_unique/);
+assert.match(server, /CREATE TABLE IF NOT EXISTS message_media_upload_intents/);
+assert.match(server, /app\.post\("\/api\/media\/upload-intent"/);
+assert.match(server, /app\.post\("\/api\/media\/upload-complete"/);
+assert.match(server, /SELECT .*message_media_upload_intents.*FOR UPDATE/s);
+assert.match(server, /WHERE id = \$1 AND owner_id = \$2 FOR UPDATE/);
+assert.match(server, /objectInfo\.byteSize !== Number\(intent\.byte_size\)/);
+assert.match(server, /objectInfo\.mimeType !== String\(intent\.mime_type\)/);
+assert.match(server, /cleanupExpiredMediaUploadIntents/);
+assert.match(server, /message_media_upload_intents_expiry_idx/);
 
 const upload = route(server, 'app.post("/api/media"', "\n\nconst statusSchema");
 assert.match(upload, /await mediaStorage\.putMediaObject/);
@@ -56,6 +65,10 @@ assert.match(bootstrap, /redirectStoredMedia/);
 assert.match(bootstrap, /mm\.storage_provider, mm\.object_key/);
 assert.match(pkg, /test-media-storage\.mjs/);
 assert.match(pkg, /verify-media-object-storage\.mjs/);
+assert.match(server, /mediaStorage\.createUploadUrl/);
+assert.match(server, /mediaStorage\.inspectMediaObject/);
+assert.match(server, /completed_media_id/);
+assert.match(pkg, /test-media-storage\.mjs/);
 
 console.log("FYNX MEDIA STORAGE INTEGRATION CONTRACT: GREEN");
 console.log("Existing media IDs, authorization-before-redirect, Postgres fallback and all server media surfaces: PASS");

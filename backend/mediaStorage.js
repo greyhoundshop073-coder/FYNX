@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
@@ -120,6 +121,37 @@ export function createMediaStorage({
         CacheControl: "private, max-age=60"
       }));
       return { storageProvider: "r2", objectKey };
+    },
+
+    async createUploadUrl({ objectKey, mimeType, expiresInSeconds = 300 }) {
+      requireR2Configuration();
+      const key = validateObjectKey(objectKey);
+      const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
+      if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mp4|mpeg|aac|x-m4a|wav))$/.test(normalizedMimeType)) {
+        throw new Error("Unsupported FYNX media type.");
+      }
+      if (!Number.isInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 600) {
+        throw new RangeError("Media upload URL expiry must be between 60 and 600 seconds.");
+      }
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        ContentType: normalizedMimeType,
+        CacheControl: "private, max-age=60"
+      });
+      const url = await signUrlFactory(getClient(), command, { expiresIn: expiresInSeconds });
+      if (typeof url !== "string" || !url.startsWith("https://")) throw new Error("Object storage returned an invalid upload URL.");
+      return url;
+    },
+
+    async inspectMediaObject(objectKey) {
+      requireR2Configuration();
+      const key = validateObjectKey(objectKey);
+      const result = await getClient().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+      return {
+        byteSize: Number(result?.ContentLength || 0),
+        mimeType: String(result?.ContentType || "").split(";")[0].trim().toLowerCase()
+      };
     },
 
     async createDownloadUrl(objectKey, expiresInSeconds = DEFAULT_DOWNLOAD_URL_TTL_SECONDS) {

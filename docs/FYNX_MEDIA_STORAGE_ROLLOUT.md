@@ -7,7 +7,7 @@ PostgreSQL remains the source of truth for FYNX users, media IDs, ownership, soc
 - storage_provider = 'postgres': legacy data BYTEA remains the source.
 - storage_provider = 'r2': object_key points to the private R2 object and data is NULL.
 
-The API checks the same FYNX authorization rules before it issues a short-lived (120-second) signed GET URL. PostgreSQL media remains readable through the existing bounded cache. Old media IDs and client routes do not change.
+The API checks the same FYNX authorization rules before it issues a short-lived (120-second) signed GET URL. For new R2 uploads, the API issues a short-lived signed PUT URL tied to an owner-bound upload intent and verifies the stored object metadata before creating the existing FYNX media row. PostgreSQL media remains readable through the existing bounded cache. Old media IDs and client routes do not change.
 
 ## Safe activation
 
@@ -32,6 +32,6 @@ Before activation, check Cloudflare's R2 subscription/checkout requirements and 
 3. Enable R2 for new uploads on testing. Existing PostgreSQL records remain available through the postgres provider and keep the same media IDs.
 4. Migrate legacy files in small, resumable batches only after the live DATABASE_URL target is verified. Copy and checksum an object before updating its row; never delete the original BYTEA during the first migration.
 5. Repeat the complete read/write/privacy checks on the intended production environment before switching it.
-6. Consider direct-to-R2 signed PUT uploads as a later client upgrade. This foundation preserves the current base64 upload contract so existing app builds continue to work.
+6. Signed upload intents are now supported: the authenticated app requests a short-lived upload URL, uploads directly to the private bucket, and calls the completion endpoint. The backend verifies object size and MIME with HEAD before assigning a permanent FYNX media ID. PostgreSQL-only mode still returns a legacy-upload instruction for older client builds. A periodic sweeper removes objects from abandoned, expired, incomplete upload intents while leaving completed media untouched.
 
 No bucket is provisioned, no credentials are added, no existing media bytes are migrated or deleted, and no live provider switch is performed by this code change.
