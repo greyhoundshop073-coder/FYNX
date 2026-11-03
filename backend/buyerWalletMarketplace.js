@@ -88,8 +88,9 @@ export function buildWalletMarketplaceCheckoutAllocations(group, children) {
     const sellerNet = cents(child.seller_net_amount);
     const buyerTotal = cents(child.buyer_total);
     const total = cents(child.total_amount);
-    if (![productSubtotal, deliveryFee, marketplaceFee, buyerFee, sellerFee, sellerNet, buyerTotal, total].every(Number.isSafeInteger) ||
-        productSubtotal <= 0 || total <= 0 || buyerTotal !== total ||
+    const expectedBuyerTotal = productSubtotal + deliveryFee + buyerFee;
+    if (![productSubtotal, deliveryFee, marketplaceFee, buyerFee, sellerFee, sellerNet, buyerTotal, total, expectedBuyerTotal].every(Number.isSafeInteger) ||
+        productSubtotal <= 0 || total <= 0 || buyerTotal !== total || total !== expectedBuyerTotal ||
         buyerFee + sellerFee !== marketplaceFee || sellerNet + marketplaceFee !== total) invalid('checkout child order financial values do not reconcile');
     return { orderId, amountCents: total, productSubtotalCents: productSubtotal, deliveryFeeCents: deliveryFee, buyerFeeCents: buyerFee };
   });
