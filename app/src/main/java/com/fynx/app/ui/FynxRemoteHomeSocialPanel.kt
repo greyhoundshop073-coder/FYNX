@@ -461,17 +461,24 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             posts.size < 8 -> 1
             else -> 2
         }
-        val selected = ordered.take(count)
-        if (selected.isEmpty()) {
+        // Discovery stays reachable whenever real trending videos exist. Other
+        // feed insertions keep their deterministic order in any remaining slot.
+        val selected = if (discoveryVideos.isNotEmpty() && "discovery" in ordered) {
+            listOf("discovery") + ordered.filterNot { it == "discovery" }.take((count - 1).coerceAtLeast(0))
+        } else {
+            ordered.take(count)
+        }
+        if (selected.isEmpty() || posts.isEmpty()) {
             emptyMap()
         } else {
             val first = (2 + (seed % 5L).toInt()).coerceAtMost(posts.lastIndex)
             val second = if (posts.size > 8) {
                 (8 + ((seed / 11L) % (posts.size - 8).toLong()).toInt()).coerceAtMost(posts.lastIndex)
-            } else posts.lastIndex
-            selected.mapIndexed { index, type ->
-                (if (index == 0) first else maxOf(first + 2, second).coerceAtMost(posts.lastIndex)) to type
-            }.toMap()
+            } else {
+                (first + 1).coerceAtMost(posts.lastIndex)
+            }
+            val positions = listOf(first, second).distinct()
+            selected.take(positions.size).mapIndexed { index, type -> positions[index] to type }.toMap()
         }
     }
 
@@ -511,6 +518,17 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading Home feed" }) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
+        if (!loading && posts.isEmpty() && discoveryVideos.isNotEmpty()) {
+            item(key = "home_discovery_empty_feed") {
+                FynxHomeDiscoverySection(
+                    videos = discoveryVideos,
+                    loadingMore = discoveryVideosLoading,
+                    hasMore = discoveryVideosHasMore,
+                    onLoadMore = { loadDiscoveryVideos() },
+                    onOpenVideo = { index -> openHomeDiscoveryViewer(index) }
+                )
+            }
+        }
         posts.forEachIndexed { postIndex, post ->
             item(key = post.id) {
             val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]; val state = interactionStates[post.id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0); val reaction = reactionStates[post.id] ?: FynxHomePostReactionsClient.ReactionState(); val busy = post.id in interactionBusy || "follow:${post.authorUsername.removePrefix("@").trim().lowercase()}" in interactionBusy

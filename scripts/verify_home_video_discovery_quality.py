@@ -75,6 +75,12 @@ checks = [
         and '"authenticated-discovery-video-viewer.png"' in navigation,
     ),
     (
+        "Discovery remains a stable Home insertion whenever real trending videos are available",
+        'listOf("discovery") + ordered.filterNot { it == "discovery" }' in home
+        and '"home_discovery_empty_feed"' in home
+        and '"discovery" in ordered' in home,
+    ),
+    (
         "opening Discovery records each page view once rather than double-counting the first view",
         "FynxDiscoveryClient.recordView(context, video.id)" in discovery
         and "fun openHomeDiscoveryViewer(index: Int)" in home
