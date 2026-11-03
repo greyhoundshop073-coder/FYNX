@@ -3,6 +3,25 @@ package com.fynx.app.ui
 import java.time.Instant
 import java.util.Locale
 
+/** Canonical category labels shared by Marketplace discovery and campaign routing. */
+internal val MARKETPLACE_CAMPAIGN_CATEGORIES = listOf(
+    "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles",
+    "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture",
+    "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts",
+    "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local",
+    "Business & Workshop Supplies", "Other"
+)
+
+/** Campaign CTA destinations must be resolvable by the actual Marketplace navigation. */
+internal fun isValidMarketplaceCampaignDestination(type: String, value: String): Boolean =
+    when (type.trim().uppercase(Locale.US)) {
+        "MARKETPLACE" -> value.isBlank()
+        "CATEGORY" -> MARKETPLACE_CAMPAIGN_CATEGORIES.any { it.equals(value.trim(), ignoreCase = true) }
+        "PRODUCT" -> value.trim().toLongOrNull()?.let { it > 0L } == true
+        "SHOP" -> value.trim().removePrefix("@").matches(Regex("[a-zA-Z0-9_]{3,32}"))
+        else -> false
+    }
+
 /**
  * Verified seller performance for one explicitly bounded Marketplace week.
  *

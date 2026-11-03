@@ -19,6 +19,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -111,6 +113,9 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var headline by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
     var actionLabel by remember { mutableStateOf("Explore Marketplace") }
+    var destinationType by remember { mutableStateOf("MARKETPLACE") }
+    var destinationValue by remember { mutableStateOf("") }
+    var categoryMenuExpanded by remember { mutableStateOf(false) }
     var artworkUri by remember { mutableStateOf<Uri?>(null) }
     var artworkMediaId by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
@@ -201,6 +206,89 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             singleLine = true,
             enabled = !saving
         )
+        Text("Button destination", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Choose where the banner opens. Product IDs are checked against active, in-stock listings before the campaign is saved.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP").forEach { type ->
+                val label = when (type) {
+                    "CATEGORY" -> "Category"
+                    "PRODUCT" -> "Product"
+                    "SHOP" -> "Shop"
+                    else -> "Marketplace"
+                }
+                if (destinationType == type) {
+                    Button(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) {
+                        Text(label, maxLines = 1)
+                    }
+                } else {
+                    OutlinedButton(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) {
+                        Text(label, maxLines = 1)
+                    }
+                }
+            }
+        }
+        when (destinationType) {
+            "CATEGORY" -> {
+                Text("Marketplace category", style = MaterialTheme.typography.labelLarge)
+                OutlinedButton(
+                    onClick = { categoryMenuExpanded = true },
+                    enabled = !saving,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(destinationValue.ifBlank { "Choose a category" }, modifier = Modifier.weight(1f))
+                    Text("⌄")
+                }
+                DropdownMenu(
+                    expanded = categoryMenuExpanded,
+                    onDismissRequest = { categoryMenuExpanded = false },
+                    modifier = Modifier.height(320.dp)
+                ) {
+                    MARKETPLACE_CAMPAIGN_CATEGORIES.forEach { category ->
+                        DropdownMenuItem(
+                            text = { Text(category) },
+                            onClick = {
+                                destinationValue = category
+                                categoryMenuExpanded = false
+                                message = null
+                                error = null
+                            }
+                        )
+                    }
+                }
+                Text(
+                    "Choose from the same categories buyers can browse in Marketplace.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            "PRODUCT", "SHOP" -> OutlinedTextField(
+                value = destinationValue,
+                onValueChange = {
+                    destinationValue = if (destinationType == "PRODUCT") {
+                        it.filter(Char::isDigit).take(20)
+                    } else {
+                        it.trim().removePrefix("@").lowercase().filter { char -> char.isLetterOrDigit() || char == '_' }.take(32)
+                    }
+                    message = null
+                    error = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(if (destinationType == "PRODUCT") "Product listing ID" else "Seller username") },
+                supportingText = {
+                    Text(if (destinationType == "PRODUCT") {
+                        "Paste the numeric listing ID from an active, in-stock product."
+                    } else {
+                        "Enter the seller's FYNX username, without @."
+                    })
+                },
+                singleLine = true,
+                enabled = !saving
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("Campaign artwork (optional)", style = MaterialTheme.typography.labelLarge)
             Text(
@@ -294,13 +382,16 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         artworkMediaId = mediaId
                     }
                     FynxMarketplaceSeasonalPromotionClient.create(
-                        context, promotionType, occasionKey, headline, body, actionLabel, savedArtworkId, startsAt, endsAt
+                        context, promotionType, occasionKey, headline, body, actionLabel,
+                        destinationType, destinationValue, savedArtworkId, startsAt, endsAt
                     ).onSuccess {
                         message = "${promotionType.lowercase().replaceFirstChar { it.uppercase() }} campaign scheduled. It will appear automatically inside its start/end window."
                         occasionKey = ""
                         headline = ""
                         body = ""
                         actionLabel = "Explore Marketplace"
+                        destinationType = "MARKETPLACE"
+                        destinationValue = ""
                         artworkUri = null
                         artworkMediaId = ""
                         startsAt = ""
@@ -313,6 +404,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 }
             },
             enabled = !saving && occasionKey.isNotBlank() && headline.trim().length >= 3 &&
+                isValidMarketplaceCampaignDestination(destinationType, destinationValue) &&
                 marketplaceSeasonalWindowIsValid(startsAt, endsAt),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -370,6 +462,12 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                             }
                         }
                         Text("${campaign.promotionType}  •  ${campaign.occasionKey}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            "Destination: ${campaign.destinationType}" +
+                                campaign.destinationValue.takeIf { it.isNotBlank() }?.let { "  •  $it" }.orEmpty(),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall
+                        )
                         Text("Starts: ${formatMarketplaceSeasonalDateTime(campaign.startsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Ends: ${formatMarketplaceSeasonalDateTime(campaign.endsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

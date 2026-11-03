@@ -52,7 +52,9 @@ private data class MarketplacePromoSlide(
     val isAnnouncement: Boolean = false,
     val isOffer: Boolean = false,
     val celebration: Boolean = false,
-    val artworkMediaId: String? = null
+    val artworkMediaId: String? = null,
+    val destinationType: String = "MARKETPLACE",
+    val destinationValue: String = ""
 )
 
 @Composable
@@ -65,6 +67,8 @@ fun MarketplacePromotionalBanner(
     seasonalPromotions: List<FynxMarketplaceSeasonalPromotion>,
     onOpenListing: (FynxRemoteSocialClient.MarketplaceListing) -> Unit,
     onOpenSeller: (String) -> Unit,
+    onOpenProduct: (String) -> Unit,
+    onOpenCategory: (String) -> Unit,
     onShopNow: () -> Unit,
     onOpenOrders: () -> Unit,
     onRefresh: () -> Unit,
@@ -135,7 +139,9 @@ fun MarketplacePromotionalBanner(
                         isAnnouncement = promotion.promotionType == "ANNOUNCEMENT",
                         isOffer = promotion.promotionType == "OFFER",
                         celebration = promotion.promotionType == "SEASONAL",
-                        artworkMediaId = promotion.artworkMediaId.takeIf { it.isNotBlank() }
+                        artworkMediaId = promotion.artworkMediaId.takeIf { it.isNotBlank() },
+                        destinationType = promotion.destinationType,
+                        destinationValue = promotion.destinationValue
                     )
                 )
             }
@@ -228,6 +234,12 @@ fun MarketplacePromotionalBanner(
             slide.isWeeklyWinner && !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
             slide.listing != null -> onOpenListing(slide.listing)
             !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
+            slide.destinationType == "PRODUCT" && slide.destinationValue.isNotBlank() ->
+                onOpenProduct(slide.destinationValue)
+            slide.destinationType == "CATEGORY" && slide.destinationValue.isNotBlank() ->
+                onOpenCategory(slide.destinationValue)
+            slide.destinationType == "SHOP" && slide.destinationValue.isNotBlank() ->
+                onOpenSeller(slide.destinationValue)
             else -> onShopNow()
         }
     }

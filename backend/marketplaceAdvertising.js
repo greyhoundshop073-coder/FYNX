@@ -14,6 +14,16 @@ const CAMPAIGN_STATUSES = new Set(["draft", "pending_review", "active", "paused"
 const TARGETING_KEYS = new Set(["locations", "ageMin", "ageMax", "interests"]);
 const CREATIVE_TYPES = new Set(["post", "product", "business"]);
 const SEASONAL_PROMOTION_TYPES = new Set(["SEASONAL", "ANNOUNCEMENT", "OFFER"]);
+const MARKETPLACE_CAMPAIGN_CATEGORIES = [
+  "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles",
+  "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture",
+  "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts",
+  "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local",
+  "Business & Workshop Supplies", "Other"
+];
+const MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY = new Map(
+  MARKETPLACE_CAMPAIGN_CATEGORIES.map(category => [category.toLowerCase(), category])
+);
 
 async function ensureAdvertisingSchema() {
   if (!pool) return;
@@ -79,6 +89,8 @@ async function ensureAdvertisingSchema() {
       body TEXT NOT NULL DEFAULT '',
       action_label TEXT NOT NULL DEFAULT 'Explore Marketplace',
       artwork_media_id BIGINT,
+      destination_type TEXT NOT NULL DEFAULT 'MARKETPLACE',
+      destination_value TEXT,
       starts_at TIMESTAMPTZ NOT NULL,
       ends_at TIMESTAMPTZ NOT NULL,
       active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -91,6 +103,8 @@ async function ensureAdvertisingSchema() {
       ON marketplace_seasonal_promotions(active, starts_at, ends_at);
     ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS artwork_media_id BIGINT;
     ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS promotion_type TEXT NOT NULL DEFAULT 'SEASONAL';
+    ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS destination_type TEXT NOT NULL DEFAULT 'MARKETPLACE';
+    ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS destination_value TEXT;
     DO $$
     BEGIN
       IF NOT EXISTS (
@@ -101,6 +115,18 @@ async function ensureAdvertisingSchema() {
         ALTER TABLE marketplace_seasonal_promotions
           ADD CONSTRAINT marketplace_seasonal_promotions_type_check
           CHECK (promotion_type IN ('SEASONAL', 'ANNOUNCEMENT', 'OFFER'));
+      END IF;
+    END $$;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'marketplace_seasonal_promotions_destination_type_check'
+          AND conrelid = 'marketplace_seasonal_promotions'::regclass
+      ) THEN
+        ALTER TABLE marketplace_seasonal_promotions
+          ADD CONSTRAINT marketplace_seasonal_promotions_destination_type_check
+          CHECK (destination_type IN ('MARKETPLACE', 'CATEGORY', 'PRODUCT', 'SHOP'));
       END IF;
     END $$;
   `);
@@ -162,6 +188,8 @@ function seasonalPromotionPayload(row) {
     body: row.body || "",
     actionLabel: row.action_label || "Explore Marketplace",
     artworkMediaId: row.artwork_media_id == null ? "" : String(row.artwork_media_id),
+    destinationType: row.destination_type || "MARKETPLACE",
+    destinationValue: row.destination_value || "",
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     active: Boolean(row.active),
@@ -263,11 +291,31 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const headline = typeof req.body?.headline === "string" ? req.body.headline.trim() : "";
       const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
       const actionLabel = typeof req.body?.actionLabel === "string" ? req.body.actionLabel.trim() : "Explore Marketplace";
+      const destinationType = typeof req.body?.destinationType === "string" ? req.body.destinationType.trim().toUpperCase() : "MARKETPLACE";
+      let destinationValue = typeof req.body?.destinationValue === "string" ? req.body.destinationValue.trim() : "";
       const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positiveInt(req.body.artworkMediaId);
       const startsAt = typeof req.body?.startsAt === "string" ? new Date(req.body.startsAt) : null;
       const endsAt = typeof req.body?.endsAt === "string" ? new Date(req.body.endsAt) : null;
       const active = req.body?.active !== false;
       if (!SEASONAL_PROMOTION_TYPES.has(promotionType)) return res.status(400).json({ error: "promotion type must be SEASONAL, ANNOUNCEMENT or OFFER" });
+      if (!["MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)) {
+        return res.status(400).json({ error: "destination must be MARKETPLACE, CATEGORY, PRODUCT or SHOP" });
+      }
+      if ((destinationType === "MARKETPLACE" && destinationValue) ||
+          (destinationType !== "MARKETPLACE" && !destinationValue)) {
+        return res.status(400).json({ error: "the selected campaign destination requires a matching destination value" });
+      }
+      if (destinationType === "CATEGORY") {
+        const canonicalCategory = MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY.get(destinationValue.toLowerCase());
+        if (!canonicalCategory) return res.status(400).json({ error: "choose a category that exists in Marketplace" });
+        destinationValue = canonicalCategory;
+      }
+      if (destinationType === "PRODUCT" && !/^[1-9][0-9]{0,19}$/.test(destinationValue)) {
+        return res.status(400).json({ error: "product destination must be a positive Marketplace listing ID" });
+      }
+      if (destinationType === "SHOP" && !/^[a-z0-9_]{3,32}$/i.test(destinationValue)) {
+        return res.status(400).json({ error: "shop destination must be a valid FYNX username" });
+      }
       if (!/^[a-z0-9][a-z0-9_-]{1,59}$/.test(occasionKey)) return res.status(400).json({ error: "campaign key must use 2-60 letters, numbers, dashes or underscores" });
       if (headline.length < 3 || headline.length > 120 || body.length > 500 || actionLabel.length < 2 || actionLabel.length > 48) {
         return res.status(400).json({ error: "headline, body or action label is outside the allowed length" });
@@ -284,6 +332,20 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       if (req.body?.artworkMediaId != null && req.body.artworkMediaId !== "" && artworkMediaId === null) {
         return res.status(400).json({ error: "artwork must be an uploaded FYNX image media ID" });
       }
+      if (destinationType === "PRODUCT") {
+        const target = await pool.query(
+          "SELECT id FROM marketplace_listings WHERE id=$1 AND COALESCE(active,TRUE)=TRUE AND GREATEST(0, quantity-COALESCE(reserved_quantity,0)) > 0 LIMIT 1",
+          [destinationValue]
+        );
+        if (!target.rowCount) return res.status(404).json({ error: "campaign product must be an active Marketplace listing with available stock" });
+      }
+      if (destinationType === "SHOP") {
+        const target = await pool.query(
+          "SELECT id FROM users WHERE LOWER(username)=LOWER($1) LIMIT 1",
+          [destinationValue]
+        );
+        if (!target.rowCount) return res.status(404).json({ error: "campaign shop username was not found" });
+      }
       if (artworkMediaId !== null) {
         const ownedMedia = await pool.query(
           "SELECT 1 FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",
@@ -292,8 +354,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         if (!ownedMedia.rowCount) return res.status(403).json({ error: "seasonal artwork must be uploaded by the current Owner/Admin account" });
       }
       const result = await pool.query(
-        "INSERT INTO marketplace_seasonal_promotions (promotion_type,occasion_key,headline,body,action_label,artwork_media_id,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *",
-        [promotionType, occasionKey, headline, body, actionLabel, artworkMediaId, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
+        "INSERT INTO marketplace_seasonal_promotions (promotion_type,occasion_key,headline,body,action_label,artwork_media_id,destination_type,destination_value,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *",
+        [promotionType, occasionKey, headline, body, actionLabel, artworkMediaId, destinationType, destinationValue || null, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
       );
       return res.status(201).json({ promotion: seasonalPromotionPayload(result.rows[0]) });
     } catch (error) {

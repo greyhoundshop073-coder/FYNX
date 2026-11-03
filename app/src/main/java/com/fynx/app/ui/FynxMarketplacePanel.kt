@@ -887,7 +887,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
-    val categories = listOf("All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other")
+    val categories = listOf("All") + MARKETPLACE_CAMPAIGN_CATEGORIES
     var sellerReputations by remember { mutableStateOf<Map<String, FynxMarketplaceClient.SellerReputation>>(emptyMap()) }
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var weeklySeller by remember(currentUsername) { mutableStateOf<FynxMarketplaceWeeklySeller?>(null) }
@@ -1322,6 +1322,28 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             seasonalPromotions = seasonalPromotions,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
+                            onOpenProduct = { listingId ->
+                                scope.launch {
+                                    loadExactMarketplaceListing(context, listingId)
+                                        .onSuccess { listing ->
+                                            if (listing.active && listing.quantity > 0) selected = listing
+                                            else {
+                                                error = "This promoted product is no longer available."
+                                                showAllProducts = true
+                                            }
+                                        }
+                                        .onFailure {
+                                            error = "This promoted product could not be opened. Browse the current listings instead."
+                                            showAllProducts = true
+                                        }
+                                }
+                            },
+                            onOpenCategory = { destination ->
+                                category = destination
+                                query = ""
+                                nearbyMode = false
+                                showAllProducts = true
+                            },
                             onShopNow = { showAllProducts = true },
                             onOpenOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
@@ -1359,6 +1381,28 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             seasonalPromotions = seasonalPromotions,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
+                            onOpenProduct = { listingId ->
+                                scope.launch {
+                                    loadExactMarketplaceListing(context, listingId)
+                                        .onSuccess { listing ->
+                                            if (listing.active && listing.quantity > 0) selected = listing
+                                            else {
+                                                error = "This promoted product is no longer available."
+                                                showAllProducts = true
+                                            }
+                                        }
+                                        .onFailure {
+                                            error = "This promoted product could not be opened. Browse the current listings instead."
+                                            showAllProducts = true
+                                        }
+                                }
+                            },
+                            onOpenCategory = { destination ->
+                                category = destination
+                                query = ""
+                                nearbyMode = false
+                                showAllProducts = true
+                            },
                             onShopNow = { showAllProducts = true },
                             onOpenOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
@@ -1401,6 +1445,28 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             seasonalPromotions = seasonalPromotions,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
+                            onOpenProduct = { listingId ->
+                                scope.launch {
+                                    loadExactMarketplaceListing(context, listingId)
+                                        .onSuccess { listing ->
+                                            if (listing.active && listing.quantity > 0) selected = listing
+                                            else {
+                                                error = "This promoted product is no longer available."
+                                                showAllProducts = true
+                                            }
+                                        }
+                                        .onFailure {
+                                            error = "This promoted product could not be opened. Browse the current listings instead."
+                                            showAllProducts = true
+                                        }
+                                }
+                            },
+                            onOpenCategory = { destination ->
+                                category = destination
+                                query = ""
+                                nearbyMode = false
+                                showAllProducts = true
+                            },
                             onShopNow = { showAllProducts = true },
                             onOpenOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
@@ -1496,6 +1562,28 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             seasonalPromotions = seasonalPromotions,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
+                            onOpenProduct = { listingId ->
+                                scope.launch {
+                                    loadExactMarketplaceListing(context, listingId)
+                                        .onSuccess { listing ->
+                                            if (listing.active && listing.quantity > 0) selected = listing
+                                            else {
+                                                error = "This promoted product is no longer available."
+                                                showAllProducts = true
+                                            }
+                                        }
+                                        .onFailure {
+                                            error = "This promoted product could not be opened. Browse the current listings instead."
+                                            showAllProducts = true
+                                        }
+                                }
+                            },
+                            onOpenCategory = { destination ->
+                                category = destination
+                                query = ""
+                                nearbyMode = false
+                                showAllProducts = true
+                            },
                             onShopNow = { showAllProducts = true },
                             onOpenOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },

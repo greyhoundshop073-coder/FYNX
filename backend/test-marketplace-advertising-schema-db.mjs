@@ -53,6 +53,35 @@ try {
   assert.match(column.rows[0].column_default, /SEASONAL/, "legacy rows must default to the SEASONAL content type");
   assert.equal(column.rows[0].is_nullable, "NO", "campaign type must be non-null");
 
+  const destinationColumn = await db.query(`
+    SELECT column_default, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = $1
+      AND table_name = 'marketplace_seasonal_promotions'
+      AND column_name = 'destination_type'
+  `, [schema]);
+  assert.equal(destinationColumn.rowCount, 1, "legacy seasonal table must gain destination_type");
+  assert.match(destinationColumn.rows[0].column_default, /MARKETPLACE/, "legacy rows must default to the Marketplace destination");
+  assert.equal(destinationColumn.rows[0].is_nullable, "NO", "campaign destination type must be non-null");
+
+  const destinationValueColumn = await db.query(`
+    SELECT is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = $1
+      AND table_name = 'marketplace_seasonal_promotions'
+      AND column_name = 'destination_value'
+  `, [schema]);
+  assert.equal(destinationValueColumn.rowCount, 1, "legacy seasonal table must gain destination_value");
+  assert.equal(destinationValueColumn.rows[0].is_nullable, "YES", "Marketplace-wide campaigns may omit a destination value");
+
+  const destinationConstraint = await db.query(`
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'marketplace_seasonal_promotions_destination_type_check'
+      AND conrelid = 'marketplace_seasonal_promotions'::regclass
+      AND contype = 'c'
+  `);
+  assert.equal(destinationConstraint.rowCount, 1, "campaign destination type check constraint must exist");
+
   const constraint = await db.query(`
     SELECT 1
     FROM pg_constraint
@@ -68,6 +97,9 @@ try {
   );
   const legacy = await db.query("SELECT promotion_type FROM marketplace_seasonal_promotions WHERE occasion_key='legacy'");
   assert.equal(legacy.rows[0].promotion_type, "SEASONAL", "legacy campaign rows must remain seasonal after migration");
+  const legacyDestination = await db.query("SELECT destination_type, destination_value FROM marketplace_seasonal_promotions WHERE occasion_key='legacy'");
+  assert.equal(legacyDestination.rows[0].destination_type, "MARKETPLACE", "legacy campaigns must default to a Marketplace destination");
+  assert.equal(legacyDestination.rows[0].destination_value, null, "legacy Marketplace destinations must not invent a target");
 
   await db.query(
     "INSERT INTO marketplace_seasonal_promotions (promotion_type,occasion_key,headline,starts_at,ends_at,created_by) VALUES ('ANNOUNCEMENT','notice','FYNX notice',NOW(),NOW()+INTERVAL '1 day',1)"
@@ -79,7 +111,17 @@ try {
     (error) => error?.code === "23514",
     "unsupported campaign types must be rejected by PostgreSQL"
   );
-  console.log("PostgreSQL Marketplace advertising schema migration passed (legacy upgrade, repeat migration, default, and type-constraint cases).");
+  await db.query(
+    "INSERT INTO marketplace_seasonal_promotions (promotion_type,destination_type,destination_value,occasion_key,headline,starts_at,ends_at,created_by) VALUES ('ANNOUNCEMENT','CATEGORY','Electronics','category-test','Electronics campaign',NOW(),NOW()+INTERVAL '1 day',1)"
+  );
+  await assert.rejects(
+    db.query(
+      "INSERT INTO marketplace_seasonal_promotions (promotion_type,destination_type,occasion_key,headline,starts_at,ends_at,created_by) VALUES ('ANNOUNCEMENT','EXTERNAL','bad-destination','Invalid destination',NOW(),NOW()+INTERVAL '1 day',1)"
+    ),
+    (error) => error?.code === "23514",
+    "unsupported campaign destinations must be rejected by PostgreSQL"
+  );
+  console.log("PostgreSQL Marketplace advertising schema migration passed (legacy upgrade, repeat migration, defaults, and campaign type/destination constraints).");
 } finally {
   await db.query("SET search_path TO public").catch(() => {});
   await db.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});
