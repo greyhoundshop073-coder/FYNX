@@ -131,6 +131,12 @@ check("Status delegates to the shared optimized media uploader", "FynxProduction
 check("R2 PUT client accepts only a Cloudflare HTTPS R2 endpoint", "isTrustedR2Host(target.host)" in put_method and "cloudflarestorage" in media_backend_client.lower())
 check("R2 PUT never receives the FYNX bearer token", "Authorization" not in put_method and "accessToken(context)" not in put_method)
 check("R2 PUT sends the signed MIME and cache headers", 'setRequestProperty("Content-Type", mimeType)' in put_once_method and 'setRequestProperty("Cache-Control", "private, max-age=60")' in put_once_method)
+
+retry_start = media_backend_client.find("private fun isRetryableFailure")
+retry_end = media_backend_client.find("\n    private fun migrateLegacyAccessToken", retry_start)
+retry_method = media_backend_client[retry_start:retry_end] if retry_start >= 0 and retry_end > retry_start else ""
+check("permanent HTTP upload failures do not retry", retry_method.find("current is FynxHttpException") < retry_method.find("current is IOException") and "current.status in setOf(408, 425, 429, 500, 502, 503, 504)" in retry_method)
+
 check("media downloads follow only the allowlisted signed R2 redirect", "HTTP_MOVED_TEMP" in download_method and "isTrustedR2Host(signedTarget.host)" in download_method)
 check("FYNX bearer auth is not forwarded to the R2 download", "openConnection(signedTarget, false)" in download_method)
 
