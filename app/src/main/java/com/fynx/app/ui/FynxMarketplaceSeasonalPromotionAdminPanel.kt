@@ -111,6 +111,8 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var headline by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
     var actionLabel by remember { mutableStateOf("Explore Marketplace") }
+    var destinationType by remember { mutableStateOf("MARKETPLACE") }
+    var destinationValue by remember { mutableStateOf("") }
     var artworkUri by remember { mutableStateOf<Uri?>(null) }
     var artworkMediaId by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
@@ -201,6 +203,58 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             singleLine = true,
             enabled = !saving
         )
+        Text("Button destination", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Choose where the banner opens. Product IDs are checked against active, in-stock listings before the campaign is saved.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP").forEach { type ->
+                val label = when (type) {
+                    "CATEGORY" -> "Category"
+                    "PRODUCT" -> "Product"
+                    "SHOP" -> "Shop"
+                    else -> "Marketplace"
+                }
+                if (destinationType == type) {
+                    Button(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) {
+                        Text(label, maxLines = 1)
+                    }
+                } else {
+                    OutlinedButton(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) {
+                        Text(label, maxLines = 1)
+                    }
+                }
+            }
+        }
+        if (destinationType != "MARKETPLACE") {
+            OutlinedTextField(
+                value = destinationValue,
+                onValueChange = {
+                    destinationValue = when (destinationType) {
+                        "PRODUCT" -> it.filter(Char::isDigit).take(20)
+                        "SHOP" -> it.trim().removePrefix("@").lowercase().filter { char -> char.isLetterOrDigit() || char == '_' }.take(32)
+                        else -> it.take(60)
+                    }
+                    message = null
+                    error = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(when (destinationType) {
+                    "CATEGORY" -> "Marketplace category"
+                    "PRODUCT" -> "Product listing ID"
+                    else -> "Seller username"
+                }) },
+                supportingText = { Text(when (destinationType) {
+                    "CATEGORY" -> "Use the same category name shown in Marketplace, for example Electronics or Fashion."
+                    "PRODUCT" -> "Paste the numeric listing ID from the product record."
+                    else -> "Enter the seller's FYNX username, without @."
+                }) },
+                singleLine = true,
+                enabled = !saving
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("Campaign artwork (optional)", style = MaterialTheme.typography.labelLarge)
             Text(
@@ -294,13 +348,16 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         artworkMediaId = mediaId
                     }
                     FynxMarketplaceSeasonalPromotionClient.create(
-                        context, promotionType, occasionKey, headline, body, actionLabel, savedArtworkId, startsAt, endsAt
+                        context, promotionType, occasionKey, headline, body, actionLabel,
+                        destinationType, destinationValue, savedArtworkId, startsAt, endsAt
                     ).onSuccess {
                         message = "${promotionType.lowercase().replaceFirstChar { it.uppercase() }} campaign scheduled. It will appear automatically inside its start/end window."
                         occasionKey = ""
                         headline = ""
                         body = ""
                         actionLabel = "Explore Marketplace"
+                        destinationType = "MARKETPLACE"
+                        destinationValue = ""
                         artworkUri = null
                         artworkMediaId = ""
                         startsAt = ""
@@ -313,6 +370,9 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 }
             },
             enabled = !saving && occasionKey.isNotBlank() && headline.trim().length >= 3 &&
+                (destinationType == "MARKETPLACE" || destinationValue.isNotBlank()) &&
+                (destinationType != "PRODUCT" || destinationValue.toLongOrNull()?.let { it > 0L } == true) &&
+                (destinationType != "SHOP" || destinationValue.matches(Regex("[a-z0-9_]{3,32}"))) &&
                 marketplaceSeasonalWindowIsValid(startsAt, endsAt),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -370,6 +430,12 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                             }
                         }
                         Text("${campaign.promotionType}  •  ${campaign.occasionKey}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            "Destination: ${campaign.destinationType}" +
+                                campaign.destinationValue.takeIf { it.isNotBlank() }?.let { "  •  $it" }.orEmpty(),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall
+                        )
                         Text("Starts: ${formatMarketplaceSeasonalDateTime(campaign.startsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Ends: ${formatMarketplaceSeasonalDateTime(campaign.endsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
