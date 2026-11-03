@@ -429,6 +429,31 @@ export function registerMarketplaceSettlementRoutes({ app }) {
     }
   });
 
+  app.get('/api/marketplace/settlement/payout-banks', auth, async (req, res) => {
+    if (!marketplacePayoutsEnabled()) {
+      return res.status(503).json({
+        error: marketplacePayoutsNotice(),
+        code: 'MARKETPLACE_PAYOUTS_NOT_ENABLED'
+      });
+    }
+    const secret = process.env.PAYSTACK_SECRET_KEY || '';
+    if (!secret) return res.status(503).json({ error: 'payout provider is not configured yet' });
+    try {
+      const response = await fetch('https://api.paystack.co/bank?country=nigeria&currency=NGN&perPage=100', { headers: { Authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(15000) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.status !== true || !Array.isArray(payload?.data)) return res.status(502).json({ error: 'supported banks are temporarily unavailable' });
+      const banks = payload.data.map((bank) => ({
+        name: String(bank?.name || '').trim(),
+        code: String(bank?.code || '').trim(),
+        slug: String(bank?.slug || '').trim()
+      })).filter((bank) => bank.name && /^[0-9]{3,10}$/.test(bank.code));
+      return res.json({ banks });
+    } catch (error) {
+      console.error('marketplace payout bank list', error);
+      return res.status(502).json({ error: 'supported banks are temporarily unavailable' });
+    }
+  });
+
   app.post('/api/marketplace/settlement/payout-account', auth, async (req, res) => {
     if (!marketplacePayoutsEnabled()) {
       return res.status(503).json({
@@ -440,7 +465,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
     const accountNumber = typeof req.body?.accountNumber === 'string' ? req.body.accountNumber.replace(/\D/g, '') : '';
     const accountName = typeof req.body?.accountName === 'string' ? req.body.accountName.trim().slice(0, 160) : '';
     const currency = typeof req.body?.currency === 'string' ? req.body.currency.trim().toUpperCase() : 'NGN';
-    if (!['NGN','USD'].includes(currency)) return res.status(400).json({ error: 'Marketplace payout currency must be NGN or USD', code: 'UNSUPPORTED_MARKETPLACE_CURRENCY' });
+    if (currency !== 'NGN') return res.status(400).json({ error: 'Marketplace payout currency must be NGN', code: 'UNSUPPORTED_MARKETPLACE_CURRENCY' });
     const bankName = typeof req.body?.bankName === 'string' ? req.body.bankName.trim().slice(0, 120) : '';
     if (!/^[0-9]{3,10}$/.test(bankCode) || !/^[0-9]{6,20}$/.test(accountNumber) || accountName.length < 2) return res.status(400).json({ error: 'valid bank code, account number and account name are required' });
     try {

@@ -17,7 +17,7 @@ internal object FynxMarketplaceSellerFlowSupport {
     const val MAX_DESCRIPTION_LENGTH = 5000
     const val MAX_QUANTITY = 1_000_000
     const val DEFAULT_CURRENCY = "NGN"
-    val SUPPORTED_CURRENCIES = listOf("NGN", "USD")
+    val SUPPORTED_CURRENCIES = listOf("NGN")
     fun isSupportedCurrency(currency: String): Boolean = currency.trim().uppercase() in SUPPORTED_CURRENCIES
 
     fun normalizedMedia(context: Context, uris: List<Uri>): List<Uri> =

@@ -136,7 +136,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const category = cleanText(req.query?.category, 40);
       const location = cleanText(req.query?.location, 160);
       const params = [req.user.sub];
-      const where = ["l.active=TRUE", "GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
+      const where = ["l.active=TRUE", "GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0", "UPPER(COALESCE(l.currency,''))='NGN'", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
       if (q) { params.push(`%${q}%`); const n=params.length; where.push("(l.title ILIKE $" + n + " OR l.description ILIKE $" + n + " OR COALESCE(l.category,'') ILIKE $" + n + " OR COALESCE(l.store_name,'') ILIKE $" + n + " OR COALESCE(shop.shop_name,'') ILIKE $" + n + " OR u.username ILIKE $" + n + " OR u.display_name ILIKE $" + n + ")"); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push("l.category=$" + params.length); }
       if (location) { params.push(`%${location}%`); where.push("l.location ILIKE $" + params.length); }
@@ -172,7 +172,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         FROM marketplace_listings l
         JOIN users u ON u.id=l.seller_id
         LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id=l.seller_id
-        WHERE l.id=$1 AND UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')
+        WHERE l.id=$1 AND UPPER(COALESCE(l.currency,''))='NGN'
           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$2))
         LIMIT 1
       `, [listingId, req.user.sub]);
