@@ -50,6 +50,9 @@ private data class SellerMoneyRecord(
 )
 
 private data class SellerMoneyTotals(
+    val grossSales: Double,
+    val marketplaceFees: Double,
+    val netEarnings: Double,
     val protectedFunds: Double,
     val availableForPayout: Double,
     val payoutPending: Double,
@@ -213,6 +216,9 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 throw IllegalStateException("Seller earnings response contained duplicate currency totals.")
                             }
                             totals[currency] = SellerMoneyTotals(
+                                grossSales = marketplaceRequiredBalance(row.opt("grossSales")),
+                                marketplaceFees = marketplaceRequiredBalance(row.opt("marketplaceFees")),
+                                netEarnings = marketplaceRequiredBalance(row.opt("netEarnings")),
                                 protectedFunds = marketplaceRequiredBalance(row.opt("protectedFunds")),
                                 availableForPayout = marketplaceRequiredBalance(row.opt("availableForPayout")),
                                 payoutPending = marketplaceRequiredBalance(row.opt("payoutPending")),
@@ -631,6 +637,16 @@ fun FynxMarketplaceSellerCenterPanel() {
                         currencies.forEach { currency ->
                             val rows = moneyRecords.filter { it.currency == currency }
                             val serverTotals = moneyTotals[currency]
+                            val reportableRows = rows.filter {
+                                it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING", "RELEASE_ELIGIBLE", "RELEASE_PENDING", "RELEASED") ||
+                                    it.payoutStatus in setOf("PENDING", "SUCCEEDED")
+                            }
+                            val grossSales = if (moneyTotalsFromBackend) serverTotals?.grossSales ?: 0.0
+                                else reportableRows.sumOf { it.sellerNet + it.marketplaceFee }
+                            val marketplaceFees = if (moneyTotalsFromBackend) serverTotals?.marketplaceFees ?: 0.0
+                                else reportableRows.sumOf { it.marketplaceFee }
+                            val netEarnings = if (moneyTotalsFromBackend) serverTotals?.netEarnings ?: 0.0
+                                else reportableRows.sumOf { it.sellerNet }
                             val protected = if (moneyTotalsFromBackend) serverTotals?.protectedFunds ?: 0.0
                                 else rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet }
                             val available = if (moneyTotalsFromBackend) serverTotals?.availableForPayout ?: 0.0
@@ -640,6 +656,10 @@ fun FynxMarketplaceSellerCenterPanel() {
                             val paid = if (moneyTotalsFromBackend) serverTotals?.paidOut ?: 0.0
                                 else rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
                             Text(currency, fontWeight = FontWeight.Bold)
+                            MoneySummaryRow("Gross sales", grossSales, currency)
+                            MoneySummaryRow("FYNX commission", marketplaceFees, currency)
+                            MoneySummaryRow("Net seller earnings", netEarnings, currency)
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
                             MoneySummaryRow("Protected", protected, currency)
                             MoneySummaryRow("Available for payout", available, currency)
                             MoneySummaryRow("Payout pending", pending, currency)
