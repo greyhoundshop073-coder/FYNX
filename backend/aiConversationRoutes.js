@@ -154,6 +154,7 @@ export function registerFynxAiConversationRoutes({ app }) {
       return res.status(400).json({error:"message or attachment is required",code:"AI_MESSAGE_EMPTY"});
     }
     if(message.length>4000 || mediaIds.length>4) return res.status(413).json({error:"message or attachment limit exceeded"});
+    let stage="database_setup";
     try {
       const db=requireDb(); await ensureSchema(db);
       const conversation=await ownedConversation(db,req.params.id,userId);
