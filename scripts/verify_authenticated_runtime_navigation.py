@@ -1502,7 +1502,7 @@ def is_home_feed_navigation_visible(xml_text: str) -> bool:
 def scroll_home_feed_page(index: int) -> str:
     """Scroll within the actual emulator viewport; never start a swipe off-screen."""
     size = run("adb", "shell", "wm", "size").stdout or ""
-    match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", size)
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
     if not match:
         FAILURES.append("Home feed scan could not read emulator dimensions; refusing an unverified swipe.")
         return ""
