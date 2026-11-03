@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [server, cache, social, marketplace, bootstrap, pkg] = await Promise.all([
+const [server, cache, social, marketplace, bootstrap, pkg, adapter] = await Promise.all([
   read("./server.js"),
   read("./mediaPayloadCache.js"),
   read("./socialRoutes.js"),
   read("./marketplaceCompletion.js"),
   read("./socialMultiMediaBootstrap.js"),
-  read("./package.json")
+  read("./package.json"),
+  read("./mediaStorage.js")
 ]);
 
 function route(source, startMarker, endMarker) {
@@ -71,6 +72,17 @@ assert.match(server, /completed_media_id/);
 assert.match(server, /completed_at TIMESTAMPTZ/);
 assert.match(server, /completed_media_id = \$2, completed_at = NOW\(\)/);
 assert.match(server, /completed_at IS NULL AND expires_at/);
+assert.match(server, /upload_object_key TEXT NOT NULL/);
+assert.match(server, /mediaStorage\.createUploadUrl\(\{ objectKey: uploadObjectKey/);
+assert.match(server, /mediaStorage\.inspectMediaObject\(intent\.upload_object_key\)/);
+assert.match(server, /mediaStorage\.promoteUploadedObject\(intent\.upload_object_key, intent\.object_key\)/);
+assert.match(server, /const permanentInfo = await mediaStorage\.inspectMediaObject\(intent\.object_key\)/);
+assert.match(server, /completedTemporary/);
+assert.match(server, /upload_object_key = object_key/);
+assert.match(adapter, /CopyObjectCommand/);
+assert.match(adapter, /validateUploadObjectKey/);
+assert.match(adapter, /validateStoredObjectKey/);
+
 assert.match(server, /completed_at IS NOT NULL AND completed_at < NOW\(\) - INTERVAL '30 days'/);
 assert.match(pkg, /test-media-storage\.mjs/);
 

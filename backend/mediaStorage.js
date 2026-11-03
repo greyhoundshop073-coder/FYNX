@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -13,6 +14,7 @@ const MAX_MEDIA_OBJECT_BYTES = 12 * 1024 * 1024;
 const DEFAULT_DOWNLOAD_URL_TTL_SECONDS = 120;
 const MAX_DOWNLOAD_URL_TTL_SECONDS = 300;
 const MEDIA_OBJECT_KEY_PATTERN = /^media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UPLOAD_OBJECT_KEY_PATTERN = /^uploads\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class MediaStorageConfigurationError extends Error {
   constructor(message = "FYNX media object storage is not configured.") {
@@ -94,6 +96,20 @@ export function createMediaStorage({
     return key;
   }
 
+  function validateUploadObjectKey(objectKey) {
+    const key = String(objectKey || "").trim();
+    if (!UPLOAD_OBJECT_KEY_PATTERN.test(key)) throw new Error("Invalid FYNX temporary upload object key.");
+    return key;
+  }
+
+  function validateStoredObjectKey(objectKey) {
+    const key = String(objectKey || "").trim();
+    if (!MEDIA_OBJECT_KEY_PATTERN.test(key) && !UPLOAD_OBJECT_KEY_PATTERN.test(key)) {
+      throw new Error("Invalid FYNX stored media object key.");
+    }
+    return key;
+  }
+
   return Object.freeze({
     provider,
     isObjectStorageEnabled: provider === "r2",
@@ -125,7 +141,7 @@ export function createMediaStorage({
 
     async createUploadUrl({ objectKey, mimeType, expiresInSeconds = 300 }) {
       requireR2Configuration();
-      const key = validateObjectKey(objectKey);
+      const key = validateUploadObjectKey(objectKey);
       const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
       if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mp4|mpeg|aac|x-m4a|wav))$/.test(normalizedMimeType)) {
         throw new Error("Unsupported FYNX media type.");
@@ -144,9 +160,22 @@ export function createMediaStorage({
       return url;
     },
 
+    async promoteUploadedObject(sourceObjectKey, destinationObjectKey) {
+      requireR2Configuration();
+      const sourceKey = validateUploadObjectKey(sourceObjectKey);
+      const destinationKey = validateObjectKey(destinationObjectKey);
+      await getClient().send(new CopyObjectCommand({
+        Bucket: bucket,
+        Key: destinationKey,
+        CopySource: bucket + "/" + sourceKey,
+        MetadataDirective: "COPY"
+      }));
+      return { objectKey: destinationKey };
+    },
+
     async inspectMediaObject(objectKey) {
       requireR2Configuration();
-      const key = validateObjectKey(objectKey);
+      const key = validateStoredObjectKey(objectKey);
       const result = await getClient().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
       return {
         byteSize: Number(result?.ContentLength || 0),
@@ -175,7 +204,7 @@ export function createMediaStorage({
 
     async deleteMediaObject(objectKey) {
       requireR2Configuration();
-      const key = validateObjectKey(objectKey);
+      const key = validateStoredObjectKey(objectKey);
       await getClient().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
     }
   });
