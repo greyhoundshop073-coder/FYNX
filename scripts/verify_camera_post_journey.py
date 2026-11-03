@@ -376,7 +376,9 @@ checks.extend([
      and "cameraTextOverlays.lastOrNull()" in camera
      and 'CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { openCameraTextEditor() }' in camera
      and "editingTextOverlayId == null && previewType == \"image\"" in camera
-     and "} else if (editingTextOverlayId == null) {" in camera),
+     and "} else if (editingTextOverlayId == null) {" in camera
+     and 'label for label in ["Looks", "Face FX", "Background", "AI Studio", "Rotate"]' in runtime
+     and "text-editing keyboard view hides the right-side effect rail and keeps Done visible" in runtime),
     ("Runtime accessibility helpers detect leaf controls and caption verification handles keyboard-owned hierarchies",
      'return node is not None and node.attrib.get("enabled", "true").lower() != "false"' in runtime
      and 'return node is not None and node.attrib.get("clickable", "false").lower() == "true"' in runtime
