@@ -26,7 +26,7 @@ const checks = [
   ["activity page returns continuation metadata", source.includes("hasMore,") && source.includes("nextCursor: hasMore && lastRow")],
   ["activity direction validates a single ALL/IN/OUT value", source.includes("parseBuyerWalletActivityDirection") && source.includes("activity direction must be a single string") && source.includes("['ALL', 'IN', 'OUT']")],
   ["direction filtering is applied before keyset pagination", source.includes("activity_delta.wallet_delta") && source.includes("$3::text='IN'") && source.includes("$3::text='OUT'") && source.includes("LEFT JOIN LATERAL")],
-  ["real-money capabilities require explicit provider, custody, compliance and payout approvals", source.includes("FYNX_WALLET_PROVIDER_APPROVED") && source.includes("FYNX_WALLET_CUSTODY_APPROVED") && source.includes("FYNX_WALLET_COMPLIANCE_APPROVED") && source.includes("FYNX_WALLET_DEPOSITS_ENABLED") && source.includes("FYNX_WALLET_WITHDRAWALS_ENABLED") && source.includes("canSpend: false")],
+  ["real-money capabilities require explicit provider, custody, compliance, registered-business and payout approvals", source.includes("FYNX_WALLET_PROVIDER_APPROVED") && source.includes("FYNX_WALLET_CUSTODY_APPROVED") && source.includes("FYNX_WALLET_COMPLIANCE_APPROVED") && source.includes("Boolean(process.env.PAYSTACK_SECRET_KEY)") && source.includes("FYNX_WALLET_DEPOSITS_ENABLED") && source.includes("FYNX_WALLET_SPENDING_ENABLED === 'true'") && source.includes("FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED === 'true'") && source.includes("FYNX_WALLET_WITHDRAWALS_ENABLED === 'true'") && source.includes("FYNX_WALLET_PAYOUTS_APPROVED === 'true'")],
   ["dedicated-account and wallet funding events use shared Paystack webhook helpers", source.includes("export async function handleBuyerWalletPaystackEvent") && source.includes("export async function reconcileBuyerWalletTransferEvent") && !source.includes("app.post('/api/wallet/paystack/webhook'")],
   ["named PL/pgSQL dollar quotes are paired", source.split("RETURNS trigger AS $fynxwallet$").length - 1 >= 7 && source.split("$fynxwallet$ LANGUAGE plpgsql;").length - 1 === source.split("RETURNS trigger AS $fynxwallet$").length - 1]
 ];
@@ -47,31 +47,36 @@ const providerGate = providerGateStart >= 0 && providerGateEnd > providerGateSta
   ? source.slice(providerGateStart, providerGateEnd)
   : "";
 checks.push(
-  ["first-time Wallet summary is read-only and never auto-creates a wallet row",
-    summaryRoute.includes("SELECT id,status,provider,currency") &&
-    !/INSERT\s+INTO\s+buyer_wallets/i.test(summaryRoute) &&
-    !/UPDATE\s+buyer_wallets/i.test(summaryRoute)],
-  ["NOT_SETUP returns null balances and keeps spending and withdrawals disabled",
-    noWalletBranch.includes("walletStatus: 'NOT_SETUP'") &&
-    noWalletBranch.includes("availableBalance: null") &&
-    noWalletBranch.includes("reservedBalance: null") &&
-    noWalletBranch.includes("withdrawalPendingBalance: null") &&
-    noWalletBranch.includes("canSpend: false") &&
-    noWalletBranch.includes("canWithdraw: false")],
+  ["first authenticated Wallet summary creates one missing NGN Wallet with conflict-safe concurrency",
+    summaryRoute.includes("INSERT INTO buyer_wallets (id,user_id,currency)") &&
+    summaryRoute.includes("ON CONFLICT (user_id,currency) DO NOTHING") &&
+    summaryRoute.includes("crypto.randomUUID()") &&
+    summaryRoute.includes("wallet provisioning did not return the customer wallet") &&
+    summaryRoute.includes("WHERE user_id=$1 AND currency=$2")],
+  ["new Wallet records retain safe provider-pending defaults and no money is posted during provisioning",
+    source.includes("status TEXT NOT NULL DEFAULT 'PENDING_PROVIDER'") &&
+    source.includes("provider TEXT NOT NULL DEFAULT 'PENDING_SELECTION'") &&
+    source.includes("funding_account_status TEXT NOT NULL DEFAULT 'NOT_CREATED'") &&
+    summaryRoute.includes("ON CONFLICT (user_id,currency) DO NOTHING") &&
+    !summaryRoute.includes("INSERT INTO buyer_wallet_transactions") &&
+    !summaryRoute.includes("INSERT INTO buyer_wallet_ledger_entries")],
   ["wallet balances are derived only from succeeded append-only ledger postings",
     summaryRoute.includes("t.status='SUCCEEDED'") &&
     summaryRoute.includes("FROM buyer_wallet_ledger_entries e") &&
     summaryRoute.includes("JOIN buyer_wallet_transactions t ON t.id=e.transaction_id")],
   ["buyer reserved balance includes both reserved funds and Marketplace escrow",
     summaryRoute.includes("(balances.RESERVED || 0) + (balances.MARKETPLACE_ESCROW || 0)")],
-  ["uninitialised-wallet payment methods stay closed unless all provider, custody, compliance and Paystack gates are present",
+  ["Wallet funding methods remain behind provider, custody, compliance, Paystack and method-specific gates",
     providerGate.includes("FYNX_WALLET_PROVIDER_APPROVED === 'true'") &&
     providerGate.includes("FYNX_WALLET_CUSTODY_APPROVED === 'true'") &&
     providerGate.includes("FYNX_WALLET_COMPLIANCE_APPROVED === 'true'") &&
     providerGate.includes("Boolean(process.env.PAYSTACK_SECRET_KEY)") &&
-    noWalletBranch.includes("canFundByBankTransfer: walletProviderApproved('DEPOSIT')") &&
-    noWalletBranch.includes("canFundByCard: walletProviderApproved('CARD_FUNDING')") &&
-    noWalletBranch.includes("canFundByUssd: walletProviderApproved('USSD_FUNDING')")],
+    providerGate.includes("FYNX_WALLET_DEPOSITS_ENABLED === 'true'") &&
+    providerGate.includes("FYNX_WALLET_CARD_FUNDING_ENABLED === 'true'") &&
+    providerGate.includes("FYNX_WALLET_USSD_FUNDING_ENABLED === 'true'") &&
+    summaryRoute.includes("canFundByBankTransfer: walletProviderApproved('DEPOSIT')") &&
+    summaryRoute.includes("canFundByCard: walletProviderApproved('CARD_FUNDING')") &&
+    summaryRoute.includes("canFundByUssd: walletProviderApproved('USSD_FUNDING')")],
   ["first-time Wallet summary stays private and uncached",
     summaryRoute.includes("Cache-Control', 'no-store, private") &&
     summaryRoute.includes("WHERE user_id=$1 AND currency=$2")]

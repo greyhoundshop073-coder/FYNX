@@ -102,7 +102,7 @@ class FynxBuyerWalletClientTest {
         assertEquals("PENDING", session.status)
         assertEquals("CARD", session.paymentMethod)
         assertEquals(5000.0, session.amount, 0.0)
-        assertTrue(session.authorizationUrl!!.startsWith("https://"))
+        assertEquals("https://checkout.paystack.com/session", session.authorizationUrl)
     }
 
     @Test
@@ -115,10 +115,28 @@ class FynxBuyerWalletClientTest {
     }
 
     @Test
-    fun hostedWalletFundingSessionRejectsInvalidReferenceAndUnsafeUrl() {
+    fun hostedWalletFundingSessionRejectsUntrustedCheckoutUrls() {
+        val unsafeUrls = listOf(
+            "http://checkout.paystack.com/session",
+            "https://checkout.paystack.com@attacker.example/session",
+            "https://checkout.paystack.com.attacker.example/session",
+            "https://attacker.example/session",
+            "https://checkout.paystack.com:8443/session"
+        )
+        unsafeUrls.forEach { url ->
+            assertThrows(IllegalArgumentException::class.java) {
+                FynxBuyerWalletClient.parseWalletFundingSession(
+                    """{"status":"PENDING","reference":"fwd_0123456789abcdef0123456789abcdef","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"$url"}"""
+                )
+            }
+        }
+    }
+
+    @Test
+    fun hostedWalletFundingSessionRejectsInvalidReferenceAndPaymentMethod() {
         assertThrows(IllegalArgumentException::class.java) {
             FynxBuyerWalletClient.parseWalletFundingSession(
-                """{"status":"PENDING","reference":"bad-ref","amount":100.0,"paymentMethod":"CARD","authorizationUrl":"http://checkout.invalid"}"""
+                """{"status":"PENDING","reference":"bad-ref","amount":100.0,"paymentMethod":"CARD"}"""
             )
         }
         assertThrows(IllegalArgumentException::class.java) {

@@ -68,7 +68,7 @@ checks = [
  ("balance visibility masks amounts across the screen", "amountsVisible = balanceVisible" in panel and "if (visible) amount?.let(::fynxWalletMoney)" in panel and "if (amountsVisible) sign + fynxWalletMoney" in panel),
  ("balance buckets explain withdrawal eligibility", "Held for an order or an active review." in panel and "How bank withdrawals will work" in panel and "no money moves from this screen today" in panel),
  ("wallet status has user-readable state labels", "Wallet access is restricted" in panel and "This wallet is closed" in panel),
- ("wallet spending stays disabled and money movement is controlled by explicit provider/custody/compliance gates", "canSpend: false" in wallet_backend and "FYNX_WALLET_PROVIDER_APPROVED" in wallet_backend and "FYNX_WALLET_CUSTODY_APPROVED" in wallet_backend and "FYNX_WALLET_COMPLIANCE_APPROVED" in wallet_backend and "walletProviderApproved('DEPOSIT')" in wallet_backend and "walletProviderApproved('WITHDRAWAL')" in wallet_backend),
+ ("Wallet spending and payouts remain gated by explicit provider/custody/compliance and registered-business approvals", "canSpend: wallet.status === 'ACTIVE' && walletProviderApproved('SPENDING')" in wallet_backend and "FYNX_WALLET_SPENDING_ENABLED === 'true'" in wallet_backend and "FYNX_WALLET_PROVIDER_APPROVED === 'true'" in wallet_backend and "FYNX_WALLET_CUSTODY_APPROVED === 'true'" in wallet_backend and "FYNX_WALLET_COMPLIANCE_APPROVED === 'true'" in wallet_backend and "FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED === 'true'" in wallet_backend and "FYNX_WALLET_WITHDRAWALS_ENABLED === 'true'" in wallet_backend and "FYNX_WALLET_PAYOUTS_APPROVED === 'true'" in wallet_backend),
  ("existing Marketplace Paystack checkout retained", "initializeMarketplacePayment" in payments and "verifyMarketplacePayment" in payments),
  ("NGN-only launch foundation", 'currency == "NGN"' in client and "currently supports the NGN foundation only" in panel),
  ("Add Money opens a dedicated funding-method screen", 'onClick = { activeAction = "ADD" }' in panel and 'screen = activeAction' in panel and 'FynxWalletActionPanel' in panel and '"ADD" ->' in actions),
@@ -191,6 +191,22 @@ checks.extend([
   and "real priced listing" in runtime),
  ("Marketplace runtime recognises the actual compact Sell floating action",
   'sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]' in runtime),
+])
+
+checks.extend([
+ ("hosted Wallet funding URLs accept only the exact HTTPS Paystack checkout host",
+  'parsed.scheme?.equals("https", ignoreCase = true) == true' in client
+  and 'parsed.host?.equals("checkout.paystack.com", ignoreCase = true) == true' in client
+  and 'parsed.rawUserInfo == null' in client
+  and 'parsed.port == -1 || parsed.port == 443' in client),
+ ("Wallet funding URL tests reject lookalike hosts and URL user-info tricks",
+  "checkout.paystack.com@attacker.example" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
+  and "checkout.paystack.com.attacker.example" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
+  and "checkout.paystack.com:8443" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()),
+ ("private Wallet funding-account and PIN-security panels require a server access token",
+  'FynxBackendClient.hasAccessToken(context)' in actions
+  and "No account request has been sent." in actions
+  and "Wallet PIN status is private account information." in actions)
 ])
 
 failed=[name for name,ok in checks if not ok]
