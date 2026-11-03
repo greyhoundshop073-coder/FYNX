@@ -20,6 +20,7 @@ fun FynxActiveCallPanel(
     name: String,
     session: FynxCallSession,
     currentUsername: String? = null,
+    avatarUsername: String? = null,
     realtimeState: FynxRealtimeClient.State = FynxRealtimeClient.State.CONNECTED,
     localVideoTrack: VideoTrack? = null,
     remoteVideoTrack: VideoTrack? = null,
@@ -54,7 +55,7 @@ fun FynxActiveCallPanel(
                 if (remoteVideoTrack != null) {
                     FynxCallVideoSurface(remoteVideoTrack, Modifier.fillMaxSize(), mirror = false)
                 } else {
-                    FynxCallRemotePlaceholder(name, Modifier.fillMaxSize(), ownerUsername = name)
+                    FynxCallRemotePlaceholder(name, Modifier.fillMaxSize(), ownerUsername = avatarUsername)
                 }
 
                 Box(
@@ -81,7 +82,7 @@ fun FynxActiveCallPanel(
                     mediaId = null,
                     contentDescription = name,
                     modifier = Modifier.size(108.dp).clip(CircleShape),
-                    ownerUsername = name
+                    ownerUsername = avatarUsername
                 )
                 Spacer(Modifier.height(18.dp))
                 Text(name, style = MaterialTheme.typography.headlineSmall)
