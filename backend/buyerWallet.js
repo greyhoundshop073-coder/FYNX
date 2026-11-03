@@ -1022,28 +1022,21 @@ export function registerBuyerWalletRoutes({ app }) {
     try {
       await ensureBuyerWalletSchema();
       res.set('Cache-Control', 'no-store, private');
+      // Provision one empty NGN Wallet on first authenticated visit. The unique
+      // (user_id,currency) key makes concurrent and repeated requests idempotent.
+      // This creates no funds, funding account, provider approval or payout access.
+      await pool.query(
+        `INSERT INTO buyer_wallets (id,user_id,currency)
+         VALUES ($1,$2,'NGN')
+         ON CONFLICT (user_id,currency) DO NOTHING`,
+        [crypto.randomUUID(), req.user.sub]
+      );
       const wallet = (await pool.query(
         'SELECT id,status,provider,currency,funding_account_status,created_at,updated_at FROM buyer_wallets WHERE user_id=$1 AND currency=$2 LIMIT 1',
         [req.user.sub, 'NGN']
       )).rows[0];
       if (!wallet) {
-        return res.json({
-          walletStatus: 'NOT_SETUP',
-          currency: 'NGN',
-          availableBalance: null,
-          reservedBalance: null,
-          withdrawalPendingBalance: null,
-          canFund: walletProviderApproved('DEPOSIT') || walletProviderApproved('CARD_FUNDING') || walletProviderApproved('USSD_FUNDING'),
-          canFundByBankTransfer: walletProviderApproved('DEPOSIT'),
-          canFundByCard: walletProviderApproved('CARD_FUNDING'),
-          canFundByUssd: walletProviderApproved('USSD_FUNDING'),
-          canSpend: false,
-          canWithdraw: false,
-          testMode: walletTestModeEnabled(),
-          notice: walletTestModeEnabled()
-            ? 'TEST MODE ONLY: Paystack card payments are simulated. This test balance is not real money and cannot be spent, transferred, used for Marketplace purchases or withdrawn.'
-            : 'Your FYNX Wallet is being prepared. Payment methods appear only after the approved provider connection and required checks are complete.'
-        });
+        throw new Error('wallet provisioning did not return the customer wallet');
       }
       const balanceRows = await pool.query(`
         SELECT e.account_code,

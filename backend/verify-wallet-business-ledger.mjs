@@ -19,6 +19,10 @@ const walletSummaryRoute = walletSummaryStart >= 0 && walletSummaryEnd > walletS
   : '';
 
 const checks = [
+  ['First authenticated Wallet summary provisions one empty NGN Wallet idempotently with safe defaults',
+    walletSummaryRoute.includes("INSERT INTO buyer_wallets (id,user_id,currency)") &&
+    walletSummaryRoute.includes("ON CONFLICT (user_id,currency) DO NOTHING") &&
+    walletSummaryRoute.includes("wallet provisioning did not return the customer wallet")],
   ['Marketplace fee remains a configurable five-percent default', checkout.includes("FYNX_MARKETPLACE_FEE_BPS || '500'")],
   ['Seller earnings expose only the seller-paid fee share', settlement.includes('COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller') && settlement.includes('marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0)')],
   ['Seller earnings separately report gross, seller fee and net', settlement.includes('AS gross_sales') && settlement.includes('AS marketplace_fees') && settlement.includes('AS net_earnings')],
