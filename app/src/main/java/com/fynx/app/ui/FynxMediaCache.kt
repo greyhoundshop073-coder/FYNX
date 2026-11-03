@@ -17,7 +17,7 @@ private const val MAX_IMAGE_DIMENSION = 1600
 internal object FynxMediaCache {
     private val downloadLocks = mutableMapOf<String, Mutex>()
 
-    suspend fun getOrDownload(context: Context, path: String, type: String?): File? {
+    suspend fun getOrDownload(context: Context, path: String, type: String?, forceRefresh: Boolean = false): File? {
         if (path.isBlank()) return null
         val normalizedPath = path.trim()
         if (!isSupportedMediaPath(normalizedPath)) return null
@@ -26,22 +26,35 @@ internal object FynxMediaCache {
         val directory = File(context.filesDir, "$FYNX_MEDIA_CACHE_DIR/${accountCacheKey(accountKey)}").apply { mkdirs() }
         val extension = when (type) { "video" -> ".mp4"; "audio" -> ".m4a"; else -> ".jpg" }
         val file = File(directory, "${key(normalizedPath, type)}$extension")
-        if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
+        fun hasUsableCachedFile(): Boolean = file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES
+
+        if (hasUsableCachedFile() && !forceRefresh) {
             file.setLastModified(System.currentTimeMillis())
             return file
         }
-        if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return null
-
-        if (!FynxBackendClient.hasAccessToken(context)) return null
+        // An explicit retry should not destroy the last usable local copy while offline
+        // or before authentication is available.
+        if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) {
+            return file.takeIf { hasUsableCachedFile() }
+        }
+        if (!FynxBackendClient.hasAccessToken(context)) {
+            return file.takeIf { hasUsableCachedFile() }
+        }
 
         val lock = synchronized(downloadLocks) { downloadLocks.getOrPut(file.absolutePath) { Mutex() } }
         return try {
             lock.withLock {
-                if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
+                if (hasUsableCachedFile() && !forceRefresh) {
                     file.setLastModified(System.currentTimeMillis())
                     return@withLock file
                 }
-                if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return@withLock null
+                if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) {
+                    return@withLock file.takeIf { hasUsableCachedFile() }
+                }
+                if (!FynxBackendClient.hasAccessToken(context)) {
+                    return@withLock file.takeIf { hasUsableCachedFile() }
+                }
+                if (forceRefresh) file.delete()
                 download(context, normalizedPath, file)?.also { trim(directory, it) }
             }
         } finally {
