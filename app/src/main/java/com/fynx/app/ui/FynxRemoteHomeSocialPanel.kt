@@ -1023,9 +1023,9 @@ private fun FynxFeedTextureVideo(
             }
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (!prepared) {
+            if (!prepared && !playbackError) {
                 CircularProgressIndicator(Modifier.size(34.dp), color = Color.White, strokeWidth = 3.dp)
-            } else {
+            } else if (prepared && !playbackError) {
                 FilledIconButton(
                     onClick = {
                         runCatching {
