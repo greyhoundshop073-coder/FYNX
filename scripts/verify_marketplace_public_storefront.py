@@ -6,6 +6,8 @@ social = read("backend/socialRoutes.js")
 transactions = read("backend/marketplaceTransactions.js")
 client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 storefront = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt")
+product_cards = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceProductComponents.kt")
+marketplace_panel = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
 purchase_start = transactions.find("my-purchased-listings")
 purchase_end = transactions.find("app.get('/api/marketplace/orders',", purchase_start)
 purchase_route = transactions[purchase_start:purchase_end] if purchase_start >= 0 and purchase_end > purchase_start else ""
@@ -20,6 +22,8 @@ checks = [
     ("product cards show private bought-before, live likes, price and stock", "Bought before" in storefront and "previouslyPurchasedListingIds" in storefront and "likeCount" in storefront and '"Available: " + listing.quantity' in storefront),
     ("seller medals map to existing reputation tiers", '"ELITE SELLER" -> "GOLD SELLER"' in storefront and '"TOP SELLER" -> "SILVER SELLER"' in storefront and '"TRUSTED SELLER" -> "BRONZE SELLER"' in storefront and '"RISING SELLER" -> "RISING SELLER"' in storefront and '"NEW SELLER" -> "NEW SELLER"' in storefront),
     ("seller ranking and weekly awards use existing reputation records", "reputation?.let { MarketplaceSellerTierBadge(it.tier) }" in storefront and "FynxMarketplaceWeeklySellerClient.history" in storefront),
+    ("verified seller medals appear on public shop, product cards, seller recommendations and product details", "reputation?.let { MarketplaceSellerTierBadge(it.tier) }" in storefront and "sellerRating?.let { MarketplaceSellerTierBadge(it.tier) }" in product_cards and marketplace_panel.count("MarketplaceSellerTierBadge(it.tier)") >= 2),
+    ("failed likes and purchase-history reads provide explicit retry controls", '"Retry product likes"' in storefront and '"Retry purchase history"' in storefront and "purchaseHistoryError" in storefront),
     ("likes and buyer purchase history load inside the profile's structured parallel scope", storefront.count("LaunchedEffect(username, viewerUsername, storefrontReloadKey)") == 1 and "coroutineScope {" in storefront and storefront.index("FynxRemoteSocialClient.marketplaceSellerListingEngagement") < storefront.index("The persistent shop description") and storefront.index("FynxRemoteSocialClient.myPurchasedMarketplaceListingIds") < storefront.index("The persistent shop description")),
 ]
 failed = [name for name, passed in checks if not passed]

@@ -95,12 +95,14 @@ internal fun FynxMarketplaceSellerStoreDialog(
     }
     var listingEngagementError by remember(username, viewerUsername) { mutableStateOf<String?>(null) }
     var previouslyPurchasedListingIds by remember(viewerUsername) { mutableStateOf<Set<String>>(emptySet()) }
+    var purchaseHistoryError by remember(viewerUsername) { mutableStateOf<String?>(null) }
     var likeBusyListingIds by remember(username, viewerUsername) { mutableStateOf<Set<String>>(emptySet()) }
     var likeError by remember(username, viewerUsername) { mutableStateOf<String?>(null) }
     LaunchedEffect(username, viewerUsername, storefrontReloadKey) {
         storefrontLoading = true
         listingEngagement = null
         listingEngagementError = null
+        purchaseHistoryError = null
         likeError = null
         storefrontError = null
         profileLoading = true
@@ -166,8 +168,14 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 val viewer = viewerUsername.trim().removePrefix("@")
                 if (viewer.isNotBlank() && !viewer.equals("preview", ignoreCase = true)) {
                     FynxRemoteSocialClient.myPurchasedMarketplaceListingIds(context)
-                        .onSuccess { previouslyPurchasedListingIds = it }
-                        .onFailure { previouslyPurchasedListingIds = emptySet() }
+                        .onSuccess {
+                            previouslyPurchasedListingIds = it
+                            purchaseHistoryError = null
+                        }
+                        .onFailure { failure ->
+                            previouslyPurchasedListingIds = emptySet()
+                            purchaseHistoryError = marketplaceSafeError(failure, "Purchase history could not load. Previous-purchase labels are temporarily unavailable.")
+                        }
                 } else {
                     previouslyPurchasedListingIds = emptySet()
                 }
@@ -431,10 +439,34 @@ internal fun FynxMarketplaceSellerStoreDialog(
                         }
                     }
                     listingEngagementError?.let { message ->
-                        item(key = "seller-store-like-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
+                        item(key = "seller-store-like-error") {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                                TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading) {
+                                    Text("Retry product likes")
+                                }
+                            }
+                        }
+                    }
+                    purchaseHistoryError?.let { message ->
+                        item(key = "seller-store-purchase-history-error") {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                                TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !storefrontLoading) {
+                                    Text("Retry purchase history")
+                                }
+                            }
+                        }
                     }
                     likeError?.let { message ->
-                        item(key = "seller-store-like-action-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
+                        item(key = "seller-store-like-action-error") {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                                TextButton(onClick = { likeError = null }, enabled = likeBusyListingIds.isEmpty()) {
+                                    Text("Dismiss")
+                                }
+                            }
+                        }
                     }
                     items(sellerListings.chunked(3), key = { row -> "seller-store-row-" + row.first().id }) { productRow ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
@@ -474,7 +506,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
 }
 
 @Composable
-private fun MarketplaceSellerTierBadge(tier: String) {
+internal fun MarketplaceSellerTierBadge(tier: String) {
     val badge = when (tier.trim().uppercase(Locale.US)) {
         "NEW SELLER" -> "NEW SELLER" to Color(0xFF64748B)
         "ELITE SELLER" -> "GOLD SELLER" to Color(0xFFD4AF37)

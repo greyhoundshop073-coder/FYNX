@@ -2037,6 +2037,7 @@ private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceLis
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
                 Text(listing.category + " • " + (reputation?.let { it.successfulSales.toString() + " sales" } ?: "New seller"), maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                reputation?.let { MarketplaceSellerTierBadge(it.tier) }
                 if (reputation != null && reputation.reviewCount > 0) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary); Text(" " + String.format(Locale.US, "%.1f", reputation.averageRating), style = MaterialTheme.typography.labelSmall) } }
                 TextButton(onClick = onProfile, contentPadding = PaddingValues(0.dp)) { Text("View Store") }
             }
@@ -2098,6 +2099,7 @@ private fun MarketplaceDetails(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text("Seller:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(l.sellerDisplayName.ifBlank { l.sellerUsername }, fontWeight = FontWeight.SemiBold)
+                        sellerReputation?.let { MarketplaceSellerTierBadge(it.tier) }
                         if (l.location.isNotBlank()) {
                             Text("Location: ${l.location}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
