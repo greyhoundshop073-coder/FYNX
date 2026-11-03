@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
@@ -891,6 +892,7 @@ private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost)
 @Composable
 private fun FynxFeedTextureVideo(
     file: File,
+    poster: Bitmap?,
     aspectRatio: Float,
     playbackActive: Boolean,
     muted: Boolean,
@@ -906,13 +908,17 @@ private fun FynxFeedTextureVideo(
     var prepared by remember(file) { mutableStateOf(false) }
     var playing by remember(file) { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize()) {
+        // Letterboxed areas use a softened frame from this clip rather than empty black bars.
+        FynxVideoAmbientBackdrop(poster = poster, modifier = Modifier.fillMaxSize())
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
                     textureViewState.value = this
                     isClickable = false
                     isFocusable = false
+                    // A transparent TextureView lets the matching blurred video frame show through its fitted side areas.
+                    setOpaque(false)
                     // TextureView does not support background drawables; the parent Box provides the black video background.
                     setSurfaceTextureListener(object : TextureView.SurfaceTextureListener {
                         override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) {
@@ -1017,6 +1023,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     var mediaFailed by remember(path) { mutableStateOf(false) }
     var reloadNonce by remember(path) { mutableIntStateOf(0) }
     var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }
+    var videoPoster by remember(path) { mutableStateOf<Bitmap?>(null) }
     var playing by remember(path) { mutableStateOf(false) }
     var muted by remember(path) { mutableStateOf(true) }
     var fullscreen by remember(path) { mutableStateOf(false) }
@@ -1028,19 +1035,12 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
         mediaLoading = false
     }
     LaunchedEffect(file, type) {
-        if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) {
-            runCatching {
-                val retriever = MediaMetadataRetriever()
-                try {
-                    retriever.setDataSource(file!!.absolutePath)
-                    val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f
-                    val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f
-                    val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-                    ((if (rotation == 90 || rotation == 270) height / width else width / height).takeIf { it.isFinite() && it > 0f } ?: (16f / 9f)).coerceIn(0.56f, 1.91f)
-                } finally {
-                    runCatching { retriever.release() }
-                }
-            }.getOrDefault(16f / 9f)
+        if (file != null && type == "video") {
+            val visual = readFynxVideoVisual(file!!)
+            videoAspectRatio = visual.aspectRatio
+            videoPoster = visual.poster
+        } else {
+            videoPoster = null
         }
     }
     if (mediaLoading) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -1063,6 +1063,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
             ) {
                 FynxFeedTextureVideo(
                     file = file!!,
+                    poster = videoPoster,
                     aspectRatio = videoAspectRatio,
                     playbackActive = playbackActive && !fullscreen,
                 muted = muted,

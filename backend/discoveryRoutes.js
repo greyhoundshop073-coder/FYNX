@@ -83,6 +83,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
                EXTRACT(EPOCH FROM p.created_at) * 1000 AS timestamp,
                COALESCE(l.likes,0) AS like_count,
                COALESCE(c.comments,0) AS comment_count,
+               EXISTS (SELECT 1 FROM social_post_likes mine WHERE mine.post_id=p.id AND mine.user_id=$1) AS liked_by_current_user,
                COALESCE(e.shares,0) AS share_count,
                COALESCE(e.saves,0) AS save_count,
                (COALESCE(l.likes,0) * 3 + COALESCE(c.comments,0) * 5 + COALESCE(e.shares,0) * 7 + COALESCE(e.saves,0) * 6)
@@ -115,7 +116,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
           mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null,
           mediaUrl: row.media_id == null ? null : `/api/social/media/${row.media_id}`, timestamp: Number(row.timestamp), likeCount: Number(row.like_count),
           commentCount: Number(row.comment_count), shareCount: Number(row.share_count), saveCount: Number(row.save_count),
-          likedByCurrentUser: false, followedByCurrentUser: false, isDiscovery: true,
+          likedByCurrentUser: Boolean(row.liked_by_current_user), followedByCurrentUser: false, isDiscovery: true,
           discoveryScore: Number(row.discovery_score || 0)
         })),
         hasMore
