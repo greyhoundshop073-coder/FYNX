@@ -887,7 +887,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
-    val categories = listOf("All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other")
+    val categories = listOf("All") + MARKETPLACE_CAMPAIGN_CATEGORIES
     var sellerReputations by remember { mutableStateOf<Map<String, FynxMarketplaceClient.SellerReputation>>(emptyMap()) }
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var weeklySeller by remember(currentUsername) { mutableStateOf<FynxMarketplaceWeeklySeller?>(null) }
