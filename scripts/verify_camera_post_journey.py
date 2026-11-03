@@ -371,6 +371,13 @@ checks.extend([
      and 'label = { Text("Highlight") }' in overlay
      and 'Text("Delete")' in overlay
      and "Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())" in overlay),
+    ("Status-to-post runtime keeps the supported rear camera and never reuses a stale editor hierarchy",
+     "This CI AVD is launched with -camera-front none" in runtime
+     and "wait_attempts=80" in runtime
+     and "camera_wait_for_control(" in runtime
+     and 'enabled=True, timeout=20.0' in runtime
+     and 'prefix + "-post-handoff-capture-failed"' in runtime
+     and 'lens_switch = find_control(fresh_camera_xml, ["Switch front/back camera"])' not in runtime),
     ("Reopening the camera Text tool edits the selected overlay instead of stacking a duplicate",
      "fun openCameraTextEditor()" in camera
      and "cameraTextOverlays.lastOrNull()" in camera
