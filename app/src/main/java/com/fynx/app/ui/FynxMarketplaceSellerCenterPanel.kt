@@ -117,7 +117,7 @@ private fun marketplaceDescriptionWithSubcategory(description: String, subcatego
 
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
-fun FynxMarketplaceSellerCenterPanel() {
+fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sellerAccountKey = FynxAuthStore.accountStorageKey(context).orEmpty().ifBlank { "signed-out" }
@@ -447,6 +447,9 @@ fun FynxMarketplaceSellerCenterPanel() {
                             OutlinedButton(onClick = { activeSection = "Delivery & drivers" }, modifier = Modifier.weight(1f)) { Text("Delivery & drivers") }
                         }
                         OutlinedButton(onClick = { activeSection = "Earnings & payouts" }, modifier = Modifier.fillMaxWidth()) { Text("Earnings & payouts") }
+                        Button(onClick = onViewPublicShop, modifier = Modifier.fillMaxWidth()) {
+                            Text("View public Marketplace profile")
+                        }
                         OutlinedButton(onClick = { showDriverAssignments = true }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
@@ -560,6 +563,13 @@ fun FynxMarketplaceSellerCenterPanel() {
                     OutlinedTextField(value = shopLocation, onValueChange = { shopLocation = it.take(160); shopMessage = null; shopError = null }, label = { Text("Shop location (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null; shopError = null }, label = { Text("Public shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
+                    OutlinedButton(
+                        onClick = onViewPublicShop,
+                        enabled = !shopLoading && shopName.trim().length >= 2,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Preview public Marketplace profile")
+                    }
                     Button(
                         onClick = {
                             shopSaving = true
