@@ -423,46 +423,61 @@ def camera_wait_for_control(
     (ROOT / f"{prefix}-timeout.xml").write_text(latest + chr(10), encoding="utf-8")
     return latest
 
-def restore_home_header(current_xml: str, prefix: str, attempts: int = 6) -> tuple[str, bool]:
-    """Physically scroll Home to its first content section before tapping the collapsing header.
+def _home_header_is_restored(xml_text: str) -> bool:
+    first_sections_visible = (
+        find_control(xml_text, ["Status"])
+        and find_control(xml_text, ["FYNX Assistance"])
+        and find_control(xml_text, ["Your feed"])
+    )
+    header_controls_visible = (
+        find_control(xml_text, ["Open FYNX camera"])
+        and find_control(xml_text, ["Profile menu, three dots"])
+        and find_control(xml_text, ["Chat"])
+        and find_control(xml_text, ["Friends"])
+    )
+    return bool(first_sections_visible and header_controls_visible)
 
-    Compose may keep alpha-zero header semantics in UIAutomator while the feed
-    is scrolled. Therefore node existence alone is not proof that the header
-    is actually on screen: always issue a real scroll-to-top gesture and require
-    the first Home sections to be present before accepting the header controls.
-    """
+
+def restore_home_header(current_xml: str, prefix: str, attempts: int = 6) -> tuple[str, bool]:
+    """Restore the real Home header without dragging across a tappable video surface."""
     latest = current_xml
-    # A single swipe is not reliable when the feed is several screens deep.
-    # Repeating it is safe at the top and does not navigate away from Home.
+    if find_control(latest, ["Close viewer"]):
+        latest = _dismiss_home_media_viewer(latest, prefix + "-dismiss-viewer") or ""
+        if not latest:
+            FAILURES.append(prefix + ": could not close the Home media viewer safely")
+            return current_xml, False
+
+    # Most authenticated journeys already return to Home at its top. Accept that
+    # real state immediately instead of swiping across the first video card.
+    if _home_header_is_restored(latest):
+        screenshot(prefix + "-home-header-restored.png")
+        (ROOT / (prefix + "-home-header-restored.xml")).write_text(latest + chr(10), encoding="utf-8")
+        return latest, True
+
+    size = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
+    if not match:
+        FAILURES.append(prefix + ": emulator dimensions unavailable; Home header restoration was not attempted")
+        return latest, False
+    width, height = (int(match.group(1)), int(match.group(2)))
+
     for attempt in range(max(2, attempts)):
-        run("adb", "shell", "input", "swipe", "720", "520", "720", "2600", "450")
-        time.sleep(0.9)
-        latest = dump_ui(f"{prefix}-scroll-top-{attempt}.xml") or latest
-        first_home_sections_visible = (
-            find_control(latest, ["Status"])
-            and find_control(latest, ["FYNX Assistance"])
-            and find_control(latest, ["Your feed"])
-        )
-        header_controls_present = (
-            find_control(latest, ["Open FYNX camera"])
-            and find_control(latest, ["Profile menu, three dots"])
-            and find_control(latest, ["Chat"])
-            and find_control(latest, ["Friends"])
-        )
-        if first_home_sections_visible and header_controls_present:
+        x, start_y, end_y = _home_content_scroll_point(latest, width, height, "down")
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "600")
+        time.sleep(0.8)
+        candidate = dump_ui(f"{prefix}-scroll-top-{attempt}.xml") or latest
+        if find_control(candidate, ["Close viewer"]):
+            candidate = _dismiss_home_media_viewer(candidate, prefix + "-dismiss-viewer-" + str(attempt)) or candidate
+        latest = candidate
+        if _home_header_is_restored(latest):
             screenshot(prefix + "-home-header-restored.png")
-            (ROOT / (prefix + "-home-header-restored.xml")).write_text(
-                latest + chr(10), encoding="utf-8"
-            )
+            (ROOT / (prefix + "-home-header-restored.xml")).write_text(latest + chr(10), encoding="utf-8")
             return latest, True
 
     screenshot(prefix + "-home-header-not-restored.png")
-    (ROOT / (prefix + "-home-header-not-restored.xml")).write_text(
-        latest + chr(10), encoding="utf-8"
-    )
-    FAILURES.append(prefix + ": Home did not return to its visible first sections/header after real scroll gestures")
+    (ROOT / (prefix + "-home-header-not-restored.xml")).write_text(latest + chr(10), encoding="utf-8")
+    FAILURES.append(prefix + ": Home did not return to its visible first sections/header after safe feed-text gestures")
     return latest, False
-
 
 def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> str:
     """Dismiss camera/editor surfaces using Back until the real Home camera entry returns."""
@@ -1491,6 +1506,89 @@ def find_exact_home_action(xml_text: str, label: str):
     return None
 
 
+
+def find_home_video_post_comment_action(xml_text: str):
+    """Return Comment only when its node shares a post-card ancestor with a real video duration."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+
+    video_nodes = [
+        node for node in root.iter("node")
+        if "video duration" in (
+            (node.attrib.get("content-desc") or "") + " " + (node.attrib.get("text") or "")
+        ).casefold()
+    ]
+    comment_nodes = [
+        node for node in root.iter("node")
+        if (node.attrib.get("content-desc") or "").strip().casefold() == "comment"
+        or (node.attrib.get("text") or "").strip().casefold() == "comment"
+    ]
+    if not video_nodes or not comment_nodes:
+        return None
+
+    def ancestors(node):
+        result = []
+        current = node
+        while current is not None:
+            result.append(current)
+            current = parents.get(id(current))
+        return result
+
+    try:
+        display_width, display_height = map(int, re.search(
+            r"(?:Physical|Override) size:\s*(\d+)x(\d+)",
+            run("adb", "shell", "wm", "size").stdout or ""
+        ).groups())
+    except (AttributeError, ValueError):
+        return None
+
+    for video_node in video_nodes:
+        video_center = _center(video_node)
+        if not video_center:
+            continue
+        video_path = ancestors(video_node)
+        for comment_node in comment_nodes:
+            comment_center = _center(comment_node)
+            if not comment_center:
+                continue
+            comment_path_ids = {id(node) for node in ancestors(comment_node)}
+            card = next((node for node in video_path if id(node) in comment_path_ids), None)
+            if card is None or card is root:
+                continue
+            bounds = card.attrib.get("bounds", "")
+            try:
+                left_top, right_bottom = bounds.split("][", 1)
+                left, top = map(int, left_top.strip("[]").split(","))
+                right, bottom = map(int, right_bottom.strip("[]").split(","))
+            except (ValueError, IndexError):
+                continue
+            card_width, card_height = right - left, bottom - top
+            if (
+                card_width < display_width * 0.70
+                or card_height < 120
+                or card_height >= display_height * 0.93
+                or not (left <= video_center[0] <= right and top <= video_center[1] <= bottom)
+                or not (left <= comment_center[0] <= right and top <= comment_center[1] <= bottom)
+            ):
+                continue
+            target = comment_node
+            current = comment_node
+            while current is not None:
+                if current.attrib.get("clickable", "false").lower() == "true" and _center(current):
+                    target = current
+                    break
+                current = parents.get(id(current))
+            center = _center(target)
+            if center:
+                return "Comment", center[0], center[1]
+    return None
+
 def is_home_feed_navigation_visible(xml_text: str) -> bool:
     """Recognize the persistent Home bottom-navigation destination while the header collapses."""
     return bool(
@@ -1499,23 +1597,111 @@ def is_home_feed_navigation_visible(xml_text: str) -> bool:
     )
 
 
-def scroll_home_feed_page(index: int) -> str:
-    """Scroll within the actual emulator viewport; never start a swipe off-screen."""
+def _home_content_scroll_point(xml_text: str, width: int, height: int, direction: str) -> tuple[int, int, int]:
+    """Choose a vertical drag wholly inside a visible, non-clickable feed caption when possible."""
+    if xml_text:
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            root = None
+        if root is not None:
+            parents = {}
+            for parent in root.iter("node"):
+                for child in list(parent):
+                    parents[id(child)] = parent
+            candidates = []
+            for node in root.iter("node"):
+                if node.attrib.get("visible-to-user", "true").lower() == "false":
+                    continue
+                value = (node.attrib.get("text") or "").strip()
+                if len(value) < 14:
+                    continue
+                bounds = node.attrib.get("bounds", "")
+                try:
+                    left_top, right_bottom = bounds.split("][", 1)
+                    left, top = map(int, left_top.strip("[]").split(","))
+                    right, bottom = map(int, right_bottom.strip("[]").split(","))
+                except (ValueError, IndexError):
+                    continue
+                node_width, node_height = right - left, bottom - top
+                center_y = (top + bottom) // 2
+                if node_width < width * 0.45 or node_height < 44:
+                    continue
+                if top < height * 0.30 or bottom > height * 0.88:
+                    continue
+                ancestor = parents.get(id(node))
+                clickable_parent = False
+                while ancestor is not None:
+                    if ancestor.attrib.get("clickable", "false").lower() == "true":
+                        clickable_parent = True
+                        break
+                    ancestor = parents.get(id(ancestor))
+                if clickable_parent:
+                    continue
+                # Prefer a substantial post caption in the middle of the feed,
+                # away from the header controls, bottom navigation and media tile.
+                score = abs(center_y - height * 0.64) - min(node_height, 280) * 0.20 - min(len(value), 180) * 0.08
+                x = max(20, min(width - 20, left + min(28, max(8, node_width // 16))))
+                start_y = bottom - 8 if direction == "up" else top + 8
+                end_y = top + 8 if direction == "up" else bottom - 8
+                if end_y == start_y:
+                    continue
+                candidates.append((score, x, start_y, end_y))
+            if candidates:
+                _, x, start_y, end_y = min(candidates, key=lambda item: item[0])
+                return x, start_y, end_y
+    # Fallback stays in the narrow left gutter, outside the media action controls.
+    x = max(20, min(width - 20, int(width * 0.025)))
+    if direction == "up":
+        return x, int(height * 0.70), int(height * 0.50)
+    return x, int(height * 0.50), int(height * 0.70)
+
+
+def _dismiss_home_media_viewer(xml_text: str, prefix: str, timeout: float = 12.0) -> str:
+    """Use the viewer's own Close action and wait for the real Home destination."""
+    close_control = find_control(xml_text, ["Close viewer"])
+    if not close_control:
+        return ""
+    _, x, y = close_control
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    deadline = time.monotonic() + timeout
+    latest = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.4)
+        latest = dump_ui(prefix + "-return-home.xml")
+        if latest and is_home_feed_navigation_visible(latest) and not find_control(latest, ["Close viewer"]):
+            screenshot(prefix + "-returned-home.png")
+            return latest
+    screenshot(prefix + "-return-home-failed.png")
+    return ""
+
+
+def scroll_home_feed_page(index: int, home_xml: str) -> str:
+    """Scroll from a safe text region; dismiss an accidentally opened viewer before retrying."""
     size = run("adb", "shell", "wm", "size").stdout or ""
     match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
     if not match:
         FAILURES.append("Home feed scan could not read emulator dimensions; refusing an unverified swipe.")
         return ""
     width, height = (int(match.group(1)), int(match.group(2)))
-    x = max(1, min(width - 1, int(width * 0.67)))
-    start_y = max(1, min(height - 1, int(height * 0.82)))
-    end_y = max(1, min(height - 1, int(height * 0.32)))
-    run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
-    time.sleep(1.0)
-    candidate = dump_ui(f"authenticated-home-feed-scan-page-{index}.xml")
-    if candidate and is_home_feed_navigation_visible(candidate):
-        screenshot(f"authenticated-home-feed-scan-page-{index}.png")
-        return candidate
+    current = home_xml
+    for attempt in range(2):
+        x, start_y, end_y = _home_content_scroll_point(current, width, height, "up")
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        time.sleep(0.9)
+        candidate = dump_ui(f"authenticated-home-feed-scan-page-{index}-{attempt}.xml")
+        if candidate and is_home_feed_navigation_visible(candidate):
+            if candidate != current or attempt == 1:
+                screenshot(f"authenticated-home-feed-scan-page-{index}.png")
+                return candidate
+            current = candidate
+            continue
+        if candidate and find_control(candidate, ["Close viewer"]):
+            restored = _dismiss_home_media_viewer(candidate, f"authenticated-home-feed-scan-page-{index}")
+            if restored:
+                current = restored
+                continue
+        return ""
     return ""
 
 
@@ -1539,16 +1725,17 @@ def capture_home_feed_visuals(home_xml: str) -> str:
             FAILURES.append("Home feed scan lost the Home navigation shell; refusing to continue on another screen.")
             break
 
+        duration_control = find_control(current, ["Video duration"])
         video_control = (
             find_control(current, ["Open video full screen"])
             or find_control(current, ["Play video"])
-        )
-        if video_control and not video_captured:
+        ) if duration_control else None
+        if video_control and duration_control and not video_captured:
             (ROOT / "authenticated-home-inline-video.xml").write_text(current + "\n", encoding="utf-8")
             time.sleep(1.0)
             screenshot("authenticated-home-inline-video.png")
             video_captured = True
-            report.append("- PASS: captured a real inline Home video card and its feed playback controls; the video was not forced full-screen.")
+            report.append("- PASS: captured a real inline Home video card with its measured total duration and live playback progress; the video was not forced full-screen.")
 
         discovery_control = find_control(current, ["Open Discovery video"])
         if discovery_control and not discovery_viewer_captured:
@@ -1612,7 +1799,7 @@ def capture_home_feed_visuals(home_xml: str) -> str:
 
         # Pair the conversation capture with a viewport that actually exposes
         # a real inline video control. Do not count an unrelated text-post comment.
-        comment_control = find_exact_home_action(current, "Comment") if video_control else None
+        comment_control = find_home_video_post_comment_action(current) if video_control and duration_control else None
         if comment_control and not comments_captured:
             comment_action_seen = True
             _, x, y = comment_control
@@ -1656,7 +1843,7 @@ def capture_home_feed_visuals(home_xml: str) -> str:
         if page == 8:
             break
 
-        next_xml = scroll_home_feed_page(page)
+        next_xml = scroll_home_feed_page(page, current)
         if not next_xml or next_xml == current or next_xml == previous_xml:
             break
         previous_xml, current = current, next_xml
