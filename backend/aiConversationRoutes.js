@@ -106,6 +106,7 @@ export function registerFynxAiConversationRoutes({ app }) {
   if (!app) return;
   app.get("/api/assistant/conversations", async (req,res)=>{
     const userId=authenticate(req); if(!userId) return res.status(401).json({error:"authentication required"});
+    let stage="database_setup";
     try {
       const db=requireDb(); await ensureSchema(db);
       const result=await db.query(`SELECT id,title,created_at,updated_at FROM ai_conversations WHERE user_id=$1 ORDER BY updated_at DESC LIMIT 100`,[userId]);
@@ -148,12 +149,16 @@ export function registerFynxAiConversationRoutes({ app }) {
     const userId=authenticate(req); if(!userId) return res.status(401).json({error:"authentication required"});
     const message=ensureMessageText(req.body?.message);
     const mediaIds=Array.isArray(req.body?.mediaIds)?req.body.mediaIds:[];
-    if(!message && !mediaIds.length) return res.status(400).json({error:"message or attachment is required"});
+    if(!message && !mediaIds.length) {
+      console.warn("[fynx-ai] message request rejected", JSON.stringify({ reason:"empty_message_and_attachments", bodyType:typeof req.body, bodyKeys:req.body && typeof req.body==="object" ? Object.keys(req.body).slice(0,12) : [], contentType:String(req.headers["content-type"] || "").slice(0,80), contentLength:Number(req.headers["content-length"] || 0), at:new Date().toISOString() }));
+      return res.status(400).json({error:"message or attachment is required",code:"AI_MESSAGE_EMPTY"});
+    }
     if(message.length>4000 || mediaIds.length>4) return res.status(413).json({error:"message or attachment limit exceeded"});
     try {
       const db=requireDb(); await ensureSchema(db);
       const conversation=await ownedConversation(db,req.params.id,userId);
       if(!conversation) return res.status(404).json({error:"conversation not found"});
+      stage="attachment_validation";
       const images=await loadImageInputs(db,mediaIds,userId);
       const prior=await db.query("SELECT role,text FROM ai_messages WHERE conversation_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 12",[conversation.id,userId]);
       const history=prior.rows.reverse().map(row=>({role:row.role,text:row.text})).filter(row=>row.text);
@@ -163,6 +168,7 @@ export function registerFynxAiConversationRoutes({ app }) {
         const userMessage=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'user',$3) RETURNING id,created_at",[conversation.id,userId,message]);
         const userMessageId=String(userMessage.rows[0].id);
         for(const image of images) await db.query("INSERT INTO ai_message_media(message_id,media_id,media_type) VALUES($1,$2,$3)",[userMessageId,image.id,image.type]);
+        stage="gemini_agent";
         const agentResult = await runAssistantAgent({
         message: message || "Analyze the attached image.",
         userId,
@@ -180,7 +186,7 @@ export function registerFynxAiConversationRoutes({ app }) {
         if (!committed) await db.query("ROLLBACK").catch(() => {});
       }
     } catch(error) {
-      console.error("AI conversation message",error);
+      console.error("[fynx-ai] conversation message failed", JSON.stringify({stage,errorName:String(error?.name || "Error").slice(0,80),errorMessage:String(error?.message || "unknown").slice(0,240),errorCode:String(error?.code || "").slice(0,80),at:new Date().toISOString()}));
       return res.status(502).json({error:"FYNX AI is temporarily unavailable"});
     }
   });
