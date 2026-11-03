@@ -1186,7 +1186,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).nestedScroll(marketplaceScrollConnection)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(Modifier.fillMaxSize()) {
             MarketplaceReferenceSearchBar(
                 value = query,
                 onValueChange = { query = it.take(80) },

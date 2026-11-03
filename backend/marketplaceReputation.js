@@ -146,7 +146,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
              completed_orders, unique_buyers, featured_listing_id,
              featured_product_title, featured_product_price, featured_product_currency
       FROM award_rows
-      ON CONFLICT (week_start, weekly_rank) DO NOTHING
+      ON CONFLICT DO NOTHING
     `);
   };
 
