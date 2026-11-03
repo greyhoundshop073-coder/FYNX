@@ -546,7 +546,7 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
         val containerAspect = maxWidth.value / maxHeight.value.coerceAtLeast(1f)
         val fittedWidth = if (containerAspect > aspect) maxHeight * aspect else maxWidth
         val fittedHeight = if (containerAspect > aspect) maxHeight else maxWidth / aspect
-        if (file != null) {
+        if (file != null && !mediaLoading) {
             key(file, retryNonce) {
                 AndroidView(
                     factory = { ctx ->
@@ -593,7 +593,11 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
                         if (playbackError) "This video could not start" else "This video could not be loaded",
                         color = Color.White
                     )
-                    TextButton(onClick = { retryNonce++ }) {
+                    TextButton(onClick = {
+                        mediaLoading = true
+                        file = null
+                        retryNonce++
+                    }) {
                         Text("Retry video", color = Color.White)
                     }
                 }
