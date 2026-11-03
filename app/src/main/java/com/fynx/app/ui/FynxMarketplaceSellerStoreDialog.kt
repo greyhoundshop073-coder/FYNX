@@ -476,6 +476,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
 @Composable
 private fun MarketplaceSellerTierBadge(tier: String) {
     val badge = when (tier.trim().uppercase(Locale.US)) {
+        "NEW SELLER" -> "NEW SELLER" to Color(0xFF64748B)
         "ELITE SELLER" -> "GOLD SELLER" to Color(0xFFD4AF37)
         "TOP SELLER" -> "SILVER SELLER" to Color(0xFFB8C0CC)
         "TRUSTED SELLER" -> "BRONZE SELLER" to Color(0xFFCD7F32)
