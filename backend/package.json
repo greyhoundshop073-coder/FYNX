@@ -3,7 +3,7 @@
   "version": "1.1.1",
   "type": "module",
   "scripts": {
-    "prestart": "node verify-marketplace-seller-summary-route.mjs && node verify-buyer-wallet-core.mjs && node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
+    "prestart": "node test-gemini-assistant-provider.mjs && node verify-marketplace-seller-summary-route.mjs && node verify-buyer-wallet-core.mjs && node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
     "start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js",
     "verify:wallet-hosted-funding": "node verify-wallet-hosted-funding.mjs && node verify-wallet-runtime-registration.mjs",
     "verify:wallet-core": "node verify-buyer-wallet-core.mjs"
