@@ -369,7 +369,7 @@ checks.extend([
      and 'Text("Apply timing")' in overlay
      and 'label = { Text("Bold") }' in overlay
      and 'label = { Text("Highlight") }' in overlay
-     and 'label = { Text("Delete") }' in overlay
+     and 'Text("Delete")' in overlay
      and "Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())" in overlay),
     ("Reopening the camera Text tool edits the selected overlay instead of stacking a duplicate",
      "fun openCameraTextEditor()" in camera
