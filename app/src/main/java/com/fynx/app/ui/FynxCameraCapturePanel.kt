@@ -368,36 +368,7 @@ private fun validateCameraStatusMedia(uri: Uri, mediaType: String): String? {
 }
 
 @Composable
-fun FynxCameraCapturePanel(
-    onCaptured: (Uri, String) -> Unit,
-    fastCapture: Boolean = false,
-    initialMode: CameraMode = CameraMode.PHOTO,
-    videoNoteMode: Boolean = false,
-    liveProofMode: Boolean = false,
-    liveProofListingTitle: String = "",
-    liveProofSellerUsername: String = "",
-    onLiveProofStart: () -> Unit = {},
-    onDismiss: () -> Unit = {},
-    statusCapture: Boolean = false,
-    selectedMusic: FynxMusicCatalogueTrack? = null,
-    onChooseMusic: () -> Unit = {},
-    onClearMusic: () -> Unit = {},
-    showYourStoryAction: Boolean = false,
-    onShareToStatus: (Uri, String) -> Unit = { _, _ -> },
-    /** Optional initial local media used to reopen an editable media item from a post draft. */
-    initialMediaUri: Uri? = null,
-    initialMediaType: String? = null,
-    initialTextOverlays: List<FynxCameraTextOverlay> = emptyList(),
-    initialVideoStyle: String = "NATURAL",
-    initialVideoCaptionText: String = "",
-    /** Returns both the final shareable file and the clean editable media source/state. */
-    onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)? = null
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraWindowView = LocalView.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-
+private fun FynxCameraWindowStyleEffect(cameraWindowView: View) {
     // Apply system-bar presentation to the Dialog Window itself, not only the Activity.
     // The scoped restore prevents camera settings leaking into the rest of FYNX.
     DisposableEffect(cameraWindowView) {
@@ -530,6 +501,40 @@ fun FynxCameraCapturePanel(
             }
         }
     }
+}
+
+@Composable
+fun FynxCameraCapturePanel(
+    onCaptured: (Uri, String) -> Unit,
+    fastCapture: Boolean = false,
+    initialMode: CameraMode = CameraMode.PHOTO,
+    videoNoteMode: Boolean = false,
+    liveProofMode: Boolean = false,
+    liveProofListingTitle: String = "",
+    liveProofSellerUsername: String = "",
+    onLiveProofStart: () -> Unit = {},
+    onDismiss: () -> Unit = {},
+    statusCapture: Boolean = false,
+    selectedMusic: FynxMusicCatalogueTrack? = null,
+    onChooseMusic: () -> Unit = {},
+    onClearMusic: () -> Unit = {},
+    showYourStoryAction: Boolean = false,
+    onShareToStatus: (Uri, String) -> Unit = { _, _ -> },
+    /** Optional initial local media used to reopen an editable media item from a post draft. */
+    initialMediaUri: Uri? = null,
+    initialMediaType: String? = null,
+    initialTextOverlays: List<FynxCameraTextOverlay> = emptyList(),
+    initialVideoStyle: String = "NATURAL",
+    initialVideoCaptionText: String = "",
+    /** Returns both the final shareable file and the clean editable media source/state. */
+    onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)? = null
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val cameraWindowView = LocalView.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    FynxCameraWindowStyleEffect(cameraWindowView)
     val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.PERFORMANCE; scaleType = PreviewView.ScaleType.FILL_CENTER } }
     val scope = rememberCoroutineScope()
     var profilePhotoId by remember { mutableStateOf<String?>(null) }
