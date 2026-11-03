@@ -65,12 +65,16 @@ print("COVER/TAKEOVER PHOTO SOURCES:", ", ".join(cover_sources) if cover_sources
 # Push 10
 check("this gate is wired into Android CI", "verify_push5_to_push10_integration.py" in workflow)
 check("Android CI builds APK", "assembleDebug" in workflow)
-artifact_name = "FYNX-debug-${{ github.sha }}"
+artifact_name = "FYNX-Android-Official.apk"
+apk_filename = "FYNX-Android-Official.apk"
 artifact_pos = workflow.find("name: FYNX Android Build")
 build_pos = workflow.find("assembleDebug")
-upload_pos = workflow.find("uses: actions/upload-artifact@v4")
-check("Android CI uploads exact-commit APK", artifact_name in workflow and "GITHUB_SHA" in workflow)
-check("APK upload follows the debug build", build_pos >= 0 and upload_pos > build_pos)
+upload_pos = workflow.find("name: FYNX-Android-Official")
+check("Android CI publishes one fixed-name official APK artifact", artifact_name in workflow and apk_filename in workflow)
+check("official APK is copied only after exact canonical commit verification", "test \"$(git rev-parse HEAD)\" = \"$GITHUB_SHA\"" in workflow and "cp app/build/outputs/apk/debug/app-debug.apk \"FYNX-Android-Official.apk\"" in workflow)
+check("official APK publication is restricted to the canonical integration branch", workflow.count("github.ref == 'refs/heads/integration/fynx-single-apk-20261013'") >= 3)
+check("official APK artifact includes source commit, run URL and checksum provenance", "FYNX-Android-Official-build.txt" in workflow and "echo \"commit=${GITHUB_SHA}\"" in workflow and "echo \"run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"" in workflow and "apk_sha256=" in workflow)
+check("official APK upload follows the debug build", build_pos >= 0 and upload_pos > build_pos)
 check("APK upload fails when the expected file is missing", "if-no-files-found: error" in workflow)
 check("Push 9 investigation is recorded without adding a duplicate feature", (ROOT / "docs/FYNX_PROFILE_COVER_TAKEOVER_INVESTIGATION.md").is_file() and not cover_sources)
 check("final integration sweep includes the active marketplace panel", "FynxMarketplacePanel" in app)

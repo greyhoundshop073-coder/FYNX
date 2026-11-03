@@ -20,3 +20,9 @@ Marketplace product-detail hierarchy changes were merged by PR #294 at merge com
 ## APK workflow
 
 `.github/workflows/android-build.yml` runs on pushes that touch `docs/**` and uploads an exact-commit debug APK named `FYNX-debug-apk-<commit-sha>`. This release-gate document intentionally triggers a canonical push build so the resulting artifact can be checked against the actual integrated branch head.
+
+## Canonical rebuild correction — 2026-11-02
+
+A previous APK and Marketplace screenshot were mistakenly supplied from `main` commit `0498632d1b72bea8aac5610a6778b75417b94af9`. That artifact is **not** the shared canonical APK and must not be reused as proof of the latest integrated Android UI.
+
+The verified canonical branch head before this correction was `1f4210e49f17ce6f7390a5f0d6b5dddf6cc125dc`. This documentation-only commit exists to trigger a fresh Android workflow from the canonical branch. The resulting candidate must be checked against its own full commit SHA, workflow run, uploaded APK and runtime evidence before it is shared. Do not merge `main` into this branch to address the divergence.

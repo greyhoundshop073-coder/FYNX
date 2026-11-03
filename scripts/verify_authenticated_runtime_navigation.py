@@ -3239,6 +3239,21 @@ def capture_wallet_from_features(prefix:str):
             break
 
     wallet_opened=wallet_shell_opened and wallet_settled
+    authenticated_wallet_errors=[]
+    if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
+        authenticated_wallet_error_markers=(
+            "Wallet unavailable",
+            "Your wallet could not be loaded",
+            "Activity could not load",
+            "Your wallet activity could not be loaded",
+        )
+        authenticated_wallet_errors=[
+            marker for marker in authenticated_wallet_error_markers if marker in wallet_xml
+        ]
+        if authenticated_wallet_errors:
+            wallet_opened=False
+    if authenticated_wallet_errors:
+        result_message="Authenticated Wallet request(s) returned visible errors: "+", ".join(authenticated_wallet_errors)
     if wallet_opened:
         screenshot("authenticated-wallet.png")
         (ROOT/"authenticated-wallet.xml").write_text(wallet_xml+chr(10),encoding="utf-8")

@@ -83,7 +83,7 @@ export function registerR6GIntegrationRoutes({ app }) {
     const client=await pool.connect();
     try{
       await ensureSchema(); const listingId=positiveId(req.params?.id); if(!listingId)return res.status(400).json({error:'invalid listing id'});
-      const listing=(await client.query(`SELECT l.*,b.id AS linked_business_id FROM marketplace_listings l LEFT JOIN business_profiles b ON b.id=l.business_id WHERE l.id=$1 AND l.active=TRUE AND l.quantity>0 LIMIT 1`,[listingId])).rows[0];
+      const listing=(await client.query(`SELECT l.*,b.id AS linked_business_id FROM marketplace_listings l LEFT JOIN business_profiles b ON b.id=l.business_id WHERE l.id=$1 AND l.active=TRUE AND GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0 LIMIT 1`,[listingId])).rows[0];
       if(!listing)return res.status(404).json({error:'listing unavailable'}); if(String(listing.seller_id)!==String(req.user.sub))return res.status(403).json({error:'only the listing seller can share this product from its canonical record'});
       const visibility=req.body?.visibility==='FRIENDS_ONLY'?'FRIENDS_ONLY':'PUBLIC'; const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,4000):'';
       const post=(await client.query('INSERT INTO social_posts(author_id,text,visibility,listing_id,business_id) VALUES($1,$2,$3,$4,$5) RETURNING id',[req.user.sub,text,visibility,listingId,listing.linked_business_id||null])).rows[0];

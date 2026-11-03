@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URI
 import java.util.Locale
 
 internal data class FynxBuyerWalletSummary(
@@ -18,7 +19,8 @@ internal data class FynxBuyerWalletSummary(
     val canFundByBankTransfer: Boolean = false,
     val canFundByCard: Boolean = false,
     val canFundByUssd: Boolean = false,
-    val notice: String
+    val notice: String,
+    val testMode: Boolean = false
 )
 
 internal data class FynxBuyerWalletActivity(
@@ -110,7 +112,8 @@ internal data class FynxWalletFundingSession(
     val amount: Double,
     val authorizationUrl: String?,
     val paymentMethod: String,
-    val message: String
+    val message: String,
+    val testMode: Boolean = false
 )
 
 internal data class FynxWalletFundingAccount(
@@ -205,9 +208,19 @@ internal object FynxBuyerWalletClient {
         }
         val amount = json.optDouble("amount", Double.NaN)
         require(amount.isFinite() && amount > 0.0) { "Wallet funding amount is invalid." }
-        val authorizationUrl = json.optString("authorizationUrl").trim().takeIf { it.startsWith("https://") }
+        val rawAuthorizationUrl = json.optString("authorizationUrl").trim()
+        val authorizationUrl = rawAuthorizationUrl.takeIf { it.isNotBlank() }?.also { url ->
+            val parsed = runCatching { URI(url) }.getOrNull()
+            require(
+                parsed != null &&
+                    parsed.scheme?.equals("https", ignoreCase = true) == true &&
+                    parsed.host?.equals("checkout.paystack.com", ignoreCase = true) == true &&
+                    parsed.rawUserInfo == null &&
+                    (parsed.port == -1 || parsed.port == 443)
+            ) { "Wallet funding returned an untrusted Paystack checkout URL." }
+        }
         val paymentMethod = json.optString("paymentMethod").trim().uppercase(Locale.US)
-        require(paymentMethod.isBlank() || paymentMethod in setOf("CARD", "USSD")) {
+        require(paymentMethod in setOf("CARD", "USSD")) {
             "Wallet funding method is invalid."
         }
         return FynxWalletFundingSession(
@@ -216,7 +229,8 @@ internal object FynxBuyerWalletClient {
             amount = amount,
             authorizationUrl = authorizationUrl,
             paymentMethod = paymentMethod,
-            message = json.optString("message").trim()
+            message = json.optString("message").trim(),
+            testMode = json.optBoolean("testMode", false)
         )
     }
 
@@ -517,19 +531,24 @@ internal object FynxBuyerWalletClient {
             "Wallet returned an unsupported status."
         }
         require(currency == "NGN") { "The buyer wallet currently supports NGN only." }
+        val testMode = json.optBoolean("testMode", false)
+        val canFundByCard = json.optBoolean("canFundByCard", false)
         return FynxBuyerWalletSummary(
             walletStatus = status,
             currency = currency,
             availableBalance = nullableAmount(json, "availableBalance"),
             reservedBalance = nullableAmount(json, "reservedBalance"),
             withdrawalPendingBalance = nullableAmount(json, "withdrawalPendingBalance"),
-            canFund = json.optBoolean("canFund", false),
-            canSpend = json.optBoolean("canSpend", false),
-            canWithdraw = json.optBoolean("canWithdraw", false),
-            canFundByBankTransfer = json.optBoolean("canFundByBankTransfer", false),
-            canFundByCard = json.optBoolean("canFundByCard", false),
-            canFundByUssd = json.optBoolean("canFundByUssd", false),
-            notice = json.optString("notice").trim()
+            // A simulated Wallet may only expose its explicitly approved card checkout.
+            // Do not let a malformed Test Mode response enable real-money capabilities.
+            canFund = json.optBoolean("canFund", false) && (!testMode || canFundByCard),
+            canSpend = json.optBoolean("canSpend", false) && !testMode,
+            canWithdraw = json.optBoolean("canWithdraw", false) && !testMode,
+            canFundByBankTransfer = json.optBoolean("canFundByBankTransfer", false) && !testMode,
+            canFundByCard = canFundByCard,
+            canFundByUssd = json.optBoolean("canFundByUssd", false) && !testMode,
+            notice = json.optString("notice").trim(),
+            testMode = testMode
         )
     }
 

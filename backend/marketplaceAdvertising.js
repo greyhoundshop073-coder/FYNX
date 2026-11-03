@@ -1,6 +1,7 @@
 import pg from "pg";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -12,10 +13,26 @@ const pool = DATABASE_URL
 const CAMPAIGN_STATUSES = new Set(["draft", "pending_review", "active", "paused", "completed", "rejected"]);
 const TARGETING_KEYS = new Set(["locations", "ageMin", "ageMax", "interests"]);
 const CREATIVE_TYPES = new Set(["post", "product", "business"]);
+const SEASONAL_PROMOTION_TYPES = new Set(["SEASONAL", "ANNOUNCEMENT", "OFFER"]);
+const MARKETPLACE_CAMPAIGN_CATEGORIES = [
+  "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles",
+  "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture",
+  "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts",
+  "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local",
+  "Business & Workshop Supplies", "Other"
+];
+const MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY = new Map(
+  MARKETPLACE_CAMPAIGN_CATEGORIES.map(category => [category.toLowerCase(), category])
+);
 
 async function ensureAdvertisingSchema() {
   if (!pool) return;
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS fynx_admin_roles (
+      user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK(role IN ('ADMIN')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS marketplace_ad_campaigns (
       id BIGSERIAL PRIMARY KEY,
       owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -64,6 +81,54 @@ async function ensureAdvertisingSchema() {
       UNIQUE (owner_id, idempotency_key, operation_type)
     );
     CREATE INDEX IF NOT EXISTS marketplace_ad_operations_campaign_idx ON marketplace_ad_operations(campaign_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS marketplace_seasonal_promotions (
+      id BIGSERIAL PRIMARY KEY,
+      occasion_key TEXT NOT NULL,
+      promotion_type TEXT NOT NULL DEFAULT 'SEASONAL',
+      headline TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      action_label TEXT NOT NULL DEFAULT 'Explore Marketplace',
+      artwork_media_id BIGINT,
+      destination_type TEXT NOT NULL DEFAULT 'MARKETPLACE',
+      destination_value TEXT,
+      starts_at TIMESTAMPTZ NOT NULL,
+      ends_at TIMESTAMPTZ NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_by BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (ends_at > starts_at)
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_seasonal_promotions_active_window_idx
+      ON marketplace_seasonal_promotions(active, starts_at, ends_at);
+    ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS artwork_media_id BIGINT;
+    ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS promotion_type TEXT NOT NULL DEFAULT 'SEASONAL';
+    ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS destination_type TEXT NOT NULL DEFAULT 'MARKETPLACE';
+    ALTER TABLE marketplace_seasonal_promotions ADD COLUMN IF NOT EXISTS destination_value TEXT;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'marketplace_seasonal_promotions_type_check'
+          AND conrelid = 'marketplace_seasonal_promotions'::regclass
+      ) THEN
+        ALTER TABLE marketplace_seasonal_promotions
+          ADD CONSTRAINT marketplace_seasonal_promotions_type_check
+          CHECK (promotion_type IN ('SEASONAL', 'ANNOUNCEMENT', 'OFFER'));
+      END IF;
+    END $$;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'marketplace_seasonal_promotions_destination_type_check'
+          AND conrelid = 'marketplace_seasonal_promotions'::regclass
+      ) THEN
+        ALTER TABLE marketplace_seasonal_promotions
+          ADD CONSTRAINT marketplace_seasonal_promotions_destination_type_check
+          CHECK (destination_type IN ('MARKETPLACE', 'CATEGORY', 'PRODUCT', 'SHOP'));
+      END IF;
+    END $$;
   `);
 }
 
@@ -94,6 +159,42 @@ function authenticate(req, res) {
     res.status(401).json({ error: "authentication required" });
     return null;
   }
+}
+
+async function marketplaceAdminRole(userId) {
+  if (!pool || !Number.isSafeInteger(Number(userId)) || Number(userId) < 1) return null;
+  const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
+  if (first && String(first.id) === String(userId)) return "OWNER";
+  const admin = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
+  return admin.rowCount ? "ADMIN" : null;
+}
+
+async function requireMarketplaceAdmin(req, res, auth) {
+  await ready();
+  const role = await marketplaceAdminRole(auth.userId);
+  if (!role) {
+    res.status(403).json({ error: "Owner/Admin access required", code: "ADMIN_REQUIRED" });
+    return null;
+  }
+  return role;
+}
+
+function seasonalPromotionPayload(row) {
+  return {
+    id: String(row.id),
+    promotionType: row.promotion_type || "SEASONAL",
+    occasionKey: row.occasion_key,
+    headline: row.headline,
+    body: row.body || "",
+    actionLabel: row.action_label || "Explore Marketplace",
+    artworkMediaId: row.artwork_media_id == null ? "" : String(row.artwork_media_id),
+    destinationType: row.destination_type || "MARKETPLACE",
+    destinationValue: row.destination_value || "",
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    active: Boolean(row.active),
+    createdAt: row.created_at
+  };
 }
 
 function parseTargeting(value) {
@@ -161,6 +262,155 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
 
   app.use("/api/advertising", async (_req, _res, next) => {
     try { await ready(); next(); } catch { next(new Error("advertising service unavailable")); }
+  });
+
+  // Owner/Admin-managed seasonal promos support lunar and other variable-date occasions.
+  // They are separate from paid seller ads and are filtered by the server's live schedule.
+  app.get("/api/admin/marketplace/seasonal-promotions", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const role = await requireMarketplaceAdmin(req, res, auth);
+      if (!role) return;
+      const result = await pool.query("SELECT * FROM marketplace_seasonal_promotions ORDER BY starts_at DESC, id DESC LIMIT 100");
+      return res.json({ promotions: result.rows.map(seasonalPromotionPayload) });
+    } catch (error) {
+      console.error("[fynx-ads] seasonal admin list unavailable", error);
+      return res.status(500).json({ error: "seasonal promotion list unavailable" });
+    }
+  });
+
+  app.post("/api/admin/marketplace/seasonal-promotions", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const role = await requireMarketplaceAdmin(req, res, auth);
+      if (!role) return;
+      const promotionType = typeof req.body?.promotionType === "string" ? req.body.promotionType.trim().toUpperCase() : "SEASONAL";
+      const occasionKey = typeof req.body?.occasionKey === "string" ? req.body.occasionKey.trim().toLowerCase() : "";
+      const headline = typeof req.body?.headline === "string" ? req.body.headline.trim() : "";
+      const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
+      const actionLabel = typeof req.body?.actionLabel === "string" ? req.body.actionLabel.trim() : "Explore Marketplace";
+      const destinationType = typeof req.body?.destinationType === "string" ? req.body.destinationType.trim().toUpperCase() : "MARKETPLACE";
+      let destinationValue = typeof req.body?.destinationValue === "string" ? req.body.destinationValue.trim() : "";
+      const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positiveInt(req.body.artworkMediaId);
+      const startsAt = typeof req.body?.startsAt === "string" ? new Date(req.body.startsAt) : null;
+      const endsAt = typeof req.body?.endsAt === "string" ? new Date(req.body.endsAt) : null;
+      const active = req.body?.active !== false;
+      if (!SEASONAL_PROMOTION_TYPES.has(promotionType)) return res.status(400).json({ error: "promotion type must be SEASONAL, ANNOUNCEMENT or OFFER" });
+      if (!["MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)) {
+        return res.status(400).json({ error: "destination must be MARKETPLACE, CATEGORY, PRODUCT or SHOP" });
+      }
+      if ((destinationType === "MARKETPLACE" && destinationValue) ||
+          (destinationType !== "MARKETPLACE" && !destinationValue)) {
+        return res.status(400).json({ error: "the selected campaign destination requires a matching destination value" });
+      }
+      if (destinationType === "CATEGORY") {
+        const canonicalCategory = MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY.get(destinationValue.toLowerCase());
+        if (!canonicalCategory) return res.status(400).json({ error: "choose a category that exists in Marketplace" });
+        destinationValue = canonicalCategory;
+      }
+      if (destinationType === "PRODUCT" && !/^[1-9][0-9]{0,19}$/.test(destinationValue)) {
+        return res.status(400).json({ error: "product destination must be a positive Marketplace listing ID" });
+      }
+      if (destinationType === "SHOP" && !/^[a-z0-9_]{3,32}$/i.test(destinationValue)) {
+        return res.status(400).json({ error: "shop destination must be a valid FYNX username" });
+      }
+      if (!/^[a-z0-9][a-z0-9_-]{1,59}$/.test(occasionKey)) return res.status(400).json({ error: "campaign key must use 2-60 letters, numbers, dashes or underscores" });
+      if (headline.length < 3 || headline.length > 120 || body.length > 500 || actionLabel.length < 2 || actionLabel.length > 48) {
+        return res.status(400).json({ error: "headline, body or action label is outside the allowed length" });
+      }
+      if ((promotionType === "ANNOUNCEMENT" || promotionType === "OFFER") && body.length < 10) {
+        return res.status(400).json({ error: "announcements and special offers require at least 10 characters of supporting details" });
+      }
+      if (!(startsAt instanceof Date) || !Number.isFinite(startsAt.getTime()) || !(endsAt instanceof Date) || !Number.isFinite(endsAt.getTime()) || endsAt <= startsAt) {
+        return res.status(400).json({ error: "valid start and end dates are required; end must be after start" });
+      }
+      if (endsAt.getTime() - startsAt.getTime() > 45 * 24 * 60 * 60 * 1000) {
+        return res.status(400).json({ error: "seasonal promotion windows cannot exceed 45 days" });
+      }
+      if (req.body?.artworkMediaId != null && req.body.artworkMediaId !== "" && artworkMediaId === null) {
+        return res.status(400).json({ error: "artwork must be an uploaded FYNX image media ID" });
+      }
+      if (destinationType === "PRODUCT") {
+        const target = await pool.query(
+          "SELECT id FROM marketplace_listings WHERE id=$1 AND COALESCE(active,TRUE)=TRUE AND GREATEST(0, quantity-COALESCE(reserved_quantity,0)) > 0 LIMIT 1",
+          [destinationValue]
+        );
+        if (!target.rowCount) return res.status(404).json({ error: "campaign product must be an active Marketplace listing with available stock" });
+      }
+      if (destinationType === "SHOP") {
+        const target = await pool.query(
+          "SELECT id FROM users WHERE LOWER(username)=LOWER($1) LIMIT 1",
+          [destinationValue]
+        );
+        if (!target.rowCount) return res.status(404).json({ error: "campaign shop username was not found" });
+      }
+      if (artworkMediaId !== null) {
+        const ownedMedia = await pool.query(
+          "SELECT 1 FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",
+          [artworkMediaId, auth.userId]
+        );
+        if (!ownedMedia.rowCount) return res.status(403).json({ error: "seasonal artwork must be uploaded by the current Owner/Admin account" });
+      }
+      const result = await pool.query(
+        "INSERT INTO marketplace_seasonal_promotions (promotion_type,occasion_key,headline,body,action_label,artwork_media_id,destination_type,destination_value,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *",
+        [promotionType, occasionKey, headline, body, actionLabel, artworkMediaId, destinationType, destinationValue || null, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
+      );
+      return res.status(201).json({ promotion: seasonalPromotionPayload(result.rows[0]) });
+    } catch (error) {
+      console.error("[fynx-ads] seasonal promotion create failed", error);
+      return res.status(500).json({ error: "seasonal promotion creation failed" });
+    }
+  });
+
+  app.patch("/api/admin/marketplace/seasonal-promotions/:id", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const role = await requireMarketplaceAdmin(req, res, auth);
+      if (!role) return;
+      const id = positiveInt(req.params.id);
+      if (!id || typeof req.body?.active !== "boolean") return res.status(400).json({ error: "valid promotion id and active flag are required" });
+      const result = await pool.query("UPDATE marketplace_seasonal_promotions SET active=$1, updated_at=NOW() WHERE id=$2 RETURNING *", [req.body.active, id]);
+      if (!result.rowCount) return res.status(404).json({ error: "seasonal promotion not found" });
+      return res.json({ promotion: seasonalPromotionPayload(result.rows[0]) });
+    } catch (error) {
+      console.error("[fynx-ads] seasonal promotion update failed", error);
+      return res.status(500).json({ error: "seasonal promotion update failed" });
+    }
+  });
+
+  app.delete("/api/admin/marketplace/seasonal-promotions/:id", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const role = await requireMarketplaceAdmin(req, res, auth);
+      if (!role) return;
+      const id = positiveInt(req.params.id);
+      if (!id) return res.status(400).json({ error: "invalid seasonal promotion id" });
+      const result = await pool.query("DELETE FROM marketplace_seasonal_promotions WHERE id=$1 RETURNING id", [id]);
+      if (!result.rowCount) return res.status(404).json({ error: "seasonal promotion not found" });
+      return res.status(204).end();
+    } catch (error) {
+      console.error("[fynx-ads] seasonal promotion delete failed", error);
+      return res.status(500).json({ error: "seasonal promotion delete failed" });
+    }
+  });
+
+  app.get("/api/marketplace/seasonal-feed", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      await ready();
+      const result = await pool.query(
+        "SELECT * FROM marketplace_seasonal_promotions WHERE active=TRUE AND starts_at <= NOW() AND ends_at > NOW() ORDER BY starts_at DESC, id DESC LIMIT 8"
+      );
+      return res.json({ promotions: result.rows.map(seasonalPromotionPayload) });
+    } catch (error) {
+      console.error("[fynx-ads] seasonal feed unavailable", error);
+      return res.status(500).json({ error: "seasonal promotion feed unavailable" });
+    }
   });
 
   app.post("/api/advertising/campaigns", async (req, res) => {
@@ -297,8 +547,12 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const data = await response.json().catch(() => ({}));
       const paid = response.ok && data?.status === true && data?.data?.status === "success" && Number(data.data.amount) === Number(campaign.total_budget_kobo) && String(data.data.currency).toUpperCase() === "NGN";
       if (!paid) return res.status(409).json({ error: "payment has not been verified" });
-      await pool.query("UPDATE marketplace_ad_campaigns SET payment_status='paid', updated_at=NOW() WHERE id=$1 AND owner_id=$2", [id, auth.userId]);
-      return res.json({ paid: true, campaignId: String(id) });
+      const updated = await pool.query(
+        "UPDATE marketplace_ad_campaigns SET payment_status='paid', updated_at=NOW() WHERE id=$1 AND owner_id=$2 RETURNING *",
+        [id, auth.userId]
+      );
+      if (!updated.rowCount) return res.status(404).json({ error: "campaign not found" });
+      return res.json({ paid: true, campaign: updated.rows[0] });
     } catch { return res.status(502).json({ error: "advertising payment verification failed" }); }
   });
 
@@ -349,6 +603,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
 
   // Metrics ingestion is deliberately limited to active campaigns. Billing/spend remains server-owned.
   app.post("/api/advertising/campaigns/:id/metric", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
     const metric = req.body?.metric;
     if (!["impression", "click", "engagement", "conversion"].includes(metric)) return res.status(400).json({ error: "invalid metric" });
     const id = positiveInt(req.params.id);
@@ -360,10 +616,79 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         engagements = m.engagements + CASE WHEN $1='engagement' THEN 1 ELSE 0 END,
         conversions = m.conversions + CASE WHEN $1='conversion' THEN 1 ELSE 0 END,
         updated_at=NOW()
-        FROM marketplace_ad_campaigns c WHERE m.campaign_id=$2 AND c.id=m.campaign_id AND c.status='active' RETURNING m.*`, [metric, id]);
+        FROM marketplace_ad_campaigns c WHERE m.campaign_id=$2 AND c.id=m.campaign_id AND c.status='active' AND c.payment_status='paid' AND c.approved_at IS NOT NULL AND (c.starts_at IS NULL OR c.starts_at <= NOW()) AND (c.ends_at IS NULL OR c.ends_at > NOW()) AND c.spent_kobo < c.total_budget_kobo
+          AND c.owner_id <> $3 RETURNING m.*`, [metric, id, auth.userId]);
       if (!result.rowCount) return res.status(404).json({ error: "campaign not active" });
       return res.status(204).end();
     } catch { return res.status(500).json({ error: "unable to record metric" });
+    }
+  });
+
+
+  // Feed only approved, paid, active product campaigns. Sponsored ranking is separate
+  // from the organic weekly-seller award and never changes seller reputation.
+  app.get("/api/advertising/marketplace-feed", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      await ensureMarketplaceSchemaForPool(pool);
+      const result = await pool.query(`
+        SELECT c.id AS campaign_id, c.headline, c.body, c.spent_kobo,
+               l.id AS listing_id, l.seller_id, u.username AS seller_username,
+               u.display_name AS seller_display_name, l.store_name, l.title,
+               l.description, l.price, l.currency, l.category, l.condition,
+               GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) AS available_quantity,
+               l.location, l.delivery_available, l.pickup_available, l.delivery_fee,
+               l.media_ids
+        FROM marketplace_ad_campaigns c
+        JOIN marketplace_listings l
+          ON l.id::text = c.creative_ref AND l.seller_id = c.owner_id
+        JOIN users u ON u.id = c.owner_id
+        WHERE c.creative_type = 'product'
+          AND c.status = 'active'
+          AND c.payment_status = 'paid'
+          AND c.approved_at IS NOT NULL
+          AND (c.starts_at IS NULL OR c.starts_at <= NOW())
+          AND (c.ends_at IS NULL OR c.ends_at > NOW())
+          AND c.spent_kobo < c.total_budget_kobo
+          AND NOT (c.targeting ? 'ageMin' OR c.targeting ? 'ageMax')
+          AND COALESCE(jsonb_array_length(c.targeting->'locations'), 0) = 0
+          AND COALESCE(jsonb_array_length(c.targeting->'interests'), 0) = 0
+          AND COALESCE(l.active, TRUE) = TRUE
+          AND GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0
+        ORDER BY c.spent_kobo ASC, c.updated_at ASC, c.id ASC
+        LIMIT 12
+      `, []);
+      const promotions = result.rows.map((row) => ({
+        campaignId: String(row.campaign_id),
+        headline: String(row.headline || '').trim(),
+        body: String(row.body || '').trim(),
+        listing: {
+          id: String(row.listing_id),
+          sellerId: String(row.seller_id),
+          sellerUsername: row.seller_username,
+          sellerDisplayName: row.seller_display_name || row.seller_username,
+          storeName: row.store_name || '',
+          title: row.title,
+          description: row.description || '',
+          price: Number(row.price),
+          currency: row.currency,
+          category: row.category || '',
+          condition: row.condition || 'NEW',
+          quantity: Number(row.available_quantity),
+          location: row.location || '',
+          deliveryAvailable: Boolean(row.delivery_available),
+          pickupAvailable: Boolean(row.pickup_available),
+          deliveryFee: row.delivery_fee == null ? null : Number(row.delivery_fee),
+          mediaIds: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [],
+          active: true,
+          mediaTypes: []
+        }
+      }));
+      return res.json({ promotions });
+    } catch (error) {
+      console.error('[fynx-ads] Marketplace promotional feed unavailable', error);
+      return res.status(500).json({ error: 'Marketplace advertisements unavailable' });
     }
   });
 }

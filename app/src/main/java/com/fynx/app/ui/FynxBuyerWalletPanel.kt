@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -65,6 +66,31 @@ import kotlinx.coroutines.launch
 
 private fun fynxWalletMoney(amount: Double): String =
     "₦" + String.format(Locale.US, "%,.2f", amount)
+
+/** Show only a real ledger balance; a newly provisioned pending Wallet has a truthful zero. */
+internal fun shouldShowBuyerWalletBalance(wallet: FynxBuyerWalletSummary?): Boolean =
+    wallet != null &&
+        wallet.availableBalance != null &&
+        (wallet.walletStatus == "ACTIVE" || wallet.walletStatus == "PENDING_PROVIDER" || wallet.testMode)
+
+internal fun buyerWalletBalanceCaption(
+    wallet: FynxBuyerWalletSummary?,
+    summaryLoading: Boolean,
+    summaryError: String?
+): String = when {
+    summaryLoading -> "Checking your wallet status securely"
+    wallet?.testMode == true && shouldShowBuyerWalletBalance(wallet) ->
+        "TEST MODE — simulated balance; cannot spend or withdraw"
+    wallet?.walletStatus == "PENDING_PROVIDER" && shouldShowBuyerWalletBalance(wallet) ->
+        "Wallet setup pending — this balance cannot be spent or withdrawn yet"
+    shouldShowBuyerWalletBalance(wallet) ->
+        "Cleared funds available to use"
+    summaryError != null ->
+        "Balance unavailable until your connection is restored"
+    wallet?.testMode == true ->
+        "Complete your first test card payment to display your simulated balance"
+    else -> "Your wallet balance will appear here after activation"
+}
 
 private fun fynxWalletTransactionTitle(type: String): String = when (type) {
     "FUNDING" -> "Money received"
@@ -87,8 +113,9 @@ private fun fynxWalletActivityDate(value: String): String {
     return SimpleDateFormat("dd MMM yyyy · hh:mm a", Locale.US).format(Date.from(instant))
 }
 
-private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String =
-    when (wallet?.walletStatus) {
+private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String {
+    if (wallet?.testMode == true) return "Wallet Test Mode"
+    return when (wallet?.walletStatus) {
         "NOT_SETUP" -> "Wallet setup is not available yet"
         "PENDING_PROVIDER" -> "Your wallet is being prepared"
         "RESTRICTED" -> "Wallet access is restricted"
@@ -96,12 +123,13 @@ private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String =
         "ACTIVE" -> "Some wallet features are not available yet"
         else -> "Your wallet is being prepared"
     }
+}
 
 @Composable
 fun FynxBuyerWalletPanel() {
     val context = LocalContext.current
-    var activeAction by remember { mutableStateOf("HOME") }
-    var fundingAmount by remember { mutableStateOf("") }
+    var activeAction by rememberSaveable { mutableStateOf("HOME") }
+    var fundingAmount by rememberSaveable { mutableStateOf("") }
     var summary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
     var activity by remember { mutableStateOf(emptyList<FynxBuyerWalletActivity>()) }
     var summaryLoading by remember { mutableStateOf(true) }
@@ -228,8 +256,7 @@ fun FynxBuyerWalletPanel() {
     val wallet = summary
     val isWalletReady = wallet != null && wallet.walletStatus == "ACTIVE" &&
         wallet.canFund && wallet.canSpend && wallet.canWithdraw
-    val canShowBalance = wallet != null && wallet.availableBalance != null &&
-        wallet.walletStatus == "ACTIVE"
+    val canShowBalance = shouldShowBuyerWalletBalance(wallet)
     // The backend filters the complete history before applying its page cursor.
     val visibleActivity = activity
 
@@ -266,6 +293,7 @@ fun FynxBuyerWalletPanel() {
     if (activeAction != "HOME") {
         FynxWalletActionPanel(
             screen = activeAction,
+            testMode = wallet?.testMode == true,
             amount = fundingAmount,
             onAmountChange = { fundingAmount = it },
             availableBalance = wallet?.availableBalance,
@@ -337,7 +365,7 @@ fun FynxBuyerWalletPanel() {
                         Text(
                             when {
                                 summaryLoading -> "Checking…"
-                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet.availableBalance ?: 0.0)
+                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet?.availableBalance ?: 0.0)
                                 canShowBalance -> "₦ ••••••"
                                 summaryError != null -> "Unavailable"
                                 else -> "—"
@@ -347,12 +375,7 @@ fun FynxBuyerWalletPanel() {
                             color = Color.White
                         )
                         Text(
-                            when {
-                                summaryLoading -> "Checking your wallet status securely"
-                                canShowBalance -> "Cleared funds available to use"
-                                summaryError != null -> "Balance unavailable until your connection is restored"
-                                else -> "Your wallet balance will appear here after activation"
-                            },
+                            buyerWalletBalanceCaption(wallet, summaryLoading, summaryError),
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.88f)
                         )

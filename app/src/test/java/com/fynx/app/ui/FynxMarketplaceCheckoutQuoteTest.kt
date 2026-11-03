@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -46,6 +47,45 @@ class FynxMarketplaceCheckoutQuoteTest {
     private fun assertInvalid(raw: String) {
         val result = runCatching { parse(raw) }
         assertTrue("Expected checkout quote to be rejected, but it was accepted.", result.isFailure)
+    }
+
+    @Test
+    fun marketplaceWalletAvailabilityExplainsTestModePendingAndCurrencyLimits() {
+        val testMode = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":1000.0,"canFund":true,"canFundByCard":true,"canSpend":true,"canWithdraw":true,"testMode":true}"""
+        )
+        assertEquals(
+            "Wallet payments are disabled in Test Mode. Simulated balances cannot be used for Marketplace purchases.",
+            marketplaceWalletPaymentUnavailableMessage("NGN", testMode, false)
+        )
+
+        val pending = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"PENDING_PROVIDER","currency":"NGN","availableBalance":0.0,"canSpend":false,"canWithdraw":false}"""
+        )
+        assertEquals(
+            "Wallet payments will open after your Wallet is active.",
+            marketplaceWalletPaymentUnavailableMessage("NGN", pending, false)
+        )
+        assertEquals(
+            "FYNX Wallet currently supports NGN Marketplace orders only. Choose card/bank for this order.",
+            marketplaceWalletPaymentUnavailableMessage("USD", pending, false)
+        )
+    }
+
+    @Test
+    fun marketplaceWalletAvailabilityRequiresVerifiedSummaryAndApprovedSpending() {
+        val active = FynxBuyerWalletClient.parseSummary(
+            """{"walletStatus":"ACTIVE","currency":"NGN","availableBalance":5000.0,"canSpend":true,"canWithdraw":false,"testMode":false}"""
+        )
+        assertNull(marketplaceWalletPaymentUnavailableMessage("NGN", active, false))
+        assertEquals(
+            "Checking Wallet payment availability…",
+            marketplaceWalletPaymentUnavailableMessage("NGN", active, true)
+        )
+        assertEquals(
+            "Wallet payment availability could not be checked. Choose card/bank payment or try again.",
+            marketplaceWalletPaymentUnavailableMessage("NGN", null, false)
+        )
     }
 
     @Test

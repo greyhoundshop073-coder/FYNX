@@ -96,6 +96,32 @@ try {
     [walletId, userId]
   );
 
+  const firstVisitUserId = 777002;
+  await client.query("INSERT INTO users(id) VALUES ($1)", [firstVisitUserId]);
+  const firstProvision = await client.query(
+    "INSERT INTO buyer_wallets(id,user_id,currency) VALUES ($1,$2,'NGN') ON CONFLICT (user_id,currency) DO NOTHING RETURNING id",
+    [crypto.randomUUID(), firstVisitUserId]
+  );
+  const duplicateProvision = await client.query(
+    "INSERT INTO buyer_wallets(id,user_id,currency) VALUES ($1,$2,'NGN') ON CONFLICT (user_id,currency) DO NOTHING RETURNING id",
+    [crypto.randomUUID(), firstVisitUserId]
+  );
+  const firstVisitWallet = await client.query(
+    "SELECT id,status,provider,funding_account_status,currency FROM buyer_wallets WHERE user_id=$1 AND currency='NGN'",
+    [firstVisitUserId]
+  );
+  if (
+    firstProvision.rowCount !== 1 ||
+    duplicateProvision.rowCount !== 0 ||
+    firstVisitWallet.rows.length !== 1 ||
+    firstVisitWallet.rows[0].status !== "PENDING_PROVIDER" ||
+    firstVisitWallet.rows[0].provider !== "PENDING_SELECTION" ||
+    firstVisitWallet.rows[0].funding_account_status !== "NOT_CREATED" ||
+    firstVisitWallet.rows[0].currency !== "NGN"
+  ) {
+    throw new Error("First-visit Wallet provisioning must create exactly one empty provider-pending NGN Wallet.");
+  }
+
   const cursorSeedIds = [];
   for (const [index, createdAt] of [
     [0, "2026-10-31T12:00:00.123456Z"],
@@ -268,7 +294,7 @@ try {
     );
   }, "buyer wallet transaction owner or currency does not match its wallet");
 
-  console.log("FYNX buyer wallet PostgreSQL schema, ledger, cursor, direction and summary-balance tests GREEN (12 scenarios)");
+  console.log("FYNX buyer wallet PostgreSQL schema, ledger, cursor, direction, first-visit provisioning and summary-balance tests GREEN (13 scenarios)");
 } finally {
   if (schemaCreated) {
     await client.query("SET search_path TO public").catch(() => {});

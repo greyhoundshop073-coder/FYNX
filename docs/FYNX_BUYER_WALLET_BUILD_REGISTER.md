@@ -109,3 +109,5 @@ The foundation verifier now explicitly protects the first-time Wallet path: summ
 - Withdrawal initiation now enforces the NGN 50 Paystack transfer minimum before opening the database transaction, resolving a bank account or creating a provider recipient. The same minimum is returned by the security endpoint, shown with the configured limits and checked by the Android client before it sends the request.
 
 - Wallet security now reads the signed-in user's wallet status and only exposes PIN creation/change when the wallet is ACTIVE. First-time users whose wallet is still NOT_SETUP receive a preparation notice instead of a PIN form that would be rejected by the backend.
+
+- Added a separate `FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED=true` fail-closed gate for bank withdrawals. Paystack's current Transfers guidance states that this feature is available only to registered businesses; an ordinary provider secret or wallet approval flag alone must not activate payouts.

@@ -11,6 +11,17 @@ workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8
 
 checks = [
     (
+        "normal authenticated Marketplace journey captures private My Shop overview and all seller sections",
+        '# Continue in the same real, server-authenticated session into the private' in navigation
+        and 'shop_xml = tap_control(' in navigation
+        and all(
+            f'"authenticated-marketplace-my-shop-{slug}.png"' in navigation
+            for slug in ("overview", "profile", "listings", "orders", "delivery-drivers", "earnings-payouts")
+        )
+        and "runtime report was missing real screenshot files:" in navigation
+        and "This is read-only: do not save a shop profile" in navigation,
+    ),
+    (
         "Android CI attempts focused Marketplace/My Shop capture after instrumentation failure",
         'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
         and 'else\n  # A red instrumentation test must not suppress Marketplace/My Shop screenshot evidence.' in runner,
@@ -115,6 +126,13 @@ checks = [
         and "refs/heads/integration/fynx-single-apk-20261013" in workflow
         and "contains(github.event.head_commit.message, '[home-cert]')" in workflow,
     ),
+    (
+        "Android emulator userdata is capped to fit the hosted runner AVD storage",
+        "profile: pixel_7_pro" in workflow
+        and "disk-size: 4G" in workflow
+        and "emulator-boot-timeout" not in workflow.split("uses: reactivecircus/android-emulator-runner@", 1)[1].split("script: bash scripts/run_android_runtime_certification.sh", 1)[0],
+    ),
+
 ]
 
 camera_source = Path("app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")

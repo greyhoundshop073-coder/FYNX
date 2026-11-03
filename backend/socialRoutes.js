@@ -178,7 +178,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const category = typeof req.query?.category === "string" ? req.query.category.trim().slice(0, 40) : "";
       const seller = typeof req.query?.seller === "string" ? req.query.seller.trim().toLowerCase().replace(/^@+/, "") : "";
       const params = [req.user.sub];
-      const where = ["l.active = TRUE", "l.quantity > 0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
+      const where = ["l.active = TRUE", "GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) > 0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
       if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR COALESCE(l.store_name, '') ILIKE $${params.length} OR COALESCE(shop.shop_name, '') ILIKE $${params.length} OR COALESCE(l.location, '') ILIKE $${params.length} OR COALESCE(l.category, '') ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }

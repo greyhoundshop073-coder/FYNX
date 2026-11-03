@@ -43,8 +43,8 @@ checks = [
      'validServerQuoteMapsAuthoritativeTotals' in client_test_content and 'productQuantityCurrencyAndFulfillmentMustMatchTheRequest' in client_test_content and 'subtotalAndTotalMustReconcileWithQuantityAndFeeBreakdown' in client_test_content and 'idempotencyFingerprintIsStableForTheSameAuthenticatedIntentAcrossTokenRotation' in client_test_content and 'missingSellerDisplayNameFallsBackToAuthoritativeSellerUsername' in client_test_content),
     ("valid quote seller identity survives a missing optional display name via the server-provided username",
      'sellerDisplayName = optionalText("sellerDisplayName").ifBlank { requiredText("sellerUsername") }' in client and 'requiredText("sellerUsername")' in client),
-    ("Wallet checkout uses the authenticated Wallet payment endpoint only when server capability and cleared balance allow it",
-     'walletSummary?.canSpend == true' in panel and 'walletSummary?.availableBalance' in panel and 'FynxBuyerWalletClient.payMarketplaceOrder(' in panel and 'Pay with FYNX Wallet' in panel),
+    ("Wallet checkout keeps a visible disabled option with a reason and enables payment only for an approved NGN balance",
+     'walletSummary.canSpend' in client and 'walletSummary?.availableBalance' in panel and 'walletOptionAvailable && hasEnoughWalletBalance' in panel and 'marketplaceWalletPaymentUnavailableMessage(' in panel and 'label = { Text("FYNX Wallet") }' in panel and 'enabled = !busy && walletOptionAvailable' in panel and 'FynxBuyerWalletClient.payMarketplaceOrder(' in panel and 'Pay with FYNX Wallet' in panel),
 
 ]
 failed = False

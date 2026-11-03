@@ -11,7 +11,7 @@ check("real-device instrumentation remains part of release certification", "reac
 runtime_path = "scripts/verify_authenticated_runtime_navigation.py" if (ROOT / "scripts/verify_authenticated_runtime_navigation.py").is_file() else "scripts/verify_runtime_navigation.py"
 runtime_navigation = (ROOT / runtime_path).read_text(encoding="utf-8").lower()
 check("runtime screenshots and UI hierarchy are captured", "screencap" in runtime_navigation and "uiautomator" in runtime_navigation and runtime_path.lower() in runtime_script)
-check("exact-commit APK artifact is produced", "FYNX-debug-apk-${{ github.sha }}" in workflow and "FYNX-debug-${GITHUB_SHA}.apk" in workflow)
+check("one canonical official APK artifact is produced", "name: FYNX-Android-Official.apk" in workflow and "FYNX-Android-Official.apk" in workflow and "GITHUB_SHA" in workflow and "github.ref == 'refs/heads/integration/fynx-single-apk-20261013'" in workflow and "FYNX-Android-Official-build.txt" in workflow and "apk_sha256=" in workflow)
 check("production certification runs before Android build", workflow.index("Verify final FYNX production certification gate") < min(i for i in (workflow.find("Fast build, test and lint"), workflow.find("Full build, test and lint")) if i >= 0))
 journey = (ROOT / "scripts/verify_fynx_journey.py").read_text(encoding="utf-8")
 production = (ROOT / "scripts/verify_fynx_production.py").read_text(encoding="utf-8")

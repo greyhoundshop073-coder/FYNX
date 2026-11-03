@@ -19,6 +19,10 @@ const walletSummaryRoute = walletSummaryStart >= 0 && walletSummaryEnd > walletS
   : '';
 
 const checks = [
+  ['First authenticated Wallet summary provisions one empty NGN Wallet idempotently with safe defaults',
+    walletSummaryRoute.includes("INSERT INTO buyer_wallets (id,user_id,currency)") &&
+    walletSummaryRoute.includes("ON CONFLICT (user_id,currency) DO NOTHING") &&
+    walletSummaryRoute.includes("wallet provisioning did not return the customer wallet")],
   ['Marketplace fee remains a configurable five-percent default', checkout.includes("FYNX_MARKETPLACE_FEE_BPS || '500'")],
   ['Seller earnings expose only the seller-paid fee share', settlement.includes('COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller') && settlement.includes('marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0)')],
   ['Seller earnings separately report gross, seller fee and net', settlement.includes('AS gross_sales') && settlement.includes('AS marketplace_fees') && settlement.includes('AS net_earnings')],
@@ -45,7 +49,9 @@ const checks = [
   ['Funding credits are applied to the append-only double-entry wallet ledger', wallet.includes("'PROVIDER_CLEARING','DEBIT'") && wallet.includes("'AVAILABLE','CREDIT'") && wallet.includes('PAYSTACK-DVA-AVAILABLE-')],
   ['Wallet CSV statements are owner-scoped and bounded', wallet.includes('/api/wallet/statement.csv') && wallet.includes('WHERE t.user_id=$1 AND t.wallet_id=$2') && wallet.includes('LIMIT 5001') && wallet.includes('rows.rows.length > 5000')],
   ['CSV export neutralizes spreadsheet formula injection', buildBuyerWalletStatementCsv([{ description: '=HYPERLINK("bad")', reference: '+cmd' }]).includes("'=HYPERLINK") && buildBuyerWalletStatementCsv([{ description: '=HYPERLINK("bad")', reference: '+cmd' }]).includes("'+cmd")],
-  ['Wallet withdrawals are gated by provider, compliance, payout approval, OTP policy and configured limits', wallet.includes("FYNX_WALLET_WITHDRAWALS_ENABLED === 'true'") && wallet.includes("FYNX_WALLET_PAYOUTS_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_WITHDRAWAL_FEE_POLICY_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true'") && wallet.includes("maximum > 10_000_000") && wallet.includes("maximum < MINIMUM_WALLET_WITHDRAWAL_NGN") && wallet.includes("const MINIMUM_WALLET_WITHDRAWAL_NGN = 50") && wallet.includes("walletWithdrawalLimits() !== null")],
+  ['Wallet withdrawals are gated by provider, compliance, payout approval, OTP policy and configured limits', wallet.includes("FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_WITHDRAWALS_ENABLED === 'true'") && wallet.includes("FYNX_WALLET_PAYOUTS_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_WITHDRAWAL_FEE_POLICY_APPROVED === 'true'") && wallet.includes("FYNX_WALLET_TRANSFER_OTP_DISABLED === 'true'") && wallet.includes("maximum > 10_000_000") && wallet.includes("maximum < MINIMUM_WALLET_WITHDRAWAL_NGN") && wallet.includes("const MINIMUM_WALLET_WITHDRAWAL_NGN = 50") && wallet.includes("walletWithdrawalLimits() !== null")],
+  ['Paystack bank withdrawals require an explicit registered-business eligibility approval',
+    wallet.includes("FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED === 'true'")],
   ['NGN 50 minimum withdrawal is enforced before database writes or provider recipient creation', (() => {
     const start = wallet.indexOf("app.post('/api/wallet/withdrawals'");
     const minimum = wallet.indexOf("amountValue < limits.minimumPerTransfer", start);

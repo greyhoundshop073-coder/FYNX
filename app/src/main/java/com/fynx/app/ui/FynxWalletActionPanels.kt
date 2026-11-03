@@ -48,6 +48,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.mapSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -64,9 +66,45 @@ import java.util.Locale
 private fun walletActionMoney(amount: Double?): String =
     amount?.takeIf { it.isFinite() && it >= 0.0 }?.let { "₦" + String.format(Locale.US, "%,.2f", it) } ?: "Unavailable"
 
+private val FynxWalletFundingSessionSaver = mapSaver<FynxWalletFundingSession?>(
+    save = { session ->
+        session?.let {
+            mapOf(
+                "status" to it.status,
+                "reference" to it.reference,
+                "amount" to it.amount,
+                "authorizationUrl" to it.authorizationUrl.orEmpty(),
+                "paymentMethod" to it.paymentMethod,
+                "message" to it.message,
+                "testMode" to it.testMode
+            )
+        } ?: emptyMap()
+    },
+    restore = { saved ->
+        val status = saved["status"] as? String
+        val reference = saved["reference"] as? String
+        val amount = saved["amount"] as? Double
+        val paymentMethod = saved["paymentMethod"] as? String
+        if (status == null || reference == null || amount == null || paymentMethod == null) {
+            null
+        } else {
+            FynxWalletFundingSession(
+                status = status,
+                reference = reference,
+                amount = amount,
+                authorizationUrl = (saved["authorizationUrl"] as? String)?.takeIf { it.isNotBlank() },
+                paymentMethod = paymentMethod,
+                message = saved["message"] as? String ?: "",
+                testMode = saved["testMode"] as? Boolean ?: false
+            )
+        }
+    }
+)
+
 @Composable
 internal fun FynxWalletActionPanel(
     screen: String,
+    testMode: Boolean,
     amount: String,
     onAmountChange: (String) -> Unit,
     availableBalance: Double?,
@@ -78,6 +116,7 @@ internal fun FynxWalletActionPanel(
     onNavigate: (String) -> Unit,
     onFundingVerified: () -> Unit
 ) {
+    val context = LocalContext.current
     val title = when (screen) {
         "ADD" -> "Add Money"
         "TRANSFER" -> "Bank Transfer"
@@ -123,7 +162,11 @@ internal fun FynxWalletActionPanel(
                     WalletMethodCard(
                         icon = "card",
                         title = "Debit card",
-                        description = if (canFundByCard) "Continue through the secure provider-hosted card checkout." else "Secure card checkout will appear after provider approval and funding limits are configured.",
+                        description = when {
+                            testMode && canFundByCard -> "Paystack Test Mode: simulate a card top-up. The balance is not real money and cannot be spent or withdrawn."
+                            canFundByCard -> "Continue through the secure provider-hosted card checkout."
+                            else -> "Secure card checkout will appear after provider approval and funding limits are configured."
+                        },
                         onClick = { onNavigate("CARD") }
                     )
                 }
@@ -137,15 +180,40 @@ internal fun FynxWalletActionPanel(
                 }
                 item {
                     WalletActionNotice(
-                        title = "Funding is being prepared",
-                        message = "Payment methods will become active after FYNX connects an approved provider and verifies payment notifications. No payment is started from this screen."
+                        title = when {
+                            testMode -> "Paystack Test Mode is active"
+                            canFundByCard -> "Card funding is active"
+                            else -> "Funding is being prepared"
+                        },
+                        message = when {
+                            testMode -> "Card top-ups use simulated Paystack payments only. Test balances are not real money and cannot be spent, used for Marketplace purchases, transferred or withdrawn. Amounts must stay within the current server test limits."
+                            canFundByCard -> "Continue through secure provider-hosted card checkout. FYNX credits your Wallet only after a signed provider notification and server-side verification."
+                            else -> "Payment methods will become active after FYNX connects an approved provider and verifies payment notifications. No payment is started from this screen."
+                        }
                     )
                 }
             }
             "TRANSFER" -> {
-                item { FynxWalletFundingAccountPanel(amount = amount) }
+                if (FynxBackendClient.hasAccessToken(context)) {
+                    item { FynxWalletFundingAccountPanel(amount = amount) }
+                } else {
+                    item {
+                        WalletActionNotice(
+                            title = "Connect your FYNX account",
+                            message = "Sign out and sign in with your FYNX username and password before checking a live funding account. No account request has been sent."
+                        )
+                    }
+                }
             }
             "CARD" -> {
+                if (testMode) {
+                    item {
+                        WalletActionNotice(
+                            title = "Paystack Test Mode",
+                            message = "This checkout uses simulated payments only. Test balances are not real money and cannot be spent, used for Marketplace purchases or withdrawn. Your server controls the permitted test amount."
+                        )
+                    }
+                }
                 item {
                     FynxWalletHostedFundingPanel(
                         method = "CARD",
@@ -176,7 +244,16 @@ internal fun FynxWalletActionPanel(
                 }
             }
             "SECURITY" -> {
-                item { FynxWalletSecurityPanel() }
+                if (FynxBackendClient.hasAccessToken(context)) {
+                    item { FynxWalletSecurityPanel() }
+                } else {
+                    item {
+                        WalletActionNotice(
+                            title = "Connect your FYNX account",
+                            message = "Wallet PIN status is private account information. Sign in with your FYNX username and password before viewing or changing Wallet security."
+                        )
+                    }
+                }
             }
             else -> item { WalletActionNotice("Wallet option unavailable", "Return to your Wallet and choose an available option.") }
         }
@@ -195,9 +272,15 @@ private fun FynxWalletHostedFundingPanel(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val methodName = if (method == "CARD") "Debit card" else "USSD"
-    var email by remember { mutableStateOf("") }
-    var session by remember(method) { mutableStateOf<FynxWalletFundingSession?>(null) }
-    var idempotencyKey by remember(method) { mutableStateOf(UUID.randomUUID().toString().replace("-", "")) }
+    // Keep the customer, idempotency key and provider reference across rotation and process recreation.
+    // A return from Paystack must resume the same attempt, never silently generate a second charge.
+    var email by rememberSaveable(method) { mutableStateOf("") }
+    var session by rememberSaveable(method, stateSaver = FynxWalletFundingSessionSaver) {
+        mutableStateOf<FynxWalletFundingSession?>(null)
+    }
+    var idempotencyKey by rememberSaveable(method) {
+        mutableStateOf(UUID.randomUUID().toString().replace("-", ""))
+    }
     var submitting by remember { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -267,13 +350,17 @@ private fun FynxWalletHostedFundingPanel(
         } else {
             val current = checkNotNull(session)
             WalletActionNotice(
-                title = when (current.status) {
-                    "SUCCEEDED" -> "Payment confirmed"
-                    "FAILED", "BLOCKED" -> "Payment not credited"
+                title = when {
+                    current.testMode && current.status == "SUCCEEDED" -> "Test payment recorded"
+                    current.testMode && current.status != "FAILED" && current.status != "BLOCKED" -> "Test checkout pending"
+                    current.status == "SUCCEEDED" -> "Payment confirmed"
+                    current.status == "FAILED" || current.status == "BLOCKED" -> "Payment not credited"
                     else -> "Payment awaiting confirmation"
                 },
                 message = current.message.ifBlank {
-                    if (current.status == "SUCCEEDED") "The provider confirmed this payment. Your Wallet will refresh."
+                    if (current.testMode && current.status == "SUCCEEDED") "TEST MODE: This simulated payment is recorded in your test Wallet. It is not real money and cannot be spent or withdrawn."
+                    else if (current.status == "SUCCEEDED") "The provider confirmed this payment. Your Wallet will refresh."
+                    else if (current.testMode) "TEST MODE: Finish the simulated Paystack checkout, then check the confirmation status. No balance is credited until Paystack verifies it."
                     else "Do not pay again yet. Check the payment status; FYNX has not credited your Wallet without provider confirmation."
                 }
             )
