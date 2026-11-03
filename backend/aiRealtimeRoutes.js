@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
 import { createRealtimeAnswer } from "./aiVoiceSession.js";
 import { executeFynxAiTool, getFynxAiTools } from "./fynxAiToolRegistry.js";
 
@@ -27,7 +28,7 @@ function authenticate(req, res) {
 }
 
 export function registerRealtimeAssistantRoutes({ app }) {
-  app.post("/api/assistant/realtime-session", async (req, res) => {
+  app.post("/api/assistant/realtime-session", assistantJsonBodyParser, async (req, res) => {
     const userId = authenticate(req, res);
     if (!userId) return;
 
@@ -45,7 +46,7 @@ export function registerRealtimeAssistantRoutes({ app }) {
     }
   });
 
-  app.post("/api/assistant/realtime-tool", async (req, res) => {
+  app.post("/api/assistant/realtime-tool", assistantJsonBodyParser, async (req, res) => {
     const userId = authenticate(req, res);
     if (!userId) return;
 
