@@ -19,6 +19,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -113,6 +115,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var actionLabel by remember { mutableStateOf("Explore Marketplace") }
     var destinationType by remember { mutableStateOf("MARKETPLACE") }
     var destinationValue by remember { mutableStateOf("") }
+    var categoryMenuExpanded by remember { mutableStateOf(false) }
     var artworkUri by remember { mutableStateOf<Uri?>(null) }
     var artworkMediaId by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
@@ -228,29 +231,60 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 }
             }
         }
-        if (destinationType != "MARKETPLACE") {
-            OutlinedTextField(
+        when (destinationType) {
+            "CATEGORY" -> {
+                Text("Marketplace category", style = MaterialTheme.typography.labelLarge)
+                OutlinedButton(
+                    onClick = { categoryMenuExpanded = true },
+                    enabled = !saving,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(destinationValue.ifBlank { "Choose a category" }, modifier = Modifier.weight(1f))
+                    Text("⌄")
+                }
+                DropdownMenu(
+                    expanded = categoryMenuExpanded,
+                    onDismissRequest = { categoryMenuExpanded = false },
+                    modifier = Modifier.height(320.dp)
+                ) {
+                    MARKETPLACE_CAMPAIGN_CATEGORIES.forEach { category ->
+                        DropdownMenuItem(
+                            text = { Text(category) },
+                            onClick = {
+                                destinationValue = category
+                                categoryMenuExpanded = false
+                                message = null
+                                error = null
+                            }
+                        )
+                    }
+                }
+                Text(
+                    "Choose from the same categories buyers can browse in Marketplace.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            "PRODUCT", "SHOP" -> OutlinedTextField(
                 value = destinationValue,
                 onValueChange = {
-                    destinationValue = when (destinationType) {
-                        "PRODUCT" -> it.filter(Char::isDigit).take(20)
-                        "SHOP" -> it.trim().removePrefix("@").lowercase().filter { char -> char.isLetterOrDigit() || char == '_' }.take(32)
-                        else -> it.take(60)
+                    destinationValue = if (destinationType == "PRODUCT") {
+                        it.filter(Char::isDigit).take(20)
+                    } else {
+                        it.trim().removePrefix("@").lowercase().filter { char -> char.isLetterOrDigit() || char == '_' }.take(32)
                     }
                     message = null
                     error = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text(when (destinationType) {
-                    "CATEGORY" -> "Marketplace category"
-                    "PRODUCT" -> "Product listing ID"
-                    else -> "Seller username"
-                }) },
-                supportingText = { Text(when (destinationType) {
-                    "CATEGORY" -> "Use the same category name shown in Marketplace, for example Electronics or Fashion."
-                    "PRODUCT" -> "Paste the numeric listing ID from the product record."
-                    else -> "Enter the seller's FYNX username, without @."
-                }) },
+                label = { Text(if (destinationType == "PRODUCT") "Product listing ID" else "Seller username") },
+                supportingText = {
+                    Text(if (destinationType == "PRODUCT") {
+                        "Paste the numeric listing ID from an active, in-stock product."
+                    } else {
+                        "Enter the seller's FYNX username, without @."
+                    })
+                },
                 singleLine = true,
                 enabled = !saving
             )
@@ -370,9 +404,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 }
             },
             enabled = !saving && occasionKey.isNotBlank() && headline.trim().length >= 3 &&
-                (destinationType == "MARKETPLACE" || destinationValue.isNotBlank()) &&
-                (destinationType != "PRODUCT" || destinationValue.toLongOrNull()?.let { it > 0L } == true) &&
-                (destinationType != "SHOP" || destinationValue.matches(Regex("[a-z0-9_]{3,32}"))) &&
+                isValidMarketplaceCampaignDestination(destinationType, destinationValue) &&
                 marketplaceSeasonalWindowIsValid(startsAt, endsAt),
             modifier = Modifier.fillMaxWidth()
         ) {
