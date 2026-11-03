@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerFlowSupport.kt").read_text()
 marketplace = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
+promotion_models = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionModels.kt").read_text()
 ad_support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCarouselSupport.kt").read_text()
 hero = marketplace[marketplace.index("private fun MarketplaceSmartDealsHero"):marketplace.index("@Composable\nfun FynxMarketplacePanel")]
 checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text()
