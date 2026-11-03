@@ -293,7 +293,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                 keyboardActions = KeyboardActions(onSend = { send() }),
                                 trailingIcon = {
                                     IconButton(onClick = { send() }, enabled = text.trim().isNotEmpty() && !sending && !loading) {
-                                        if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, "Send comment")
+                                        if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, if (replyingTo == null) "Send comment" else "Send reply")
                                     }
                                 }
                             )
