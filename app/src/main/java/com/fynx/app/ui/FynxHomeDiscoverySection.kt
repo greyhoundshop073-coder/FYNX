@@ -513,8 +513,10 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
         }
     }
     DisposableEffect(file, retryNonce) {
-        val attachedView = viewState.value
         onDispose {
+            // Read the actual attached player during disposal so retries always
+            // stop the view being replaced, rather than a stale/null snapshot.
+            val attachedView = viewState.value
             runCatching { attachedView?.stopPlayback() }
             if (viewState.value === attachedView) viewState.value = null
         }
