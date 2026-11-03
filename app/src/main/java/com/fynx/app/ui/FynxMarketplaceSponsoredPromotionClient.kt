@@ -4,6 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.util.UUID
 
 /** A paid campaign paired with its canonical Marketplace product listing. */
 data class FynxMarketplaceSponsoredPromotion(
@@ -20,10 +21,15 @@ object FynxMarketplaceSponsoredPromotionClient {
         if (id <= 0L || metric !in setOf("impression", "click")) {
             return Result.failure(IllegalArgumentException("invalid sponsored campaign metric"))
         }
+        val payload = JSONObject().put("metric", metric).apply {
+            // The server also deduplicates by buyer/campaign/Lagos day; this key makes
+            // request retries idempotent without ever trusting a client-supplied price.
+            if (metric == "click") put("clickKey", UUID.randomUUID().toString())
+        }
         return FynxBackendClient.postJson(
             context,
             "/api/advertising/campaigns/$id/metric",
-            JSONObject().put("metric", metric).toString()
+            payload.toString()
         ).map { Unit }
     }
 
