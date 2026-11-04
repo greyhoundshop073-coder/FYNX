@@ -2564,6 +2564,22 @@ if marketplace_xml:
         report.append("- FAIL: " + wallet_shortcut_message)
         FAILURES.append("Authenticated Marketplace -> Wallet shortcut: " + wallet_shortcut_message)
 
+    # The Marketplace -> Wallet round trip can restore the Marketplace at the
+    # previous vertical scroll offset. My Shop is in the top shortcut rail, so
+    # return the actual Marketplace content viewport to its top and re-read the
+    # hierarchy before selecting it. This is a bounded UI-only gesture; it does
+    # not bypass authentication or create/change seller data.
+    for attempt in range(5):
+        if find_control(marketplace_xml, ["My Shop"]):
+            break
+        scrolled_xml = swipe_vertical_scroll_container(
+            marketplace_xml, "authenticated-marketplace-my-shop-return-top-" + str(attempt) + ".xml",
+            reverse=True
+        )
+        if not scrolled_xml:
+            break
+        marketplace_xml = scrolled_xml
+
     # Continue in the same real, server-authenticated session into the private
     # seller control center. This is read-only: do not save a shop profile,
     # publish a listing, change inventory, assign a driver or create an order.
