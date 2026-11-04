@@ -166,13 +166,13 @@ export class MarketplaceAiListingCopyInputError extends Error {
 function sanitizeMarketplaceAiListingText(value, maximumLength) {
   if (typeof value !== "string") return "";
   let text = value
-    .replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]/g, " ")
-    .replace(/\\s+/g, " ")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
     .slice(0, maximumLength);
-  text = text.replace(/\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b/gi, "[contact details omitted]");
-  text = text.replace(/\\+?\\d[\\d\\s().-]{7,}\\d/g, (match) =>
-    (match.match(/\\d/g) || []).length >= 9 ? "[contact details omitted]" : match
+  text = text.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[contact details omitted]");
+  text = text.replace(/\+?\d[\d\s().-]{7,}\d/g, (match) =>
+    (match.match(/\d/g) || []).length >= 9 ? "[contact details omitted]" : match
   );
   return text.trim();
 }
@@ -211,7 +211,7 @@ export function normalizeMarketplaceAiListingCopyInput(input = {}) {
 
 export function buildMarketplaceAiListingCopyPrompt(input) {
   const specifications = input.specifications.length
-    ? input.specifications.map((item) => "- " + item.label + ": " + item.value).join("\\n")
+    ? input.specifications.map((item) => "- " + item.label + ": " + item.value).join("\n")
     : "- None supplied";
   return [
     "Prepare a clear, honest FYNX Marketplace product title and description.",
@@ -230,12 +230,12 @@ export function buildMarketplaceAiListingCopyPrompt(input) {
     "SELLER'S CURRENT DESCRIPTION: " + (input.description || "Not supplied"),
     "SELLER'S PRODUCT SPECIFICATIONS:",
     specifications
-  ].join("\\n");
+  ].join("\n");
 }
 
 export function parseMarketplaceAiListingCopyReply(reply) {
   if (typeof reply !== "string") throw new Error("FYNX AI returned an incomplete listing suggestion.");
-  const raw = reply.trim().replace(/^\\uFEFF/, "");
+  const raw = reply.trim().replace(/^\uFEFF/, "");
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start < 0 || end <= start) throw new Error("FYNX AI could not prepare a valid listing suggestion.");
