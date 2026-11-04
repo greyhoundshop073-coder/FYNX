@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   buildAiConversationContext,
+  loadPersistedAiConversationHistory,
   MAX_CONTEXT_HISTORY_ITEMS,
   MAX_CONTEXT_SUMMARY_CHARS,
   MAX_CONTEXT_TASK_CHARS
@@ -43,8 +44,24 @@ assert.equal(sanitized.currentTask, "useful user text");
 const empty = buildAiConversationContext(null);
 assert.deepEqual(empty, { summary: "", currentTask: "" });
 
+let queryText = "";
+let queryValues = [];
+const loadedHistory = await loadPersistedAiConversationHistory({
+  async query(sql, values) {
+    queryText = sql;
+    queryValues = values;
+    return { rows: [message("assistant", "second"), message("user", "first")] };
+  }
+}, "conversation-73", "user-17");
+assert.match(queryText, /WHERE conversation_id=\\$1 AND user_id=\\$2/);
+assert.match(queryText, /LIMIT \\$3/);
+assert.deepEqual(queryValues, ["conversation-73", "user-17", MAX_CONTEXT_HISTORY_ITEMS]);
+assert.deepEqual(loadedHistory, [message("user", "first"), message("assistant", "second")]);
+await assert.rejects(loadPersistedAiConversationHistory({}, "conversation-73", "user-17"), /database query is required/);
+await assert.rejects(loadPersistedAiConversationHistory({ query: async () => ({ rows: [] }) }, null, "user-17"), /IDs are required/);
+
 const original = [message("user", "Do not mutate me")];
 buildAiConversationContext(original);
 assert.equal(original[0].text, "Do not mutate me");
 
-console.log("AI conversation context tests GREEN: 5 suites passed");
+console.log("AI conversation context tests GREEN: 6 suites passed");
