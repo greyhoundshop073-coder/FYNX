@@ -112,8 +112,15 @@ checks = [
         and "no visible real listing card" in navigation,
     ),
     (
-        "product-publishing form is captured without submitting a listing",
+        "product-publishing capture uses exact Sell matching and scrolls inside the real content viewport",
         '["Sell", "Sell something", "Start selling", "Sell your first product"]' in navigation
+        and 'def find_control(xml_text:str, labels:list[str], *, exact_only: bool = False):' in navigation
+        and 'candidates = exact if exact_only else (exact or partial)' in navigation
+        and 'find_control(marketplace_xml, sell_labels, exact_only=True)' in navigation
+        and '["Product name", "Choose media", "Product media"], exact_only=True' in navigation
+        and 'def swipe_vertical_scroll_container(' in navigation
+        and 'swipe_vertical_scroll_container(\n                marketplace_xml, "marketplace-publish-cta-scroll-"' in navigation
+        and 'node.attrib.get("scrollable", "false").lower() != "true"' in navigation
         and "without submitting or creating a listing" in navigation,
     ),
     (

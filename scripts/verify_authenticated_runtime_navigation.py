@@ -180,7 +180,7 @@ def _matches(node, wanted:list[str]) -> bool:
     hay=" | ".join((text,desc,rid)).lower()
     return any(label in hay for label in wanted)
 
-def _find_control_node(root, wanted:list[str]):
+def _find_control_node(root, wanted:list[str], *, exact_only: bool = False):
     # Prefer exact text/content-description/resource-id matches before substring
     # matches. Compose may expose a label on a descendant while the actual
     # click target is its clickable ancestor, so promote that ancestor.
@@ -208,14 +208,14 @@ def _find_control_node(root, wanted:list[str]):
                 exact.append(promote(node)); break
             if label in text or label in desc or label in rid:
                 partial.append(promote(node)); break
-    candidates=exact or partial
+    candidates = exact if exact_only else (exact or partial)
     if not candidates: return None
     for node in candidates:
         if node.attrib.get("clickable","false").lower()=="true":
             return node
     return candidates[0]
 
-def find_control(xml_text:str, labels:list[str]):
+def find_control(xml_text:str, labels:list[str], *, exact_only: bool = False):
     if not xml_text: return None
     wanted=[x.lower() for x in labels]
     try: root=ET.fromstring(xml_text)
@@ -240,7 +240,7 @@ def find_control(xml_text:str, labels:list[str]):
         collect(root)
         node=min(candidates,key=lambda item:(_center(item)[1],_center(item)[0])) if candidates else None
     else:
-        node=_find_control_node(root,wanted)
+        node=_find_control_node(root,wanted,exact_only=exact_only)
     if node is None: return None
     center=_center(node)
     if not center: return None
@@ -366,15 +366,15 @@ def dismiss_ime_if_visible(name: str) -> str:
     return dump_ui(name)
 
 
-def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None)->str:
+def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None, *, exact_only: bool = False)->str:
     # Retry the same real accessibility selector; never use guessed coordinates.
-    control=find_control(xml_text,labels)
+    control=find_control(xml_text,labels,exact_only=exact_only)
     for _ in range(8):
         if control:
             break
         time.sleep(.5)
         xml_text=dump_ui(f"authenticated-{name}-retry.xml")
-        control=find_control(xml_text,labels)
+        control=find_control(xml_text,labels,exact_only=exact_only)
     if not control:
         screenshot(f"authenticated-{name}-control-missing.png")
         requested=", ".join(labels)
@@ -401,6 +401,47 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         FAILURES.append(f"{name}: destination marker not found [{expected}]; visible markers: {visible_marker_summary(next_xml)}")
         return ""
     return next_xml
+
+
+def swipe_vertical_scroll_container(xml_text: str, name: str, *, reverse: bool = False) -> str:
+    """Swipe inside the largest visible vertical scroll container, not fixed screen coordinates."""
+    if not xml_text:
+        return ""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        if node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        bounds = node.attrib.get("bounds", "")
+        try:
+            left_top, right_bottom = bounds.split("][", 1)
+            left, top = map(int, left_top.strip("[]").split(","))
+            right, bottom = map(int, right_bottom.strip("[]").split(","))
+        except (ValueError, IndexError):
+            continue
+        width, height = right - left, bottom - top
+        # Horizontal category/tab rails are short; the main content list is tall.
+        if width <= 0 or height < 320:
+            continue
+        candidates.append((height, left, top, right, bottom))
+    if not candidates:
+        return ""
+    _, left, top, right, bottom = max(candidates, key=lambda item: item[0])
+    x = (left + right) // 2
+    inset = max(60, min(140, (bottom - top) // 8))
+    start_y, end_y = bottom - inset, top + inset
+    if reverse:
+        start_y, end_y = end_y, start_y
+    if abs(start_y - end_y) < 240:
+        return ""
+    run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "450")
+    time.sleep(0.4)
+    return dump_ui(name)
 
 
 def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
@@ -1924,18 +1965,22 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         else:
             report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
 
-        # Scroll the real Marketplace list to its sell action; do not fill or submit the form.
+        # Scroll the actual Marketplace content viewport to the seller action. Match "Sell"
+        # exactly: substring matching would also match "sellers" in the search field.
         sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]
         for attempt in range(6):
-            if find_control(marketplace_xml, sell_labels):
+            if find_control(marketplace_xml, sell_labels, exact_only=True):
                 break
-            run("adb", "shell", "input", "swipe", "720", "2450", "720", "700", "450")
-            time.sleep(0.4)
-            marketplace_xml = dump_ui("marketplace-publish-cta-scroll-"+str(attempt)+".xml") or marketplace_xml
-        if find_control(marketplace_xml, sell_labels):
+            scrolled_xml = swipe_vertical_scroll_container(
+                marketplace_xml, "marketplace-publish-cta-scroll-"+str(attempt)+".xml"
+            )
+            if not scrolled_xml:
+                break
+            marketplace_xml = scrolled_xml
+        if find_control(marketplace_xml, sell_labels, exact_only=True):
             publish_xml = tap_control(
                 marketplace_xml, sell_labels, "marketplace-publishing-flow",
-                ["Product name", "Choose media", "Product media"]
+                ["Product name", "Choose media", "Product media"], exact_only=True
             )
             if publish_xml:
                 report.append("- PASS: captured the real product-publishing form without submitting or creating a listing.")
@@ -1947,13 +1992,16 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         else:
             report.append("- BLOCKED: the Sell action was not exposed by the rendered Marketplace state; publishing flow not captured.")
 
-        # Return the actual Marketplace screen to its top before opening My Shop.
+        # Return the actual Marketplace content to its top before opening My Shop.
         for attempt in range(5):
             if find_control(marketplace_xml, ["My Shop"]):
                 break
-            run("adb", "shell", "input", "swipe", "720", "700", "720", "2450", "450")
-            time.sleep(0.35)
-            marketplace_xml = dump_ui("marketplace-return-top-"+str(attempt)+".xml") or marketplace_xml
+            scrolled_xml = swipe_vertical_scroll_container(
+                marketplace_xml, "marketplace-return-top-"+str(attempt)+".xml", reverse=True
+            )
+            if not scrolled_xml:
+                break
+            marketplace_xml = scrolled_xml
         shop_xml = tap_control(
             marketplace_xml, ["My Shop"], "marketplace-my-shop-overview",
             ["Your shop at a glance", "Manage your storefront", "Shop profile"]
