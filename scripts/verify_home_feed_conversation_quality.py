@@ -27,6 +27,10 @@ checks = [
     ("full-screen video surface and player are released safely", "DisposableEffect(surface)" in HOME and "player.release()" in HOME),
     ("comments preserve post context", '"POST CONVERSATION"' in COMMENTS and "post.authorDisplayName" in COMMENTS),
     ("conversation supports expanded nested reply trees", "flattenHomeReplies(" in COMMENTS and "toggleReplies(reply)" in COMMENTS),
+    ("comment reactions render with durable per-comment counts and coloured selected states", "HomeCommentReactionRow(reactionStates[comment.id]" in COMMENTS and "HomeCommentReactionRow(reactionStates[reply.id]" in COMMENTS and 'Triple("LOVE", "❤️", Color(0xFFE53935))' in COMMENTS and 'Triple("THUMBS_UP", "👍", Color(0xFF1976D2))' in COMMENTS),
+    ("comment sorting supports relevant and newest conversations", 'FilterChip(selected = commentSort == "Relevant"' in COMMENTS and 'FilterChip(selected = commentSort == "Newest"' in COMMENTS),
+    ("comments and replies can be shared through the Android share sheet", "fun shareComment(comment:" in COMMENTS and "Intent.createChooser(Intent(Intent.ACTION_SEND)" in COMMENTS),
+
     ("users can reply directly to another reply", "replyingToId = reply.id" in COMMENTS and "availableComments.firstOrNull" in COMMENTS),
     ("reply composer remains keyboard-safe", ".imePadding()" in COMMENTS and "KeyboardActions(onSend = { send() })" in COMMENTS),
     ("comment composer announces whether it sends a comment or reply", '"Send comment" else "Send reply"' in COMMENTS),

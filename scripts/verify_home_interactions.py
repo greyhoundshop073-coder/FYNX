@@ -26,6 +26,7 @@ visible_updates = read("app/src/main/java/com/fynx/app/ui/FynxVisibleUpdatesPane
 ai_panel = read("app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt")
 ai_client = read("app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt")
 comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
+reaction_bootstrap = read("backend/homeCommentReactionBootstrap.js")
 client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 saved_panel = read("app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt")
 privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
@@ -133,6 +134,10 @@ for needle in ('commentReactions(context, post.id, ids)', 'setCommentReaction(co
 require(client, 'data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)', "typed comment reaction summary")
 require(client, '"/api/social/posts/$post/comment-reactions?ids=$query"', "batched comment reaction summary avoids per-row requests")
 require(client, '"/api/social/posts/$post/comments/$comment/reaction"', "comment reaction write endpoint")
+for needle in ('var commentSort by rememberSaveable(post.id)', 'FilterChip(selected = commentSort == "Relevant"', 'FilterChip(selected = commentSort == "Newest"', 'fun shareComment(comment:', 'Intent.createChooser(Intent(Intent.ACTION_SEND)', 'TextButton(onClick = { shareComment(comment) })', 'TextButton(onClick = { shareComment(reply) })'):
+    require(comments_panel, needle, f"X-style comment sorting/share action {needle}")
+require(reaction_bootstrap, "[commentId,postId,req.user.sub]", "comment reaction deletion applies the current user's block filter parameter")
+
 require_normalized(comments_panel, 'Column(Modifier.fillMaxSize())', "comment sheet keeps a single stable layout owner")
 require_normalized(comments_panel, 'Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp)', "comment composer is positioned directly above IME")
 if 'Column(Modifier.fillMaxSize().imePadding())' in comments_panel:
