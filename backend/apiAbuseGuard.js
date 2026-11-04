@@ -3,6 +3,7 @@ const LIMITS = [
   [/^\/api\/assistant\/tools$/, 60],
   [/^\/api\/assistant\/realtime-session$/, 20],
   [/^\/api\/assistant\/marketplace\/listing-copy$/, 15],
+  [/^\/api\/assistant\/marketplace\/photo-review$/, 6],
   [/^\/api\/marketplace\//, 90],
   [/^\/api\/advertising\//, 60]
 ];
