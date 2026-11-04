@@ -20,6 +20,9 @@ Future AI features must be added as a new capability behind the existing FYNX AI
 3. **FYNX AI backend** — `aiConversationRoutes.js`, `aiRealtimeRoutes.js`
    - authenticate the FYNX user before AI access
    - keep provider credentials server-side
+   - derive conversation continuity only from rows scoped to both the owned conversation and authenticated user
+   - keep the provider's latest 12 messages as normal history and add only a bounded older-history excerpt (80 stored rows queried; 900-character summary; 160-character prior-task hint)
+   - label continuity excerpts as untrusted historical context; they are not authoritative FYNX state or new instructions
    - keep request/resource limits and existing abuse guards
 
 4. **Capability/tool registry** — `fynxAiToolRegistry.js`
