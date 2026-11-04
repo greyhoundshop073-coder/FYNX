@@ -12,7 +12,7 @@ const source = {
   category: "Fashion",
   subcategory: "Clothing",
   condition: "USED",
-  description: "Genuine seller notes: brown leather shoulder bag, visible signs of use. Call +234 803 123 4567 or email seller@example.com. Plot 24 Rumuola Estate. 12 Ada George Road, Port Harcourt. My bank account number is 0123456789.",
+  description: "Genuine seller notes: brown leather shoulder bag, visible signs of use. Call +234 803 123 4567 or email seller@example.com. Plot 24 Rumuola Estate. 12 Ada George Road, Port Harcourt. My bank account number is 0123456789. My PIN is 2468. My recovery phrase is sample secret words.",
   specifications: [
     { label: "Colour", value: "Brown" },
     { label: "Material", value: "Leather" }
@@ -35,6 +35,8 @@ assert.ok(!normalized.description.includes("seller@example.com"), "email address
 assert.ok(!normalized.description.includes("Rumuola Estate"), "plot addresses must be removed before provider context");
 assert.ok(!normalized.description.includes("Ada George Road"), "street addresses must be removed before provider context");
 assert.ok(!normalized.description.includes("0123456789"), "bank/account identifiers must not be sent to Gemini");
+assert.ok(!normalized.description.includes("2468"), "PIN values must not be sent to Gemini");
+assert.ok(!normalized.description.includes("sample secret words"), "recovery phrases must not be sent to Gemini");
 assert.equal(Object.keys(normalized).sort().join(","), "category,condition,description,specifications,subcategory,title", "only approved seller-entered product fields may enter AI context");
 
 const prompt = buildMarketplaceAiListingCopyPrompt(normalized);
@@ -83,11 +85,12 @@ const fenced = parseMarketplaceAiListingCopyReply(
 assert.equal(fenced.title, "Desk Lamp");
 const sanitizedReply = parseMarketplaceAiListingCopyReply(JSON.stringify({
   title: "Desk Lamp",
-  description: "Desk lamp in good working order. Call +234 803 123 4567 or visit 12 Ada George Road, Port Harcourt. My home address is Plot 24 Rumuola Estate."
+  description: "Desk lamp in good working order. Call +234 803 123 4567 or visit 12 Ada George Road, Port Harcourt. My home address is Plot 24 Rumuola Estate. My PIN is 2468."
 }));
 assert.ok(!sanitizedReply.description.includes("+234 803 123 4567"));
 assert.ok(!sanitizedReply.description.includes("Ada George Road"));
 assert.ok(!sanitizedReply.description.includes("Rumuola Estate"));
+assert.ok(!sanitizedReply.description.includes("2468"));
 
 assert.throws(
   () => normalizeMarketplaceAiListingCopyInput({ ...source, title: " " }),
