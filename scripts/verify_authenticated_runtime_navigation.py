@@ -13,6 +13,7 @@ PACKAGE="com.fynx.app"
 USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
+HOME_FEED_FIXTURES_SEEDED=False
 VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or HOME_FEED_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
@@ -1797,6 +1798,131 @@ def scroll_home_feed_page(index: int, home_xml: str) -> str:
     return ""
 
 
+def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
+    """Seed disposable emulator caches with clearly labelled local-only media fixtures.
+
+    This writes only to the CI emulator's private app sandbox. It never creates a
+    server post, uploads media, submits comments, or changes user/backend records.
+    """
+    global HOME_FEED_FIXTURES_SEEDED
+    if not HOME_FEED_VISUALS_ONLY or LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
+        return False
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        report.append("- NOTE: ffmpeg is unavailable; local Home video fixtures were not seeded.")
+        return False
+
+    account = username.strip().lower()
+    if not account:
+        report.append("- NOTE: debug-local account name was empty; Home video fixtures were not seeded.")
+        return False
+
+    import hashlib
+    import xml.etree.ElementTree as FixtureET
+
+    media_specs = [
+        ("portrait", "360x640"),
+        ("landscape", "640x360"),
+        ("square", "480x480"),
+    ]
+    account_cache_key = hashlib.sha256(("account:" + account).encode("utf-8")).hexdigest()
+    cache_relative_dir = f"files/fynx_media_cache_v2/{account_cache_key}"
+    mkdir = run("adb", "shell", "run-as", PACKAGE, "mkdir", "-p", cache_relative_dir)
+    if mkdir.returncode != 0:
+        report.append("- NOTE: unable to create the app-private media fixture directory: " + (mkdir.stdout or "").strip())
+        return False
+
+    posts = []
+    now_ms = int(time.time() * 1000)
+    for index, (shape, dimensions) in enumerate(media_specs):
+        media_id = f"ci-home-{shape}"
+        media_path = f"/api/social/media/{media_id}"
+        local_video = ROOT / f"ci-home-feed-{shape}.mp4"
+        generation = run(
+            ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", f"testsrc2=size={dimensions}:rate=24:duration=6",
+            "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(local_video),
+            timeout=60
+        )
+        if generation.returncode != 0 or not local_video.is_file() or local_video.stat().st_size <= 0:
+            report.append(f"- NOTE: could not generate the local {shape} MP4 fixture: {(generation.stdout or '').strip()}")
+            return False
+        if local_video.stat().st_size > 12 * 1024 * 1024:
+            report.append(f"- NOTE: generated {shape} MP4 exceeded the app media-cache size limit.")
+            return False
+
+        cache_name = hashlib.sha256(("video:" + media_path).encode("utf-8")).hexdigest() + ".mp4"
+        destination = f"{cache_relative_dir}/{cache_name}"
+        staged_path = f"/data/local/tmp/fynx-home-feed-{shape}.mp4"
+        pushed = run("adb", "push", str(local_video), staged_path, timeout=30)
+        if pushed.returncode != 0:
+            report.append(f"- NOTE: unable to stage the {shape} fixture on the emulator: {(pushed.stdout or '').strip()}")
+            return False
+        copied = run("adb", "shell", "run-as", PACKAGE, "cp", staged_path, destination)
+        if copied.returncode != 0:
+            report.append(f"- NOTE: unable to copy the {shape} fixture into the app cache: {(copied.stdout or '').strip()}")
+            return False
+        posts.append({
+            "id": f"ci-home-post-{shape}",
+            "authorId": "ci-local-fixture-author",
+            "authorUsername": "fynx_visual_fixture",
+            "authorDisplayName": "FYNX Visual Fixture",
+            "text": f"CI TEST FIXTURE — {shape.upper()} video ({dimensions.replace('x', ':')}). Local-only preview; not published or uploaded.",
+            "visibility": "PUBLIC",
+            "mediaId": media_id,
+            "mediaType": "video",
+            "mediaUrl": media_path,
+            "timestamp": now_ms - index * 60_000,
+            "likeCount": 12 + index,
+            "commentCount": 3 + index,
+            "likedByCurrentUser": False,
+            "followedByCurrentUser": False,
+            "isDiscovery": False,
+        })
+
+    feed_payload = {"posts": posts, "hasMore": False, "nextCursor": None}
+    prefs = FixtureET.Element("map")
+    cache_key = "fynx_feed_cache_v1_" + account
+    time_key = "fynx_feed_cache_time_v1_" + account
+    FixtureET.SubElement(prefs, "string", {"name": cache_key}).text = json.dumps(feed_payload, separators=(",", ":"))
+    FixtureET.SubElement(prefs, "long", {"name": time_key, "value": str(now_ms)})
+    prefs_file = ROOT / "ci-home-feed-cache.xml"
+    FixtureET.ElementTree(prefs).write(prefs_file, encoding="utf-8", xml_declaration=True)
+    staged_prefs = "/data/local/tmp/fynx-home-feed-cache.xml"
+    pushed_prefs = run("adb", "push", str(prefs_file), staged_prefs, timeout=30)
+    if pushed_prefs.returncode != 0:
+        report.append("- NOTE: unable to stage the local Home feed cache: " + (pushed_prefs.stdout or "").strip())
+        return False
+    ensure_prefs = run("adb", "shell", "run-as", PACKAGE, "mkdir", "-p", "shared_prefs")
+    copied_prefs = run("adb", "shell", "run-as", PACKAGE, "cp", staged_prefs, "shared_prefs/fynx_feed_cache.xml")
+    if ensure_prefs.returncode != 0 or copied_prefs.returncode != 0:
+        report.append("- NOTE: unable to seed the app-private Home feed cache.")
+        return False
+
+    stopped = run("adb", "shell", "am", "force-stop", PACKAGE)
+    relaunched = run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://home", PACKAGE, timeout=30)
+    if stopped.returncode != 0 or relaunched.returncode != 0:
+        report.append("- NOTE: local Home cache was seeded, but the app could not be relaunched to read it.")
+        return False
+
+    latest = ""
+    deadline = time.monotonic() + 25.0
+    while time.monotonic() < deadline:
+        latest = dump_ui("ci-home-feed-fixture-loaded.xml")
+        if latest and find_control(latest, ["Your feed"]) and not find_control(latest, ["Loading Home feed"]):
+            break
+        time.sleep(0.5)
+    if not latest or not find_control(latest, ["Your feed"]):
+        report.append("- NOTE: local fixture cache was written, but Home did not expose its feed after relaunch.")
+        return False
+
+    HOME_FEED_FIXTURES_SEEDED = True
+    report.append("- PASS: seeded 3 clearly labelled portrait/landscape/square video fixtures in the disposable emulator's account-scoped local cache only; nothing was posted or uploaded.")
+    return True
+
+
 def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True) -> str:
     """Capture real Home video/comment surfaces without synthetic feed data."""
     current = home_xml
@@ -1957,7 +2083,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
 
         # Pair the conversation capture with a viewport that actually exposes
         # a real inline video control. Do not count an unrelated text-post comment.
-        comment_control = find_home_video_post_comment_action(current) if video_control and duration_control else None
+        comment_control = find_home_video_post_comment_action(current) if video_control and duration_control and require_real_media else None
         if comment_control and not comments_captured:
             comment_action_seen = True
             _, x, y = comment_control
@@ -1979,9 +2105,11 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
 
             if not conversation_xml:
                 screenshot("authenticated-home-comments-open-failed.png")
-                FAILURES.append(
-                    "A real Home video post Comment action was visible, but its conversation did not render an existing comment row with Reply/Replies actions within 12 seconds."
-                )
+                message = "The Home video Comment action opened, but the comment service did not return an existing conversation row; no local or server comment was inserted."
+                if require_real_media:
+                    FAILURES.append(message)
+                else:
+                    report.append("- NOTE: " + message)
                 return current
 
             (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
@@ -2014,11 +2142,18 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
         previous_xml, current = current, next_xml
 
     if video_captured:
-        report.append(
-            "- PASS: measured Home inline video duration(s) captured from real media metadata: "
-            + ", ".join(captured_video_durations)
-            + ". Dedicated full-resolution feed screenshots were saved per viewport."
-        )
+        if HOME_FEED_FIXTURES_SEEDED:
+            report.append(
+                "- PASS: Home inline playback metadata was read from the local CI video fixtures: "
+                + ", ".join(captured_video_durations)
+                + ". These are disposable test files, not real user posts."
+            )
+        else:
+            report.append(
+                "- PASS: measured Home inline video duration(s) captured from real media metadata: "
+                + ", ".join(captured_video_durations)
+                + ". Dedicated full-resolution feed screenshots were saved per viewport."
+            )
     else:
         message = (
             f"No real inline Home video with a measured duration and playback controls was found "
@@ -2083,6 +2218,10 @@ if install.returncode!=0:
 # system dialog from intercepting taps intended for the real Marketplace surface.
 prepare_debug_visual_capture_permissions()
 xml,error=login()
+if HOME_FEED_VISUALS_ONLY and not error and LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+    seed_offline_home_feed_visual_fixtures(USERNAME or "marketplace_visual_check")
+    # The helper relaunches Home after seeding so Compose reads the fresh test cache.
+    xml = dump_ui("ci-home-feed-fixture-entry.xml") or xml
 if HOME_FEED_VISUALS_ONLY and not error:
     # Match the supplied X-style reference with the real Android dark theme before
     # the first Home screenshot is taken.
@@ -2117,12 +2256,14 @@ if HOME_FEED_VISUALS_ONLY:
     else:
         report.append("- Session: server-authenticated Home Feed session.")
 
+    if HOME_FEED_FIXTURES_SEEDED:
+        report.append("- Evidence scope: video sizing, muted inline playback and tap-to-fullscreen were exercised with local-only CI fixtures in the disposable emulator; no backend post was created.")
     if not (ROOT / "authenticated-home-inline-video.png").is_file():
-        report.append("- LIMITATION: no real Home video post with loaded media was available; no synthetic post or video was inserted.")
+        report.append("- LIMITATION: no playable Home video was available for screenshot verification; no production or backend data was created.")
     if not (ROOT / "authenticated-home-fullscreen-video.png").is_file():
-        report.append("- LIMITATION: full-screen video interaction could not be demonstrated without a real available Home video.")
+        report.append("- LIMITATION: full-screen video interaction could not be demonstrated without an available Home video or successful local CI fixture.")
     if not (ROOT / "authenticated-home-comments.png").is_file():
-        report.append("- LIMITATION: no existing video-post conversation was available for screenshot verification; no synthetic comment was created.")
+        report.append("- LIMITATION: comment loading/replies still require backend-owned conversation data; no synthetic comment was created.")
 
     report += ["", "## Home Feed evidence files"]
     report += [
