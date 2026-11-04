@@ -252,16 +252,44 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
         if (!decision.allowed) { errorMessage = "I couldn't process that request safely."; return@sendPrompt }
         val attachment = pendingMediaId
         if (appendUser) messages = messages + AiMessage(prompt.ifBlank { "Analyze this image." }, true)
-        input = ""; pendingMediaId = null; loading = true; errorMessage = null
+        val assistantMessageIndex = messages.size
+        messages = messages + AiMessage("", false)
+        input = ""; pendingMediaId = null; loading = true; errorMessage = null; failedPrompt = null
         scope.launch {
-            val result = withContext(Dispatchers.IO) { FynxAiConversationClient.send(context, activeConversation, prompt, listOfNotNull(attachment)) }
+            val result = withContext(Dispatchers.IO) {
+                FynxAiConversationClient.sendStreaming(
+                    context,
+                    activeConversation,
+                    prompt,
+                    listOfNotNull(attachment)
+                ) { delta ->
+                    withContext(Dispatchers.Main) {
+                        val current = messages.getOrNull(assistantMessageIndex)
+                        if (current != null && !current.fromUser && delta.isNotEmpty()) {
+                            val updated = messages.toMutableList()
+                            updated[assistantMessageIndex] = AiMessage(current.text + delta, false)
+                            messages = updated
+                        }
+                    }
+                }
+            }
             result.onSuccess { reply ->
-                    messages = messages + AiMessage(reply.assistantMessage.text, false)
+                    val current = messages.getOrNull(assistantMessageIndex)
+                    if (current != null && !current.fromUser) {
+                        val updated = messages.toMutableList()
+                        updated[assistantMessageIndex] = AiMessage(reply.assistantMessage.text, false)
+                        messages = updated
+                    } else {
+                        messages = messages + AiMessage(reply.assistantMessage.text, false)
+                    }
                     pendingMessageAction = reply.pendingAction
                     failedPrompt = null
                 }
                 .onFailure {
-                    failedPrompt = prompt; input = prompt; if (attachment != null) pendingMediaId = attachment
+                    if (assistantMessageIndex < messages.size) messages = messages.take(assistantMessageIndex)
+                    failedPrompt = prompt
+                    input = prompt
+                    if (attachment != null) pendingMediaId = attachment
                     errorMessage = "FYNX Assistant is temporarily unavailable. You can retry or edit your message."
                 }
             loading = false
