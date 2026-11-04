@@ -61,8 +61,22 @@ export async function installHomeCommentReactions() {
       if (!(await visibleSocialPost(postId,req.user.sub))) return res.status(404).json({error:'post not found'});
       const comment=await pool.query(\`SELECT c.id,c.author_id FROM social_post_comments c WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))\`,[commentId,postId,req.user.sub]);
       if (!comment.rows[0]) return res.status(404).json({error:'comment not found'});
+      const previousReaction = await pool.query('SELECT reaction_type FROM social_comment_reactions WHERE comment_id=$1 AND user_id=$2',[commentId,req.user.sub]);
       await pool.query(\`INSERT INTO social_comment_reactions(comment_id,user_id,reaction_type) VALUES($1,$2,$3)
         ON CONFLICT(comment_id,user_id) DO UPDATE SET reaction_type=EXCLUDED.reaction_type,updated_at=NOW()\`,[commentId,req.user.sub,reaction]);
+      if ((!previousReaction.rows[0] || previousReaction.rows[0].reaction_type !== reaction) && String(comment.rows[0].author_id) !== String(req.user.sub)) {
+        const actor = await pool.query('SELECT username FROM users WHERE id=$1',[req.user.sub]);
+        await queueFynxNotification(pool,{
+          userId: comment.rows[0].author_id,
+          type: 'REACTION',
+          title: '@' + (actor.rows[0]?.username || 'A FYNX user') + ' reacted to your comment',
+          message: reaction,
+          targetId: postId,
+          sourceUsername: actor.rows[0]?.username || null,
+          route: 'fynx://post/' + postId + '?comment=' + commentId,
+          notificationId: 'comment-reaction-' + commentId + '-' + req.user.sub + '-' + reaction
+        }).catch(error => console.error('home comment reaction notification failed', error));
+      }
       const result=await pool.query('SELECT reaction_type,COUNT(*)::int AS count FROM social_comment_reactions WHERE comment_id=$1 GROUP BY reaction_type',[commentId]);
       const counts={}; for (const row of result.rows) counts[row.reaction_type]=Number(row.count||0);
       const current=await pool.query('SELECT reaction_type FROM social_comment_reactions WHERE comment_id=$1 AND user_id=$2',[commentId,req.user.sub]);
