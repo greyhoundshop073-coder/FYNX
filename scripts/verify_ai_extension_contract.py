@@ -36,6 +36,7 @@ checks = [
     ("Marketplace seller copy regression tests cover privacy and invalid outputs", "seller copy must not have database or action tools" in marketplace_ai_test and "price must not be sent to Gemini" in marketplace_ai_test and "email addresses must be removed before provider context" in marketplace_ai_test),
     ("Android seller copy helper uses the central authenticated transport", "FynxBackendClient.postJson" in marketplace_ai_client and "/api/assistant/marketplace/listing-copy" in marketplace_ai_client),
     ("Seller must review and apply AI copy before publishing", "Review your AI listing draft" in marketplace_panel and "Use suggestion" in marketplace_panel and "listingCopyBusy" in marketplace_panel),
+    ("Seller AI drafts are discarded when the product form changes", "latestListingCopyInputs.value == requestedInputSnapshot" in marketplace_panel and "Please generate a fresh suggestion" in marketplace_panel),
     ("AI copy does not bypass the existing Marketplace publish flow", "FynxRemoteSocialClient.createMarketplaceListing" in marketplace_panel and "listingCopySuggestion" in marketplace_panel),
     ("extension contract exists", "FYNX AI Extension Contract" in doc),
     ("assistant JSON parser is strict and bounded", 'express.json({' in assistant_parser and 'limit: "18mb"' in assistant_parser and 'strict: true' in assistant_parser),
