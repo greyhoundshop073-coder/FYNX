@@ -36,6 +36,27 @@ for (const name of blockedTools) {
 }
 assert.equal(databaseCalls, 0, "blocked private tools must be rejected before database access");
 
+const privacyQueries = [];
+const privacyAwarePool = {
+  async query(sql, params) {
+    privacyQueries.push({ sql: String(sql), params });
+    return { rows: [], rowCount: 0 };
+  }
+};
+await executeFynxAiTool({ name: "search_users", argumentsJson: JSON.stringify({ query: "alice" }), userId: "17", databasePool: privacyAwarePool });
+await executeFynxAiTool({ name: "get_people_recommendations", argumentsJson: "{}", userId: "17", databasePool: privacyAwarePool });
+await assert.rejects(
+  executeFynxAiTool({ name: "prepare_send_message", argumentsJson: JSON.stringify({ recipientUsername: "alice_public", message: "Hello" }), userId: "17", databasePool: privacyAwarePool }),
+  /recipient not found/
+);
+assert.equal(privacyQueries.length, 3, "profile search, recommendations and message preparation must each use a privacy-scoped query");
+assert.match(privacyQueries[0].sql, /LEFT JOIN privacy_settings ps ON ps\.user_id=u\.id/);
+assert.match(privacyQueries[0].sql, /profile_visibility.*Everyone/);
+assert.match(privacyQueries[1].sql, /profile_visibility.*Everyone/);
+assert.doesNotMatch(privacyQueries[1].sql, /friendships|social_follows/i, "AI recommendations must not read private social graphs");
+assert.match(privacyQueries[2].sql, /profile_visibility.*Everyone/);
+assert.match(privacyQueries[2].sql, /messages_visibility.*Everyone/);
+
 const voiceTools = buildRealtimeSessionConfig().tools.map(tool => tool.name);
 assert.deepEqual(voiceTools, expectedPublicTools, "realtime voice must use the same reviewed public-data tool set");
 assert.ok(FYNX_AI_VOICE_INSTRUCTIONS.includes(FYNX_AI_PRIVACY_INSTRUCTIONS), "voice must receive the shared privacy instructions");
