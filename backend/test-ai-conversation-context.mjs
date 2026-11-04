@@ -53,8 +53,8 @@ const loadedHistory = await loadPersistedAiConversationHistory({
     return { rows: [message("assistant", "second"), message("user", "first")] };
   }
 }, "conversation-73", "user-17");
-assert.match(queryText, /WHERE conversation_id=\\$1 AND user_id=\\$2/);
-assert.match(queryText, /LIMIT \\$3/);
+assert.match(queryText, /WHERE conversation_id=\$1 AND user_id=\$2/);
+assert.match(queryText, /LIMIT \$3/);
 assert.deepEqual(queryValues, ["conversation-73", "user-17", MAX_CONTEXT_HISTORY_ITEMS]);
 assert.deepEqual(loadedHistory, [message("user", "first"), message("assistant", "second")]);
 await assert.rejects(loadPersistedAiConversationHistory({}, "conversation-73", "user-17"), /database query is required/);
