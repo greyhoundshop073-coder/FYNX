@@ -227,6 +227,24 @@ object FynxBackendClient {
                 throw FynxHttpException(status, errorBody)
             }
 
+            // Older backends may ignore Accept: text/event-stream. Preserve the
+            // previous JSON response contract instead of turning that into a hard failure.
+            if (!connection.contentType.orEmpty().contains("text/event-stream", ignoreCase = true)) {
+                val output = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var total = 0
+                connection.inputStream.use { input ->
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > MAX_RESPONSE_BYTES) throw IOException("FYNX AI response is too large.")
+                        output.write(buffer, 0, count)
+                    }
+                }
+                return output.toString(Charsets.UTF_8.name())
+            }
+
             var totalBytes = 0
             var lastEvent: String? = null
             connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
