@@ -51,7 +51,7 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
     const message = String(args.message || "").trim();
     if (!/^[a-z0-9_]{3,32}$/.test(recipientUsername)) throw new Error("invalid recipient username");
     if (!message || message.length > 4000) throw new Error("message must be 1-4000 characters");
-    const recipient = await databasePool.query("SELECT id,username,display_name FROM users WHERE lower(username)=lower($1) LIMIT 1", [recipientUsername]);
+    const recipient = await databasePool.query("SELECT u.id,u.username,u.display_name FROM users u LEFT JOIN privacy_settings ps ON ps.user_id=u.id WHERE lower(u.username)=lower($1) AND COALESCE(ps.profile_visibility,\'My friends\')=\'Everyone\' AND COALESCE(ps.messages_visibility,\'My friends\')=\'Everyone\' LIMIT 1", [recipientUsername]);
     if (!recipient.rows[0] || String(recipient.rows[0].id) === String(userId)) throw new Error("recipient not found");
     const blocked = await databasePool.query("SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1", [userId, recipient.rows[0].id]);
     if (blocked.rowCount) throw new Error("conversation unavailable");
@@ -82,7 +82,7 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
     const query = String(args.query || "").trim().slice(0, 80);
     if (query.length < 2) throw new Error("search query must be at least 2 characters");
     const normalized = query.replace(/^@+/, "").toLowerCase().slice(0, 32);
-    const result = await databasePool.query(`SELECT id,username,display_name FROM users WHERE (username ILIKE $1 OR display_name ILIKE $2) AND id<>$4 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$4 AND b.blocked_id=users.id) OR (b.blocker_id=users.id AND b.blocked_id=$4)) ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 10`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized, userId]);
+    const result = await databasePool.query(`SELECT u.id,u.username,u.display_name FROM users u LEFT JOIN privacy_settings ps ON ps.user_id=u.id WHERE (u.username ILIKE $1 OR u.display_name ILIKE $2) AND COALESCE(ps.profile_visibility,\'My friends\')=\'Everyone\' AND u.id<>$4 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$4 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$4)) ORDER BY CASE WHEN lower(u.username) = $3 THEN 0 ELSE 1 END, u.username LIMIT 10`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized, userId]);
     return { users: result.rows.map(row => ({ id: String(row.id), username: row.username, displayName: row.display_name || "" })) };
   }
 
@@ -90,32 +90,13 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
     const limit = Math.min(Math.max(Number(args.limit) || 30, 1), 30);
     const offset = Math.max(Number(args.offset) || 0, 0);
     const result = await databasePool.query(`
-      SELECT u.id,u.username,u.display_name,u.verified,
-        COALESCE(mutual.mutual_count,0)::int AS mutual_count,
-        COALESCE(followers.follower_count,0)::int AS follower_count,
-        CASE WHEN mutual.mutual_count > 0 THEN 'mutual friends' ELSE 'people you may know' END AS reason
+      SELECT u.id,u.username,u.display_name,u.verified
       FROM users u
-      LEFT JOIN (
-        SELECT candidate_id,COUNT(*)::int AS mutual_count
-        FROM (
-          SELECT CASE WHEN f2.user_id=$1 THEN f2.friend_id ELSE f2.user_id END AS candidate_id
-          FROM friendships f1
-          JOIN friendships f2 ON f2.status='accepted'
-            AND (f2.user_id = CASE WHEN f1.user_id=$1 THEN f1.friend_id ELSE f1.user_id END
-              OR f2.friend_id = CASE WHEN f1.user_id=$1 THEN f1.friend_id ELSE f1.user_id END)
-          WHERE f1.status='accepted' AND (f1.user_id=$1 OR f1.friend_id=$1)
-        ) mutual_candidates
-        GROUP BY candidate_id
-      ) mutual ON mutual.candidate_id=u.id
-      LEFT JOIN (
-        SELECT followed_id,COUNT(*)::int AS follower_count
-        FROM social_follows GROUP BY followed_id
-      ) followers ON followers.followed_id=u.id
+      LEFT JOIN privacy_settings ps ON ps.user_id=u.id
       WHERE u.id<>$1
+        AND COALESCE(ps.profile_visibility,'My friends')='Everyone'
         AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$1))
-        AND NOT EXISTS (SELECT 1 FROM friendships f WHERE (f.user_id=$1 AND f.friend_id=u.id) OR (f.user_id=u.id AND f.friend_id=$1))
-        AND NOT EXISTS (SELECT 1 FROM social_follows sf WHERE sf.follower_id=$1 AND sf.followed_id=u.id)
-      ORDER BY COALESCE(mutual.mutual_count,0) DESC,COALESCE(followers.follower_count,0) DESC,u.created_at DESC
+      ORDER BY u.verified DESC,u.created_at DESC
       LIMIT $2 OFFSET $3
     `, [userId, limit, offset]);
     return { people: result.rows.map(row => ({ id:String(row.id), username:row.username, displayName:row.display_name || "", verified:Boolean(row.verified) })) };
