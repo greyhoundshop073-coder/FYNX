@@ -100,8 +100,24 @@ object FynxProductionMessaging {
             val effectiveMimeType = prepared.second
             require(bytes.isNotEmpty()) { "The selected media is empty." }
             require(bytes.size <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
-            val body = JSONObject().apply { put("mimeType", effectiveMimeType); put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)) }
-            val raw = FynxBackendClient.postJson(context, "/api/media", body.toString()).getOrThrow()
+            val intentBody = JSONObject().put("mimeType", effectiveMimeType).put("byteSize", bytes.size).toString()
+            val intent = JSONObject(FynxBackendClient.postJson(context, "/api/media/upload-intent", intentBody).getOrThrow())
+            val raw = if (intent.optBoolean("useLegacyUpload")) {
+                val legacyBody = JSONObject().apply {
+                    put("mimeType", effectiveMimeType)
+                    put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                }
+                FynxBackendClient.postJson(context, "/api/media", legacyBody.toString()).getOrThrow()
+            } else {
+                val uploadUrl = intent.getString("uploadUrl")
+                val intentId = intent.getString("intentId")
+                FynxBackendClient.putSignedMedia(context, uploadUrl, effectiveMimeType, bytes).getOrThrow()
+                FynxBackendClient.postJsonIdempotent(
+                    context,
+                    "/api/media/upload-complete",
+                    JSONObject().put("intentId", intentId).toString()
+                ).getOrThrow()
+            }
             val item = JSONObject(raw).getJSONObject("media")
             Result.success(RemoteMedia(item.getString("id"), item.getString("mimeType"), item.optInt("byteSize", bytes.size)))
         } catch (cancelled: CancellationException) { throw cancelled }
