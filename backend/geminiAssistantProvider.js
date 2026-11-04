@@ -68,7 +68,7 @@ function normalizeHistory(history) {
 
 function getCandidateText(parts) {
   return parts
-    .filter(part => part && typeof part.text === "string")
+    .filter(part => part && part.thought !== true && typeof part.text === "string")
     .map(part => part.text.trim())
     .filter(Boolean)
     .join("\n")
@@ -108,7 +108,9 @@ async function readGeminiStreamResponse(response, onTextChunk) {
     const incoming = payload?.candidates?.[0];
     if (!incoming) return;
     candidate = { ...candidate, ...incoming };
-    const parts = Array.isArray(incoming.content?.parts) ? incoming.content.parts : [];
+    const parts = Array.isArray(incoming.content?.parts)
+      ? incoming.content.parts.filter(part => part && typeof part === "object" && part.thought !== true)
+      : [];
     for (let index = 0; index < parts.length; index += 1) {
       const part = parts[index];
       if (!part || typeof part !== "object") continue;
