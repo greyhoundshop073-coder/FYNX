@@ -130,6 +130,8 @@ jobs:
           node test-assistant-json-body-parser.mjs
           node --check aiConversationContext.js
           node test-ai-conversation-context.mjs
+          node --check fynxAiPrivacyPolicy.js
+          node test-fynx-ai-privacy-policy.mjs
           node --check aiConversationRoutes.js
           node --check geminiAssistantProvider.js
           node test-gemini-assistant-provider.mjs
