@@ -15,6 +15,7 @@ marketplace_ai_photo_test = read("backend/test-marketplace-ai-photo-review.mjs")
 marketplace_ai_photo_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceAiPhotoReviewClient.kt")
 marketplace_panel = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
 gemini_provider = read("backend/geminiAssistantProvider.js")
+provider_test = read("backend/test-gemini-assistant-provider.mjs")
 conversation = read("backend/aiConversationRoutes.js")
 realtime = read("backend/aiRealtimeRoutes.js")
 assistant_parser = read("backend/assistantJsonBodyParser.js")
@@ -71,6 +72,15 @@ checks = [
     ("future sensitive writes remain confirmation-gated", "confirmationRequired" in registry and "NEVER sends the message" in registry),
     ("future financial/destructive writes remain blocked by policy", "Never perform payments, refunds, purchases, transfers, deletions, or settings changes" in registry),
     ("AI capability additions cannot silently bypass authentication", "authenticate(req)" in conversation and "authenticate(req, res)" in realtime and "authenticated user is required" in registry),
+    ("Gemini streaming uses the server-side streamGenerateContent SSE endpoint", ":streamGenerateContent?alt=sse" in gemini_provider and "onTextChunk" in gemini_provider),
+    ("Gemini thought-only parts are excluded from user-visible output", "part.thought !== true" in gemini_provider and "thought !== true" in gemini_provider),
+    ("Gemini streaming tests cover real incremental chunks and thought filtering", "ReadableStream" in provider_test and "testStreamingTextResponse" in provider_test and "internal thought" in provider_test and "Hello from FYNX." in provider_test),
+    ("AI conversation route negotiates SSE without changing the default JSON contract", 'req.headers?.accept' in conversation and "text/event-stream" in conversation and 'type:"delta"' in conversation and 'type:"complete"' in conversation and 'type:"error"' in conversation and "return res.json(responsePayload)" in conversation),
+    ("AI route persists the completed assistant reply before its stream completion event", conversation.index('await db.query("COMMIT")') < conversation.index('type:"complete"') and "persist_assistant_reply" in conversation),
+    ("Android central transport adds authenticated SSE support without a direct Gemini client", "postJsonStream" in backend_client and 'setRequestProperty("Accept", "text/event-stream")' in backend_client and 'setRequestProperty("Authorization", "Bearer $token")' in backend_client and "executeStreamingRequest" in backend_client),
+    ("Android conversation client parses delta and completion events through FYNX transport", "FynxBackendClient.postJsonStream" in android_client and "suspend fun sendStreaming" in android_client and '"delta"' in android_client and '"complete"' in android_client),
+    ("Android AI panel renders streamed deltas and restores failed prompts for retry", "FynxAiConversationClient.sendStreaming" in android_panel and "withContext(Dispatchers.Main)" in android_panel and "failedPrompt = prompt" in android_panel),
+    ("AI extension contract documents optional SSE transport and JSON compatibility", "Server-Sent Events (SSE)" in doc and "streamGenerateContent" in doc and "default request/JSON response contract remains compatible" in doc),
 ]
 
 failed = [name for name, ok in checks if not ok]
