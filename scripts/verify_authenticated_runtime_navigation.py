@@ -1826,6 +1826,13 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
         ("landscape", "640x360"),
         ("square", "480x480"),
     ]
+    # Stop the app before replacing its SharedPreferences file so an older
+    # in-memory snapshot cannot be flushed over the local fixture cache.
+    stopped = run("adb", "shell", "am", "force-stop", PACKAGE)
+    if stopped.returncode != 0:
+        report.append("- NOTE: unable to stop FYNX safely before seeding local visual fixtures.")
+        return False
+
     account_cache_key = hashlib.sha256(("account:" + account).encode("utf-8")).hexdigest()
     cache_relative_dir = f"files/fynx_media_cache_v2/{account_cache_key}"
     mkdir = run("adb", "shell", "run-as", PACKAGE, "mkdir", "-p", cache_relative_dir)
@@ -1901,9 +1908,8 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
         report.append("- NOTE: unable to seed the app-private Home feed cache.")
         return False
 
-    stopped = run("adb", "shell", "am", "force-stop", PACKAGE)
     relaunched = run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://home", PACKAGE, timeout=30)
-    if stopped.returncode != 0 or relaunched.returncode != 0:
+    if relaunched.returncode != 0:
         report.append("- NOTE: local Home cache was seeded, but the app could not be relaunched to read it.")
         return False
 
@@ -1919,7 +1925,7 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
         return False
 
     HOME_FEED_FIXTURES_SEEDED = True
-    report.append("- PASS: seeded 3 clearly labelled portrait/landscape/square video fixtures in the disposable emulator's account-scoped local cache only; nothing was posted or uploaded.")
+    report.append("- PASS: seeded 3 clearly labelled local CI videos (portrait 360x640, landscape 640x360, square 480x480) in the disposable emulator's account-scoped cache only; nothing was posted or uploaded.")
     return True
 
 
