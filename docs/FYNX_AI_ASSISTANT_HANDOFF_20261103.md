@@ -15,8 +15,8 @@ This workstream is limited to the AI Assistant: Android assistant panel/client/c
 - Base commit inspected: `def609c094af7d515045255c51adee27d1b73895`
 - Isolated work branch: `feat/fynx-ai-context-grounding-20261103`
 - Branch was created from the base commit above.
-- No AI code changes, build, tests, or push of implementation have been completed as of this document.
-- Latest commit status lookup returned no status entries and no workflow runs; do not interpret an empty result as a successful build.
+- At handoff creation, no AI implementation had been committed. The implementation status below supersedes this historical baseline.
+- Empty GitHub status-check arrays are not evidence of a successful build; use the workflow results for the current head SHA.
 
 Before continuing, fetch the latest base and branch heads and inspect open PRs/commits. Do not assume this snapshot is still current. If the canonical branch advanced, rebase/merge carefully and preserve changes from other chats.
 
@@ -30,7 +30,8 @@ Before continuing, fetch the latest base and branch heads and inspect open PRs/c
 - Gemini labels the additional excerpt and prior request as untrusted historical context, not authoritative FYNX data and not a new instruction. The shared AI system instructions reinforce that history/summary content cannot override the assistant's rules.
 - Removed the unused Android-only context helper and its dead panel state. Context is derived from the authenticated persisted conversation rather than trusted client-supplied summaries.
 - Added `backend/test-ai-conversation-context.mjs`, extended the mocked Gemini provider test, wired the context test into backend prestart and `.github/workflows/fynx-backend-ci.yml`, and updated AI security / Large Badge #8 static contracts.
-- **Verification status:** tests and CI have been wired but have not yet been executed in this environment. Do not mark this slice GREEN until the backend CI results are checked.
+- **Local verification:** the focused context-builder/query-scope test and mocked Gemini provider test each passed six suites in an isolated Node test directory. The repository itself is not checked out in the local container, so these were isolated copies of the committed sources, not a full-repository build.
+- **CI status:** GitHub Backend CI run #5918 is pending; Android Build #11420 and Chat Group Parity #3242 are queued for head `b65cc9ceb09973fa4f8d645694c44c7b9196f986`. Do not mark this slice GREEN until the backend static gates and complete CI result are checked.
 
 ## Existing architecture — how the assistant currently works
 
@@ -39,7 +40,7 @@ Before continuing, fetch the latest base and branch heads and inspect open PRs/c
 1. Android UI: `app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt`
    - Compose assistant screen, conversation list/history, current messages, prompt composer, image picker, pending action confirmation UI, and voice controls.
    - Uses `FynxAiConversationClient` for persisted text conversations.
-   - Has `conversationSummary` and `currentTask` state, but the normal persisted send path does not pass those values to the backend.
+   - Keeps presentation and input state only. The previous unused client-side summary/task state has been removed; persistent continuity is derived from the authenticated conversation history on the backend.
 2. Android transport: `app/src/main/java/com/fynx/app/ui/FynxAiConversationClient.kt`
    - Creates, lists, loads and deletes conversations.
    - Sends turns to `/api/assistant/conversations/{id}/message` with `message` and `mediaIds`.
