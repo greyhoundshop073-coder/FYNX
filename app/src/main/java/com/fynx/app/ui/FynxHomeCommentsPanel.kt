@@ -22,7 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
-import com.fynx.app.BuildConfig
+import android.content.pm.ApplicationInfo
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -149,7 +149,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         reactionStates[comment.id]?.counts?.values?.sum() ?: 0
     fun loadComments() {
         if (sending || loading) return
-        if (BuildConfig.DEBUG && post.id.startsWith("ci-home-post-")) {
+        if ((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 && post.id.startsWith("ci-home-post-")) {
             val now = System.currentTimeMillis()
             val first = FynxRemoteSocialClient.RemoteComment("ci-comment-1", "This video looks amazing! The portrait preview fits naturally in the feed. ❤️", now - 8 * 60_000L, "ci-author-1", "@amara", "Amara Okafor")
             val second = FynxRemoteSocialClient.RemoteComment("ci-comment-2", "I like how the full video opens when you tap it.", now - 5 * 60_000L, "ci-author-2", "@david", "David James")
