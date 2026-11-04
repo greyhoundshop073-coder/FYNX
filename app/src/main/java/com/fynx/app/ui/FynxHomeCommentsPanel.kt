@@ -13,6 +13,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,7 +60,18 @@ private fun flattenHomeReplies(
 }
 
 @Composable
-fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommentId: String? = null, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}) {
+fun FynxHomeCommentsPanel(
+    post: FynxRemoteSocialClient.RemotePost,
+    initialCommentId: String? = null,
+    interactionState: FynxRemoteSocialClient.SocialInteractionState = FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0),
+    interactionBusy: Boolean = false,
+    onLikePost: () -> Unit = {},
+    onRepostPost: () -> Unit = {},
+    onSavePost: () -> Unit = {},
+    onSharePost: () -> Unit = {},
+    onClose: () -> Unit,
+    onCommentCountChanged: (Int) -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -276,10 +294,51 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("👍  ${post.likeCount}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("💬  ${commentCount}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                            Text("Join the conversation", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CommentPostEngagementAction(
+                                icon = if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                label = "Like",
+                                count = post.likeCount,
+                                selected = post.likedByCurrentUser,
+                                enabled = !interactionBusy,
+                                onClick = onLikePost
+                            )
+                            CommentPostEngagementAction(
+                                icon = Icons.Default.ChatBubbleOutline,
+                                label = "Comments",
+                                count = commentCount,
+                                selected = true,
+                                enabled = false,
+                                onClick = {}
+                            )
+                            CommentPostEngagementAction(
+                                icon = Icons.Default.Repeat,
+                                label = "Repost",
+                                count = interactionState.repostCount,
+                                selected = interactionState.reposted,
+                                enabled = !interactionBusy,
+                                onClick = onRepostPost
+                            )
+                            CommentPostEngagementAction(
+                                icon = if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                label = "Save",
+                                count = interactionState.savedCount,
+                                selected = interactionState.saved,
+                                enabled = !interactionBusy,
+                                onClick = onSavePost
+                            )
+                            CommentPostEngagementAction(
+                                icon = Icons.Default.Share,
+                                label = "Share",
+                                count = null,
+                                selected = false,
+                                enabled = !interactionBusy,
+                                onClick = onSharePost
+                            )
                         }
                     }
                     HorizontalDivider()
@@ -404,6 +463,38 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CommentPostEngagementAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    count: Int?,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 3.dp, vertical = 2.dp)
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            modifier = Modifier.size(19.dp),
+            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (count != null) {
+            Spacer(Modifier.width(4.dp))
+            Text(
+                compactEngagement(count),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
         }
     }
 }
