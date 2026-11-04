@@ -177,7 +177,7 @@ function sanitizeMarketplaceAiListingText(value, maximumLength) {
   text = text.replace(/\b(?:https?:\/\/|www\.)\S+/gi, "[link omitted]");
   text = text.replace(/\b(?:plot|house|flat|apartment|apt|suite|unit|block|building)\s*(?:number\s*)?#?\s*\d+[a-z]?\b[^.;\n]*/gi, "[address omitted]");
   text = text.replace(/\b\d{1,5}\s+(?:[a-z0-9][\w.'-]*\s+){0,5}(?:street|st\.?|road|rd\.?|avenue|ave\.?|close|crescent|cres\.?|lane|ln\.?|drive|dr\.?|boulevard|blvd\.?|estate|court|ct\.?|highway|hwy\.?|junction|layout)\b[^.;\n]*/gi, "[address omitted]");
-  text = text.replace(/\b(?:my|our)\s+(?:home\s+address|street\s+address|bank\s+account(?:\s+number)?|account\s+number|wallet\s+pin|transaction\s+pin|password|otp|verification\s+code)\b.{0,100}/gi, "[private details omitted]");
+  text = text.replace(/\b(?:my|our)\s+(?:home\s+address|street\s+address|bank\s+account(?:\s+number)?|bank\s+details|account\s+number|wallet\s+pin|transaction\s+pin|pin|password|otp|verification\s+code|authentication\s+token|recovery\s+(?:code|phrase)|seed\s+phrase|private\s+key|card\s+details|cvv)\b.{0,100}/gi, "[private details omitted]");
   return text.trim();
 }
 
