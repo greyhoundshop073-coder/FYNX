@@ -970,10 +970,6 @@ private fun FynxFeedTextureVideo(
                     } else {
                         "Video preview. Tap to play full screen"
                     }
-                    onClick(label = "Play video full screen") {
-                        onOpenFullscreen()
-                        true
-                    }
                 }
             } else Modifier
         )
