@@ -2527,7 +2527,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDDEEFF), contentColor = Color(0xFF0756A8))
                     ) { if (photoReviewBusy) CircularProgressIndicator(Modifier.size(18.dp), color = Color(0xFF0756A8)) else Text("Review photos with FYNX AI") }
-                    Text("Up to 4 still photos • Advice only • Photos are not saved or changed by the AI check.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Up to 4 still photos • One-time AI check • Original photos stay unchanged.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (media.count { !contextIsVideo(context, it) } > 4) Text("The first four selected photos will be checked. Other photos and videos stay unchanged.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     photoReviewError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
@@ -2869,8 +2869,8 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             title = { Text("Review product photos with FYNX AI?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("The first " + photoReviewPhotoUris.size + " selected still photo(s) will be compressed on this device and sent through your authenticated FYNX request for this one photo-quality check.")
-                    Text("FYNX AI checks only lighting, sharpness, glare, framing and background. The photos are not added to your listing, saved to Marketplace media or changed by this check.", style = MaterialTheme.typography.bodySmall)
+                    Text("The first " + photoReviewPhotoUris.size + " selected still photo(s) will be compressed on this device and sent to FYNX AI (Gemini) through your authenticated request for this one check.")
+                    Text("Only the selected image bytes are sent for this check. FYNX does not save them to your account, Marketplace media or listing, and the original photos are not changed.", style = MaterialTheme.typography.bodySmall)
                     Text("For your privacy, do not continue with photos showing faces, identity documents, receipts, addresses, phone numbers, contact details or other private information.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
