@@ -145,7 +145,7 @@ checks = [
     ("active marketplace details are scrollable for phone screens", "verticalScroll(rememberScrollState())" in marketplace),
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
-    ("marketplace header respects the status bar", "statusBarsPadding()" in marketplace),
+    ("marketplace header respects the status bar through the shared app header", "statusBarsPadding()" in app_shell and "Column(Modifier.fillMaxSize().statusBarsPadding()) {\n            MarketplaceReferenceSearchBar(" not in marketplace),
     ("marketplace uses a responsive two-column product grid", "GridCells.Fixed(2)" in marketplace),
     ("marketplace leaves free bottom scroll space above navigation", "bottom = 132.dp" in marketplace),
     ("marketplace sell button respects navigation and keyboard insets", "navigationBarsPadding().imePadding()" in marketplace),
