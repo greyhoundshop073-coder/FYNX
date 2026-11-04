@@ -127,6 +127,12 @@ for needle in ("if (!(await visiblePost(postId, req.user.sub))) return res.statu
 require(realtime_bootstrap, "before === null ? [postId, req.user.sub, limit + 1] : [postId, req.user.sub, limit + 1, before]", "Home comment cursor parameter binding")
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 for needle in ('remember(post.id)','rememberSaveable(post.id)','DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)','.imePadding()','KeyboardActions(onSend = { send() })','FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }','commentCount += 1','onCommentCountChanged(commentCount)'):
+for needle in ('commentReactions(context, post.id, ids)', 'setCommentReaction(context, post.id, comment.id, nextReaction)', 'HomeCommentReactionRow(reactionStates[comment.id]', 'HomeCommentReactionRow(reactionStates[reply.id]', 'Triple("LOVE", "❤️", Color(0xFFE53935))', 'Triple("THUMBS_UP", "👍", Color(0xFF1976D2))', 'optimisticCounts.filterValues { it > 0 }'):
+    require(comments_panel, needle, f"X-style comment reaction interaction {needle}")
+require(client, 'data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)', "typed comment reaction summary")
+require(client, '"/api/social/posts/$post/comment-reactions?ids=$query"', "batched comment reaction summary avoids per-row requests")
+require(client, '"/api/social/posts/$post/comments/$comment/reaction"', "comment reaction write endpoint")
+
     require(comments_panel, needle, f"Home 4D edge-case safeguard {needle}")
 require_normalized(comments_panel, 'Column(Modifier.fillMaxSize())', "comment sheet keeps a single stable layout owner")
 require_normalized(comments_panel, 'Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp)', "comment composer is positioned directly above IME")
