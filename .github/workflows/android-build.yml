@@ -319,7 +319,7 @@ jobs:
           }
           NODE
       - name: Ensure FFmpeg for isolated Home Feed visual fixtures
-        if: ${{ env.FYNX_HOME_FEED_VISUALS_ONLY == '1' }}
+        if: ${{ github.ref == 'refs/heads/feat/home-feed-professional-feed-conversations-20261103' }}
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1; then
             sudo apt-get update -qq
