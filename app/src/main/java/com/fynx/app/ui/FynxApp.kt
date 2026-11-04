@@ -48,6 +48,12 @@ import kotlinx.coroutines.delay
 private const val FYNX_PREVIEW_MODE = false
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
+/** Shortens only the longest tab label when it cannot fit its share of the bar at this width and font size. */
+internal fun fynxBottomNavLabel(label: String, screenWidthDp: Int, fontScale: Float): String {
+    val itemWidthDp = (minOf(screenWidthDp, 560) - 68) / 5f
+    return if (label == "Marketplace" && 60f * fontScale > itemWidthDp + 6f) "Market" else label
+}
+
 private fun fynxBackDestination(
     selected: String,
     notificationPreferencesOnly: Boolean,
@@ -610,10 +616,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                     Surface(
                         modifier = Modifier
+                            .widthIn(max = 560.dp)
                             .fillMaxWidth()
                             .height(64.dp)
                             .shadow(8.dp, RoundedCornerShape(32.dp)),
@@ -644,7 +652,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                     },
                                     label = {
                                         Text(
-                                            item.label,
+                                            fynxBottomNavLabel(
+                                                item.label,
+                                                androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp,
+                                                LocalDensity.current.fontScale
+                                            ),
                                             maxLines = 1,
                                             softWrap = false,
                                             overflow = androidx.compose.ui.text.style.TextOverflow.Visible,

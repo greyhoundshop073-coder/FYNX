@@ -320,7 +320,7 @@ private fun MarketplacePromotionalSlide(
 ) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.width(width).height(MARKETPLACE_PROMO_BANNER_HEIGHT_DP.dp),
+        modifier = Modifier.width(width).height(MARKETPLACE_PROMO_BANNER_HEIGHT_DP.dp * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceIn(1f, 1.4f)),
         shape = RoundedCornerShape(20.dp),
         color = Color(0xFF16263D),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x22007FFF))

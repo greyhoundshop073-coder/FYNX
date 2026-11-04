@@ -146,7 +146,7 @@ checks = [
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
     ("marketplace header respects the status bar through the shared app header", "statusBarsPadding()" in app_shell and "Column(Modifier.fillMaxSize().statusBarsPadding()) {\n            MarketplaceReferenceSearchBar(" not in marketplace),
-    ("marketplace uses a responsive two-column product grid", "GridCells.Fixed(2)" in marketplace),
+    ("marketplace product grid adapts its columns to the screen width", "GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL)" in marketplace and "GridCells.Fixed(2)" not in marketplace),
     ("marketplace leaves free bottom scroll space above navigation", "bottom = 132.dp" in marketplace),
     ("marketplace sell button respects navigation and keyboard insets", "navigationBarsPadding().imePadding()" in marketplace),
     ("marketplace product cards show the seller avatar and name", "FynxProfileRemoteClient.get" in marketplace and "l.sellerDisplayName" in marketplace),

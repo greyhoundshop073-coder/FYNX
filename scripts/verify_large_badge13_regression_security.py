@@ -77,7 +77,7 @@ check("authenticated visual certification remains mandatory",
       "verify_authenticated_runtime_navigation.py" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow and "FYNX_E2E_USERNAME" in workflow and "FYNX_E2E_PASSWORD" in workflow)
 check("instrumentation remains mandatory before APK publication",
       "connectedDebugAndroidTest" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow and
-      "github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true'" in workflow and
+      "github.event_name == 'workflow_dispatch' && github.event.inputs.full_runtime == 'true'" in workflow and
       "Upload exact-commit debug APK" in workflow and
       "if-no-files-found: error" in workflow)
 check("no common API secrets are committed to Android source",
