@@ -6,6 +6,38 @@ This is the protected extension point for future FYNX AI capabilities.
 
 Future AI features must be added as a new capability behind the existing FYNX AI boundaries. Do not replace or fork the current text, realtime voice, authentication, database ownership, or UI transport.
 
+## Mandatory privacy boundary
+
+FYNX AI must not retrieve, infer, disclose, summarize, or confirm private personal or financial information for any user, including the authenticated user. This is intentionally stricter than ordinary account ownership: protected information stays inside its normal authenticated FYNX screen and security flow.
+
+Protected categories include wallet balances and ledger/transaction history; bank and payment details; passwords, PINs, tokens and recovery secrets; private FYNX chat messages; phone numbers, email addresses and private addresses; identity/KYC evidence; private orders, delivery addresses and customer records; friend/follower lists, saved-post history and non-public profile fields.
+
+The AI registry must expose only reviewed public-data capabilities and explicitly confirmation-gated message preparation. Private-data tools must be absent from text and voice tool declarations and rejected by the executor before any database query. Public profile search, public posts and active public Marketplace listings must still respect visibility, stock and block rules. Recommendation results must not reveal private social-graph counts or relationships.
+
+The user's own persisted FYNX AI conversation can be used only as bounded continuity for that same authenticated AI conversation. It does not grant access to ordinary FYNX chat messages or other account records.
+
+AI people search and recommendations may return only profiles whose FYNX `profile_visibility` is `Everyone`; missing settings default to `My friends` and are not public. AI recommendations must not query or use private friendship/follow graphs. AI message preparation may resolve only profiles where both `profile_visibility` and `messages_visibility` are `Everyone`.
+
+When a user asks for protected information, the assistant explains that the user must open the appropriate protected FYNX screen. No tool call, indirect inference, or record-existence confirmation is permitted.
+
+## Marketplace seller copy assistance
+
+The Sell on FYNX form may request an AI draft of a product title and description using only the seller-entered product name, category, subcategory, condition, description and visible product specifications. The endpoint is authenticated, text-only, rate-limited and has no database or AI tools. It must not receive price, currency, stock, seller location, personal contact details, wallet data, order data, private profile data or uploaded media.
+
+The model must use only supplied product facts, preserve the selected condition and avoid inventing product features, compatibility, warranty, certifications, authenticity, origin, expiry, delivery or availability claims. Phone numbers, email addresses, URLs, recognizable plot/house/street addresses, and common bank-account or credential phrases are redacted before provider context. Returned copy is sanitized too. The response must validate as a bounded title/description pair.
+
+Suggestions are drafts only. The Android form displays a preview and requires the seller to explicitly apply the suggested title and description. The existing seller edit fields and normal Marketplace publish validation/authorization remain the only publishing path. AI must never publish, save or modify a listing itself.
+
+## Marketplace product-photo quality review
+
+The seller may explicitly request a photo-quality review of up to four still product photos. Before sending, Android shows a consent step explaining the selected photos are compressed on-device and sent to FYNX AI (Gemini) through the authenticated request for this one check. FYNX does not save the selected image bytes to the user's account, Marketplace media or listing. Users are warned not to select photos showing faces, identity documents, receipts, addresses, phone numbers, contact details or other private information.
+
+The route accepts only a bounded array of image MIME types and base64 image bytes. It requires FYNX authentication, rejects unexpected fields, invalid base64, unsupported MIME types, more than four images, more than 4 MB per image or more than 9 MB combined. Images are passed to Gemini in-memory for that request and must not be inserted into media storage, attached to an AI conversation or persisted as Marketplace media.
+
+The provider receives only selected image bytes and a fixed photo-quality prompt. It receives no seller text, price, currency, quantity, location, profile, wallet, order, customer, chat or other account data. It has no database/action tools, conversation history or continuity context. The model assesses only lighting, sharpness, glare, background clutter, framing, camera distance, angle and image resolution. It must not identify/describe people or products, infer product facts, read image text, or follow image-embedded instructions. It returns only strict quality status and allowlisted issue codes; Android renders fixed reviewed advice instead of free-form model prose.
+
+The review is advisory only. It never modifies, enhances, saves, publishes, stores or replaces an image or listing. Existing on-device background cleanup remains separate. Normal listing photo upload and ownership validation remain exclusively in the existing Publish flow.
+
 ## Stable layers
 
 1. **Android AI UI** — `FynxAiAssistantPanel.kt`
@@ -20,6 +52,9 @@ Future AI features must be added as a new capability behind the existing FYNX AI
 3. **FYNX AI backend** — `aiConversationRoutes.js`, `aiRealtimeRoutes.js`
    - authenticate the FYNX user before AI access
    - keep provider credentials server-side
+   - derive conversation continuity only from rows scoped to both the owned conversation and authenticated user
+   - keep the provider's latest 12 messages as normal history and add only a bounded older-history excerpt (80 stored rows queried; 900-character summary; 160-character prior-task hint)
+   - label continuity excerpts as untrusted historical context; they are not authoritative FYNX state or new instructions
    - keep request/resource limits and existing abuse guards
 
 4. **Capability/tool registry** — `fynxAiToolRegistry.js`

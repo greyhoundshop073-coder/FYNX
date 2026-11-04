@@ -7,6 +7,13 @@ def read(path):
 
 doc = read("docs/FYNX_AI_EXTENSION_CONTRACT.md")
 registry = read("backend/fynxAiToolRegistry.js")
+privacy_policy = read("backend/fynxAiPrivacyPolicy.js")
+privacy_test = read("backend/test-fynx-ai-privacy-policy.mjs")
+marketplace_ai_test = read("backend/test-marketplace-ai-listing-copy.mjs")
+marketplace_ai_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceAiClient.kt")
+marketplace_ai_photo_test = read("backend/test-marketplace-ai-photo-review.mjs")
+marketplace_ai_photo_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceAiPhotoReviewClient.kt")
+marketplace_panel = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
 gemini_provider = read("backend/geminiAssistantProvider.js")
 conversation = read("backend/aiConversationRoutes.js")
 realtime = read("backend/aiRealtimeRoutes.js")
@@ -19,6 +26,29 @@ android_panel = read("app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt"
 backend_client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
 
 checks = [
+    ("mandatory privacy boundary documents protected data", "wallet balances" in doc and "private FYNX chat messages" in doc and "KYC" in doc and "saved-post history" in doc),
+    ("privacy policy is centralized and enforced by the registry", "assertFynxAiToolAllowed(name);" in registry and "FYNX_AI_PRIVACY_INSTRUCTIONS" in registry and "FYNX_AI_PRIVACY_INSTRUCTIONS" in privacy_policy),
+    ("private-data tools are absent from the tool registry", all(f'name: "{name}"' not in registry for name in ["get_my_profile", "get_conversation", "get_my_friends", "get_my_saved_posts"])),
+    ("private tool rejection is covered by regression tests", "databaseCalls, 0" in privacy_test and "realtime voice must use the same reviewed public-data tool set" in privacy_test),
+    ("AI profile search respects Everyone visibility", "LEFT JOIN privacy_settings ps" in registry and "COALESCE(ps.profile_visibility" in registry and "'Everyone'" in registry),
+    ("AI recommendations do not use private social graphs", "get_people_recommendations" in registry and "FROM friendships" not in registry and "JOIN friendships" not in registry and "FROM social_follows" not in registry and "JOIN social_follows" not in registry),
+    ("AI message preparation respects profile and messaging visibility", "COALESCE(ps.profile_visibility" in registry and "COALESCE(ps.messages_visibility" in registry and "messages_visibility" in registry),
+    ("Marketplace seller copy is an authenticated text-only AI capability", 'app.post("/api/assistant/marketplace/listing-copy"' in registry and "const userId = authenticate(req);" in registry and "toolDefinitions: []" in registry),
+    ("Marketplace seller copy uses only current product-form facts", "input.title" in registry and "input.category" in registry and "input.condition" in registry and "input.specifications" in registry and "input.wallet" not in registry and "input.location" not in registry),
+    ("Marketplace seller copy redacts contacts, precise addresses and credentials", all(term in registry for term in ["[contact details omitted]", "[address omitted]", "[private details omitted]"]) and "plot addresses must be removed" in marketplace_ai_test and "sanitizedReply.description" in marketplace_ai_test and "parseMarketplaceAiListingCopyReply" in marketplace_ai_test),
+    ("Marketplace seller copy regression tests cover privacy and invalid outputs", "seller copy must not have database or action tools" in marketplace_ai_test and "price must not be sent to Gemini" in marketplace_ai_test and "email addresses must be removed before provider context" in marketplace_ai_test),
+    ("Android seller copy helper uses the central authenticated transport", "FynxBackendClient.postJson" in marketplace_ai_client and "/api/assistant/marketplace/listing-copy" in marketplace_ai_client),
+    ("Seller must review and apply AI copy before publishing", "Review your AI listing draft" in marketplace_panel and "Use suggestion" in marketplace_panel and "listingCopyBusy" in marketplace_panel),
+    ("Seller AI drafts are discarded when the product form changes", "latestListingCopyInputs.value == requestedInputSnapshot" in marketplace_panel and "Please generate a fresh suggestion" in marketplace_panel),
+    ("AI copy does not bypass the existing Marketplace publish flow", "FynxRemoteSocialClient.createMarketplaceListing" in marketplace_panel and "listingCopySuggestion" in marketplace_panel),
+
+    ("Marketplace photo review requires seller consent", "Review product photos with FYNX AI?" in marketplace_panel and "Review photos" in marketplace_panel),
+    ("Marketplace photo review uses temporary bounded image inputs", 'app.post("/api/assistant/marketplace/photo-review"' in registry and "dataBase64" in registry and "MARKETPLACE_AI_PHOTO_REVIEW_MAX_TOTAL_BYTES = 9 * 1024 * 1024" in registry),
+    ("Marketplace photo review is authenticated without private tools/history", 'const userId = authenticate(req);' in registry and "history: []" in registry and "context: {}" in registry and "toolDefinitions: []" in registry),
+    ("Marketplace photo review blocks OCR and people/product inference", all(term in registry for term in ["Do not read, transcribe, interpret or summarize text", "Do not identify or describe the product or any person", "Never edit, save, publish"])),
+    ("Marketplace photo review results use allowlisted issue codes and fixed advice", "MARKETPLACE_AI_PHOTO_REVIEW_ISSUES" in registry and "issueAdvice" in marketplace_ai_photo_client and "Photo check results" in marketplace_panel),
+    ("Marketplace photo review client compresses locally and avoids media-storage uploads", "BitmapFactory" in marketplace_ai_photo_client and "FynxBackendClient.postJson" in marketplace_ai_photo_client and "FynxProductionMessaging.uploadMedia" not in marketplace_ai_photo_client),
+    ("Marketplace photo review has backend regression tests", "authenticated temporary inputs" in marketplace_ai_photo_test and "not base64!" in marketplace_ai_photo_test and "parseMarketplaceAiPhotoReviewReply" in registry),
     ("extension contract exists", "FYNX AI Extension Contract" in doc),
     ("assistant JSON parser is strict and bounded", 'express.json({' in assistant_parser and 'limit: "18mb"' in assistant_parser and 'strict: true' in assistant_parser),
     ("persistent conversation routes parse JSON before handlers", 'app.post("/api/assistant/conversations", assistantJsonBodyParser,' in conversation and 'app.post("/api/assistant/conversations/:id/message", assistantJsonBodyParser,' in conversation),

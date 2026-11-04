@@ -56,8 +56,6 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var failedPrompt by remember { mutableStateOf<String?>(null) }
-    var conversationSummary by remember { mutableStateOf("") }
-    var currentTask by remember { mutableStateOf("") }
     var voiceConnected by remember { mutableStateOf(false) }
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
@@ -99,7 +97,6 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
     fun startNewConversation() {
         scope.launch {
             loading = false; errorMessage = null; failedPrompt = null; input = ""; pendingMediaId = null; pendingMessageAction = null
-            conversationSummary = ""; currentTask = ""
             FynxAiConversationClient.create(context)
                 .onSuccess { conversationId = it.id; messages = emptyList(); showConversationHistory = false }
                 .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX Assistant conversation." }

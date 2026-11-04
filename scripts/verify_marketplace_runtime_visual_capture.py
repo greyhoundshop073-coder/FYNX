@@ -6,9 +6,22 @@ import sys
 runner = Path("scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 navigation = Path("scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
+wallet_source = Path("app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text(encoding="utf-8")
 emulator_storage = Path("scripts/configure_android_emulator_storage.sh").read_text(encoding="utf-8")
 
 checks = [
+    (
+        "Marketplace seller-flow capture dismisses only a confirmed visible Android keyboard before scrolling",
+        "def dismiss_ime_if_visible(name: str) -> str:" in navigation
+        and 'dumpsys", "input_method"' in navigation
+        and 'KEYCODE_BACK' in navigation
+        and 'dismiss_ime_if_visible("marketplace-visual-keyboard-dismissed.xml")' in navigation,
+    ),
+    (
+        "Wallet bank-transfer capture recognizes the current account sign-in safety gate without claiming account issuance",
+        '["Connect your FYNX account", "Your dedicated FYNX funding account", "Dedicated account not ready"]' in navigation
+        and "No account request has been sent." in wallet_source,
+    ),
     (
         "normal authenticated Marketplace journey captures private My Shop overview and all seller sections",
         '# Continue in the same real, server-authenticated session into the private' in navigation
@@ -100,8 +113,15 @@ checks = [
         and "no visible real listing card" in navigation,
     ),
     (
-        "product-publishing form is captured without submitting a listing",
+        "product-publishing capture uses exact Sell matching and scrolls inside the real content viewport",
         '["Sell", "Sell something", "Start selling", "Sell your first product"]' in navigation
+        and 'def find_control(xml_text:str, labels:list[str], *, exact_only: bool = False):' in navigation
+        and 'candidates = exact if exact_only else (exact or partial)' in navigation
+        and 'find_control(marketplace_xml, sell_labels, exact_only=True)' in navigation
+        and '["Product name", "Choose media", "Product media"], exact_only=True' in navigation
+        and 'def swipe_vertical_scroll_container(' in navigation
+        and 'swipe_vertical_scroll_container(\n                marketplace_xml, "marketplace-publish-cta-scroll-"' in navigation
+        and 'node.attrib.get("scrollable", "false").lower() != "true"' in navigation
         and "without submitting or creating a listing" in navigation,
     ),
     (
