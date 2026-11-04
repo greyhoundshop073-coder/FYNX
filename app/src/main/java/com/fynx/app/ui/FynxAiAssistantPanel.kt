@@ -360,11 +360,13 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(messages) { message ->
-                    AiChatBubble(
-                        message = message,
-                        onCopy = { copyText(message.text) },
-                        onShare = { shareText(message.text) }
-                    )
+                    if (message.fromUser || message.text.isNotBlank()) {
+                        AiChatBubble(
+                            message = message,
+                            onCopy = { copyText(message.text) },
+                            onShare = { shareText(message.text) }
+                        )
+                    }
                 }
 
                 if (loading || voiceConnecting) {
