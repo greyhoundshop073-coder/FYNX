@@ -48,6 +48,8 @@ The review is advisory only. It never modifies, enhances, saves, publishes, stor
 2. **Android AI transport** — `FynxAiConversationClient.kt` and `FynxAiVoiceSession.kt`
    - all AI traffic goes through the authenticated FYNX backend
    - keep the central `FynxBackendClient` transport boundary
+   - text conversations may negotiate Server-Sent Events (SSE) on the existing owned-conversation message route; the default request/JSON response contract remains compatible
+   - Android must parse bounded SSE events through `FynxBackendClient`, retain the authenticated FYNX session, and never call Gemini directly
 
 3. **FYNX AI backend** — `aiConversationRoutes.js`, `aiRealtimeRoutes.js`
    - authenticate the FYNX user before AI access
@@ -65,6 +67,8 @@ The review is advisory only. It never modifies, enhances, saves, publishes, stor
 
 5. **Provider adapters**
    - normal text conversations and image understanding use the server-side Gemini adapter in `geminiAssistantProvider.js`
+   - text replies may use Gemini `streamGenerateContent` SSE so the Android panel can render user-visible text deltas as they arrive; non-streaming callers keep the existing `generateContent` path
+   - thought-only model parts must not be forwarded to the user-visible stream; tool calls still execute only through the approved registry and the final reply is persisted before the completion event
    - Gemini credentials are read only from the backend `GEMINI_API_KEY` environment variable and sent in the `x-goog-api-key` request header
    - realtime voice continues to use the existing server-side OpenAI WebRTC adapter until a separately reviewed migration is approved
    - provider changes must not leak into the Android APK
@@ -87,6 +91,9 @@ A new capability is **not** allowed to bypass these layers by adding a second Op
 When adding a capability:
 
 - preserve all existing endpoints and response contracts unless a migration is explicitly required
+- preserve the normal JSON response for existing callers; streaming is negotiated only when the caller explicitly requests `text/event-stream`
+- send ordered `delta`, `complete`, or generic `error` events; the `complete` payload carries the persisted message and pending confirmation action
+- do not claim a streamed reply is saved until the server confirms the completed database commit
 - preserve current AI conversations and stored messages
 - preserve existing message confirmation behavior
 - preserve realtime voice session authentication
