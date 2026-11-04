@@ -37,6 +37,12 @@ on:
         required: false
         default: false
         type: boolean
+      display_profile:
+        description: "Display used for runtime screenshots"
+        required: false
+        default: default
+        type: choice
+        options: [default, small_phone, tablet, large_font, landscape]
       run_live_backend_probe:
         description: "Also verify the configured live production backend (separate from APK/runtime checks)"
         required: false
@@ -48,7 +54,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: fynx-android-${{ github.workflow }}-${{ github.sha }}
+  group: fynx-android-${{ github.workflow }}-${{ github.sha }}-${{ github.event.inputs.display_profile || 'default' }}
   cancel-in-progress: false
 
 env:
@@ -277,17 +283,17 @@ jobs:
       - name: Fast build, test and lint
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
       - name: Full build, test and lint
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101'))) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101'))) }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Enable KVM permissions for Android emulator
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101'))) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101'))) }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo 'ERROR: /dev/kvm is unavailable on this runner'; exit 1; fi
       - name: Run Android instrumentation tests and capture the real FYNX UI
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101'))) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101'))) }}
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -297,9 +303,10 @@ jobs:
           disk-size: 4G # Keep AVD userdata below the GitHub runner's available AVD storage.
           script: bash scripts/run_android_runtime_certification.sh
         env:
+          FYNX_DISPLAY_PROFILE: ${{ github.event.inputs.display_profile || 'default' }}
           FYNX_MARKETPLACE_VISUALS_ONLY: ${{ (github.event_name == 'pull_request' && contains(github.event.pull_request.head.ref, 'fix/real-wallet-runtime-screen-capture-20261101') || github.ref == 'refs/heads/fix/real-wallet-runtime-screen-capture-20261101') && '1' || '0' }}
       - name: Upload FYNX runtime screenshots and UI hierarchies
-        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101')))) }}
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && github.event.inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101')))) }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-runtime-visual-check-${{ github.sha }}
@@ -317,6 +324,29 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "No non-empty debug APK exists for this run."
           fi
+      - name: Prepare device-test debug APK
+        id: device_apk
+        if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.full_runtime == 'true' && github.ref != 'refs/heads/integration/fynx-single-apk-20261013' }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          cp app/build/outputs/apk/debug/app-debug.apk FYNX-device-test-debug.apk
+          {
+            echo "branch=${GITHUB_REF_NAME}"
+            echo "commit=${GITHUB_SHA}"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "apk_sha256=$(sha256sum FYNX-device-test-debug.apk | awk '{print $1}')"
+            echo "note=Debug build for testing only, not a release. Built from the branch named above."
+          } > FYNX-device-test-debug-build.txt
+      - name: Upload device-test debug APK
+        if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.full_runtime == 'true' && github.ref != 'refs/heads/integration/fynx-single-apk-20261013' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-device-test-APK-${{ github.event.inputs.display_profile || 'default' }}-${{ github.sha }}
+          path: |
+            FYNX-device-test-debug.apk
+            FYNX-device-test-debug-build.txt
+          if-no-files-found: error
+          retention-days: 14
       - name: Verify APK is built from the exact checked-out commit
         if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
         run: |

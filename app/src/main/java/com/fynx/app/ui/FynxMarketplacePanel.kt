@@ -1186,7 +1186,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).nestedScroll(marketplaceScrollConnection)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(Modifier.fillMaxSize()) {
             MarketplaceReferenceSearchBar(
                 value = query,
                 onValueChange = { query = it.take(80) },
@@ -1499,7 +1499,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 else -> if (showAllProducts || query.isNotBlank() || category != "All" || nearbyMode) {
                     LazyVerticalGrid(
                         state = productsGridState,
-                        columns = GridCells.Fixed(2),
+                        columns = GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2539,7 +2539,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             Text("Choose a closer match. FYNX keeps the main category unchanged for existing search and filter compatibility.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text("Condition", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }, colors = selectedChipColors) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }, colors = selectedChipColors) } }
         Text("2. Price and stock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("FYNX Marketplace prices are in Nigerian Naira (₦).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(price, { price = it.filter { ch -> ch.isDigit() || ch == '.' }.take(14) }, label = { Text("Price (₦)") }, supportingText = { Text("Enter a positive amount.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
