@@ -354,6 +354,18 @@ def find_edit_fields(xml_text:str):
         if center: fields.append(center)
     return fields
 
+def dismiss_ime_if_visible(name: str) -> str:
+    """Dismiss the Android keyboard only when the input method reports it is visible."""
+    state = run("adb", "shell", "dumpsys", "input_method", timeout=12).stdout or ""
+    shown = re.search(r"mInputShown\\s*=\\s*true", state, re.IGNORECASE)
+    if not shown and "mInputShown" not in state:
+        shown = re.search(r"mShowRequested\\s*=\\s*true", state, re.IGNORECASE)
+    if shown:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        time.sleep(0.55)
+    return dump_ui(name)
+
+
 def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None)->str:
     # Retry the same real accessibility selector; never use guessed coordinates.
     control=find_control(xml_text,labels)
@@ -1764,7 +1776,7 @@ def capture_wallet_from_features(prefix:str):
             screenshot("authenticated-wallet-add-money.png")
             transfer_xml = tap_control(
                 add_money_xml, ["Dedicated bank transfer"], "wallet-bank-transfer",
-                ["Your dedicated FYNX funding account", "Dedicated account not ready"]
+                ["Connect your FYNX account", "Your dedicated FYNX funding account", "Dedicated account not ready"]
             )
             if transfer_xml:
                 (ROOT/"authenticated-wallet-bank-transfer.xml").write_text(transfer_xml+chr(10),encoding="utf-8")
@@ -1859,6 +1871,12 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         settled_xml, settle_state = wait_for_marketplace_settled(timeout=20.0)
         if settled_xml:
             marketplace_xml = settled_xml
+        # Marketplace search can retain focus when opened from Home. Close only a
+        # confirmed visible IME before scrolling to the Sell action, otherwise the
+        # keyboard consumes the gesture and hides the seller entry.
+        keyboard_dismissed_xml = dismiss_ime_if_visible("marketplace-visual-keyboard-dismissed.xml")
+        if keyboard_dismissed_xml and find_control(keyboard_dismissed_xml, ["Search products, sellers or categories"]):
+            marketplace_xml = keyboard_dismissed_xml
         screenshot("authenticated-marketplace.png")
         (ROOT/"authenticated-marketplace.xml").write_text(marketplace_xml+"\n", encoding="utf-8")
         if settle_state == "loading timeout":
