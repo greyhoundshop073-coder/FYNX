@@ -1855,6 +1855,12 @@ def capture_home_feed_visuals(home_xml: str) -> str:
                         timeout=35.0,
                         prefix="authenticated-home-fullscreen-video-player-ready"
                     )
+                    fullscreen_xml = camera_wait_for_control(
+                        fullscreen_xml,
+                        ["Pause full-screen video", "Play full-screen video"],
+                        timeout=35.0,
+                        prefix="authenticated-home-fullscreen-video-playback-ready"
+                    )
                     missing_fullscreen_actions = []
                     if not find_control(fullscreen_xml, ["Pause full-screen video", "Play full-screen video"]):
                         missing_fullscreen_actions.append("Play / pause")
@@ -1875,7 +1881,11 @@ def capture_home_feed_visuals(home_xml: str) -> str:
                             "authenticated-home-fullscreen-video-close",
                             ["Your feed", "Home"]
                         )
-                        if restored_xml and is_home_feed_navigation_visible(restored_xml):
+                        if (
+                            restored_xml
+                            and is_home_feed_navigation_visible(restored_xml)
+                            and not find_control(restored_xml, ["Close media viewer"])
+                        ):
                             current = restored_xml
                             home_fullscreen_video_captured = True
                         else:
