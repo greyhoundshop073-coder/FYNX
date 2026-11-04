@@ -20,7 +20,8 @@ const context = buildAiConversationContext(history);
 assert.ok(context.summary.includes("Earlier user turn"), "older turns must remain available");
 assert.ok(context.summary.includes("Earlier assistant turn"), "assistant context must be retained");
 assert.ok(!context.summary.includes("Please compare the two options"), "the latest 12-message provider window must not be duplicated in the summary");
-assert.equal(context.currentTask, "Please compare the two options we discussed.");
+assert.equal(context.currentTask, "Earlier user turn 18: remember the blue bicycle");
+assert.ok(!context.currentTask.includes("Please compare the two options"), "prior-task hint must not duplicate the recent provider history");
 assert.ok(context.summary.length <= MAX_CONTEXT_SUMMARY_CHARS);
 assert.ok(context.currentTask.length <= MAX_CONTEXT_TASK_CHARS);
 
