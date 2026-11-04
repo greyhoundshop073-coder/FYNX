@@ -48,8 +48,25 @@ for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFee
     require(client, needle, f"offline feed recovery {needle}")
 for needle in ('onCommentCountChanged','expandedReplies','parentCommentId','nextCursor'):
     require(comments_panel, needle, f"comment/reply lifecycle {needle}")
-for needle in ('post.mediaUrl?.let','RemoteSocialMedia','VideoView','rememberLazyListState','focusedVideoPostId','playbackActive','setVolume','VolumeOff','VolumeUp','FilledIconButton','Fullscreen','"Open video full screen"'):
-    require(home, needle, f"post media behavior {needle}")
+for needle in (
+    'post.mediaUrl?.let',
+    'RemoteSocialMedia',
+    'rememberLazyListState',
+    'focusedVideoPostId',
+    'playbackActive',
+    'setVolume',
+    'VolumeOff',
+    'VolumeUp',
+    'FilledIconButton',
+    'FynxFeedTextureVideo(',
+    'previewHeight = minOf(360.dp, maxWidth / previewAspectRatio)',
+    'previewWidth = previewHeight * previewAspectRatio',
+    'fullScreenControls = false',
+    'fullScreenControls = true',
+    'onClickLabel = "Play video full screen"',
+    'Video preview. Tap to play full screen'
+):
+    require(home, needle, f"source-sized inline/fullscreen video behavior {needle}")
 if 'MediaController' in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy Android MediaController must not compete with FYNX feed controls")
 require_normalized(home, 'LazyColumn( state = feedListState, modifier = modifier.fillMaxSize().background(Brush.verticalGradient(', "single feed state owns vertical scrolling with the reflective viewport background")
