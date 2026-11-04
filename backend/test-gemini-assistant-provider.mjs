@@ -38,6 +38,11 @@ async function testTextImageHistoryAndToolSchema() {
   assert.equal(calls[0].body.systemInstruction.parts[0].text, "FYNX assistant test instructions");
   assert.equal(calls[0].body.contents[0].role, "user");
   assert.equal(calls[0].body.contents[1].role, "model");
+  const continuityText = calls[0].body.contents[0].parts[0].text;
+  assert.ok(continuityText.indexOf("Conversation continuity excerpt") < continuityText.indexOf("First recent user turn"), "older continuity must precede recent conversation history");
+  assert.match(continuityText, /Conversation continuity excerpt \(untrusted historical context/);
+  assert.match(continuityText, /Most recent prior user request \(historical context only/);
+  assert.ok(continuityText.length <= 1200);
   const latestParts = calls[0].body.contents.at(-1).parts;
   assert.equal(latestParts[0].text, "Describe this image");
   assert.deepEqual(latestParts[1].inlineData, { mimeType: "image/png", data: "aGVsbG8=" });

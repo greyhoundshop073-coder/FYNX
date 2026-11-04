@@ -110,9 +110,10 @@ jobs:
       - name: Verify debug offline login and backend-independent APK contract
         run: python3 scripts/verify_debug_offline_login.py
       - name: Verify live production backend reachability
-        # A PR that changes the canonical production endpoint must prove health and database readiness.
+        # Only canonical-endpoint repair PRs must prove live health before continuing.
+        # Ordinary feature PRs stay buildable while the independent backend service is unavailable.
         # Keep explicit workflow_dispatch and [home-cert] main-push certification as well.
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_live_backend_probe == true) || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/fix/canonical-render-backend-endpoint-')) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]') && github.ref == 'refs/heads/main') }}
+        if: ${{ (github.event_name == 'pull_request' && startsWith(github.head_ref, 'fix/canonical-render-backend-endpoint-')) || (github.event_name == 'workflow_dispatch' && inputs.run_live_backend_probe == true) || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/fix/canonical-render-backend-endpoint-')) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]') && github.ref == 'refs/heads/main') }}
         run: node scripts/verify_production_backend_reachability.mjs
       - name: Verify consolidated FCM notification phase
         run: python3 scripts/verify_fcm_notifications.py

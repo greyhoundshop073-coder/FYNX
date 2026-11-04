@@ -7,6 +7,8 @@ def read(path):
 
 doc = read("docs/FYNX_AI_EXTENSION_CONTRACT.md")
 registry = read("backend/fynxAiToolRegistry.js")
+privacy_policy = read("backend/fynxAiPrivacyPolicy.js")
+privacy_test = read("backend/test-fynx-ai-privacy-policy.mjs")
 gemini_provider = read("backend/geminiAssistantProvider.js")
 conversation = read("backend/aiConversationRoutes.js")
 realtime = read("backend/aiRealtimeRoutes.js")
@@ -19,6 +21,13 @@ android_panel = read("app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt"
 backend_client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
 
 checks = [
+    ("mandatory privacy boundary documents protected data", "wallet balances" in doc and "private FYNX chat messages" in doc and "KYC" in doc and "saved-post history" in doc),
+    ("privacy policy is centralized and enforced by the registry", "assertFynxAiToolAllowed(name);" in registry and "FYNX_AI_PRIVACY_INSTRUCTIONS" in registry and "FYNX_AI_PRIVACY_INSTRUCTIONS" in privacy_policy),
+    ("private-data tools are absent from the tool registry", all(f'name: "{name}"' not in registry for name in ["get_my_profile", "get_conversation", "get_my_friends", "get_my_saved_posts"])),
+    ("private tool rejection is covered by regression tests", "databaseCalls, 0" in privacy_test and "realtime voice must use the same reviewed public-data tool set" in privacy_test),
+    ("AI profile search respects Everyone visibility", "LEFT JOIN privacy_settings ps" in registry and "COALESCE(ps.profile_visibility" in registry and "'Everyone'" in registry),
+    ("AI recommendations do not use private social graphs", "get_people_recommendations" in registry and "FROM friendships" not in registry and "JOIN friendships" not in registry and "FROM social_follows" not in registry and "JOIN social_follows" not in registry),
+    ("AI message preparation respects profile and messaging visibility", "COALESCE(ps.profile_visibility" in registry and "COALESCE(ps.messages_visibility" in registry and "messages_visibility" in registry),
     ("extension contract exists", "FYNX AI Extension Contract" in doc),
     ("assistant JSON parser is strict and bounded", 'express.json({' in assistant_parser and 'limit: "18mb"' in assistant_parser and 'strict: true' in assistant_parser),
     ("persistent conversation routes parse JSON before handlers", 'app.post("/api/assistant/conversations", assistantJsonBodyParser,' in conversation and 'app.post("/api/assistant/conversations/:id/message", assistantJsonBodyParser,' in conversation),

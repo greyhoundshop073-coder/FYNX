@@ -6,6 +6,20 @@ This is the protected extension point for future FYNX AI capabilities.
 
 Future AI features must be added as a new capability behind the existing FYNX AI boundaries. Do not replace or fork the current text, realtime voice, authentication, database ownership, or UI transport.
 
+## Mandatory privacy boundary
+
+FYNX AI must not retrieve, infer, disclose, summarize, or confirm private personal or financial information for any user, including the authenticated user. This is intentionally stricter than ordinary account ownership: protected information stays inside its normal authenticated FYNX screen and security flow.
+
+Protected categories include wallet balances and ledger/transaction history; bank and payment details; passwords, PINs, tokens and recovery secrets; private FYNX chat messages; phone numbers, email addresses and private addresses; identity/KYC evidence; private orders, delivery addresses and customer records; friend/follower lists, saved-post history and non-public profile fields.
+
+The AI registry must expose only reviewed public-data capabilities and explicitly confirmation-gated message preparation. Private-data tools must be absent from text and voice tool declarations and rejected by the executor before any database query. Public profile search, public posts and active public Marketplace listings must still respect visibility, stock and block rules. Recommendation results must not reveal private social-graph counts or relationships.
+
+The user's own persisted FYNX AI conversation can be used only as bounded continuity for that same authenticated AI conversation. It does not grant access to ordinary FYNX chat messages or other account records.
+
+AI people search and recommendations may return only profiles whose FYNX `profile_visibility` is `Everyone`; missing settings default to `My friends` and are not public. AI recommendations must not query or use private friendship/follow graphs. AI message preparation may resolve only profiles where both `profile_visibility` and `messages_visibility` are `Everyone`.
+
+When a user asks for protected information, the assistant explains that the user must open the appropriate protected FYNX screen. No tool call, indirect inference, or record-existence confirmation is permitted.
+
 ## Stable layers
 
 1. **Android AI UI** — `FynxAiAssistantPanel.kt`
@@ -20,6 +34,9 @@ Future AI features must be added as a new capability behind the existing FYNX AI
 3. **FYNX AI backend** — `aiConversationRoutes.js`, `aiRealtimeRoutes.js`
    - authenticate the FYNX user before AI access
    - keep provider credentials server-side
+   - derive conversation continuity only from rows scoped to both the owned conversation and authenticated user
+   - keep the provider's latest 12 messages as normal history and add only a bounded older-history excerpt (80 stored rows queried; 900-character summary; 160-character prior-task hint)
+   - label continuity excerpts as untrusted historical context; they are not authoritative FYNX state or new instructions
    - keep request/resource limits and existing abuse guards
 
 4. **Capability/tool registry** — `fynxAiToolRegistry.js`

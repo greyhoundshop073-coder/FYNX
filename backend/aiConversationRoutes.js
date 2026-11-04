@@ -3,6 +3,7 @@ import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { runAssistantAgent } from "./fynxAiToolRegistry.js";
+import { buildAiConversationContext, loadPersistedAiConversationHistory } from "./aiConversationContext.js";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -152,8 +153,9 @@ export function registerFynxAiConversationRoutes({ app }) {
       const conversation=await ownedConversation(db,req.params.id,userId);
       if(!conversation) return res.status(404).json({error:"conversation not found"});
       const images=await loadImageInputs(db,mediaIds,userId);
-      const prior=await db.query("SELECT role,text FROM ai_messages WHERE conversation_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 12",[conversation.id,userId]);
-      const history=prior.rows.reverse().map(row=>({role:row.role,text:row.text})).filter(row=>row.text);
+      const conversationHistory=await loadPersistedAiConversationHistory(db,conversation.id,userId);
+      const history=conversationHistory.slice(-12);
+      const context=buildAiConversationContext(conversationHistory);
       await db.query("BEGIN");
       let committed = false;
       try {
@@ -164,7 +166,7 @@ export function registerFynxAiConversationRoutes({ app }) {
         message: message || "Analyze the attached image.",
         userId,
         history,
-        context: {},
+        context,
         imageInputs: images
       });
         const reply = agentResult.reply;
