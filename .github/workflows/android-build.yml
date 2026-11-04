@@ -54,7 +54,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: fynx-android-${{ github.workflow }}-${{ github.sha }}
+  group: fynx-android-${{ github.workflow }}-${{ github.sha }}-${{ github.event.inputs.display_profile || 'default' }}
   cancel-in-progress: false
 
 env:
