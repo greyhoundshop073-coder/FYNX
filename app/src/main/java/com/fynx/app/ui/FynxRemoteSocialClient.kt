@@ -12,6 +12,7 @@ object FynxRemoteSocialClient {
     data class FeedPage(val posts: List<RemotePost>, val hasMore: Boolean, val nextCursor: String? = null)
     data class RemoteComment(val id: String, val text: String, val timestamp: Long, val authorId: String, val authorUsername: String, val authorDisplayName: String, val parentCommentId: String? = null)
     data class CommentPage(val comments: List<RemoteComment>, val nextCursor: String?)
+    data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)
     data class RemoteUser(val id: String, val username: String, val displayName: String)
     data class MarketplaceListing(val id: String, val sellerId: String, val sellerUsername: String, val sellerDisplayName: String, val storeName: String, val title: String, val description: String, val price: Double, val currency: String, val category: String, val condition: String, val quantity: Int, val location: String, val deliveryAvailable: Boolean, val pickupAvailable: Boolean, val deliveryFee: Double?, val mediaIds: List<String>, val active: Boolean = true, val mediaTypes: List<String> = emptyList())
     data class MarketplaceOrder(val id: String, val buyerId: String, val sellerId: String, val listingId: String, val quantity: Int, val unitPrice: Double, val deliveryFee: Double, val totalAmount: Double, val currency: String, val productTitle: String, val sellerUsername: String?, val status: String, val trackingReference: String?, val fulfillmentMethod: String, val shippingAddress: JSONObject?, val buyerNote: String, val inspectionDeadline: String?, val deliveryAvailable: Boolean, val pickupAvailable: Boolean)
@@ -290,6 +291,44 @@ object FynxRemoteSocialClient {
         val parent = parentCommentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid parent comment id"))
         val safe = limit.coerceIn(1, 100)
         return FynxBackendClient.get(context, "/api/social/posts/$post/comments/$parent/replies?limit=$safe").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("comments") ?: JSONArray(); buildList { for (i in 0 until a.length()) add(parseRemoteComment(a.getJSONObject(i))) } }
+    }
+    suspend fun commentReactions(context: Context, postId: String, commentIds: List<String>): Result<Map<String, CommentReactionState>> {
+        val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val ids = commentIds.mapNotNull { it.toLongOrNull() }.distinct().take(100)
+        if (ids.isEmpty()) return Result.success(emptyMap())
+        val query = ids.joinToString(",")
+        return FynxBackendClient.get(context, "/api/social/posts/$post/comment-reactions?ids=$query").mapCatching { raw ->
+            val root = JSONObject(raw).optJSONObject("reactions") ?: JSONObject()
+            buildMap {
+                val keys = root.keys()
+                while (keys.hasNext()) {
+                    val id = keys.next()
+                    val item = root.optJSONObject(id) ?: JSONObject()
+                    val countsObject = item.optJSONObject("counts") ?: JSONObject()
+                    val counts = buildMap {
+                        val countKeys = countsObject.keys()
+                        while (countKeys.hasNext()) { val key = countKeys.next(); put(key, countsObject.optInt(key)) }
+                    }
+                    put(id, CommentReactionState(counts, item.optString("currentReaction").takeIf { it.isNotBlank() && it != "null" }))
+                }
+            }
+        }
+    }
+    suspend fun setCommentReaction(context: Context, postId: String, commentId: String, reaction: String?): Result<CommentReactionState> {
+        val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val comment = commentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid comment id"))
+        val path = "/api/social/posts/$post/comments/$comment/reaction"
+        val response = if (reaction == null) FynxBackendClient.delete(context, path)
+            else FynxBackendClient.postJson(context, path, JSONObject().put("reaction", reaction).toString())
+        return response.mapCatching { raw ->
+            val root = JSONObject(raw)
+            val countsObject = root.optJSONObject("counts") ?: JSONObject()
+            val counts = buildMap {
+                val keys = countsObject.keys()
+                while (keys.hasNext()) { val key = keys.next(); put(key, countsObject.optInt(key)) }
+            }
+            CommentReactionState(counts, root.optString("currentReaction").takeIf { it.isNotBlank() && it != "null" })
+        }
     }
     private fun parseRemoteComment(o: JSONObject) = RemoteComment(o.optString("id"), o.optString("text"), o.optDouble("timestamp").toLong(), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("parentCommentId").takeIf { it.isNotBlank() && it != "null" })
     suspend fun likes(context: Context, id: String): Result<List<RemoteUser>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.get(context, "/api/social/posts/$numericId/likes").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("users") ?: JSONArray(); buildList { for (i in 0 until a.length()) { val o = a.getJSONObject(i); add(RemoteUser(o.optString("id"), o.optString("username"), o.optString("displayName"))) } } } }

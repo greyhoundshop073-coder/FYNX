@@ -6,6 +6,7 @@ import path from "node:path";
 import { installSocialFeed } from "./socialFeedBootstrap.js";
 import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";
 import { installSocialPostReactions } from "./socialPostReactionBootstrap.js";
+import { installHomeCommentReactions } from "./homeCommentReactionBootstrap.js";
 
 // R3 connection isolation layer. server.js is intentionally kept intact; this
 // wrapper makes the existing WebSocket connection handler reject stale/replaced
@@ -219,4 +220,5 @@ await installSocialFeed();
 await installHomeCommentBackend();
 await installHomeCommentPrivacy();
 await installSocialPostReactions();
+await installHomeCommentReactions();
 await import("./serverBootstrap.js");
