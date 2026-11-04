@@ -9,6 +9,18 @@ workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8
 
 checks = [
     (
+        "Marketplace seller-flow capture dismisses only a confirmed visible Android keyboard before scrolling",
+        "def dismiss_ime_if_visible(name: str) -> str:" in navigation
+        and 'dumpsys", "input_method"' in navigation
+        and 'KEYCODE_BACK' in navigation
+        and 'dismiss_ime_if_visible("marketplace-visual-keyboard-dismissed.xml")' in navigation,
+    ),
+    (
+        "Wallet bank-transfer capture recognizes the current account sign-in safety gate without claiming account issuance",
+        '["Connect your FYNX account", "Your dedicated FYNX funding account", "Dedicated account not ready"]' in navigation
+        and "No account request has been sent." in navigation,
+    ),
+    (
         "normal authenticated Marketplace journey captures private My Shop overview and all seller sections",
         '# Continue in the same real, server-authenticated session into the private' in navigation
         and 'shop_xml = tap_control(' in navigation
