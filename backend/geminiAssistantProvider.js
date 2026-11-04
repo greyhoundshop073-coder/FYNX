@@ -142,7 +142,13 @@ export async function runGeminiAssistant({
   ].filter(Boolean).join("\n");
 
   const contents = safeHistory.map(item => ({ role: item.role, parts: [{ text: item.text }] }));
-  if (contextHint) contents.push({ role: "user", parts: [{ text: contextHint }] });
+  if (contextHint) {
+    if (contents[0]?.role === "user") {
+      contents[0].parts[0].text = contextHint + "\n\nFirst recent user turn:\n" + contents[0].parts[0].text;
+    } else {
+      contents.unshift({ role: "user", parts: [{ text: contextHint }] });
+    }
+  }
 
   const latestParts = [];
   if (safeMessage) latestParts.push({ text: safeMessage });
