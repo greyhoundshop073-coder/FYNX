@@ -48,7 +48,7 @@ checks = [
     ("Marketplace photo review blocks OCR and people/product inference", all(term in registry for term in ["Do not read, transcribe, interpret or summarize text", "Do not identify or describe the product or any person", "Never edit, save, publish"])),
     ("Marketplace photo review results use allowlisted issue codes and fixed advice", "MARKETPLACE_AI_PHOTO_REVIEW_ISSUES" in registry and "issueAdvice" in marketplace_ai_photo_client and "Photo check results" in marketplace_panel),
     ("Marketplace photo review client compresses locally and avoids media-storage uploads", "BitmapFactory" in marketplace_ai_photo_client and "FynxBackendClient.postJson" in marketplace_ai_photo_client and "FynxProductionMessaging.uploadMedia" not in marketplace_ai_photo_client),
-    ("Marketplace photo review has backend regression tests", "authenticated temporary inputs" in marketplace_ai_photo_test and "invalid base64" in marketplace_ai_photo_test and "parseMarketplaceAiPhotoReviewReply" in registry),
+    ("Marketplace photo review has backend regression tests", "authenticated temporary inputs" in marketplace_ai_photo_test and "not base64!" in marketplace_ai_photo_test and "parseMarketplaceAiPhotoReviewReply" in registry),
     ("extension contract exists", "FYNX AI Extension Contract" in doc),
     ("assistant JSON parser is strict and bounded", 'express.json({' in assistant_parser and 'limit: "18mb"' in assistant_parser and 'strict: true' in assistant_parser),
     ("persistent conversation routes parse JSON before handlers", 'app.post("/api/assistant/conversations", assistantJsonBodyParser,' in conversation and 'app.post("/api/assistant/conversations/:id/message", assistantJsonBodyParser,' in conversation),
