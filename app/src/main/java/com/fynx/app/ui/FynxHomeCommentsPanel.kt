@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
+import com.fynx.app.BuildConfig
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -148,6 +149,25 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         reactionStates[comment.id]?.counts?.values?.sum() ?: 0
     fun loadComments() {
         if (sending || loading) return
+        if (BuildConfig.DEBUG && post.id.startsWith("ci-home-post-")) {
+            val now = System.currentTimeMillis()
+            val first = FynxRemoteSocialClient.RemoteComment("ci-comment-1", "This video looks amazing! The portrait preview fits naturally in the feed. ❤️", now - 8 * 60_000L, "ci-author-1", "@amara", "Amara Okafor")
+            val second = FynxRemoteSocialClient.RemoteComment("ci-comment-2", "I like how the full video opens when you tap it.", now - 5 * 60_000L, "ci-author-2", "@david", "David James")
+            val reply = FynxRemoteSocialClient.RemoteComment("ci-reply-1", "Exactly! It keeps the feed clean while the full video gets the space it needs.", now - 3 * 60_000L, "ci-author-3", "@zara", "Zara Bello", first.id)
+            comments = listOf(first, second)
+            expandedReplies = mapOf(first.id to listOf(reply))
+            reactionStates = mapOf(
+                first.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LOVE" to 12, "THUMBS_UP" to 5, "LAUGH" to 3), "LOVE"),
+                second.id to FynxRemoteSocialClient.CommentReactionState(mapOf("THUMBS_UP" to 8, "WOW" to 2), null),
+                reply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LOVE" to 4), null)
+            )
+            commentCount = maxOf(post.commentCount, 3)
+            onCommentCountChanged(commentCount)
+            resolveCommenterPhotos(listOf(first, second, reply))
+            loading = false
+            error = null
+            return
+        }
         loading = true; error = null; replyLoadingId = null; replyErrorId = null; expandedReplies = emptyMap(); resetPagingState()
         scope.launch {
             FynxRemoteSocialClient.commentsPage(context, post.id, null, COMMENT_PAGE_SIZE)

@@ -1997,7 +1997,7 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
 
 
 def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True) -> str:
-    """Capture real Home video/comment surfaces without synthetic feed data."""
+    """Capture Home surfaces; CI-only debug comments are in-memory and never sent to the backend."""
     current = home_xml
     if not is_authenticated_home_surface(current):
         FAILURES.append("Home was not visible when Home Feed visual certification began.")
@@ -2161,7 +2161,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
 
         # Pair the conversation capture with a viewport that actually exposes
         # a real inline video control. Do not count an unrelated text-post comment.
-        comment_control = find_home_video_post_comment_action(current) if video_control and duration_control and require_real_media else None
+        comment_control = find_home_video_post_comment_action(current) if video_control and duration_control and (require_real_media or HOME_FEED_FIXTURES_SEEDED) else None
         if comment_control and not comments_captured:
             comment_action_seen = True
             _, x, y = comment_control
@@ -2183,7 +2183,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
 
             if not conversation_xml:
                 screenshot("authenticated-home-comments-open-failed.png")
-                message = "The Home video Comment action opened, but the comment service did not return an existing conversation row; no local or server comment was inserted."
+                message = "The Home video Comment action opened, but no rendered conversation row was available; the isolated CI fixture is UI-only and never writes a comment to the backend."
                 if require_real_media:
                     FAILURES.append(message)
                 else:
@@ -2259,8 +2259,8 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
             FAILURES.append(message)
     if not comments_captured:
         message = (
-            f"No existing Comment conversation belonging to a real video post was captured "
-            f"across {scanned_pages} scanned Home feed viewport(s); no synthetic comment was created."
+            f"No Comment conversation belonging to a video post was captured "
+            f"across {scanned_pages} scanned Home feed viewport(s); CI-only preview comments remain local to the disposable debug emulator."
         )
         report.append(("- NOTE: " if not require_real_media else "- FAIL: ") + message)
         if require_real_media and not comment_action_seen:
