@@ -6,6 +6,7 @@ import sys
 runner = Path("scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 navigation = Path("scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
+wallet_source = Path("app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text(encoding="utf-8")
 
 checks = [
     (
@@ -146,7 +147,6 @@ checks = [
 
 marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 app_source = Path("app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
-wallet_source = Path("app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text(encoding="utf-8")
 hero_source = marketplace_source.split("private fun MarketplaceSmartDealsHero", 1)[1].split("@Composable\nfun FynxMarketplacePanel", 1)[0]
 checks.extend([
     (
