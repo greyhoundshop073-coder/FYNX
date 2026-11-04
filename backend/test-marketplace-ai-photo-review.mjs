@@ -12,7 +12,7 @@ assert.deepEqual(result,{overallStatus:"IMPROVE",photos:[{index:1,status:"IMPROV
 assert.equal(request.userId,"42");
 assert.deepEqual(request.history,[]);
 assert.deepEqual(request.context,{});
-assert.deepEqual(request.toolDefinitions,[]);
+assert.deepEqual(request.toolDefinitions,[],"no private-data or action tools");
 assert.ok(request.instructions.includes("FYNX PRIVACY BOUNDARY"));
 assert.ok(request.instructions.includes("temporary inputs"));
 assert.ok(request.imageInputs[0].dataUrl==="data:image/jpeg;base64,"+one);
