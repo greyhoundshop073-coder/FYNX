@@ -357,9 +357,9 @@ def find_edit_fields(xml_text:str):
 def dismiss_ime_if_visible(name: str) -> str:
     """Dismiss the Android keyboard only when the input method reports it is visible."""
     state = run("adb", "shell", "dumpsys", "input_method", timeout=12).stdout or ""
-    shown = re.search(r"mInputShown\\s*=\\s*true", state, re.IGNORECASE)
+    shown = re.search(r"mInputShown\s*=\s*true", state, re.IGNORECASE)
     if not shown and "mInputShown" not in state:
-        shown = re.search(r"mShowRequested\\s*=\\s*true", state, re.IGNORECASE)
+        shown = re.search(r"mShowRequested\s*=\s*true", state, re.IGNORECASE)
     if shown:
         run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
         time.sleep(0.55)
