@@ -389,9 +389,28 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         scope.launch { action().onSuccess { result -> interactionStates = interactionStates + (id to update(previous, result.first, result.second.coerceAtLeast(0))) }.onFailure { interactionStates = interactionStates + (id to previous); error = it.message ?: "Unable to update this post." }; interactionBusy = interactionBusy - id }
     }
     fun runLike(id: String) {
-        if (id in interactionBusy) return; val previous = posts.firstOrNull { it.id == id } ?: return; val optimisticLiked = !previous.likedByCurrentUser; val optimisticCount = (previous.likeCount + if (optimisticLiked) 1 else -1).coerceAtLeast(0)
-        posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = optimisticLiked, likeCount = optimisticCount) else it }; interactionBusy = interactionBusy + id
-        scope.launch { FynxRemoteSocialClient.like(context, id, desired = optimisticLiked).onSuccess { result -> val (liked, count) = result; posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count.coerceAtLeast(0)) else it } }.onFailure { posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser, likeCount = previous.likeCount) else it }; error = it.message ?: "Unable to update this like." }; interactionBusy = interactionBusy - id }
+        if (id in interactionBusy) return
+        val previous = posts.firstOrNull { it.id == id } ?: return
+        val optimisticLiked = !previous.likedByCurrentUser
+        val optimisticCount = (previous.likeCount + if (optimisticLiked) 1 else -1).coerceAtLeast(0)
+        posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = optimisticLiked, likeCount = optimisticCount) else it }
+        commentsPost = commentsPost?.takeIf { it.id == id }?.copy(likedByCurrentUser = optimisticLiked, likeCount = optimisticCount)
+        interactionBusy = interactionBusy + id
+        scope.launch {
+            FynxRemoteSocialClient.like(context, id, desired = optimisticLiked)
+                .onSuccess { result ->
+                    val (liked, count) = result
+                    val safeCount = count.coerceAtLeast(0)
+                    posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = safeCount) else it }
+                    commentsPost = commentsPost?.takeIf { it.id == id }?.copy(likedByCurrentUser = liked, likeCount = safeCount)
+                }
+                .onFailure {
+                    posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser, likeCount = previous.likeCount) else it }
+                    commentsPost = commentsPost?.takeIf { it.id == id }?.copy(likedByCurrentUser = previous.likedByCurrentUser, likeCount = previous.likeCount)
+                    error = it.message ?: "Unable to update this like."
+                }
+            interactionBusy = interactionBusy - id
+        }
     }
     fun runReaction(id: String, reaction: String) {
         if (id in interactionBusy) return; val previous = reactionStates[id] ?: FynxHomePostReactionsClient.ReactionState(); val same = previous.currentReaction == reaction; val optimisticCounts = previous.counts.toMutableMap(); previous.currentReaction?.let { current -> optimisticCounts[current] = ((optimisticCounts[current] ?: 0) - 1).coerceAtLeast(0) }; if (!same) optimisticCounts[reaction] = (optimisticCounts[reaction] ?: 0) + 1
