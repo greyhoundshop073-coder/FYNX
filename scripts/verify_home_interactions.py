@@ -224,7 +224,8 @@ if 'FynxMoneyAiCoachPanel(' in money_center:
 if 'AiAssistantClient.' in budget:
     raise SystemExit("HOME INTERACTIONS RED: Budget Planner still executes AI outside the dedicated FYNX AI screen")
 require(ai_panel, 'OutlinedTextField(', "full FYNX AI typing surface")
-require(ai_panel, 'FynxAiConversationClient.send(context, activeConversation, prompt', "persistent FYNX AI conversation backend path")
+require(ai_panel, 'FynxAiConversationClient.sendStreaming(', "persistent FYNX AI streamed conversation backend path")
+require(ai_client, 'suspend fun send(context: Context', "legacy JSON FYNX AI conversation compatibility path")
 require(ai_panel, 'FynxAiConversationClient.create(context)', "new FYNX AI conversation creation")
 require(ai_panel, 'FynxAiConversationClient.list(context)', "FYNX AI conversation history")
 require(ai_panel, 'FynxAiConversationClient.uploadImage(context, uri)', "real FYNX AI image attachment upload")
