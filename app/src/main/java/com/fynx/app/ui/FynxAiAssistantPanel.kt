@@ -303,7 +303,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
         }
     }
 
-    LaunchedEffect(messages.size, loading, voiceConnecting) {
+    LaunchedEffect(messages.size, messages.lastOrNull()?.text, loading, voiceConnecting) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
 
