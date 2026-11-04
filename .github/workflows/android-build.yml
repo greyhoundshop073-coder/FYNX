@@ -290,6 +290,34 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo 'ERROR: /dev/kvm is unavailable on this runner'; exit 1; fi
+      - name: Probe configured FYNX backend (non-blocking diagnostic)
+        id: home_backend_diagnostic
+        if: \${{ github.ref == 'refs/heads/feat/home-feed-professional-feed-conversations-20261103' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const base = (process.env.FYNX_PRODUCTION_BASE_URL || "").replace(/\/+$/, "");
+          if (!base) {
+            console.log("BACKEND_DIAGNOSTIC=not_configured");
+          } else {
+            try {
+              const response = await fetch(\`\${base}/health\`, {
+                headers: { Accept: "application/json" },
+                signal: AbortSignal.timeout(8000)
+              });
+              const body = await response.json().catch(() => null);
+              const ready = response.ok && body?.ok === true &&
+                body?.service === "fynx-backend" && body?.database === "ready";
+              console.log(\`BACKEND_DIAGNOSTIC=\${ready ? "ready" : "responded_not_ready"}\`);
+              console.log(\`BACKEND_HTTP_STATUS=\${response.status}\`);
+              console.log(\`BACKEND_DATABASE=\${body?.database ?? "unknown"}\`);
+            } catch (error) {
+              console.log("BACKEND_DIAGNOSTIC=unreachable_from_ci");
+              console.log(\`BACKEND_ERROR=\${String(error?.message ?? error).slice(0, 240)}\`);
+            }
+          }
+          NODE
       - name: Ensure FFmpeg for isolated Home Feed visual fixtures
         if: ${{ env.FYNX_HOME_FEED_VISUALS_ONLY == '1' }}
         run: |
