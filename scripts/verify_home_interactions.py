@@ -41,7 +41,7 @@ for needle in ("FynxRemoteSocialClient.feedPage","FynxRemoteSocialClient.like","
     require(home, needle, f"Home interaction path {needle}")
 for needle in ("suspend fun comments(context: Context, id: String)","suspend fun addComment(context: Context, id: String, text: String)","suspend fun addReply(context: Context, postId: String, parentCommentId: String, text: String)","suspend fun save(context: Context, id: String, saved: Boolean)","suspend fun repost(context: Context, id: String, reposted: Boolean)","suspend fun interactionState(context: Context, id: String)",'"/api/social/posts/$numericId/save"','"/api/social/posts/$numericId/repost"','"/api/social/posts/$numericId/interaction-state"'):
     require_normalized(client, needle, f"existing social client API {needle}")
-for needle in ('Icons.Default.Favorite','Icons.Default.ChatBubbleOutline','Icons.Default.Bookmark','Icons.Default.BookmarkBorder','Icons.Default.Repeat','Icons.Default.MoreHoriz','interactionBusy','feedRequestInFlight','lastFeedRequestAt','FEED_REFRESH_DEBOUNCE_MS','posts = posts.filterNot { it.id == id }','deletePost = null','AlertDialog(','sharePost(context, post)'):
+for needle in ('Icons.Default.ThumbUp','Icons.Default.ChatBubbleOutline','Icons.Default.Bookmark','Icons.Default.BookmarkBorder','Icons.Default.Repeat','Icons.Default.MoreHoriz','interactionBusy','feedRequestInFlight','lastFeedRequestAt','FEED_REFRESH_DEBOUNCE_MS','posts = posts.filterNot { it.id == id }','deletePost = null','AlertDialog(','sharePost(context, post)'):
     require(home, needle, f"Home reliability surface {needle}")
 for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNextCursor','discoveryFeed(context, 3, offset)','discoveryOffset','discoveryHasMore','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','lastVisibleIndex >= totalItems - 6','!loadingMore && !discoveryLoadingMore && !feedRequestInFlight','if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)'):
     require(home, needle, f"feed recovery/pagination {needle}")
@@ -134,7 +134,7 @@ for needle in ('commentReactions(context, post.id, ids)', 'setCommentReaction(co
 require(client, 'data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)', "typed comment reaction summary")
 require(client, '"/api/social/posts/$post/comment-reactions?ids=$query"', "batched comment reaction summary avoids per-row requests")
 require(client, '"/api/social/posts/$post/comments/$comment/reaction"', "comment reaction write endpoint")
-for needle in ('var commentSort by rememberSaveable(post.id)', 'FilterChip(selected = commentSort == "Relevant"', 'FilterChip(selected = commentSort == "Newest"', 'fun shareComment(comment:', 'Intent.createChooser(Intent(Intent.ACTION_SEND)', 'TextButton(onClick = { shareComment(comment) })', 'TextButton(onClick = { shareComment(reply) })'):
+for needle in ('var commentSort by rememberSaveable(post.id)', 'FilterChip(selected = commentSort == "Relevant"', 'FilterChip(selected = commentSort == "Newest"', 'fun shareComment(comment:', 'Intent.createChooser(Intent(Intent.ACTION_SEND)', 'shareComment(comment)', 'shareComment(reply)'):
     require(comments_panel, needle, f"X-style comment sorting/share action {needle}")
 require(reaction_bootstrap, "[commentId,postId,req.user.sub]", "comment reaction deletion applies the current user's block filter parameter")
 

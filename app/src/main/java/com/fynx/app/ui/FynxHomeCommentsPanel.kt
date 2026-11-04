@@ -13,6 +13,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -22,6 +28,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.Toast
 import android.content.pm.ApplicationInfo
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -53,7 +62,18 @@ private fun flattenHomeReplies(
 }
 
 @Composable
-fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommentId: String? = null, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}) {
+fun FynxHomeCommentsPanel(
+    post: FynxRemoteSocialClient.RemotePost,
+    initialCommentId: String? = null,
+    interactionState: FynxRemoteSocialClient.SocialInteractionState = FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0),
+    interactionBusy: Boolean = false,
+    onLikePost: () -> Unit = {},
+    onRepostPost: () -> Unit = {},
+    onSavePost: () -> Unit = {},
+    onSharePost: () -> Unit = {},
+    onClose: () -> Unit,
+    onCommentCountChanged: (Int) -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -73,6 +93,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var reactionStates by remember(post.id) { mutableStateOf<Map<String, FynxRemoteSocialClient.CommentReactionState>>(emptyMap()) }
     var reactionPending by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     var commentSort by rememberSaveable(post.id) { mutableStateOf("Relevant") }
+    var openCommentMenuId by remember(post.id) { mutableStateOf<String?>(null) }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     val availableComments = remember(comments, expandedReplies) {
@@ -260,22 +281,69 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                     HorizontalDivider()
                     Column(
                         Modifier.fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
                             .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Text("POST CONVERSATION", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         Text(
                             post.text.ifBlank { "Join the conversation and share a thoughtful reply." },
                             style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
+                            maxLines = 3,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            "Started by ${post.authorDisplayName.ifBlank { post.authorUsername }}",
+                            "Started by ${post.authorDisplayName.ifBlank { post.authorUsername }} · @${post.authorUsername.removePrefix("@")} · ${relative(post.timestamp)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CommentPostEngagementAction(
+                                icon = null,
+                                emoji = "👍",
+                                label = "Like",
+                                count = post.likeCount,
+                                selected = post.likedByCurrentUser,
+                                enabled = !interactionBusy,
+                                onClick = onLikePost
+                            )
+                            CommentPostEngagementAction(
+                                icon = Icons.Default.ChatBubbleOutline,
+                                label = "Comments",
+                                count = commentCount,
+                                selected = true,
+                                enabled = false,
+                                onClick = {}
+                            )
+                            CommentPostEngagementAction(
+                                icon = Icons.Default.Repeat,
+                                label = "Repost",
+                                count = interactionState.repostCount,
+                                selected = interactionState.reposted,
+                                enabled = !interactionBusy,
+                                onClick = onRepostPost
+                            )
+                            CommentPostEngagementAction(
+                                icon = if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                label = "Save",
+                                count = interactionState.savedCount,
+                                selected = interactionState.saved,
+                                enabled = !interactionBusy,
+                                onClick = onSavePost
+                            )
+                            CommentPostEngagementAction(
+                                icon = Icons.Default.Share,
+                                label = "Share",
+                                count = null,
+                                selected = false,
+                                enabled = !interactionBusy,
+                                onClick = onSharePost
+                            )
+                        }
                     }
                     HorizontalDivider()
                     when {
@@ -291,18 +359,42 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                         FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(40.dp).clip(CircleShape), ownerUsername = comment.authorUsername)
                                         Spacer(Modifier.width(11.dp))
                                         Column(Modifier.weight(1f)) {
-                                            Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge)
-                                            Spacer(Modifier.height(3.dp))
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("@${comment.authorUsername.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                                Text(" · ${relative(comment.timestamp)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Spacer(Modifier.weight(1f))
+                                                val engagement = commentEngagement(comment)
+                                                if (engagement > 0) Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
+                                                    Text(compactEngagement(engagement), Modifier.padding(horizontal = 7.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                Box {
+                                                    IconButton(onClick = { openCommentMenuId = comment.id }, modifier = Modifier.size(28.dp)) {
+                                                        Icon(Icons.Default.MoreHoriz, "More comment actions", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                    DropdownMenu(expanded = openCommentMenuId == comment.id, onDismissRequest = { openCommentMenuId = null }) {
+                                                        DropdownMenuItem(
+                                                            text = { Text("Reply") },
+                                                            onClick = { openCommentMenuId = null; if (!sending) replyingToId = comment.id }
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("Copy comment") },
+                                                            onClick = { openCommentMenuId = null; copyCommentText(context, comment.text) }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Spacer(Modifier.height(4.dp))
                                             Text(comment.text, style = MaterialTheme.typography.bodyMedium)
                                             HomeCommentReactionRow(reactionStates[comment.id], reactionPending.contains(comment.id)) { reaction -> reactToComment(comment, reaction) }
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                TextButton(onClick = { if (!sending) replyingToId = comment.id }) { Text("Reply") }
-                                                TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending) {
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                                TextButton(onClick = { if (!sending) replyingToId = comment.id }, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) { Text("↩  Reply", style = MaterialTheme.typography.labelSmall) }
+                                                TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) {
                                                     val loadedReplyCount = expandedReplies[comment.id]?.size
-                                                    Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "$loadedReplyCount replies" } else "Replies")
+                                                    Text("💬 ${if (loadedReplyCount != null) loadedReplyCount else "Replies"}", style = MaterialTheme.typography.labelSmall)
                                                 }
-                                                TextButton(onClick = { shareComment(comment) }) { Text("Share") }
+                                                TextButton(onClick = { shareComment(comment) }, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) { Text("↗  Share", style = MaterialTheme.typography.labelSmall) }
                                             }
                                         }
                                     }
@@ -315,18 +407,42 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                                 FynxRemoteProfileAvatar(replyPhoto, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername)
                                                 Spacer(Modifier.width(8.dp))
                                                 Column(Modifier.weight(1f)) {
-                                                    Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium)
+                                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                                        Spacer(Modifier.width(5.dp))
+                                                        Text("@${reply.authorUsername.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                                        Text(" · ${relative(reply.timestamp)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        Spacer(Modifier.weight(1f))
+                                                        val replyEngagement = commentEngagement(reply)
+                                                        if (replyEngagement > 0) Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
+                                                            Text(compactEngagement(replyEngagement), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        }
+                                                        Box {
+                                                            IconButton(onClick = { openCommentMenuId = reply.id }, modifier = Modifier.size(26.dp)) {
+                                                                Icon(Icons.Default.MoreHoriz, "More reply actions", modifier = Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                            }
+                                                            DropdownMenu(expanded = openCommentMenuId == reply.id, onDismissRequest = { openCommentMenuId = null }) {
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Reply") },
+                                                                    onClick = { openCommentMenuId = null; if (!sending) replyingToId = reply.id }
+                                                                )
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Copy reply") },
+                                                                    onClick = { openCommentMenuId = null; copyCommentText(context, reply.text) }
+                                                                )
+                                                            }
+                                                        }
+                                                    }
                                                     Spacer(Modifier.height(2.dp))
                                                     Text(reply.text, style = MaterialTheme.typography.bodyMedium)
                                                     HomeCommentReactionRow(reactionStates[reply.id], reactionPending.contains(reply.id)) { reaction -> reactToComment(reply, reaction) }
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                        TextButton(onClick = { if (!sending) replyingToId = reply.id }) { Text("Reply") }
-                                                        TextButton(onClick = { toggleReplies(reply) }, enabled = replyLoadingId == null && !sending) {
+                                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                                        TextButton(onClick = { if (!sending) replyingToId = reply.id }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) { Text("↩ Reply", style = MaterialTheme.typography.labelSmall) }
+                                                        TextButton(onClick = { toggleReplies(reply) }, enabled = replyLoadingId == null && !sending, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
                                                             val loadedReplyCount = expandedReplies[reply.id]?.size
-                                                            Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "${loadedReplyCount} replies" } else "Replies")
+                                                            Text("💬 ${if (loadedReplyCount != null) loadedReplyCount else "Replies"}", style = MaterialTheme.typography.labelSmall)
                                                         }
-                                                        TextButton(onClick = { shareComment(reply) }) { Text("Share") }
+                                                        TextButton(onClick = { shareComment(reply) }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) { Text("↗ Share", style = MaterialTheme.typography.labelSmall) }
                                                     }
                                                 }
                                             }
@@ -383,6 +499,65 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     }
 }
 
+@Composable
+private fun CommentPostEngagementAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    emoji: String? = null,
+    label: String,
+    count: Int?,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 3.dp, vertical = 2.dp)
+    ) {
+        if (icon != null) {
+            Icon(
+                icon,
+                contentDescription = label,
+                modifier = Modifier.size(19.dp),
+                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else if (!emoji.isNullOrBlank()) {
+            Text(
+                emoji,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (count != null) {
+            Spacer(Modifier.width(4.dp))
+            Text(
+                compactEngagement(count),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+private fun copyCommentText(context: android.content.Context, value: String) {
+    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+    clipboard.setPrimaryClip(ClipData.newPlainText("FYNX comment", value))
+    Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+}
+
+private fun compactEngagement(count: Int): String = when {
+    count >= 1_000_000 -> compactCommentCount(count, 1_000_000, "M")
+    count >= 1_000 -> compactCommentCount(count, 1_000, "K")
+    else -> count.coerceAtLeast(0).toString()
+}
+
+private fun compactCommentCount(count: Int, divisor: Int, suffix: String): String {
+    val value = if (count % divisor == 0) (count / divisor).toString()
+    else "%.1f".format(java.util.Locale.US, count / divisor.toDouble())
+    return value + suffix
+}
+
 private fun relative(timestamp: Long): String {
     val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L))
     return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" }
@@ -403,18 +578,25 @@ private fun HomeCommentReactionRow(
         Triple("LIKE", "👏", Color(0xFF1976D2))
     )
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 3.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         options.forEach { (type, emoji, tint) ->
             val count = state?.counts?.get(type) ?: 0
             val selected = state?.currentReaction == type
-            TextButton(onClick = { onReact(type) }, enabled = !pending,
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
-                Text(if (count > 0) "$emoji $count" else emoji,
-                    color = if (selected) tint else MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall)
+            if (count > 0 || selected || type == "LOVE") {
+                Surface(
+                    color = if (selected) tint.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    shape = CircleShape
+                ) {
+                    TextButton(onClick = { onReact(type) }, enabled = !pending,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Text(if (count > 0) "$emoji $count" else emoji,
+                            color = if (selected) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
         }
     }
