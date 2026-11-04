@@ -369,7 +369,21 @@ fun FynxHomeCommentsPanel(
                                                 if (engagement > 0) Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
                                                     Text(compactEngagement(engagement), Modifier.padding(horizontal = 7.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
-                                                Text(" ⋯", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
+                                                Box {
+                                                    IconButton(onClick = { openCommentMenuId = comment.id }, modifier = Modifier.size(28.dp)) {
+                                                        Icon(Icons.Default.MoreHoriz, "More comment actions", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                    DropdownMenu(expanded = openCommentMenuId == comment.id, onDismissRequest = { openCommentMenuId = null }) {
+                                                        DropdownMenuItem(
+                                                            text = { Text("Reply") },
+                                                            onClick = { openCommentMenuId = null; if (!sending) replyingToId = comment.id }
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("Copy comment") },
+                                                            onClick = { openCommentMenuId = null; copyCommentText(context, comment.text) }
+                                                        )
+                                                    }
+                                                }
                                             }
                                             Spacer(Modifier.height(4.dp))
                                             Text(comment.text, style = MaterialTheme.typography.bodyMedium)
