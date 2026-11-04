@@ -70,9 +70,14 @@ object FynxAiConversationClient {
                 "error" -> throw IllegalStateException(event.optString("message").ifBlank { "FYNX Assistant is temporarily unavailable." })
             }
         }.mapCatching { raw ->
-            val json = JSONObject(raw)
-            if (json.optString("type") != "complete") {
-                throw IllegalStateException("FYNX Assistant stream ended before the reply was saved.")
+            val response = JSONObject(raw)
+            val json = if (response.optString("type") == "complete") response else {
+                // Older deployed backends return the original JSON envelope. Keep
+                // the chat usable while they are upgraded to the optional SSE route.
+                if (!response.has("assistantMessage")) {
+                    throw IllegalStateException("FYNX Assistant stream ended before the reply was saved.")
+                }
+                response
             }
             val reply = json.getJSONObject("assistantMessage")
             FynxAiConversationReply(
