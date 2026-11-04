@@ -51,6 +51,52 @@ object FynxAiConversationClient {
         }
     }
 
+    suspend fun sendStreaming(
+        context: Context,
+        conversationId: String,
+        message: String,
+        mediaIds: List<String> = emptyList(),
+        onDelta: suspend (String) -> Unit
+    ): Result<FynxAiConversationReply> {
+        val body = JSONObject().put("message", message.trim()).put("mediaIds", JSONArray(mediaIds.distinct().take(4)))
+        return FynxBackendClient.postJsonStream(
+            context,
+            "/api/assistant/conversations/${encode(conversationId)}/message",
+            body.toString()
+        ) { rawEvent ->
+            val event = JSONObject(rawEvent)
+            when (event.optString("type")) {
+                "delta" -> event.optString("text").takeIf { it.isNotEmpty() }?.let { onDelta(it) }
+                "error" -> throw IllegalStateException(event.optString("message").ifBlank { "FYNX Assistant is temporarily unavailable." })
+            }
+        }.mapCatching { raw ->
+            val json = JSONObject(raw)
+            if (json.optString("type") != "complete") {
+                throw IllegalStateException("FYNX Assistant stream ended before the reply was saved.")
+            }
+            val reply = json.getJSONObject("assistantMessage")
+            FynxAiConversationReply(
+                conversationId = json.getString("conversationId"),
+                userMessageId = json.getString("userMessageId"),
+                assistantMessage = FynxAiStoredMessage(
+                    reply.getString("id"),
+                    "assistant",
+                    reply.optString("text"),
+                    reply.optLong("timestamp", System.currentTimeMillis())
+                ),
+                pendingAction = json.optJSONObject("pendingAction")?.let { action ->
+                    val recipient = action.optJSONObject("recipient")
+                    FynxAiPendingMessageAction(
+                        action.getString("actionId"),
+                        recipient?.optString("username", "") ?: "",
+                        recipient?.optString("displayName", "") ?: "",
+                        action.optString("message")
+                    )
+                }
+            )
+        }
+    }
+
     suspend fun cancelMessage(context: Context, actionId: String): Result<Unit> =
         FynxBackendClient.postJson(context, "/api/assistant/message-cancel", JSONObject().put("actionId", actionId).toString()).map { Unit }
 
