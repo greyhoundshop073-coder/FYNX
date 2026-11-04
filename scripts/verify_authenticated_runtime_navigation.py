@@ -2122,7 +2122,18 @@ if HOME_FEED_VISUALS_ONLY:
         "- authenticated-home-inline-video.png" if (ROOT / "authenticated-home-inline-video.png").is_file() else "- Inline video screenshot unavailable",
         "- authenticated-home-fullscreen-video.png" if (ROOT / "authenticated-home-fullscreen-video.png").is_file() else "- Full-screen screenshot unavailable",
     ]
-    report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    media_proof_complete = all(
+        (ROOT / name).is_file()
+        for name in (
+            "authenticated-home-inline-video.png",
+            "authenticated-home-fullscreen-video.png",
+            "authenticated-home-comments.png",
+        )
+    )
+    capture_result = "GREEN" if not FAILURES and media_proof_complete else "PARTIAL" if not FAILURES else "RED"
+    report += ["", f"## Result: {capture_result}"]
+    if not media_proof_complete and not FAILURES:
+        report.append("- The real Home screen was captured, but full video/comment proof requires existing live media and conversation data.")
     if FAILURES:
         report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
     (ROOT / "FYNX-home-feed-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
