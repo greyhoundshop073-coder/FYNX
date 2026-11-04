@@ -81,7 +81,7 @@ async function testStreamingTextResponse() {
     }
   });
 
-  assert.match(requestedUrl, /:streamGenerateContent\\?alt=sse$/);
+  assert.match(requestedUrl, /:streamGenerateContent\?alt=sse$/);
   assert.equal(chunks.join(""), "Hello from FYNX.");
   assert.equal(result.reply, "Hello from FYNX.");
   assert.equal(chunks.join("").includes("internal thought"), false, "thought-only parts must never reach the user");
