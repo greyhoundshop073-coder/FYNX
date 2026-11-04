@@ -14,7 +14,7 @@ function fakeStreamResponse(payloads, status = 200) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
-      for (const payload of payloads) controller.enqueue(encoder.encode("data: " + JSON.stringify(payload) + "\\n\\n"));
+      for (const payload of payloads) controller.enqueue(encoder.encode("data: " + JSON.stringify(payload) + "\n\n"));
       controller.close();
     }
   });
