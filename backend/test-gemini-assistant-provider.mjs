@@ -75,7 +75,7 @@ async function testStreamingTextResponse() {
       requestedUrl = url;
       assert.equal(options.headers["x-goog-api-key"], "unit-test-only-key");
       return fakeStreamResponse([
-        { candidates: [{ content: { role: "model", parts: [{ text: "Hello " }] } }] },
+        { candidates: [{ content: { role: "model", parts: [{ text: "internal thought", thought: true }, { text: "Hello " }] } }] },
         { candidates: [{ content: { role: "model", parts: [{ text: "from FYNX." }] }, finishReason: "STOP" }] }
       ]);
     }
@@ -84,6 +84,7 @@ async function testStreamingTextResponse() {
   assert.match(requestedUrl, /:streamGenerateContent\\?alt=sse$/);
   assert.equal(chunks.join(""), "Hello from FYNX.");
   assert.equal(result.reply, "Hello from FYNX.");
+  assert.equal(chunks.join("").includes("internal thought"), false, "thought-only parts must never reach the user");
   assert.equal(result.pendingAction, null);
 }
 
