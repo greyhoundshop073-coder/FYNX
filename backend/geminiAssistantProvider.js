@@ -77,12 +77,91 @@ function getCandidateText(parts) {
 
 async function readGeminiResponse(response) {
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error("Gemini provider request failed (" + response.status + ").");
+  if (!response.ok) {
+    const error = new Error("Gemini provider request failed (" + response.status + ").");
+    error.status = response.status;
+    error.retryAfter = response.headers?.get?.("retry-after") || "";
+    throw error;
+  }
   return payload;
 }
 
-async function requestGemini({ model, apiKey, contents, instructions, declarations, fetchImpl }) {
-  const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
+async function readGeminiStreamResponse(response, onTextChunk) {
+  if (!response.ok) return readGeminiResponse(response);
+  if (!response.body || typeof response.body.getReader !== "function") {
+    throw new Error("Gemini provider stream is unavailable.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const accumulatedParts = [];
+  let candidate = {};
+  let buffer = "";
+
+  const consumeEvent = (block) => {
+    const data = block.split(/\\r?\\n/)
+      .filter(line => line.startsWith("data:"))
+      .map(line => line.slice(5).trimStart())
+      .join("\\n");
+    if (!data || data === "[DONE]") return;
+    const payload = JSON.parse(data);
+    const incoming = payload?.candidates?.[0];
+    if (!incoming) return;
+    candidate = { ...candidate, ...incoming };
+    const parts = Array.isArray(incoming.content?.parts) ? incoming.content.parts : [];
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index];
+      if (!part || typeof part !== "object") continue;
+      const previous = accumulatedParts[index] || {};
+      if (typeof part.text === "string") {
+        accumulatedParts[index] = { ...previous, ...part, text: String(previous.text || "") + part.text };
+        if (part.text) onTextChunk(part.text);
+      } else if (part.functionCall && typeof part.functionCall === "object") {
+        const previousCall = previous.functionCall || {};
+        const previousArgs = previousCall.args && typeof previousCall.args === "object" ? previousCall.args : {};
+        const nextArgs = part.functionCall.args && typeof part.functionCall.args === "object" ? part.functionCall.args : {};
+        accumulatedParts[index] = {
+          ...previous,
+          ...part,
+          functionCall: { ...previousCall, ...part.functionCall, args: { ...previousArgs, ...nextArgs } }
+        };
+      } else {
+        accumulatedParts[index] = { ...previous, ...part };
+      }
+    }
+  };
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split(/\\r?\\n\\r?\\n/);
+      buffer = blocks.pop() || "";
+      for (const block of blocks) consumeEvent(block);
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) consumeEvent(buffer);
+  } catch (error) {
+    if (error && error.name === "AbortError") throw new Error("Gemini provider request timed out.");
+    if (error && typeof error.message === "string" && error.message.startsWith("Gemini provider")) throw error;
+    throw new Error("Gemini provider stream failed.");
+  } finally {
+    reader.releaseLock();
+  }
+
+  return {
+    candidates: [{
+      ...candidate,
+      content: { ...(candidate.content || {}), role: "model", parts: accumulatedParts }
+    }]
+  };
+}
+
+async function requestGemini({ model, apiKey, contents, instructions, declarations, fetchImpl, onTextChunk }) {
+  const streaming = typeof onTextChunk === "function";
+  const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + model
+    + (streaming ? ":streamGenerateContent?alt=sse" : ":generateContent");
   const body = {
     systemInstruction: { parts: [{ text: instructions }] },
     contents,
@@ -102,7 +181,9 @@ async function requestGemini({ model, apiKey, contents, instructions, declaratio
       body: JSON.stringify(body),
       signal: controller.signal
     });
-    return await readGeminiResponse(response);
+    return streaming
+      ? await readGeminiStreamResponse(response, onTextChunk)
+      : await readGeminiResponse(response);
   } catch (error) {
     if (error && error.name === "AbortError") throw new Error("Gemini provider request timed out.");
     if (error && typeof error.message === "string" && error.message.startsWith("Gemini provider")) throw error;
@@ -118,6 +199,7 @@ export async function runGeminiAssistant({
   history = [],
   context = {},
   imageInputs = [],
+  onTextChunk = null,
   instructions,
   toolDefinitions = [],
   executeTool,
@@ -170,7 +252,7 @@ export async function runGeminiAssistant({
   let pendingAction = null;
   for (let turn = 0; turn < 4; turn += 1) {
     const data = await requestGemini({
-      model, apiKey, contents, instructions: String(instructions || ""), declarations, fetchImpl
+      model, apiKey, contents, instructions: String(instructions || ""), declarations, fetchImpl, onTextChunk
     });
     const candidate = data?.candidates?.[0];
     const candidateContent = candidate?.content;
