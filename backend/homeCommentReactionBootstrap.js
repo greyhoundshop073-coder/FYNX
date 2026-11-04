@@ -75,7 +75,7 @@ export async function installHomeCommentReactions() {
       const postId=Number(req.params.id), commentId=Number(req.params.commentId);
       if (!Number.isSafeInteger(postId)||postId<1||!Number.isSafeInteger(commentId)||commentId<1) return res.status(400).json({error:'invalid comment reference'});
       if (!(await visibleSocialPost(postId,req.user.sub))) return res.status(404).json({error:'post not found'});
-      const comment=await pool.query('SELECT c.id FROM social_post_comments c WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))',[commentId,postId]);
+      const comment=await pool.query('SELECT c.id FROM social_post_comments c WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))',[commentId,postId,req.user.sub]);
       if (!comment.rows[0]) return res.status(404).json({error:'comment not found'});
       await pool.query('DELETE FROM social_comment_reactions WHERE comment_id=$1 AND user_id=$2',[commentId,req.user.sub]);
       const result=await pool.query('SELECT reaction_type,COUNT(*)::int AS count FROM social_comment_reactions WHERE comment_id=$1 GROUP BY reaction_type',[commentId]);

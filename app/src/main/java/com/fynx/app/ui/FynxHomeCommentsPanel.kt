@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -70,6 +71,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var reactionStates by remember(post.id) { mutableStateOf<Map<String, FynxRemoteSocialClient.CommentReactionState>>(emptyMap()) }
     var reactionPending by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var commentSort by rememberSaveable(post.id) { mutableStateOf("Relevant") }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     val availableComments = remember(comments, expandedReplies) {
@@ -131,6 +133,19 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         }
     }
     fun resetPagingState() { nextCursor = null; consumedCursors.value = emptySet(); loadingMore = false }
+
+    fun shareComment(comment: FynxRemoteSocialClient.RemoteComment) {
+        val author = comment.authorDisplayName.ifBlank { comment.authorUsername }
+        val shareText = "$author on FYNX: ${comment.text}"
+        runCatching {
+            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, shareText)
+            }, "Share comment"))
+        }.onFailure { error = it.message ?: "Comment could not be shared." }
+    }
+    fun commentEngagement(comment: FynxRemoteSocialClient.RemoteComment): Int =
+        reactionStates[comment.id]?.counts?.values?.sum() ?: 0
     fun loadComments() {
         if (sending || loading) return
         loading = true; error = null; replyLoadingId = null; replyErrorId = null; expandedReplies = emptyMap(); resetPagingState()
@@ -215,6 +230,14 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                         IconButton(onClick = { if (!loading && !sending && replyLoadingId == null) loadComments() }, enabled = !loading && !sending && replyLoadingId == null) { Icon(Icons.Default.Refresh, "Refresh comments") }
                     }
                     HorizontalDivider()
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Sort by", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(8.dp))
+                        FilterChip(selected = commentSort == "Relevant", onClick = { commentSort = "Relevant" }, label = { Text("Relevant") })
+                        Spacer(Modifier.width(7.dp))
+                        FilterChip(selected = commentSort == "Newest", onClick = { commentSort = "Newest" }, label = { Text("Newest") })
+                    }
+                    HorizontalDivider()
                     Column(
                         Modifier.fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
@@ -241,7 +264,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                         comments.isEmpty() -> Column(Modifier.fillMaxWidth().weight(1f).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text("No comments yet", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Start the conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         else -> LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             if (nextCursor != null) item(key = "comments_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !sending, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more comments…" else "Load earlier comments") } }
-                            items(comments.filter { it.parentCommentId == null }, key = { it.id }) { comment ->
+                            items((if (commentSort == "Newest") comments.filter { it.parentCommentId == null }.sortedByDescending { it.timestamp } else comments.filter { it.parentCommentId == null }.sortedWith(compareByDescending<FynxRemoteSocialClient.RemoteComment> { commentEngagement(it) }.thenByDescending { it.timestamp })), key = { it.id }) { comment ->
                                 Column(Modifier.fillMaxWidth()) {
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                                         val photo = authorPhotos[comment.authorUsername.removePrefix("@").trim().lowercase()]
@@ -259,6 +282,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                                     val loadedReplyCount = expandedReplies[comment.id]?.size
                                                     Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "$loadedReplyCount replies" } else "Replies")
                                                 }
+                                                TextButton(onClick = { shareComment(comment) }) { Text("Share") }
                                             }
                                         }
                                     }
@@ -282,6 +306,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                                             val loadedReplyCount = expandedReplies[reply.id]?.size
                                                             Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "${loadedReplyCount} replies" } else "Replies")
                                                         }
+                                                        TextButton(onClick = { shareComment(reply) }) { Text("Share") }
                                                     }
                                                 }
                                             }
