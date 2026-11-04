@@ -40,7 +40,7 @@ const sanitized = buildAiConversationContext([
   { role: "assistant", text: 42 }
 ]);
 assert.equal(sanitized.summary, "");
-assert.equal(sanitized.currentTask, "useful user text");
+assert.equal(sanitized.currentTask, "", "a recent request already covered by the provider window is not duplicated as prior context");
 
 const empty = buildAiConversationContext(null);
 assert.deepEqual(empty, { summary: "", currentTask: "" });
