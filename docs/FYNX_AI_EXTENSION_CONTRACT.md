@@ -20,6 +20,14 @@ AI people search and recommendations may return only profiles whose FYNX `profil
 
 When a user asks for protected information, the assistant explains that the user must open the appropriate protected FYNX screen. No tool call, indirect inference, or record-existence confirmation is permitted.
 
+## Marketplace seller copy assistance
+
+The Sell on FYNX form may request an AI draft of a product title and description using only the seller-entered product name, category, subcategory, condition, description and visible product specifications. The endpoint is authenticated, text-only, rate-limited and has no database or AI tools. It must not receive price, currency, stock, seller location, personal contact details, wallet data, order data, private profile data or uploaded media.
+
+The model must use only supplied product facts, preserve the selected condition and avoid inventing product features, compatibility, warranty, certifications, authenticity, origin, expiry, delivery or availability claims. Phone numbers, email addresses, URLs, recognizable plot/house/street addresses, and common bank-account or credential phrases are redacted before provider context. Returned copy is sanitized too. The response must validate as a bounded title/description pair.
+
+Suggestions are drafts only. The Android form displays a preview and requires the seller to explicitly apply the suggested title and description. The existing seller edit fields and normal Marketplace publish validation/authorization remain the only publishing path. AI must never publish, save or modify a listing itself.
+
 ## Stable layers
 
 1. **Android AI UI** — `FynxAiAssistantPanel.kt`
