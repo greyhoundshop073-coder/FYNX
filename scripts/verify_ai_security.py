@@ -51,6 +51,7 @@ check("Marketplace AI seller copy rate limit is installed", "listing-copy" in li
 check("Marketplace AI copy safety regression runs at startup and in CI", "test-marketplace-ai-listing-copy.mjs" in package_json and "node test-marketplace-ai-listing-copy.mjs" in workflow)
 check("Marketplace AI seller copy is called through the authenticated Android backend client", "FynxBackendClient.postJson" in marketplace_ai_client and "/api/assistant/marketplace/listing-copy" in marketplace_ai_client)
 check("Marketplace AI suggestion requires seller preview and explicit application", "Review your AI listing draft" in marketplace_panel and "Use suggestion" in marketplace_panel and "listingCopySuggestion" in marketplace_panel and "createMarketplaceListing" in marketplace_panel)
+check("Marketplace AI discards drafts when seller form details change in flight", "latestListingCopyInputs.value == requestedInputSnapshot" in marketplace_panel and "Please generate a fresh suggestion" in marketplace_panel)
 check("Marketplace AI seller copy warns that suggestions are drafts", "Draft only" in marketplace_panel and "AI can make mistakes" in marketplace_panel)
 check("AI registry exposes strict function definitions", 'strict: true' in registry and 'type: "function"' in registry)
 check("AI agent requires authenticated user", 'const userId = authenticate(req);' in registry and 'if (!userId) return res.status(401)' in registry)
