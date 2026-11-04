@@ -1675,7 +1675,7 @@ def visible_home_video_preview_ratios(xml_text: str) -> list[float]:
     except ET.ParseError:
         return []
     display = run("adb", "shell", "wm", "size").stdout or ""
-    match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", display)
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", display)
     if not match:
         return []
     screen_width, screen_height = map(int, match.groups())
@@ -1686,7 +1686,7 @@ def visible_home_video_preview_ratios(xml_text: str) -> list[float]:
         description = (node.attrib.get("content-desc") or "").strip().casefold()
         if description == "home":
             bounds = node.attrib.get("bounds", "")
-            nav_match = re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]", bounds)
+            nav_match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
             if nav_match:
                 left, top, right, bottom = map(int, nav_match.groups())
                 if top >= int(screen_height * 0.70):
@@ -1694,7 +1694,7 @@ def visible_home_video_preview_ratios(xml_text: str) -> list[float]:
         if "video preview" not in description or "video duration" not in description:
             continue
         bounds = node.attrib.get("bounds", "")
-        item_match = re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]", bounds)
+        item_match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
         if not item_match:
             continue
         left, top, right, bottom = map(int, item_match.groups())
