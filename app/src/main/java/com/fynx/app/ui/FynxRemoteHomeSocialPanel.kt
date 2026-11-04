@@ -967,9 +967,15 @@ private fun ReactionChoice(emoji: String, reaction: String, active: Boolean, onR
 private fun reactionSummary(state: FynxHomePostReactionsClient.ReactionState): String { val order = listOf("LIKE" to "👍", "LOVE" to "❤️", "LAUGH" to "😂", "WOW" to "😮", "SAD" to "😢"); val visible = order.filter { (key, _) -> (state.counts[key] ?: 0) > 0 }.take(5); return "${visible.joinToString(" ") { it.second }}  ${state.total} reaction${if (state.total == 1) "" else "s"}" }
 
 private fun formatFeedEngagementCount(count: Int): String = when {
-    count >= 1_000_000 -> "${"%.1f".format(Locale.US, count / 1_000_000.0)}M"
-    count >= 1_000 -> "${"%.1f".format(Locale.US, count / 1_000.0)}K"
+    count >= 1_000_000 -> compactFeedCount(count, 1_000_000, "M")
+    count >= 1_000 -> compactFeedCount(count, 1_000, "K")
     else -> count.coerceAtLeast(0).toString()
+}
+
+private fun compactFeedCount(count: Int, divisor: Int, suffix: String): String {
+    val value = if (count % divisor == 0) (count / divisor).toString()
+    else "%.1f".format(Locale.US, count / divisor.toDouble())
+    return value + suffix
 }
 
 @Composable
