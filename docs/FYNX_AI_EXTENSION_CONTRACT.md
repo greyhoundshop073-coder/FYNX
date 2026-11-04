@@ -6,6 +6,18 @@ This is the protected extension point for future FYNX AI capabilities.
 
 Future AI features must be added as a new capability behind the existing FYNX AI boundaries. Do not replace or fork the current text, realtime voice, authentication, database ownership, or UI transport.
 
+## Mandatory privacy boundary
+
+FYNX AI must not retrieve, infer, disclose, summarize, or confirm private personal or financial information for any user, including the authenticated user. This is intentionally stricter than ordinary account ownership: protected information stays inside its normal authenticated FYNX screen and security flow.
+
+Protected categories include wallet balances and ledger/transaction history; bank and payment details; passwords, PINs, tokens and recovery secrets; private FYNX chat messages; phone numbers, email addresses and private addresses; identity/KYC evidence; private orders, delivery addresses and customer records; friend/follower lists, saved-post history and non-public profile fields.
+
+The AI registry must expose only reviewed public-data capabilities and explicitly confirmation-gated message preparation. Private-data tools must be absent from text and voice tool declarations and rejected by the executor before any database query. Public profile search, public posts and active public Marketplace listings must still respect visibility, stock and block rules. Recommendation results must not reveal private social-graph counts or relationships.
+
+The user's own persisted FYNX AI conversation can be used only as bounded continuity for that same authenticated AI conversation. It does not grant access to ordinary FYNX chat messages or other account records.
+
+When a user asks for protected information, the assistant explains that the user must open the appropriate protected FYNX screen. No tool call, indirect inference, or record-existence confirmation is permitted.
+
 ## Stable layers
 
 1. **Android AI UI** — `FynxAiAssistantPanel.kt`
