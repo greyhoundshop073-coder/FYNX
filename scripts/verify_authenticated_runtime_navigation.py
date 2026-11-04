@@ -1663,6 +1663,28 @@ def find_home_video_post_comment_action(xml_text: str):
     return None
 
 
+def visible_home_video_preview_ratios(xml_text: str) -> list[float]:
+    """Measure the real clickable Home video preview bounds exposed by Android."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    ratios = []
+    for node in root.iter("node"):
+        description = (node.attrib.get("content-desc") or "").strip().casefold()
+        if "video preview" not in description or "video duration" not in description:
+            continue
+        bounds = node.attrib.get("bounds", "")
+        match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+        if not match:
+            continue
+        left, top, right, bottom = map(int, match.groups())
+        width, height = right - left, bottom - top
+        if width > 0 and height > 0:
+            ratios.append(width / height)
+    return ratios
+
+
 def visible_home_video_duration_labels(xml_text: str) -> list[str]:
     """Read measured duration badges from visible real Home video cards."""
     try:
@@ -1813,9 +1835,30 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
         report.append("- NOTE: ffmpeg is unavailable; local Home video fixtures were not seeded.")
         return False
 
-    account = username.strip().lower()
-    if not account:
-        report.append("- NOTE: debug-local account name was empty; Home video fixtures were not seeded.")
+    # Derive the cache namespace from the username actually persisted by FynxAuthStore,
+    # not from a guessed CI label. Do not seed if the debug-local account is absent.
+    stored_auth = run("adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_auth.xml")
+    if stored_auth.returncode != 0:
+        report.append("- NOTE: the debug-local FYNX account preferences were not readable; Home video fixtures were not seeded.")
+        return False
+    try:
+        auth_root = ET.fromstring(stored_auth.stdout)
+        stored_username = next(
+            (node.text or "").strip().lower()
+            for node in auth_root.findall("string")
+            if node.attrib.get("name") == "username"
+        )
+        signed_in = next(
+            (node.attrib.get("value") == "true")
+            for node in auth_root.findall("boolean")
+            if node.attrib.get("name") == "signed_in"
+        )
+    except (ET.ParseError, StopIteration):
+        report.append("- NOTE: FYNX local account preferences did not contain a valid signed-in username; Home video fixtures were not seeded.")
+        return False
+    account = stored_username
+    if not signed_in or not account:
+        report.append("- NOTE: FYNX debug-local account was not signed in; Home video fixtures were not seeded.")
         return False
 
     import hashlib
@@ -1945,6 +1988,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
     home_fullscreen_video_captured = False
     comment_action_seen = False
     captured_video_durations: list[str] = []
+    captured_video_preview_ratios: list[float] = []
     scanned_pages = 0
     previous_xml = ""
 
@@ -1976,6 +2020,9 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
             for duration in duration_labels:
                 if duration not in captured_video_durations:
                     captured_video_durations.append(duration)
+            for ratio in visible_home_video_preview_ratios(current):
+                if not any(abs(existing - ratio) < 0.025 for existing in captured_video_preview_ratios):
+                    captured_video_preview_ratios.append(ratio)
 
             if not home_fullscreen_video_captured:
                 fullscreen_xml = tap_control(
@@ -2147,6 +2194,23 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
             break
         previous_xml, current = current, next_xml
 
+    if HOME_FEED_FIXTURES_SEEDED:
+        expected_ratios = {"portrait 9:16": 9 / 16, "landscape 16:9": 16 / 9, "square 1:1": 1.0}
+        ratio_matches = {
+            label: min((abs(value - expected) for value in captured_video_preview_ratios), default=999.0) <= 0.035
+            for label, expected in expected_ratios.items()
+        }
+        passed_ratios = [label for label, passed in ratio_matches.items() if passed]
+        missing_ratios = [label for label, passed in ratio_matches.items() if not passed]
+        if missing_ratios:
+            FAILURES.append(
+                "Rendered Home video preview bounds did not confirm all source ratios: "
+                + ", ".join(missing_ratios)
+                + ". Measured ratios: "
+                + ", ".join(f"{value:.3f}" for value in captured_video_preview_ratios)
+            )
+        else:
+            report.append("- PASS: Android accessibility bounds confirmed all three adaptive Home preview ratios: " + ", ".join(passed_ratios) + ".")
     if video_captured:
         if HOME_FEED_FIXTURES_SEEDED:
             report.append(
