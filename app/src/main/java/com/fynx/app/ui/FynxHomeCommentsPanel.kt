@@ -330,18 +330,28 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                                 FynxRemoteProfileAvatar(replyPhoto, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername)
                                                 Spacer(Modifier.width(8.dp))
                                                 Column(Modifier.weight(1f)) {
-                                                    Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium)
+                                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                                        Spacer(Modifier.width(5.dp))
+                                                        Text("@${reply.authorUsername.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                                        Text(" · ${relative(reply.timestamp)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        Spacer(Modifier.weight(1f))
+                                                        val replyEngagement = commentEngagement(reply)
+                                                        if (replyEngagement > 0) Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
+                                                            Text(compactEngagement(replyEngagement), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        }
+                                                        Text(" ⋯", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleSmall)
+                                                    }
                                                     Spacer(Modifier.height(2.dp))
                                                     Text(reply.text, style = MaterialTheme.typography.bodyMedium)
                                                     HomeCommentReactionRow(reactionStates[reply.id], reactionPending.contains(reply.id)) { reaction -> reactToComment(reply, reaction) }
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                        TextButton(onClick = { if (!sending) replyingToId = reply.id }) { Text("Reply") }
-                                                        TextButton(onClick = { toggleReplies(reply) }, enabled = replyLoadingId == null && !sending) {
+                                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                                        TextButton(onClick = { if (!sending) replyingToId = reply.id }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) { Text("↩ Reply", style = MaterialTheme.typography.labelSmall) }
+                                                        TextButton(onClick = { toggleReplies(reply) }, enabled = replyLoadingId == null && !sending, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
                                                             val loadedReplyCount = expandedReplies[reply.id]?.size
-                                                            Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "${loadedReplyCount} replies" } else "Replies")
+                                                            Text("💬 ${if (loadedReplyCount != null) loadedReplyCount else "Replies"}", style = MaterialTheme.typography.labelSmall)
                                                         }
-                                                        TextButton(onClick = { shareComment(reply) }) { Text("Share") }
+                                                        TextButton(onClick = { shareComment(reply) }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) { Text("↗ Share", style = MaterialTheme.typography.labelSmall) }
                                                     }
                                                 }
                                             }
@@ -424,18 +434,25 @@ private fun HomeCommentReactionRow(
         Triple("LIKE", "👏", Color(0xFF1976D2))
     )
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 3.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         options.forEach { (type, emoji, tint) ->
             val count = state?.counts?.get(type) ?: 0
             val selected = state?.currentReaction == type
-            TextButton(onClick = { onReact(type) }, enabled = !pending,
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
-                Text(if (count > 0) "$emoji $count" else emoji,
-                    color = if (selected) tint else MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall)
+            if (count > 0 || selected || type == "LOVE") {
+                Surface(
+                    color = if (selected) tint.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    shape = CircleShape
+                ) {
+                    TextButton(onClick = { onReact(type) }, enabled = !pending,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Text(if (count > 0) "$emoji $count" else emoji,
+                            color = if (selected) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
         }
     }
