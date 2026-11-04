@@ -1239,32 +1239,39 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     else if (type.equals("audio", ignoreCase = true)) AudioPostPlayer(file!!)
     else if (type.equals("video", ignoreCase = true)) {
         val previewAspectRatio = videoAspectRatio.takeIf { it.isFinite() && it > 0f } ?: (16f / 9f)
-        Box(
-            Modifier.fillMaxWidth()
-                .aspectRatio(previewAspectRatio)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.Black)
-        ) {
-            FynxFeedTextureVideo(
-                file = file!!,
-                poster = videoPoster,
-                aspectRatio = videoAspectRatio,
-                durationMs = videoDurationMs,
-                playbackActive = playbackActive && !fullscreen,
-                muted = muted,
-                retryNonce = reloadNonce,
-                onRetryMedia = {
-                    mediaLoading = true
-                    file = null
-                    reloadNonce++
-                },
-                onPlayingChanged = {},
-                onMutedChanged = { muted = it },
-                onOpenFullscreen = {
-                    if (onOpenMedia != null) onOpenMedia() else fullscreen = true
-                },
-                fullScreenControls = false
-            )
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // Fit the real clip shape inside the post width and a comfortable height.
+            // Portrait clips stay narrower and centered; landscape clips use more width.
+            val previewHeight = minOf(360.dp, maxWidth / previewAspectRatio)
+            val previewWidth = previewHeight * previewAspectRatio
+            Box(
+                Modifier.align(Alignment.Center)
+                    .width(previewWidth)
+                    .height(previewHeight)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.Black)
+            ) {
+                FynxFeedTextureVideo(
+                    file = file!!,
+                    poster = videoPoster,
+                    aspectRatio = videoAspectRatio,
+                    durationMs = videoDurationMs,
+                    playbackActive = playbackActive && !fullscreen,
+                    muted = muted,
+                    retryNonce = reloadNonce,
+                    onRetryMedia = {
+                        mediaLoading = true
+                        file = null
+                        reloadNonce++
+                    },
+                    onPlayingChanged = {},
+                    onMutedChanged = { muted = it },
+                    onOpenFullscreen = {
+                        if (onOpenMedia != null) onOpenMedia() else fullscreen = true
+                    },
+                    fullScreenControls = false
+                )
+            }
         }
     } else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }

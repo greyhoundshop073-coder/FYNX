@@ -12,8 +12,8 @@ DISCOVERY = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeDiscoverySection.
 RUNTIME_NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 checks = [
-    ("video preview uses the post width and measured source aspect ratio", "Modifier.fillMaxWidth()" in HOME and ".aspectRatio(previewAspectRatio)" in HOME),
-    ("video preview is not forced into one fixed height", "coerceAtMost(420.dp)" not in HOME),
+    ("video preview fits the post width while deriving dimensions from source ratio", "BoxWithConstraints(Modifier.fillMaxWidth())" in HOME and "previewHeight = minOf(360.dp, maxWidth / previewAspectRatio)" in HOME and "previewWidth = previewHeight * previewAspectRatio" in HOME),
+    ("portrait preview stays narrower and landscape preview uses available width", ".width(previewWidth)" in HOME and ".height(previewHeight)" in HOME and "Modifier.align(Alignment.Center)" in HOME and "coerceAtMost(420.dp)" not in HOME),
     ("full-screen video keeps its source ratio without stretching", "applyFynxFeedVideoFit" in HOME and "view.setTransform(Matrix()" in HOME),
     ("tapping a video preview opens the full-screen player", '"Play video full screen"' in HOME and "else fullscreen = true" in HOME and "if (fullscreen && file != null)" in HOME),
     ("Home feed plays the focused video inline and reuses the same player in full screen", HOME.count("FynxFeedTextureVideo(") >= 2 and "playbackActive = playbackActive && !fullscreen" in HOME and "fullScreenControls = false" in HOME and "fullScreenControls = true" in HOME),
