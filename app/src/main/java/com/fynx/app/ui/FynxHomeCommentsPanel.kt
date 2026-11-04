@@ -28,6 +28,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.Toast
 import android.content.pm.ApplicationInfo
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -290,7 +293,7 @@ fun FynxHomeCommentsPanel(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            "Started by ${post.authorDisplayName.ifBlank { post.authorUsername }}",
+                            "Started by ${post.authorDisplayName.ifBlank { post.authorUsername }} · @${post.authorUsername.removePrefix("@")} · ${relative(post.timestamp)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -410,8 +413,8 @@ fun FynxHomeCommentsPanel(
                                                                     onClick = { openCommentMenuId = null; if (!sending) replyingToId = reply.id }
                                                                 )
                                                                 DropdownMenuItem(
-                                                                    text = { Text("Share reply") },
-                                                                    onClick = { openCommentMenuId = null; shareComment(reply) }
+                                                                    text = { Text("Copy reply") },
+                                                                    onClick = { openCommentMenuId = null; copyCommentText(context, reply.text) }
                                                                 )
                                                             }
                                                         }
@@ -521,6 +524,12 @@ private fun CommentPostEngagementAction(
             )
         }
     }
+}
+
+private fun copyCommentText(context: android.content.Context, value: String) {
+    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+    clipboard.setPrimaryClip(ClipData.newPlainText("FYNX comment", value))
+    Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
 }
 
 private fun compactEngagement(count: Int): String = when {
