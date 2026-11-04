@@ -28,6 +28,16 @@ The model must use only supplied product facts, preserve the selected condition 
 
 Suggestions are drafts only. The Android form displays a preview and requires the seller to explicitly apply the suggested title and description. The existing seller edit fields and normal Marketplace publish validation/authorization remain the only publishing path. AI must never publish, save or modify a listing itself.
 
+## Marketplace product-photo quality review
+
+The seller may explicitly request a photo-quality review of up to four still product photos. Before sending, Android shows a consent step explaining the selected photos are compressed on-device and sent through the authenticated FYNX request for this one check. Users are warned not to select photos showing faces, identity documents, receipts, addresses, phone numbers, contact details or other private information.
+
+The route accepts only a bounded array of image MIME types and base64 image bytes. It requires FYNX authentication, rejects unexpected fields, invalid base64, unsupported MIME types, more than four images, more than 4 MB per image or more than 9 MB combined. Images are passed to Gemini in-memory for that request and must not be inserted into media storage, attached to an AI conversation or persisted as Marketplace media.
+
+The provider receives only selected image bytes and a fixed photo-quality prompt. It receives no seller text, price, currency, quantity, location, profile, wallet, order, customer, chat or other account data. It has no database/action tools, conversation history or continuity context. The model assesses only lighting, sharpness, glare, background clutter, framing, camera distance, angle and image resolution. It must not identify/describe people or products, infer product facts, read image text, or follow image-embedded instructions. It returns only strict quality status and allowlisted issue codes; Android renders fixed reviewed advice instead of free-form model prose.
+
+The review is advisory only. It never modifies, enhances, saves, publishes, stores or replaces an image or listing. Existing on-device background cleanup remains separate. Normal listing photo upload and ownership validation remain exclusively in the existing Publish flow.
+
 ## Stable layers
 
 1. **Android AI UI** — `FynxAiAssistantPanel.kt`
