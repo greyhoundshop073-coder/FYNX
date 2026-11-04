@@ -98,7 +98,7 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
       if (safety.marketplace_safety) { const safetyResult = inspectTrustSafetyText([listing.title, listing.description, listing.location].filter(Boolean).join(' ')); if (safetyResult.shouldBlock) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'listing blocked by marketplace safety protection', code: 'SAFETY_BLOCK' }); } }
       const currency = normalizeCurrency(listing.currency);
       if (!currency) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'listing currency is invalid or not configured', code: 'INVALID_CURRENCY' }); }
-      if (!['NGN','USD'].includes(currency)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'this Marketplace currency is not active yet', code: 'UNSUPPORTED_MARKETPLACE_CURRENCY' }); }
+      if (currency !== 'NGN') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'this Marketplace currency is not active yet', code: 'UNSUPPORTED_MARKETPLACE_CURRENCY' }); }
       if (method === 'DELIVERY' && !listing.delivery_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is no longer available for this listing' }); }
       if (method === 'PICKUP' && !listing.pickup_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is no longer available for this listing' }); }
       if (method === 'DELIVERY' && !(await isMarketplaceDestinationCovered(client, listing.id, address))) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'seller does not currently deliver to this destination', code: 'DESTINATION_NOT_COVERED' }); }
@@ -188,7 +188,7 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
         if (blocked.rowCount) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'one or more listings are unavailable' }); }
         if (safety.marketplace_safety) { const safetyResult = inspectTrustSafetyText([listing.title, listing.description, listing.location].filter(Boolean).join(' ')); if (safetyResult.shouldBlock) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'one or more listings are blocked by marketplace safety protection', code: 'SAFETY_BLOCK' }); } }
         const currency = normalizeCurrency(listing.currency);
-        if (!currency || !['NGN','USD'].includes(currency)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'all selected Marketplace currencies must be active NGN or USD', code: 'UNSUPPORTED_MARKETPLACE_CURRENCY' }); }
+        if (currency !== 'NGN') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'all selected Marketplace currencies must be active NGN or USD', code: 'UNSUPPORTED_MARKETPLACE_CURRENCY' }); }
         if (checkoutCurrency && checkoutCurrency !== currency) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'all products in one checkout must use the same currency', code: 'MIXED_CURRENCIES' }); }
         checkoutCurrency = currency;
         if (item.method === 'DELIVERY' && !listing.delivery_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is no longer available for one of the selected listings' }); }
