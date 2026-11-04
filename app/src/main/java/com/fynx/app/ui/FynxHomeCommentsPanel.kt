@@ -533,9 +533,15 @@ private fun copyCommentText(context: android.content.Context, value: String) {
 }
 
 private fun compactEngagement(count: Int): String = when {
-    count >= 1_000_000 -> "${"%.1f".format(java.util.Locale.US, count / 1_000_000.0)}M"
-    count >= 1_000 -> "${"%.1f".format(java.util.Locale.US, count / 1_000.0)}K"
-    else -> count.toString()
+    count >= 1_000_000 -> compactCommentCount(count, 1_000_000, "M")
+    count >= 1_000 -> compactCommentCount(count, 1_000, "K")
+    else -> count.coerceAtLeast(0).toString()
+}
+
+private fun compactCommentCount(count: Int, divisor: Int, suffix: String): String {
+    val value = if (count % divisor == 0) (count / divisor).toString()
+    else "%.1f".format(java.util.Locale.US, count / divisor.toDouble())
+    return value + suffix
 }
 
 private fun relative(timestamp: Long): String {
