@@ -18,7 +18,7 @@ checks = [
     (
         "Wallet bank-transfer capture recognizes the current account sign-in safety gate without claiming account issuance",
         '["Connect your FYNX account", "Your dedicated FYNX funding account", "Dedicated account not ready"]' in navigation
-        and "No account request has been sent." in navigation,
+        and "No account request has been sent." in wallet_source,
     ),
     (
         "normal authenticated Marketplace journey captures private My Shop overview and all seller sections",
@@ -146,6 +146,7 @@ checks = [
 
 marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 app_source = Path("app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+wallet_source = Path("app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text(encoding="utf-8")
 hero_source = marketplace_source.split("private fun MarketplaceSmartDealsHero", 1)[1].split("@Composable\nfun FynxMarketplacePanel", 1)[0]
 checks.extend([
     (
