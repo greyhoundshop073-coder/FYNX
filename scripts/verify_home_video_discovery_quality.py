@@ -22,12 +22,13 @@ checks = [
         and "ContentScale.Crop" in discovery,
     ),
     (
-        "Home feed shows a source-sized poster and mounts playback only in the full-screen viewer",
-        "Image(\n                    bitmap = frame.asImageBitmap()" in home
-        and ".aspectRatio(previewAspectRatio)" in home
+        "Home feed plays only the focused video inline and opens the same player full screen",
+        ".aspectRatio(previewAspectRatio)" in home
         and "if (fullscreen && file != null)" in home
-        and "FynxFeedTextureVideo(" in home
-        and "playbackActive = true" in home
+        and home.count("FynxFeedTextureVideo(") >= 2
+        and "playbackActive = playbackActive && !fullscreen" in home
+        and "fullScreenControls = false" in home
+        and "fullScreenControls = true" in home
         and '"authenticated-home-fullscreen-video.png"' in navigation,
     ),
     (
@@ -37,7 +38,7 @@ checks = [
         and "VideoView(ctx)" not in discovery[discovery.index("private fun FynxDiscoveryPreviewCard"):discovery.index("fun FynxHomeDiscoveryViewer")],
     ),
     (
-        "Full-screen Home video error state replaces the loading spinner with a clear retry message",
+        "Home inline and full-screen video error states provide a clear retry message",
         "if (!prepared && !playbackError)" in home
         and "else if (prepared && !playbackError)" in home
         and 'Text("This video could not start"' in home

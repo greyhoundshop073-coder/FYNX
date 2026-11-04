@@ -27,7 +27,7 @@ required_home = {
     "FilledIconButton": "FYNX video play/pause control",
     "Fullscreen": "FYNX video fullscreen control",
     '"Open video full screen"': "FYNX video fullscreen accessibility action",
-    "FynxFeedTextureVideo": "full-screen Home video player",
+    "FynxFeedTextureVideo": "focused inline and full-screen Home video player",
     ".aspectRatio(previewAspectRatio)": "source-sized adaptive Home video preview",
     '"Play video full screen"': "tap-to-open full-screen video preview action",
     "TextureView": "regular View-backed feed video surface",
@@ -146,6 +146,7 @@ required_media_recovery = [
     'Text("Retry media")',
     'if (fullscreen && file != null)',
     'playbackActive = true',
+    'playbackActive = playbackActive && !fullscreen',
     'Pause full-screen video',
     'Unmute full-screen video',
 ]
