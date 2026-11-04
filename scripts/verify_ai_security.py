@@ -39,6 +39,7 @@ check("AI recommendations do not query private friendship/follow graphs", "get_p
 check("AI message preparation respects profile and message visibility", "COALESCE(ps.profile_visibility" in registry and "COALESCE(ps.messages_visibility" in registry and "messages_visibility" in registry)
 check("AI recommendations do not reveal private friend/follower metrics", "mutualFriends" not in registry and "followerCount" not in registry)
 check("Private-data denial tests run during backend startup and CI", "test-fynx-ai-privacy-policy.mjs" in package_json and "node test-fynx-ai-privacy-policy.mjs" in workflow)
+check("Marketplace seller-copy safety tests run during backend startup and CI", "test-marketplace-ai-listing-copy.mjs" in package_json and "node test-marketplace-ai-listing-copy.mjs" in workflow)
 listing_copy_route = registry.split('app.post("/api/assistant/marketplace/listing-copy"', 1)[-1].split('app.post("/api/assistant/tools"', 1)[0]
 listing_copy_input = registry.split("export function normalizeMarketplaceAiListingCopyInput", 1)[-1].split("export function buildMarketplaceAiListingCopyPrompt", 1)[0]
 listing_copy_runner = registry.split("export async function generateMarketplaceAiListingCopy", 1)[-1].split("export function registerFynxAiRoutes", 1)[0]
