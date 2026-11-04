@@ -1664,26 +1664,50 @@ def find_home_video_post_comment_action(xml_text: str):
 
 
 def visible_home_video_preview_ratios(xml_text: str) -> list[float]:
-    """Measure the real clickable Home video preview bounds exposed by Android."""
+    """Measure fully visible, unclipped Home video surfaces in the safe feed viewport.
+
+    Android clips accessibility bounds for media that is partly behind the bottom
+    navigation bar. Those clipped rectangles are not valid source aspect ratios
+    and must not be counted as a successful adaptive-size check.
+    """
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
         return []
+    display = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", display)
+    if not match:
+        return []
+    screen_width, screen_height = map(int, match.groups())
+    nav_tops = []
     ratios = []
+    expected = (9 / 16, 16 / 9, 1.0)
     for node in root.iter("node"):
         description = (node.attrib.get("content-desc") or "").strip().casefold()
+        if description == "home":
+            bounds = node.attrib.get("bounds", "")
+            nav_match = re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]", bounds)
+            if nav_match:
+                left, top, right, bottom = map(int, nav_match.groups())
+                if top >= int(screen_height * 0.70):
+                    nav_tops.append(top)
         if "video preview" not in description or "video duration" not in description:
             continue
         bounds = node.attrib.get("bounds", "")
-        match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
-        if not match:
+        item_match = re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]", bounds)
+        if not item_match:
             continue
-        left, top, right, bottom = map(int, match.groups())
+        left, top, right, bottom = map(int, item_match.groups())
         width, height = right - left, bottom - top
-        if width > 0 and height > 0:
-            ratios.append(width / height)
+        if width <= 0 or height <= 0:
+            continue
+        safe_bottom = min(nav_tops) - 8 if nav_tops else int(screen_height * 0.84)
+        if top < 96 or bottom > safe_bottom or right > screen_width or left < 0:
+            continue
+        ratio = width / height
+        if any(abs(ratio - target) <= 0.055 for target in expected):
+            ratios.append(ratio)
     return ratios
-
 
 def visible_home_video_duration_labels(xml_text: str) -> list[str]:
     """Read measured duration badges from visible real Home video cards."""
@@ -2004,7 +2028,8 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
             or find_control(current, ["Video preview"])
         ) if duration_control else None
         duration_labels = visible_home_video_duration_labels(current)
-        if video_control and duration_control and duration_labels:
+        preview_ratios_on_page = visible_home_video_preview_ratios(current)
+        if video_control and duration_control and duration_labels and preview_ratios_on_page:
             page_xml_name = f"authenticated-home-inline-video-page-{page}.xml"
             page_png_name = f"authenticated-home-inline-video-page-{page}.png"
             (ROOT / page_xml_name).write_text(current + "\n", encoding="utf-8")
@@ -2020,7 +2045,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
             for duration in duration_labels:
                 if duration not in captured_video_durations:
                     captured_video_durations.append(duration)
-            for ratio in visible_home_video_preview_ratios(current):
+            for ratio in preview_ratios_on_page:
                 if not any(abs(existing - ratio) < 0.025 for existing in captured_video_preview_ratios):
                     captured_video_preview_ratios.append(ratio)
 

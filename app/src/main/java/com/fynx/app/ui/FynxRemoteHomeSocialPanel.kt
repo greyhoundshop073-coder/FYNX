@@ -964,11 +964,15 @@ private fun FynxFeedTextureVideo(
                     role = Role.Button,
                     onClickLabel = "Play video full screen",
                     onClick = onOpenFullscreen
-                ).semantics {
+                ).semantics(mergeDescendants = true) {
                     contentDescription = if (durationMs > 0L) {
                         "Video preview. Tap to play full screen. Video duration ${formatHomeVideoDuration(durationMs)}"
                     } else {
                         "Video preview. Tap to play full screen"
+                    }
+                    onClick(label = "Play video full screen") {
+                        onOpenFullscreen()
+                        true
                     }
                 }
             } else Modifier
