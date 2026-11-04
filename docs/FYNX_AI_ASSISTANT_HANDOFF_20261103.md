@@ -6,7 +6,7 @@ This document is the handoff record for upgrading the existing FYNX AI Assistant
 
 This workstream is limited to the AI Assistant: Android assistant panel/client/context, authenticated assistant conversation routes, Gemini text provider, shared FYNX AI tool registry, realtime voice integration, AI-specific tests/docs, and the minimum media/file plumbing needed for assistant attachments. Do not modify camera, Status, Marketplace, Groups, general chat, or unrelated backend features unless a verified AI dependency requires it and the change is isolated.
 
-**Status at handoff creation:** investigation completed; implementation has not yet been committed. A dedicated branch has been created from the canonical integration branch. This document records the observed architecture and the next implementation sequence. It is not evidence that the listed upgrades are already implemented or runtime-certified.
+**Status at handoff creation (3 November):** investigation completed; implementation had not yet been committed. The dedicated branch was created from the canonical integration branch. The current implementation status is recorded below; this document is not a claim of end-to-end AI certification.
 
 ## Repository and branch baseline
 
@@ -19,6 +19,18 @@ This workstream is limited to the AI Assistant: Android assistant panel/client/c
 - Latest commit status lookup returned no status entries and no workflow runs; do not interpret an empty result as a successful build.
 
 Before continuing, fetch the latest base and branch heads and inspect open PRs/commits. Do not assume this snapshot is still current. If the canonical branch advanced, rebase/merge carefully and preserve changes from other chats.
+
+## Current implementation status — 4 November 2026
+
+### Completed first slice: persistent conversation continuity
+
+- The authenticated conversation route now reads at most 80 earlier messages from `ai_messages`, scoped by **both** `conversation_id` and authenticated `user_id`, after confirming conversation ownership.
+- The latest 12 messages remain the provider's normal bounded history. A new backend helper, `backend/aiConversationContext.js`, derives a separate excerpt only from older persisted turns.
+- The older-history excerpt is capped at 900 characters; the latest prior user request is capped at 160 characters. Empty/invalid roles and blank text are dropped. No durable cross-conversation/user memory is created.
+- Gemini labels the additional excerpt and prior request as untrusted historical context, not authoritative FYNX data and not a new instruction. The shared AI system instructions reinforce that history/summary content cannot override the assistant's rules.
+- Removed the unused Android-only context helper and its dead panel state. Context is derived from the authenticated persisted conversation rather than trusted client-supplied summaries.
+- Added `backend/test-ai-conversation-context.mjs`, extended the mocked Gemini provider test, wired the context test into backend prestart and `.github/workflows/fynx-backend-ci.yml`, and updated AI security / Large Badge #8 static contracts.
+- **Verification status:** tests and CI have been wired but have not yet been executed in this environment. Do not mark this slice GREEN until the backend CI results are checked.
 
 ## Existing architecture — how the assistant currently works
 
@@ -71,19 +83,21 @@ Before continuing, fetch the latest base and branch heads and inspect open PRs/c
 
 ## Confirmed gaps to address
 
-### 1. Context continuity is incomplete
+### 1. Context continuity — first implementation slice committed
 
-- The Android panel tracks summary/task state, and `AiConversationContext.kt` contains `buildAiConversationContext`.
-- The persistent conversation send call currently sends only the current prompt and media IDs.
-- The persistent conversation route calls `runAssistantAgent` without meaningful context hints (default empty context).
-- The Gemini provider has only the latest bounded message history. It does not implement durable user-approved long-term memory.
-- Result: old conversation details can fall outside the 12-message window, and the context helper/state does not currently improve normal persisted turns.
+- The persistent route now derives bounded continuity context from the selected conversation's own persisted messages, with both conversation ID and authenticated user ID in the SQL predicate.
+- The normal provider history remains 12 messages. The helper reads at most 80 stored rows, uses only the older portion for its 900-character excerpt, and supplies the most recent previous user request as a 160-character hint.
+- This is per-conversation continuity, not durable user memory. No cross-conversation profile memory is created.
+- The additional context is clearly marked as untrusted historical text. It cannot represent authoritative account state or completed actions.
+- Focused helper tests, provider prompt assertions, and updated static certification checks have been added. Their execution and CI result remain pending.
 
-**Implementation direction**
-- First wire a compact, bounded conversation summary/current-task context through the existing Android client → authenticated conversation route → `runAssistantAgent` → provider prompt path.
-- Prefer server-derived summaries from persisted conversation history over trusting arbitrary client claims. If client context is accepted, treat it only as an untrusted hint, label it as such, cap length, and never let it override authenticated FYNX database state.
-- Add explicit tests that prove context is scoped to the correct conversation/user and cannot cross accounts.
-- Treat long-term memory as a separate opt-in/transparent feature: define what is stored, how users inspect/edit/clear it, retention, and consent before implementing durable profile memory. Do not silently infer or store sensitive user attributes.
+**Next validation**
+- Run `node test-ai-conversation-context.mjs` and `node test-gemini-assistant-provider.mjs` in the backend directory.
+- Run `python3 scripts/verify_ai_security.py` and `python3 scripts/verify_large_badge8_ai_intelligence.py`.
+- Verify database-level account isolation in CI/runtime; the query must remain constrained by both `conversation_id` and `user_id`.
+
+**Long-term memory remains separate**
+- Define opt-in consent, inspect/edit/clear controls, retention, and sensitive-data exclusions before implementing any persistent user profile memory. Do not silently infer or store sensitive user attributes.
 
 ### 2. Web research and sourced answers are missing
 
@@ -129,7 +143,8 @@ Do not bundle unrelated product changes into this branch. Prefer one coherent AI
 - `scripts/verify_ai_security.py` — authentication, server-side secrets, bounded history/tool loops, media ownership, confirmation gates, voice protections and abuse limits.
 - `scripts/verify_ai_extension_contract.py` — verifies the existing extension architecture and approved capability seams.
 - `scripts/verify_large_badge8_ai_intelligence.py` — additional AI capability/integration checks; inspect its current expectations before changing the AI contract.
-- `backend/test-gemini-assistant-provider.mjs` — provider behavior tests.
+- `backend/test-ai-conversation-context.mjs` — bounded persisted-context helper tests.
+- `backend/test-gemini-assistant-provider.mjs` — provider behavior and continuity prompt tests.
 - `backend/test-assistant-json-body-parser.mjs` — assistant JSON route parser regression coverage.
 - `.github/workflows/android-build.yml` and `.github/workflows/fynx-backend-ci.yml` — CI gates; inspect current workflow definitions before relying on them.
 - `docs/FYNX_AI_EXTENSION_CONTRACT.md` — existing architecture contract; update it when the implementation contract changes.
@@ -154,7 +169,7 @@ Run the actual repository commands from the workflow/package scripts; do not rep
 - [ ] Confirm this branch is still based on the intended integration head; preserve concurrent work.
 - [ ] Read this document and `docs/FYNX_AI_EXTENSION_CONTRACT.md`.
 - [ ] Trace the exact current Android → backend → provider path before editing.
-- [ ] Implement context continuity first with tests.
+- [x] Implement first bounded, server-derived conversation continuity slice; CI/runtime isolation validation still pending.
 - [ ] Add web research/citations through the shared tool registry.
 - [ ] Design safe document ingestion before enabling PDFs.
 - [ ] Verify text and voice parity, confirmation gates and account isolation.
