@@ -12,7 +12,8 @@ ROOT=Path("fynx-runtime-screenshots"); ROOT.mkdir(parents=True,exist_ok=True)
 PACKAGE="com.fynx.app"
 USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
-VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1"
+HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or HOME_FEED_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
@@ -1796,12 +1797,15 @@ def scroll_home_feed_page(index: int, home_xml: str) -> str:
     return ""
 
 
-def capture_home_feed_visuals(home_xml: str) -> str:
-    """Capture real Home video/comment surfaces across the feed without creating content."""
+def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True) -> str:
+    """Capture real Home video/comment surfaces without synthetic feed data."""
     current = home_xml
     if not is_authenticated_home_surface(current):
-        FAILURES.append("Authenticated Home was not visible when Home Feed visual certification began.")
+        FAILURES.append("Home was not visible when Home Feed visual certification began.")
         return current
+
+    (ROOT / "authenticated-home-feed.xml").write_text(current + chr(10), encoding="utf-8")
+    screenshot("authenticated-home-feed.png")
 
     video_captured = False
     comments_captured = False
@@ -2020,15 +2024,16 @@ def capture_home_feed_visuals(home_xml: str) -> str:
             f"No real inline Home video with a measured duration and playback controls was found "
             f"in {scanned_pages} scanned feed viewport(s); no synthetic post was created."
         )
-        report.append("- FAIL: " + message)
-        FAILURES.append(message)
+        report.append(("- NOTE: " if not require_real_media else "- FAIL: ") + message)
+        if require_real_media:
+            FAILURES.append(message)
     if not comments_captured:
         message = (
             f"No existing Comment conversation belonging to a real video post was captured "
             f"across {scanned_pages} scanned Home feed viewport(s); no synthetic comment was created."
         )
-        report.append("- FAIL: " + message)
-        if not comment_action_seen:
+        report.append(("- NOTE: " if not require_real_media else "- FAIL: ") + message)
+        if require_real_media and not comment_action_seen:
             FAILURES.append(message)
     if not discovery_viewer_captured:
         report.append(
@@ -2079,7 +2084,51 @@ if install.returncode!=0:
 prepare_debug_visual_capture_permissions()
 xml,error=login()
 if not error:
-    xml = capture_home_feed_visuals(xml) or xml
+    xml = capture_home_feed_visuals(
+        xml,
+        require_real_media=not (HOME_FEED_VISUALS_ONLY and LOGIN_MODE == "debug-only local UI entry (not server-authenticated)")
+    ) or xml
+
+if HOME_FEED_VISUALS_ONLY:
+    home_xml = dump_ui("authenticated-home-feed-final.xml") or xml
+    home_visible = bool(home_xml and is_authenticated_home_surface(home_xml))
+    if home_visible:
+        (ROOT / "authenticated-home-feed-final.xml").write_text(home_xml + chr(10), encoding="utf-8")
+        screenshot("authenticated-home-feed-final.png")
+        report.append("- PASS: captured the actual Home Feed surface from the installed Android APK using adb screencap.")
+    elif error:
+        report.append("- BLOCKED: the Home Feed was not reached: " + error)
+        FAILURES.append("Home Feed visual entry: " + error)
+    else:
+        report.append("- FAIL: Home navigation markers were not visible after the Home capture.")
+        FAILURES.append("Home Feed visual capture did not retain the Home navigation surface.")
+
+    if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+        report.append("- Session: explicit debug-local UI entry. This proves rendered UI/navigation only, not live account data.")
+    else:
+        report.append("- Session: server-authenticated Home Feed session.")
+
+    if not (ROOT / "authenticated-home-inline-video.png").is_file():
+        report.append("- LIMITATION: no real Home video post with loaded media was available; no synthetic post or video was inserted.")
+    if not (ROOT / "authenticated-home-fullscreen-video.png").is_file():
+        report.append("- LIMITATION: full-screen video interaction could not be demonstrated without a real available Home video.")
+    if not (ROOT / "authenticated-home-comments.png").is_file():
+        report.append("- LIMITATION: no existing video-post conversation was available for screenshot verification; no synthetic comment was created.")
+
+    report += ["", "## Home Feed evidence files"]
+    report += [
+        "- authenticated-home-feed.png",
+        "- authenticated-home-feed-final.png" if home_visible else "- Home final screenshot not captured",
+        "- authenticated-home-inline-video.png" if (ROOT / "authenticated-home-inline-video.png").is_file() else "- Inline video screenshot unavailable",
+        "- authenticated-home-fullscreen-video.png" if (ROOT / "authenticated-home-fullscreen-video.png").is_file() else "- Full-screen screenshot unavailable",
+    ]
+    report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    if FAILURES:
+        report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
+    (ROOT / "FYNX-home-feed-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(0 if not FAILURES else 1)
+
 if not error and not VISUALS_ONLY and LOGIN_MODE != "server credential login":
     error = "Wallet runtime certification requires a server-credential login; debug-only local UI entry does not authenticate with the backend."
     FAILURES.append(error)
