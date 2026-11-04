@@ -99,10 +99,10 @@ async function readGeminiStreamResponse(response, onTextChunk) {
   let buffer = "";
 
   const consumeEvent = (block) => {
-    const data = block.split(/\\r?\\n/)
+    const data = block.split(/\r?\n/)
       .filter(line => line.startsWith("data:"))
       .map(line => line.slice(5).trimStart())
-      .join("\\n");
+      .join("\n");
     if (!data || data === "[DONE]") return;
     const payload = JSON.parse(data);
     const incoming = payload?.candidates?.[0];
@@ -136,7 +136,7 @@ async function readGeminiStreamResponse(response, onTextChunk) {
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const blocks = buffer.split(/\\r?\\n\\r?\\n/);
+      const blocks = buffer.split(/\r?\n\r?\n/);
       buffer = blocks.pop() || "";
       for (const block of blocks) consumeEvent(block);
     }
