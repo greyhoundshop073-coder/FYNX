@@ -132,6 +132,8 @@ jobs:
           node test-ai-conversation-context.mjs
           node --check fynxAiPrivacyPolicy.js
           node test-fynx-ai-privacy-policy.mjs
+          node --check fynxAiToolRegistry.js
+          node test-marketplace-ai-listing-copy.mjs
           node --check aiConversationRoutes.js
           node --check geminiAssistantProvider.js
           node test-gemini-assistant-provider.mjs
