@@ -317,7 +317,7 @@ export function normalizeMarketplaceAiPhotoReviewInput(input = {}) {
       throw new MarketplaceAiPhotoReviewInputError("Use JPEG, PNG or WebP still photos for AI review.");
     }
     if (!encoded || encoded.length > Math.ceil(MARKETPLACE_AI_PHOTO_REVIEW_MAX_SINGLE_BYTES * 4 / 3) + 4 ||
-        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+        encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
       throw new MarketplaceAiPhotoReviewInputError("One or more selected photos are not valid image data.");
     }
     const data = Buffer.from(encoded, "base64");
