@@ -134,7 +134,7 @@ for needle in ('commentReactions(context, post.id, ids)', 'setCommentReaction(co
 require(client, 'data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)', "typed comment reaction summary")
 require(client, '"/api/social/posts/$post/comment-reactions?ids=$query"', "batched comment reaction summary avoids per-row requests")
 require(client, '"/api/social/posts/$post/comments/$comment/reaction"', "comment reaction write endpoint")
-for needle in ('var commentSort by rememberSaveable(post.id)', 'FilterChip(selected = commentSort == "Relevant"', 'FilterChip(selected = commentSort == "Newest"', 'fun shareComment(comment:', 'Intent.createChooser(Intent(Intent.ACTION_SEND)', 'TextButton(onClick = { shareComment(comment) })', 'TextButton(onClick = { shareComment(reply) })'):
+for needle in ('var commentSort by rememberSaveable(post.id)', 'FilterChip(selected = commentSort == "Relevant"', 'FilterChip(selected = commentSort == "Newest"', 'fun shareComment(comment:', 'Intent.createChooser(Intent(Intent.ACTION_SEND)', 'shareComment(comment)', 'shareComment(reply)'):
     require(comments_panel, needle, f"X-style comment sorting/share action {needle}")
 require(reaction_bootstrap, "[commentId,postId,req.user.sub]", "comment reaction deletion applies the current user's block filter parameter")
 
