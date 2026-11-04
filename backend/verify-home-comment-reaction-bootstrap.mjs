@@ -11,6 +11,9 @@ assert.ok(bootstrap.includes("/comment-reactions?") || bootstrap.includes("comme
 assert.ok(bootstrap.includes("visibleSocialPost(postId,req.user.sub)"), "reaction reads and writes enforce post visibility");
 assert.ok(bootstrap.includes("blocker_id=c.author_id AND b.blocked_id=$3"), "reaction writes respect symmetric blocks");
 assert.ok(bootstrap.includes("ON CONFLICT(comment_id,user_id) DO UPDATE"), "reaction changes are idempotent and replace the user's prior reaction");
+assert.ok(bootstrap.includes("queueFynxNotification"), "comment reaction notifications use the shared notification queue");
+assert.ok(bootstrap.includes("comment-reaction-"), "comment reaction notifications have a stable deduplication id");
+assert.ok(bootstrap.includes("previousReaction.rows[0].reaction_type !== reaction"), "switching an existing reaction is notified only when the reaction changes");
 assert.ok(realtime.includes('import { installHomeCommentReactions } from "./homeCommentReactionBootstrap.js";'), "realtime entrypoint imports comment reactions");
 assert.ok(realtime.includes("await installHomeCommentReactions();"), "realtime entrypoint installs comment reactions");
 assert.ok(bootstrap.includes('const marker = "\\n}\\n";') === false, "bootstrap uses a real newline route marker");
