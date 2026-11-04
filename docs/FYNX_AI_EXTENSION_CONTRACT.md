@@ -16,6 +16,8 @@ The AI registry must expose only reviewed public-data capabilities and explicitl
 
 The user's own persisted FYNX AI conversation can be used only as bounded continuity for that same authenticated AI conversation. It does not grant access to ordinary FYNX chat messages or other account records.
 
+AI people search and recommendations may return only profiles whose FYNX `profile_visibility` is `Everyone`; missing settings default to `My friends` and are not public. AI recommendations must not query or use private friendship/follow graphs. AI message preparation may resolve only profiles where both `profile_visibility` and `messages_visibility` are `Everyone`.
+
 When a user asks for protected information, the assistant explains that the user must open the appropriate protected FYNX screen. No tool call, indirect inference, or record-existence confirmation is permitted.
 
 ## Stable layers
