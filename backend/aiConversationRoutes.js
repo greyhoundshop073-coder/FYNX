@@ -146,40 +146,81 @@ export function registerFynxAiConversationRoutes({ app }) {
     const userId=authenticate(req); if(!userId) return res.status(401).json({error:"authentication required"});
     const message=ensureMessageText(req.body?.message);
     const mediaIds=Array.isArray(req.body?.mediaIds)?req.body.mediaIds:[];
+    const wantsStream=String(req.headers?.accept || "").includes("text/event-stream");
     if(!message && !mediaIds.length) return res.status(400).json({error:"message or attachment is required"});
     if(message.length>4000 || mediaIds.length>4) return res.status(413).json({error:"message or attachment limit exceeded"});
+    let stage="database_setup";
     try {
       const db=requireDb(); await ensureSchema(db);
       const conversation=await ownedConversation(db,req.params.id,userId);
       if(!conversation) return res.status(404).json({error:"conversation not found"});
+      stage="attachment_validation";
       const images=await loadImageInputs(db,mediaIds,userId);
+      stage="conversation_context";
       const conversationHistory=await loadPersistedAiConversationHistory(db,conversation.id,userId);
       const history=conversationHistory.slice(-12);
       const context=buildAiConversationContext(conversationHistory);
+      stage="database_transaction";
       await db.query("BEGIN");
       let committed = false;
       try {
         const userMessage=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'user',$3) RETURNING id,created_at",[conversation.id,userId,message]);
         const userMessageId=String(userMessage.rows[0].id);
         for(const image of images) await db.query("INSERT INTO ai_message_media(message_id,media_id,media_type) VALUES($1,$2,$3)",[userMessageId,image.id,image.type]);
+        if(wantsStream) {
+          res.status(200);
+          res.setHeader("Content-Type","text/event-stream; charset=utf-8");
+          res.setHeader("Cache-Control","no-cache, no-transform");
+          res.setHeader("Connection","keep-alive");
+          res.setHeader("X-Accel-Buffering","no");
+          res.flushHeaders?.();
+        }
+        stage="gemini_agent";
         const agentResult = await runAssistantAgent({
-        message: message || "Analyze the attached image.",
-        userId,
-        history,
-        context,
-        imageInputs: images
-      });
+          message: message || "Analyze the attached image.",
+          userId,
+          history,
+          context,
+          imageInputs: images,
+          onTextChunk: wantsStream ? (chunk) => {
+            if(chunk && !res.destroyed && !res.writableEnded) {
+              res.write("data: " + JSON.stringify({type:"delta",text:chunk}) + "\n\n");
+            }
+          } : null
+        });
         const reply = agentResult.reply;
+        stage="persist_assistant_reply";
         const assistant=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'assistant',$3) RETURNING id,created_at",[conversation.id,userId,reply]);
         await db.query("UPDATE ai_conversations SET updated_at=NOW(),title=CASE WHEN title='New conversation' AND $2<>'' THEN LEFT($2,120) ELSE title END WHERE id=$1",[conversation.id,message]);
         await db.query("COMMIT");
         committed = true;
-        return res.json({conversationId:String(conversation.id),userMessageId:String(userMessageId),assistantMessage:{id:String(assistant.rows[0].id),text:reply,timestamp:new Date(assistant.rows[0].created_at).getTime()},pendingAction:agentResult.pendingAction || null});
+        const responsePayload={conversationId:String(conversation.id),userMessageId:String(userMessageId),assistantMessage:{id:String(assistant.rows[0].id),text:reply,timestamp:new Date(assistant.rows[0].created_at).getTime()},pendingAction:agentResult.pendingAction || null};
+        if(wantsStream) {
+          if(!res.destroyed && !res.writableEnded) {
+            res.write("data: " + JSON.stringify({type:"complete",...responsePayload}) + "\n\n");
+            res.end();
+          }
+          return;
+        }
+        return res.json(responsePayload);
       } finally {
         if (!committed) await db.query("ROLLBACK").catch(() => {});
       }
     } catch(error) {
-      console.error("AI conversation message",error);
+      console.error("[fynx-ai] conversation message failed", JSON.stringify({
+        stage,
+        errorName:String(error?.name || "Error").slice(0,80),
+        errorMessage:String(error?.message || "unknown").slice(0,240),
+        errorCode:String(error?.code || "").slice(0,80),
+        at:new Date().toISOString()
+      }));
+      if(wantsStream && res.headersSent) {
+        if(!res.destroyed && !res.writableEnded) {
+          res.write("data: " + JSON.stringify({type:"error",message:"FYNX AI is temporarily unavailable."}) + "\n\n");
+          res.end();
+        }
+        return;
+      }
       return res.status(502).json({error:"FYNX AI is temporarily unavailable"});
     }
   });
