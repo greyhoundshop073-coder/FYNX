@@ -50,6 +50,7 @@ The review is advisory only. It never modifies, enhances, saves, publishes, stor
    - keep the central `FynxBackendClient` transport boundary
    - text conversations may negotiate Server-Sent Events (SSE) on the existing owned-conversation message route; the default request/JSON response contract remains compatible
    - Android must parse bounded SSE events through `FynxBackendClient`, retain the authenticated FYNX session, and never call Gemini directly
+   - if an older deployed backend ignores the SSE preference and returns the established JSON envelope, Android must accept that bounded JSON response as a compatibility fallback
 
 3. **FYNX AI backend** — `aiConversationRoutes.js`, `aiRealtimeRoutes.js`
    - authenticate the FYNX user before AI access
