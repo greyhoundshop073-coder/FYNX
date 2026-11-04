@@ -13,13 +13,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -91,6 +90,7 @@ fun FynxHomeCommentsPanel(
     var reactionStates by remember(post.id) { mutableStateOf<Map<String, FynxRemoteSocialClient.CommentReactionState>>(emptyMap()) }
     var reactionPending by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     var commentSort by rememberSaveable(post.id) { mutableStateOf("Relevant") }
+    var openCommentMenuId by remember(post.id) { mutableStateOf<String?>(null) }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     val availableComments = remember(comments, expandedReplies) {
@@ -300,7 +300,8 @@ fun FynxHomeCommentsPanel(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             CommentPostEngagementAction(
-                                icon = if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                icon = null,
+                                emoji = "👍",
                                 label = "Like",
                                 count = post.likeCount,
                                 selected = post.likedByCurrentUser,
@@ -399,7 +400,21 @@ fun FynxHomeCommentsPanel(
                                                         if (replyEngagement > 0) Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
                                                             Text(compactEngagement(replyEngagement), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                         }
-                                                        Text(" ⋯", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleSmall)
+                                                        Box {
+                                                            IconButton(onClick = { openCommentMenuId = reply.id }, modifier = Modifier.size(26.dp)) {
+                                                                Icon(Icons.Default.MoreHoriz, "More reply actions", modifier = Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                            }
+                                                            DropdownMenu(expanded = openCommentMenuId == reply.id, onDismissRequest = { openCommentMenuId = null }) {
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Reply") },
+                                                                    onClick = { openCommentMenuId = null; if (!sending) replyingToId = reply.id }
+                                                                )
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Share reply") },
+                                                                    onClick = { openCommentMenuId = null; shareComment(reply) }
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                     Spacer(Modifier.height(2.dp))
                                                     Text(reply.text, style = MaterialTheme.typography.bodyMedium)
@@ -469,7 +484,8 @@ fun FynxHomeCommentsPanel(
 
 @Composable
 private fun CommentPostEngagementAction(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    emoji: String? = null,
     label: String,
     count: Int?,
     selected: Boolean,
@@ -481,12 +497,20 @@ private fun CommentPostEngagementAction(
         enabled = enabled,
         contentPadding = PaddingValues(horizontal = 3.dp, vertical = 2.dp)
     ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            modifier = Modifier.size(19.dp),
-            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        if (icon != null) {
+            Icon(
+                icon,
+                contentDescription = label,
+                modifier = Modifier.size(19.dp),
+                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else if (!emoji.isNullOrBlank()) {
+            Text(
+                emoji,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         if (count != null) {
             Spacer(Modifier.width(4.dp))
             Text(
