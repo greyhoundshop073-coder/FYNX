@@ -30,7 +30,7 @@ Suggestions are drafts only. The Android form displays a preview and requires th
 
 ## Marketplace product-photo quality review
 
-The seller may explicitly request a photo-quality review of up to four still product photos. Before sending, Android shows a consent step explaining the selected photos are compressed on-device and sent through the authenticated FYNX request for this one check. Users are warned not to select photos showing faces, identity documents, receipts, addresses, phone numbers, contact details or other private information.
+The seller may explicitly request a photo-quality review of up to four still product photos. Before sending, Android shows a consent step explaining the selected photos are compressed on-device and sent to FYNX AI (Gemini) through the authenticated request for this one check. FYNX does not save the selected image bytes to the user's account, Marketplace media or listing. Users are warned not to select photos showing faces, identity documents, receipts, addresses, phone numbers, contact details or other private information.
 
 The route accepts only a bounded array of image MIME types and base64 image bytes. It requires FYNX authentication, rejects unexpected fields, invalid base64, unsupported MIME types, more than four images, more than 4 MB per image or more than 9 MB combined. Images are passed to Gemini in-memory for that request and must not be inserted into media storage, attached to an AI conversation or persisted as Marketplace media.
 
