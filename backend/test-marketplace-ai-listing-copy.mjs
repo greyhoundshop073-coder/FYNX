@@ -12,7 +12,7 @@ const source = {
   category: "Fashion",
   subcategory: "Clothing",
   condition: "USED",
-  description: "Genuine seller notes: brown leather shoulder bag, visible signs of use. Call +234 803 123 4567 or email seller@example.com.",
+  description: "Genuine seller notes: brown leather shoulder bag, visible signs of use. Call +234 803 123 4567 or email seller@example.com. Plot 24 Rumuola Estate. 12 Ada George Road, Port Harcourt. My bank account number is 0123456789.",
   specifications: [
     { label: "Colour", value: "Brown" },
     { label: "Material", value: "Leather" }
@@ -32,6 +32,9 @@ assert.equal(normalized.category, "Fashion");
 assert.equal(normalized.condition, "USED");
 assert.ok(!normalized.description.includes("+234 803 123 4567"), "telephone numbers must be removed before provider context");
 assert.ok(!normalized.description.includes("seller@example.com"), "email addresses must be removed before provider context");
+assert.ok(!normalized.description.includes("Rumuola Estate"), "plot addresses must be removed before provider context");
+assert.ok(!normalized.description.includes("Ada George Road"), "street addresses must be removed before provider context");
+assert.ok(!normalized.description.includes("0123456789"), "bank/account identifiers must not be sent to Gemini");
 assert.equal(Object.keys(normalized).sort().join(","), "category,condition,description,specifications,subcategory,title", "only approved seller-entered product fields may enter AI context");
 
 const prompt = buildMarketplaceAiListingCopyPrompt(normalized);
@@ -42,6 +45,7 @@ assert.ok(prompt.includes("Colour: Brown"));
 assert.ok(!prompt.includes("45000"), "price must not be sent to Gemini");
 assert.ok(!prompt.includes("NGN"), "currency must not be sent to Gemini");
 assert.ok(!prompt.includes("Port Harcourt"), "seller location must not be sent to Gemini");
+assert.ok(!prompt.includes("Rumuola") && !prompt.includes("Ada George Road"), "private address details must not be sent to Gemini");
 assert.ok(!prompt.includes("900000"), "wallet information must not be sent to Gemini");
 assert.ok(!prompt.includes("must not be read"), "private account information must not be sent to Gemini");
 assert.ok(prompt.includes("Never describe a used or refurbished item as new"));
