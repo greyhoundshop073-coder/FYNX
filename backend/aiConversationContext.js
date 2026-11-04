@@ -46,6 +46,7 @@ export function buildAiConversationContext(history = []) {
     .filter(Boolean);
 
   const olderMessages = normalized.slice(0, -PROVIDER_HISTORY_WINDOW);
+  const latestOlderUserMessage = [...olderMessages].reverse().find(item => item.role === "user");
   const selected = [];
   let summaryLength = 0;
 
@@ -61,9 +62,8 @@ export function buildAiConversationContext(history = []) {
     summaryLength += line.length + (selected.length > 1 ? 1 : 0);
   }
 
-  const latestUserMessage = [...normalized].reverse().find(item => item.role === "user");
   return {
     summary: selected.reverse().join("\n").slice(0, MAX_CONTEXT_SUMMARY_CHARS),
-    currentTask: latestUserMessage?.text.slice(0, MAX_CONTEXT_TASK_CHARS) || ""
+    currentTask: latestOlderUserMessage?.text.slice(0, MAX_CONTEXT_TASK_CHARS) || ""
   };
 }
