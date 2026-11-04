@@ -27,10 +27,12 @@ required_home = {
     "FilledIconButton": "FYNX video play/pause control",
     "Fullscreen": "FYNX video fullscreen control",
     '"Open video full screen"': "FYNX video fullscreen accessibility action",
-    "FynxFeedTextureVideo": "scroll-safe Home feed video surface",
+    "FynxFeedTextureVideo": "full-screen Home video player",
+    ".aspectRatio(previewAspectRatio)": "source-sized adaptive Home video preview",
+    '"Play video full screen"': "tap-to-open full-screen video preview action",
     "TextureView": "regular View-backed feed video surface",
     "prepareAsync()": "asynchronous feed video preparation",
-    "DisposableEffect(file)": "video lifecycle cleanup",
+    "DisposableEffect(surface)": "full-screen video surface lifecycle cleanup",
     "DisposableEffect(player)": "audio lifecycle cleanup",
     "player.release()": "audio resource release",
     "FynxRemoteProfileAvatar": "real author identity media",
@@ -143,7 +145,7 @@ required_media_recovery = [
     'var reloadNonce by remember(path)',
     'Text("Retry media")',
     'if (fullscreen && file != null)',
-    'playbackActive = playbackActive && !fullscreen',
+    'playbackActive = true',
     'Pause full-screen video',
     'Unmute full-screen video',
 ]
@@ -162,6 +164,7 @@ if missing_runtime_capture:
     raise SystemExit("HOME 4F RUNTIME RED: stable Home capture gate missing " + ", ".join(missing_runtime_capture))
 
 required_video_runtime_capture = [
+    '"authenticated-home-fullscreen-video.png"',
     "def _home_content_scroll_point(",
     "def _dismiss_home_media_viewer(",
     "def find_home_video_post_comment_action(",

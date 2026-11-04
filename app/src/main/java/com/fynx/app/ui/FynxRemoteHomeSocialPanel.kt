@@ -8,10 +8,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
-import android.view.ViewGroup
 import android.view.Surface
 import android.view.TextureView
-import android.widget.VideoView
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -859,7 +857,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         if (mediaItems.isNotEmpty()) {
             PostMediaGrid(mediaItems, playbackActive = playbackActive, onOpenMedia = { index -> onOpenMediaViewer(mediaItems, index) }, onOpenVideoDiscovery = onOpenVideoDiscovery.takeIf { mediaItems.size == 1 })
         } else {
-            post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null, playbackActive = playbackActive) }
+            post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, playbackActive = playbackActive) }
         }
         if (!post.musicMediaId.isNullOrBlank()) MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
@@ -947,7 +945,7 @@ private fun FynxFeedTextureVideo(
     onPlayingChanged: (Boolean) -> Unit,
     onMutedChanged: (Boolean) -> Unit,
     onOpenMedia: (() -> Unit)?,
-    onOpenFullscreen: () -> Unit
+    onOpenFullscreen: (() -> Unit)?
 ) {
     val textureState = remember(file) { mutableStateOf<android.graphics.SurfaceTexture?>(null) }
     val textureViewState = remember(file) { mutableStateOf<TextureView?>(null) }
@@ -1060,8 +1058,8 @@ private fun FynxFeedTextureVideo(
         Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.BottomEnd) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onOpenMedia != null) IconButton(onClick = onOpenMedia) { Icon(Icons.Default.OpenInNew, "Open video", tint = Color.White) }
-                IconButton(onClick = onOpenFullscreen) { Icon(Icons.Default.Fullscreen, "Open video full screen", tint = Color.White) }
-                IconButton(onClick = { onMutedChanged(!muted) }) { Icon(if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (muted) "Unmute video" else "Mute video", tint = Color.White) }
+                if (onOpenFullscreen != null) IconButton(onClick = onOpenFullscreen) { Icon(Icons.Default.Fullscreen, "Open video full screen", tint = Color.White) }
+                IconButton(onClick = { onMutedChanged(!muted) }) { Icon(if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (muted) "Unmute full-screen video" else "Mute full-screen video", tint = Color.White) }
             }
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1076,7 +1074,7 @@ private fun FynxFeedTextureVideo(
                         }
                     },
                     modifier = Modifier.size(56.dp)
-                ) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video") }
+                ) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause full-screen video" else "Play full-screen video") }
             }
         }
     }
@@ -1187,7 +1185,6 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }
     var videoDurationMs by remember(path) { mutableLongStateOf(0L) }
     var videoPoster by remember(path) { mutableStateOf<Bitmap?>(null) }
-    var playing by remember(path) { mutableStateOf(false) }
     var muted by remember(path) { mutableStateOf(true) }
     var fullscreen by remember(path) { mutableStateOf(false) }
     LaunchedEffect(path, reloadNonce) {
@@ -1217,32 +1214,55 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     }
     else if (type.equals("audio", ignoreCase = true)) AudioPostPlayer(file!!)
     else if (type.equals("video", ignoreCase = true)) {
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val feedFrameHeight = (maxWidth / videoAspectRatio).coerceAtMost(420.dp)
-            Box(
-                Modifier.fillMaxWidth()
-                    .height(feedFrameHeight)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.Black)
-            ) {
-                FynxFeedTextureVideo(
-                    file = file!!,
-                    poster = videoPoster,
-                    aspectRatio = videoAspectRatio,
-                    durationMs = videoDurationMs,
-                    playbackActive = playbackActive && !fullscreen,
-                    muted = muted,
-                    retryNonce = reloadNonce,
-                    onRetryMedia = {
-                        mediaLoading = true
-                        file = null
-                        reloadNonce++
-                    },
-                onPlayingChanged = { playing = it },
-                onMutedChanged = { muted = it },
-                    onOpenMedia = onOpenMedia,
-                    onOpenFullscreen = { fullscreen = true }
+        val previewAspectRatio = videoAspectRatio.takeIf { it.isFinite() && it > 0f } ?: (16f / 9f)
+        Box(
+            Modifier.fillMaxWidth()
+                .aspectRatio(previewAspectRatio)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.Black)
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = "Play video full screen"
+                ) {
+                    if (onOpenMedia != null) onOpenMedia() else fullscreen = true
+                }
+                .semantics { contentDescription = "Video preview. Tap to play full screen" }
+        ) {
+            videoPoster?.let { frame ->
+                Image(
+                    bitmap = frame.asImageBitmap(),
+                    contentDescription = "Video thumbnail",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
                 )
+            }
+            Box(
+                Modifier.align(Alignment.Center)
+                    .size(62.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.58f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(42.dp))
+            }
+            if (videoDurationMs > 0L) {
+                val durationLabel = formatHomeVideoDuration(videoDurationMs)
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp)
+                        .semantics { contentDescription = "Video duration $durationLabel" },
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.Black.copy(alpha = 0.72f),
+                    tonalElevation = 0.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        Text(durationLabel, color = Color.White, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
             }
         }
     } else {
@@ -1257,56 +1277,25 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
     if (fullscreen && file != null) {
         Dialog(onDismissRequest = { fullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             Box(Modifier.fillMaxSize().background(Color.Black)) {
-                if (type == "video") {
-                    var fullscreenVideoView by remember(file) { mutableStateOf<VideoView?>(null) }
-                    var fullscreenPlayer by remember(file) { mutableStateOf<MediaPlayer?>(null) }
-                    var fullscreenPlaying by remember(file) { mutableStateOf(false) }
-                    var fullscreenMuted by remember(file) { mutableStateOf(true) }
-                    AndroidView(
-                        factory = { ctx ->
-                            FynxPassiveVideoView(ctx).apply {
-                                fullscreenVideoView = this
-                                layoutParams = ViewGroup.LayoutParams(-1, -1)
-                                setVideoPath(file!!.absolutePath)
-                                setOnPreparedListener { player ->
-                                    fullscreenPlayer = player
-                                    player.isLooping = true
-                                    player.setVolume(0f, 0f)
-                                    player.start()
-                                    fullscreenPlaying = true
-                                }
-                                setOnCompletionListener { fullscreenPlaying = false }
-                            }
+                if (type.equals("video", ignoreCase = true)) {
+                    FynxFeedTextureVideo(
+                        file = file!!,
+                        poster = videoPoster,
+                        aspectRatio = videoAspectRatio,
+                        durationMs = videoDurationMs,
+                        playbackActive = true,
+                        muted = muted,
+                        retryNonce = reloadNonce,
+                        onRetryMedia = {
+                            mediaLoading = true
+                            file = null
+                            reloadNonce++
                         },
-                        modifier = Modifier.fillMaxSize()
+                        onPlayingChanged = {},
+                        onMutedChanged = { muted = it },
+                        onOpenMedia = null,
+                        onOpenFullscreen = null
                     )
-                    IconButton(
-                        onClick = {
-                            val view = fullscreenVideoView
-                            if (view != null) {
-                                if (fullscreenPlaying) { view.pause(); fullscreenPlaying = false }
-                                else { view.start(); fullscreenPlaying = true }
-                            }
-                        },
-                        modifier = Modifier.align(Alignment.Center).size(64.dp)
-                    ) {
-                        Icon(if (fullscreenPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (fullscreenPlaying) "Pause full-screen video" else "Play full-screen video", tint = Color.White, modifier = Modifier.size(42.dp))
-                    }
-                    IconButton(
-                        onClick = {
-                            fullscreenMuted = !fullscreenMuted
-                            runCatching { fullscreenPlayer?.setVolume(if (fullscreenMuted) 0f else 1f, if (fullscreenMuted) 0f else 1f) }
-                        },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
-                    ) { Icon(if (fullscreenMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (fullscreenMuted) "Unmute full-screen video" else "Mute full-screen video", tint = Color.White) }
-                    DisposableEffect(file) {
-                        onDispose {
-                            runCatching { fullscreenVideoView?.stopPlayback() }
-                            fullscreenVideoView = null
-                            fullscreenPlayer = null
-                            fullscreenPlaying = false
-                        }
-                    }
                 } else {
                     var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
                     LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }

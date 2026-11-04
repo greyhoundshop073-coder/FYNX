@@ -145,7 +145,7 @@ DIAGNOSTIC_MARKERS = (
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
-    "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video", "Close Discovery",
+    "Video preview", "Play video full screen", "Pause full-screen video", "Play full-screen video", "Unmute full-screen video", "Mute full-screen video", "Close media viewer", "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video", "Close Discovery",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
@@ -1806,6 +1806,7 @@ def capture_home_feed_visuals(home_xml: str) -> str:
     video_captured = False
     comments_captured = False
     discovery_viewer_captured = False
+    home_fullscreen_video_captured = False
     comment_action_seen = False
     captured_video_durations: list[str] = []
     scanned_pages = 0
@@ -1819,8 +1820,8 @@ def capture_home_feed_visuals(home_xml: str) -> str:
 
         duration_control = find_control(current, ["Video duration"])
         video_control = (
-            find_control(current, ["Open video full screen"])
-            or find_control(current, ["Play video"])
+            find_control(current, ["Play video full screen"])
+            or find_control(current, ["Video preview"])
         ) if duration_control else None
         duration_labels = visible_home_video_duration_labels(current)
         if video_control and duration_control and duration_labels:
@@ -1839,6 +1840,46 @@ def capture_home_feed_visuals(home_xml: str) -> str:
             for duration in duration_labels:
                 if duration not in captured_video_durations:
                     captured_video_durations.append(duration)
+
+            if not home_fullscreen_video_captured:
+                fullscreen_xml = tap_control(
+                    current,
+                    ["Play video full screen", "Video preview"],
+                    "authenticated-home-fullscreen-video-open",
+                    ["Unmute full-screen video", "Mute full-screen video", "Pause full-screen video", "Play full-screen video", "Close media viewer"]
+                )
+                if fullscreen_xml:
+                    fullscreen_xml = camera_wait_for_control(
+                        fullscreen_xml,
+                        ["Unmute full-screen video", "Mute full-screen video"],
+                        timeout=35.0,
+                        prefix="authenticated-home-fullscreen-video-player-ready"
+                    )
+                    missing_fullscreen_actions = []
+                    if not find_control(fullscreen_xml, ["Pause full-screen video", "Play full-screen video"]):
+                        missing_fullscreen_actions.append("Play / pause")
+                    if not find_control(fullscreen_xml, ["Unmute full-screen video", "Mute full-screen video"]):
+                        missing_fullscreen_actions.append("Mute / unmute")
+                    if not find_control(fullscreen_xml, ["Close media viewer"]):
+                        missing_fullscreen_actions.append("Close viewer")
+                    if missing_fullscreen_actions:
+                        FAILURES.append("Full-screen Home video is missing controls: " + ", ".join(missing_fullscreen_actions))
+                        screenshot("authenticated-home-fullscreen-video-actions-missing.png")
+                        (ROOT / "authenticated-home-fullscreen-video-actions-missing.xml").write_text(fullscreen_xml + chr(10), encoding="utf-8")
+                    else:
+                        screenshot("authenticated-home-fullscreen-video.png")
+                        (ROOT / "authenticated-home-fullscreen-video.xml").write_text(fullscreen_xml + chr(10), encoding="utf-8")
+                        restored_xml = tap_control(
+                            fullscreen_xml,
+                            ["Close media viewer"],
+                            "authenticated-home-fullscreen-video-close",
+                            ["Your feed", "Home"]
+                        )
+                        if restored_xml and is_home_feed_navigation_visible(restored_xml):
+                            current = restored_xml
+                            home_fullscreen_video_captured = True
+                        else:
+                            FAILURES.append("Closing the full-screen Home video did not restore the Home feed navigation.")
 
         discovery_control = find_control(current, ["Open Discovery video"])
         if discovery_control and not discovery_viewer_captured:

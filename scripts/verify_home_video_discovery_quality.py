@@ -22,11 +22,13 @@ checks = [
         and "ContentScale.Crop" in discovery,
     ),
     (
-        "Home feed TextureView layers the source-frame backdrop behind the undistorted video",
-        "FynxVideoAmbientBackdrop(poster = poster" in home
-        and "applyFynxFeedVideoFit" in home
-        and "poster = videoPoster" in home
-        and "setOpaque(false)" in home,
+        "Home feed shows a source-sized poster and mounts playback only in the full-screen viewer",
+        "Image(\n                    bitmap = frame.asImageBitmap()" in home
+        and ".aspectRatio(previewAspectRatio)" in home
+        and "if (fullscreen && file != null)" in home
+        and "FynxFeedTextureVideo(" in home
+        and "playbackActive = true" in home
+        and '"authenticated-home-fullscreen-video.png"' in navigation,
     ),
     (
         "Discovery cards use poster artwork and do not autoplay every preview player",
@@ -35,7 +37,7 @@ checks = [
         and "VideoView(ctx)" not in discovery[discovery.index("private fun FynxDiscoveryPreviewCard"):discovery.index("fun FynxHomeDiscoveryViewer")],
     ),
     (
-        "Home inline-video error state replaces the loading spinner with a clear retry message",
+        "Full-screen Home video error state replaces the loading spinner with a clear retry message",
         "if (!prepared && !playbackError)" in home
         and "else if (prepared && !playbackError)" in home
         and 'Text("This video could not start"' in home
