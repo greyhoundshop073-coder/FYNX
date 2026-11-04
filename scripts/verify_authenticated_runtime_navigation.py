@@ -2083,10 +2083,19 @@ if install.returncode!=0:
 # system dialog from intercepting taps intended for the real Marketplace surface.
 prepare_debug_visual_capture_permissions()
 xml,error=login()
+if HOME_FEED_VISUALS_ONLY and not error:
+    # Match the supplied X-style reference with the real Android dark theme before
+    # the first Home screenshot is taken.
+    night_mode = run("adb", "shell", "cmd", "uimode", "night", "yes", timeout=15)
+    if night_mode.returncode != 0:
+        night_mode = run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "2", timeout=15)
+    if night_mode.returncode == 0:
+        time.sleep(1.2)
+        xml = dismiss_runtime_permission_prompt() or dump_ui("home-feed-dark-mode.xml") or xml
 if not error:
     xml = capture_home_feed_visuals(
         xml,
-        require_real_media=not (HOME_FEED_VISUALS_ONLY and LOGIN_MODE == "debug-only local UI entry (not server-authenticated)")
+        require_real_media=LOGIN_MODE != "debug-only local UI entry (not server-authenticated)"
     ) or xml
 
 if HOME_FEED_VISUALS_ONLY:
