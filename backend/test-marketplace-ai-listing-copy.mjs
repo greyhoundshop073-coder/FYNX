@@ -81,6 +81,13 @@ const fenced = parseMarketplaceAiListingCopyReply(
   'Here is the draft:\n```json\n{"title":"Desk Lamp","description":"A compact desk lamp for everyday reading and task lighting. Check the supplied photos for its exact finish."}\n```'
 );
 assert.equal(fenced.title, "Desk Lamp");
+const sanitizedReply = parseMarketplaceAiListingCopyReply(JSON.stringify({
+  title: "Desk Lamp",
+  description: "Desk lamp in good working order. Call +234 803 123 4567 or visit 12 Ada George Road, Port Harcourt. My home address is Plot 24 Rumuola Estate."
+}));
+assert.ok(!sanitizedReply.description.includes("+234 803 123 4567"));
+assert.ok(!sanitizedReply.description.includes("Ada George Road"));
+assert.ok(!sanitizedReply.description.includes("Rumuola Estate"));
 
 assert.throws(
   () => normalizeMarketplaceAiListingCopyInput({ ...source, title: " " }),
