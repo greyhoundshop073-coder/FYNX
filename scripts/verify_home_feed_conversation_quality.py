@@ -13,7 +13,7 @@ RUNTIME_NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py
 
 checks = [
     ("existing Discovery section and viewer navigation remain wired", "FynxHomeDiscoverySection(" in HOME and "onOpenVideo = { index -> openHomeDiscoveryViewer(index) }" in HOME and "FynxHomeDiscoveryViewer(" in HOME and "fun openHomeDiscoveryViewer(index: Int)" in HOME),
-    ("video preview fits the post width while deriving dimensions from source ratio", "BoxWithConstraints(Modifier.fillMaxWidth())" in HOME and "previewHeight = minOf(360.dp, maxWidth / previewAspectRatio)" in HOME and "previewWidth = previewHeight * previewAspectRatio" in HOME),
+    ("video preview fits the post width while deriving dimensions from source ratio", "BoxWithConstraints(Modifier.fillMaxWidth())" in HOME and "previewHeight = minOf(340.dp, maxWidth / previewAspectRatio)" in HOME and "previewWidth = previewHeight * previewAspectRatio" in HOME),
     ("portrait preview stays narrower and landscape preview uses available width", ".width(previewWidth)" in HOME and ".height(previewHeight)" in HOME and "Modifier.align(Alignment.Center)" in HOME and "coerceAtMost(420.dp)" not in HOME),
     ("full-screen video keeps its source ratio without stretching", "applyFynxFeedVideoFit" in HOME and "view.setTransform(Matrix()" in HOME),
     ("tapping a video preview opens the full-screen player", '"Play video full screen"' in HOME and "else fullscreen = true" in HOME and "if (fullscreen && file != null)" in HOME),

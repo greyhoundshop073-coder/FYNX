@@ -59,7 +59,7 @@ for needle in (
     'VolumeUp',
     'FilledIconButton',
     'FynxFeedTextureVideo(',
-    'previewHeight = minOf(360.dp, maxWidth / previewAspectRatio)',
+    'previewHeight = minOf(340.dp, maxWidth / previewAspectRatio)',
     'previewWidth = previewHeight * previewAspectRatio',
     'fullScreenControls = false',
     'fullScreenControls = true',

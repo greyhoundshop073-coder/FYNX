@@ -1242,7 +1242,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             // Fit the real clip shape inside the post width and a comfortable height.
             // Portrait clips stay narrower and centered; landscape clips use more width.
-            val previewHeight = minOf(360.dp, maxWidth / previewAspectRatio)
+            val previewHeight = minOf(340.dp, maxWidth / previewAspectRatio)
             val previewWidth = previewHeight * previewAspectRatio
             Box(
                 Modifier.align(Alignment.Center)

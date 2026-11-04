@@ -30,7 +30,7 @@ required_home = {
     '"Pause full-screen video"': "accessible full-screen playback control",
     '"Unmute full-screen video"': "accessible full-screen mute control",
     "FynxFeedTextureVideo": "focused inline and full-screen Home video player",
-    "previewHeight = minOf(360.dp, maxWidth / previewAspectRatio)": "height-bounded, source-ratio Home video preview",
+    "previewHeight = minOf(340.dp, maxWidth / previewAspectRatio)": "height-bounded, source-ratio Home video preview",
     "previewWidth = previewHeight * previewAspectRatio": "matching source-ratio Home video preview width",
     '"Play video full screen"': "tap-to-open full-screen video preview action",
     "TextureView": "regular View-backed feed video surface",

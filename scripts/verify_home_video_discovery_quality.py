@@ -23,7 +23,7 @@ checks = [
     ),
     (
         "Home feed plays only the focused video inline and opens the same player full screen",
-        "previewHeight = minOf(360.dp, maxWidth / previewAspectRatio)" in home
+        "previewHeight = minOf(340.dp, maxWidth / previewAspectRatio)" in home
         and "previewWidth = previewHeight * previewAspectRatio" in home
         and "if (fullscreen && file != null)" in home
         and home.count("FynxFeedTextureVideo(") >= 2
