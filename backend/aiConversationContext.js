@@ -7,7 +7,7 @@ const MAX_CONTEXT_MESSAGE_CHARS = 260;
 function normalizePersistedMessage(item) {
   if (!item || (item.role !== "user" && item.role !== "assistant")) return null;
   if (typeof item.text !== "string") return null;
-  const text = item.text.replace(/\\s+/g, " ").trim();
+  const text = item.text.replace(/\s+/g, " ").trim();
   return text ? { role: item.role, text } : null;
 }
 
