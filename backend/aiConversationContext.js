@@ -12,9 +12,28 @@ function normalizePersistedMessage(item) {
 }
 
 /**
+ * Load only the authenticated user's messages for the selected conversation.
+ * Keep the query parameters explicit and the read bounded before summarizing.
+ */
+export async function loadPersistedAiConversationHistory(db, conversationId, userId) {
+  if (!db || typeof db.query !== "function") throw new TypeError("conversation database query is required");
+  if (conversationId === null || conversationId === undefined || userId === null || userId === undefined) {
+    throw new TypeError("conversation and authenticated user IDs are required");
+  }
+  const result = await db.query(
+    "SELECT role,text FROM ai_messages WHERE conversation_id=$1 AND user_id=$2 ORDER BY created_at DESC,id DESC LIMIT $3",
+    [conversationId, userId, MAX_CONTEXT_HISTORY_ITEMS]
+  );
+  return (Array.isArray(result?.rows) ? result.rows : [])
+    .reverse()
+    .map(normalizePersistedMessage)
+    .filter(Boolean);
+}
+
+/**
  * Build bounded continuity from messages already persisted for one owned
- * conversation. The caller must scope its database query by conversation ID
- * and authenticated user ID before calling this helper.
+ * conversation. Use loadPersistedAiConversationHistory first so the database
+ * read is bound to both the conversation ID and authenticated user ID.
  *
  * The provider still receives its normal latest 12 messages separately.
  * This excerpt contains only older turns and is historical context, not
