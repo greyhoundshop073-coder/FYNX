@@ -260,15 +260,15 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                     HorizontalDivider()
                     Column(
                         Modifier.fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
                             .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Text("POST CONVERSATION", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         Text(
                             post.text.ifBlank { "Join the conversation and share a thoughtful reply." },
                             style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
+                            maxLines = 3,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
@@ -276,6 +276,11 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("👍  ${post.likeCount}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("💬  ${commentCount}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                            Text("Join the conversation", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                     HorizontalDivider()
                     when {
@@ -291,18 +296,28 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                         FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(40.dp).clip(CircleShape), ownerUsername = comment.authorUsername)
                                         Spacer(Modifier.width(11.dp))
                                         Column(Modifier.weight(1f)) {
-                                            Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge)
-                                            Spacer(Modifier.height(3.dp))
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("@${comment.authorUsername.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                                Text(" · ${relative(comment.timestamp)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Spacer(Modifier.weight(1f))
+                                                val engagement = commentEngagement(comment)
+                                                if (engagement > 0) Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
+                                                    Text(compactEngagement(engagement), Modifier.padding(horizontal = 7.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                Text(" ⋯", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
+                                            }
+                                            Spacer(Modifier.height(4.dp))
                                             Text(comment.text, style = MaterialTheme.typography.bodyMedium)
                                             HomeCommentReactionRow(reactionStates[comment.id], reactionPending.contains(comment.id)) { reaction -> reactToComment(comment, reaction) }
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                TextButton(onClick = { if (!sending) replyingToId = comment.id }) { Text("Reply") }
-                                                TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending) {
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                                TextButton(onClick = { if (!sending) replyingToId = comment.id }, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) { Text("↩  Reply", style = MaterialTheme.typography.labelSmall) }
+                                                TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) {
                                                     val loadedReplyCount = expandedReplies[comment.id]?.size
-                                                    Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "$loadedReplyCount replies" } else "Replies")
+                                                    Text("💬 ${if (loadedReplyCount != null) loadedReplyCount else "Replies"}", style = MaterialTheme.typography.labelSmall)
                                                 }
-                                                TextButton(onClick = { shareComment(comment) }) { Text("Share") }
+                                                TextButton(onClick = { shareComment(comment) }, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) { Text("↗  Share", style = MaterialTheme.typography.labelSmall) }
                                             }
                                         }
                                     }
@@ -381,6 +396,12 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             }
         }
     }
+}
+
+private fun compactEngagement(count: Int): String = when {
+    count >= 1_000_000 -> "${"%.1f".format(java.util.Locale.US, count / 1_000_000.0)}M"
+    count >= 1_000 -> "${"%.1f".format(java.util.Locale.US, count / 1_000.0)}K"
+    else -> count.toString()
 }
 
 private fun relative(timestamp: Long): String {
