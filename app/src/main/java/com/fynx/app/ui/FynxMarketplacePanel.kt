@@ -2444,6 +2444,9 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         "Services" -> listOf("Service details" to serviceDetails)
         else -> listOf("Brand / maker" to brand, "Colour" to color, "Additional details" to generalDetails)
     }.filter { it.second.isNotBlank() }
+    val latestListingCopyInputs = rememberUpdatedState(
+        listOf(title, category, subcategory, condition, desc) + specifications.flatMap { listOf(it.first, it.second) }
+    )
     val allSpecifications = if (subcategory.isBlank()) specifications else listOf("Subcategory" to subcategory) + specifications
     val maximumSavedDescriptionLength = minOf(4_000, FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)
     val specificationSection = if (allSpecifications.isEmpty()) "" else buildString {
@@ -2651,21 +2654,32 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(
                 onClick = {
+                    val requestedInputSnapshot = latestListingCopyInputs.value
+                    val requestedTitle = title
+                    val requestedCategory = category
+                    val requestedSubcategory = subcategory
+                    val requestedCondition = condition
+                    val requestedDescription = desc
+                    val requestedSpecifications = specifications.toList()
                     listingCopyBusy = true
                     listingCopyError = null
                     listingCopySuggestion = null
                     scope.launch {
                         FynxMarketplaceAiClient.generateListingCopy(
                             context = context,
-                            title = title,
-                            category = category,
-                            subcategory = subcategory,
-                            condition = condition,
-                            description = desc,
-                            specifications = specifications
+                            title = requestedTitle,
+                            category = requestedCategory,
+                            subcategory = requestedSubcategory,
+                            condition = requestedCondition,
+                            description = requestedDescription,
+                            specifications = requestedSpecifications
                         ).onSuccess { suggestion ->
-                            listingCopySuggestion = suggestion
-                            showListingCopyPreview = true
+                            if (latestListingCopyInputs.value == requestedInputSnapshot) {
+                                listingCopySuggestion = suggestion
+                                showListingCopyPreview = true
+                            } else {
+                                listingCopyError = "Your product details changed while FYNX AI was preparing the draft. Please generate a fresh suggestion."
+                            }
                         }.onFailure { failure ->
                             listingCopyError = marketplaceSafeError(
                                 failure,
