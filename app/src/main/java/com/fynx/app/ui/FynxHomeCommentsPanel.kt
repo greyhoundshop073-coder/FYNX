@@ -158,11 +158,11 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         if (sending || loading) return
         if (isLocalPreview) {
             val now = System.currentTimeMillis()
-            val first = FynxRemoteSocialClient.RemoteComment("ci-comment-1", "This video looks amazing! The portrait preview fits naturally in the feed. ❤️", now - 8 * 60_000L, "ci-author-1", "@amara", "Amara Okafor")
-            val second = FynxRemoteSocialClient.RemoteComment("ci-comment-2", "I like how the full video opens when you tap it.", now - 5 * 60_000L, "ci-author-2", "@david", "David James")
-            val reply = FynxRemoteSocialClient.RemoteComment("ci-reply-1", "Exactly! It keeps the feed clean while the full video gets the space it needs.", now - 3 * 60_000L, "ci-author-3", "@zara", "Zara Bello", first.id)
-            val nestedReply = FynxRemoteSocialClient.RemoteComment("ci-reply-2", "And the thread stays attached to the right comment.", now - 2 * 60_000L, "ci-author-4", "@leo", "Leo Mensah", reply.id)
-            val thirdLevelReply = FynxRemoteSocialClient.RemoteComment("ci-reply-3", "That makes longer conversations easier to follow.", now - 1 * 60_000L, "ci-author-5", "@nina", "Nina James", nestedReply.id)
+            val first = FynxRemoteSocialClient.RemoteComment("ci-comment-1", "Great portrait fit. ❤️", now - 8 * 60_000L, "ci-author-1", "@amara", "Amara Okafor")
+            val second = FynxRemoteSocialClient.RemoteComment("ci-comment-2", "Full-screen playback feels smooth.", now - 5 * 60_000L, "ci-author-2", "@david", "David James")
+            val reply = FynxRemoteSocialClient.RemoteComment("ci-reply-1", "Agreed — the feed stays uncluttered.", now - 3 * 60_000L, "ci-author-3", "@zara", "Zara Bello", first.id)
+            val nestedReply = FynxRemoteSocialClient.RemoteComment("ci-reply-2", "And it opens the same clip.", now - 2 * 60_000L, "ci-author-4", "@leo", "Leo Mensah", reply.id)
+            val thirdLevelReply = FynxRemoteSocialClient.RemoteComment("ci-reply-3", "Easy to follow.", now - 1 * 60_000L, "ci-author-5", "@nina", "Nina James", nestedReply.id)
             val previewComments = listOf(first, second, reply, nestedReply, thirdLevelReply)
             comments = listOf(first, second)
             expandedReplies = mapOf(
