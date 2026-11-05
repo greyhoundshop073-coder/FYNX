@@ -33,6 +33,9 @@ assert.throws(() => applyNotificationBootstrapPatch("const untouched = true;", {
 "required missing markers must fail loudly");
 
 
+const bootstrap = await readFile(new URL("./notificationBootstrap.js", import.meta.url), "utf8");
+const socialRoutes = await readFile(new URL("./socialRoutes.js", import.meta.url), "utf8");
+
 const commentRouteMarker = "const u=await pool.query('SELECT username,display_name FROM users WHERE id=$1',[req.user.sub]);res.status(201).json({comment:{id:String(r.rows[0].id),text,timestamp:Number(r.rows[0].timestamp),authorId:String(req.user.sub),authorUsername:u.rows[0]?.username||'',authorDisplayName:u.rows[0]?.display_name||''}})";
 const commentRouteReplacement = "const u=await pool.query('SELECT username,display_name FROM users WHERE id=$1',[req.user.sub]);const postOwner=await pool.query('SELECT author_id FROM social_posts WHERE id=$1',[id]);if(postOwner.rows[0]&&String(postOwner.rows[0].author_id)!==String(req.user.sub)){await queueFynxNotification(pool,{userId:postOwner.rows[0].author_id,type:'COMMENT',title:'@'+(u.rows[0]?.username||'A FYNX user')+' commented on your post',message:text,targetId:id,sourceUsername:u.rows[0]?.username||null,route:'fynx://post/'+id+'?comment='+r.rows[0].id,notificationId:'comment-'+r.rows[0].id});}res.status(201).json({comment:{id:String(r.rows[0].id),text,timestamp:Number(r.rows[0].timestamp),authorId:String(req.user.sub),authorUsername:u.rows[0]?.username||'',authorDisplayName:u.rows[0]?.display_name||''}})";
 const commentRouteFixture = commentRouteMarker;
@@ -47,8 +50,6 @@ assert.ok(bootstrap.includes("postOwner=await pool.query('SELECT author_id FROM 
 assert.ok(bootstrap.includes("notificationId:'comment-'+r.rows[0].id"),
   "top-level comment notifications use a stable id");
 
-const bootstrap = await readFile(new URL("./notificationBootstrap.js", import.meta.url), "utf8");
-const socialRoutes = await readFile(new URL("./socialRoutes.js", import.meta.url), "utf8");
 assert.ok(bootstrap.includes('import { applyNotificationBootstrapPatch } from "./notificationBootstrapPatch.js";'),
   "the live bootstrap must use the tested patch helper");
 assert.ok(bootstrap.includes("already: 'import { queueFynxNotification } from \"./notificationPush.js\";'"),
