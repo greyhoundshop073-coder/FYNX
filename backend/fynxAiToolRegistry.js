@@ -4,6 +4,7 @@ import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { runGeminiAssistant } from "./geminiAssistantProvider.js";
+import { generateFynxAiWritingCopy, FynxAiWritingCopyInputError } from "./fynxAiWritingSupport.js";
 import { assertFynxAiToolAllowed, FYNX_AI_PRIVACY_INSTRUCTIONS } from "./fynxAiPrivacyPolicy.js";
 
 const { Pool } = pg;
@@ -425,6 +426,19 @@ export function registerFynxAiRoutes({ app }) {
     if (historyLength > 12000) return res.status(413).json({ error: "conversation history too long" });
     try { const result = await runAssistantAgent({ message, userId, history: normalizedHistory, context: { summary: contextSummary, currentTask: contextTask } }); return res.json(result); }
     catch (error) { console.error("FYNX AI agent", error?.message || error); return res.status(502).json({ error: "FYNX AI is temporarily unavailable" }); }
+  });
+
+  app.post("/api/assistant/writing-copy", assistantJsonBodyParser, async (req, res) => {
+    const userId = authenticate(req);
+    if (!userId) return res.status(401).json({ error: "authentication required" });
+    try {
+      const suggestion = await generateFynxAiWritingCopy({ input: req.body || {}, userId });
+      return res.json({ suggestion });
+    } catch (error) {
+      if (error instanceof FynxAiWritingCopyInputError) return res.status(400).json({ error: error.message });
+      console.error("FYNX inline AI writing", error?.message || error);
+      return res.status(502).json({ error: "FYNX AI could not prepare a writing suggestion right now." });
+    }
   });
 
   app.post("/api/assistant/marketplace/listing-copy", assistantJsonBodyParser, async (req, res) => {

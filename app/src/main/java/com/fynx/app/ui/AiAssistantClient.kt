@@ -5,6 +5,17 @@ import org.json.JSONObject
 
 /** Authenticated client for the FYNX AI backend. */
 object AiAssistantClient {
+    private suspend fun requestWritingCopy(context: Context, kind: String, text: String, maximumLength: Int): Result<String> {
+        val body = JSONObject().put("kind", kind).put("text", text.take(maximumLength)).toString()
+        return FynxBackendClient.postJson(context, "/api/assistant/writing-copy", body).mapCatching { raw ->
+            val suggestion = JSONObject(raw).optString("suggestion").trim()
+            if (suggestion.isBlank() || suggestion.length > maximumLength) {
+                throw IllegalStateException("FYNX AI returned an incomplete writing suggestion.")
+            }
+            suggestion
+        }
+    }
+
     suspend fun sendMessage(
         context: Context,
         message: String,
@@ -25,45 +36,34 @@ object AiAssistantClient {
     suspend fun improvePostCaption(context: Context, caption: String): Result<String> {
         val clean = caption.trim().take(4000)
         if (clean.isBlank()) return Result.failure(IllegalArgumentException("Caption is empty"))
-        return sendMessage(context, "Improve this social-media post caption. Keep the user's original meaning and facts, make it natural, clear and engaging, and do not add invented personal details. Return only the finished caption.\n\nCaption:\n$clean")
+        return requestWritingCopy(context, "post_caption", clean, 4000)
     }
 
     suspend fun improveStatusText(context: Context, statusText: String): Result<String> {
         val clean = statusText.trim().take(3000)
         if (clean.isBlank()) return Result.failure(IllegalArgumentException("Status text is empty"))
-        return sendMessage(
-            context,
-            "Improve this FYNX Status text. Preserve the user's meaning, tone and all supplied facts. Make it clear, natural and engaging without adding events, achievements, relationships, promises or personal details that the user did not provide. Return only the finished Status text.\n\nStatus text:\n$clean"
-        )
+        return requestWritingCopy(context, "status_text", clean, 3000)
     }
 
     suspend fun improveProfileBio(context: Context, bio: String): Result<String> {
         val clean = bio.trim().take(1000)
         if (clean.isBlank()) return Result.failure(IllegalArgumentException("Profile bio is empty"))
-        return sendMessage(
-            context,
-            "Improve this FYNX profile bio. Keep it concise, authentic and clear. Preserve only the user's supplied identity, interests and facts; do not invent a job, location, achievements, credentials, contact details or personal history. Return only the finished bio.\n\nBio:\n$clean"
-        )
+        return requestWritingCopy(context, "profile_bio", clean, 1000)
     }
 
     suspend fun improveShopDescription(context: Context, shopName: String, description: String): Result<String> {
         val name = shopName.trim().take(120)
         val clean = description.trim().take(800)
         if (clean.isBlank() && name.isBlank()) return Result.failure(IllegalArgumentException("Add shop details first"))
-        return sendMessage(
-            context,
-            "Improve this FYNX My Shop description using only the shop name and description supplied by its owner. Make it professional, clear and welcoming. Do not invent services, product categories, business history, certifications, guarantees, opening hours, location, contact details or delivery promises. Return only the finished shop description.\n\nShop name:\n$name\n\nCurrent description:\n$clean"
-        )
+        val source = listOf(name, clean).filter { it.isNotBlank() }.joinToString(" — ").take(800)
+        return requestWritingCopy(context, "shop_description", source, 800)
     }
 
     suspend fun improveCommentText(context: Context, comment: String, isReply: Boolean): Result<String> {
         val clean = comment.trim().take(1000)
         if (clean.isBlank()) return Result.failure(IllegalArgumentException("Comment is empty"))
         val kind = if (isReply) "reply" else "comment"
-        return sendMessage(
-            context,
-            "Improve this FYNX social $kind. Preserve the user's intended meaning and facts. Make it clearer, natural and respectful, without adding claims, threats, personal details, insults or assumptions. Keep it concise and suitable for a public conversation. Return only the finished $kind.\n\nOriginal $kind:\n$clean"
-        )
+        return requestWritingCopy(context, kind, clean, 1000)
     }
 
     suspend fun translateText(context: Context, text: String, targetLanguage: String): Result<String> {
