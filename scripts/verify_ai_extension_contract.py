@@ -16,6 +16,9 @@ marketplace_ai_photo_client = read("app/src/main/java/com/fynx/app/ui/FynxMarket
 marketplace_panel = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
 social_composer = read("app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt")
 ai_writing_client = read("app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt")
+status_composer = read("app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt")
+profile_editor = read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt")
+seller_center = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt")
 gemini_provider = read("backend/geminiAssistantProvider.js")
 provider_test = read("backend/test-gemini-assistant-provider.mjs")
 conversation = read("backend/aiConversationRoutes.js")
@@ -51,6 +54,10 @@ checks = [
     ("Feed AI caption suggestions require explicit user acceptance and preserve the original draft", "FYNX AI suggestion" in social_composer and "Keep my caption" in social_composer and "Use caption" in social_composer and "text = suggestion.take(4000)" in social_composer),
     ("Feed AI caption generation rejects blank input and protects against stale draft edits", "if (clean.isBlank()) return Result.failure" in ai_writing_client and "text.trim() == requestedCaption" in social_composer and "Your caption changed while FYNX AI was preparing it." in social_composer),
     ("Marketplace listing AI writing action shows the FYNX sparkle mark and remains review-first", "Icons.Default.AutoAwesome" in marketplace_panel and "Improve with FYNX AI" in marketplace_panel and "Review your AI listing draft" in marketplace_panel and "Use suggestion" in marketplace_panel),
+    ("Status text composer offers authenticated AI rewriting with explicit review", "AiAssistantClient.improveStatusText(context, requestedText)" in status_composer and "FYNX AI suggestion" in status_composer and "Keep my text" in status_composer and "Use text" in status_composer),
+    ("Profile bio editor offers authenticated AI rewriting without auto-saving", "AiAssistantClient.improveProfileBio(context, requestedBio)" in profile_editor and "Keep my bio" in profile_editor and "Use bio" in profile_editor and "onSave(profile.copy" in profile_editor),
+    ("My Shop description offers authenticated AI rewriting without changing saved shop data automatically", "AiAssistantClient.improveShopDescription(context, requestedName, requestedDescription)" in seller_center and "Keep my description" in seller_center and "Use description" in seller_center and "patchJson(context, \"/api/marketplace/my-shop\"" in seller_center),
+    ("Status, bio and shop AI writing preserve drafts when inputs change during generation", "text.trim() == requestedText" in status_composer and "bio.trim() == requestedBio" in profile_editor and "shopName.trim() == requestedName && shopDescription.trim() == requestedDescription" in seller_center),
 
     ("Marketplace photo review requires seller consent", "Review product photos with FYNX AI?" in marketplace_panel and "Review photos" in marketplace_panel),
     ("Marketplace photo review uses temporary bounded image inputs", 'app.post("/api/assistant/marketplace/photo-review"' in registry and "dataBase64" in registry and "MARKETPLACE_AI_PHOTO_REVIEW_MAX_TOTAL_BYTES = 9 * 1024 * 1024" in registry),

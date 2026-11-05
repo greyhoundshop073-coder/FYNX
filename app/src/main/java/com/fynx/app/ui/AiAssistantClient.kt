@@ -28,6 +28,34 @@ object AiAssistantClient {
         return sendMessage(context, "Improve this social-media post caption. Keep the user's original meaning and facts, make it natural, clear and engaging, and do not add invented personal details. Return only the finished caption.\n\nCaption:\n$clean")
     }
 
+    suspend fun improveStatusText(context: Context, statusText: String): Result<String> {
+        val clean = statusText.trim().take(3000)
+        if (clean.isBlank()) return Result.failure(IllegalArgumentException("Status text is empty"))
+        return sendMessage(
+            context,
+            "Improve this FYNX Status text. Preserve the user's meaning, tone and all supplied facts. Make it clear, natural and engaging without adding events, achievements, relationships, promises or personal details that the user did not provide. Return only the finished Status text.\\n\\nStatus text:\\n$clean"
+        )
+    }
+
+    suspend fun improveProfileBio(context: Context, bio: String): Result<String> {
+        val clean = bio.trim().take(1000)
+        if (clean.isBlank()) return Result.failure(IllegalArgumentException("Profile bio is empty"))
+        return sendMessage(
+            context,
+            "Improve this FYNX profile bio. Keep it concise, authentic and clear. Preserve only the user's supplied identity, interests and facts; do not invent a job, location, achievements, credentials, contact details or personal history. Return only the finished bio.\\n\\nBio:\\n$clean"
+        )
+    }
+
+    suspend fun improveShopDescription(context: Context, shopName: String, description: String): Result<String> {
+        val name = shopName.trim().take(120)
+        val clean = description.trim().take(800)
+        if (clean.isBlank() && name.isBlank()) return Result.failure(IllegalArgumentException("Add shop details first"))
+        return sendMessage(
+            context,
+            "Improve this FYNX My Shop description using only the shop name and description supplied by its owner. Make it professional, clear and welcoming. Do not invent services, product categories, business history, certifications, guarantees, opening hours, location, contact details or delivery promises. Return only the finished shop description.\\n\\nShop name:\\n$name\\n\\nCurrent description:\\n$clean"
+        )
+    }
+
     suspend fun translateText(context: Context, text: String, targetLanguage: String): Result<String> {
         val cleanText = text.trim().take(8000)
         val language = targetLanguage.trim().take(80)

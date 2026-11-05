@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandMore
@@ -185,6 +186,9 @@ fun FynxMarketplaceSellerCenterPanel() {
     ) standardMarketplaceCategories + editCategory else standardMarketplaceCategories
     var shopName by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var shopDescription by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopDescriptionAiBusy by remember(sellerAccountKey) { mutableStateOf(false) }
+    var shopDescriptionAiError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var shopDescriptionAiSuggestion by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopLocation by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var shopContactPhone by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var shopLoading by remember(sellerAccountKey) { mutableStateOf(true) }
@@ -555,8 +559,85 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     Text("Set a shop name and details that stay with your seller account. A Business Account is not required.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    OutlinedTextField(value = shopName, onValueChange = { shopName = it.take(120); shopMessage = null; shopError = null }, label = { Text("Shop name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
-                    OutlinedTextField(value = shopDescription, onValueChange = { shopDescription = it.take(800); shopMessage = null; shopError = null }, label = { Text("About your shop (optional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !shopSaving)
+                    OutlinedTextField(value = shopName, onValueChange = { shopName = it.take(120); shopDescriptionAiSuggestion = null; shopDescriptionAiError = null; shopMessage = null; shopError = null }, label = { Text("Shop name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("About your shop (optional)", style = MaterialTheme.typography.labelLarge)
+                        OutlinedButton(
+                            onClick = {
+                                val requestedName = shopName.trim()
+                                val requestedDescription = shopDescription.trim()
+                                if (requestedName.isNotBlank() || requestedDescription.isNotBlank()) {
+                                    shopDescriptionAiBusy = true
+                                    shopDescriptionAiError = null
+                                    shopDescriptionAiSuggestion = null
+                                    scope.launch {
+                                        AiAssistantClient.improveShopDescription(context, requestedName, requestedDescription)
+                                            .onSuccess { suggestion ->
+                                                if (shopName.trim() == requestedName && shopDescription.trim() == requestedDescription) {
+                                                    shopDescriptionAiSuggestion = suggestion.trim().take(800)
+                                                } else {
+                                                    shopDescriptionAiError = "Your shop details changed while FYNX AI was preparing them. Please try again."
+                                                }
+                                            }
+                                            .onFailure { failure ->
+                                                shopDescriptionAiError = failure.message?.takeIf { it.isNotBlank() }
+                                                    ?: "FYNX AI could not improve your shop description. Please try again."
+                                            }
+                                        shopDescriptionAiBusy = false
+                                    }
+                                }
+                            },
+                            enabled = !shopSaving && !shopLoading && !shopDescriptionAiBusy &&
+                                (shopName.isNotBlank() || shopDescription.isNotBlank())
+                        ) {
+                            if (shopDescriptionAiBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF007FFF), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (shopDescriptionAiBusy) "Improving…" else "Improve with AI")
+                        }
+                    }
+                    shopDescriptionAiError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    OutlinedTextField(
+                        value = shopDescription,
+                        onValueChange = {
+                            if (it != shopDescription) {
+                                shopDescriptionAiSuggestion = null
+                                shopDescriptionAiError = null
+                            }
+                            shopDescription = it.take(800)
+                            shopMessage = null
+                            shopError = null
+                        },
+                        label = { Text("About your shop (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        enabled = !shopSaving
+                    )
+                    shopDescriptionAiSuggestion?.takeIf { it.isNotBlank() }?.let { suggestion ->
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3FF))) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF007FFF), modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("FYNX AI suggestion", style = MaterialTheme.typography.titleSmall)
+                                }
+                                Text(suggestion, style = MaterialTheme.typography.bodyMedium)
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    TextButton(onClick = { shopDescriptionAiSuggestion = null }) { Text("Keep my description") }
+                                    Button(
+                                        onClick = {
+                                            shopDescription = suggestion.take(800)
+                                            shopDescriptionAiSuggestion = null
+                                            shopDescriptionAiError = null
+                                            shopMessage = null
+                                            shopError = null
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007FFF))
+                                    ) { Text("Use description") }
+                                }
+                            }
+                        }
+                    }
                     OutlinedTextField(value = shopLocation, onValueChange = { shopLocation = it.take(160); shopMessage = null; shopError = null }, label = { Text("Shop location (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null; shopError = null }, label = { Text("Public shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
