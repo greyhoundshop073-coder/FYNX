@@ -1066,8 +1066,12 @@ private fun AiChatBubble(
             } else {
                 RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 6.dp, bottomEnd = 22.dp)
             },
-            color = if (message.fromUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .38f)),
+            color = if (message.fromUser) Color(0xFF007FFF) else MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                1.dp,
+                if (message.fromUser) Color(0xFF007FFF).copy(alpha = .72f)
+                else MaterialTheme.colorScheme.outline.copy(alpha = .38f)
+            ),
             tonalElevation = if (message.fromUser) 1.dp else 2.dp
         ) {
             Column(
@@ -1104,10 +1108,10 @@ private fun AiChatBubble(
                         Text(
                             text = buildFynxAiMarkdown(
                                 message.text,
-                                MaterialTheme.colorScheme.onSurface,
-                                MaterialTheme.colorScheme.surfaceContainerHigh
+                                if (message.fromUser) Color.White else MaterialTheme.colorScheme.onSurface,
+                                if (message.fromUser) Color.White.copy(alpha = .16f) else MaterialTheme.colorScheme.surfaceContainerHigh
                             ),
-                            color = if (message.fromUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                            color = if (message.fromUser) Color.White else MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
