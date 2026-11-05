@@ -127,7 +127,10 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                 pendingMediaUploading = true
                 errorMessage = null
                 FynxAiConversationClient.uploadImage(context, uri)
-                    .onSuccess { pendingMediaId = it }
+                    .onSuccess {
+                        pendingMediaId = it
+                        hasStartedInteraction = true
+                    }
                     .onFailure { errorMessage = friendlyFynxAiError(it, "Image upload is unavailable right now. Please try again when your connection is restored.") }
                 pendingMediaUploading = false
             }
