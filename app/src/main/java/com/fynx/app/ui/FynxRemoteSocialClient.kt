@@ -263,7 +263,7 @@ object FynxRemoteSocialClient {
         val safeText = text.trim().takeIf { it.isNotBlank() && it.length <= 4000 }
             ?: return Result.failure(IllegalArgumentException("Add a comment before quoting this post."))
         return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/quote", JSONObject().put("text", safeText).toString())
-            .mapCatching { JSONObject(it).optString("postId").takeIf(String::isNotBlank) ?: throw IllegalStateException("Quote post was created without an id.") }
+            .mapCatching { JSONObject(it).optString("postId").takeIf { it.isNotBlank() } ?: throw IllegalStateException("Quote post was created without an id.") }
     }
     suspend fun interactionState(context: Context, id: String): Result<SocialInteractionState> {
         val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
