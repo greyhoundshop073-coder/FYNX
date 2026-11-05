@@ -90,7 +90,7 @@ checks = [
     ("AI voice mode exposes an explicit disconnect control", "fun endVoiceSession()" in android_panel and "End voice session" in android_panel),
     ("AI chat follows the latest response without dragging readers away from older messages", "snapshotFlow" in android_panel and "followingLatest" in android_panel and "Latest ↓" in android_panel and "items(messages, key = { it.id })" in android_panel),
     ("AI conversation reload preserves image attachments", "attachmentIds = it.attachmentIds" in android_panel and "message.attachmentIds.forEach" in android_panel and "FynxRemoteMedia(" in android_panel),
-    ("AI messages render selectable headings, lists and formatted text", "buildFynxAiMarkdown" in android_panel and "SelectionContainer" in android_panel and "fontWeight = FontWeight.Bold" in android_panel and "append(\"•  \" )" not in android_panel),
+    ("AI messages render selectable headings, lists and formatted text", "buildFynxAiMarkdown" in android_panel and "SelectionContainer" in android_panel and "fontWeight = FontWeight.Bold" in android_panel and 'append("•  ")' in android_panel),
     ("Image-only AI prompts send a non-empty user instruction", "val requestMessage = prompt.ifBlank { \"Analyze the attached image.\" }" in android_panel),
 ]
 
