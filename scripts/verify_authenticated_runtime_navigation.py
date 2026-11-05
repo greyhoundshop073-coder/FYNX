@@ -1992,7 +1992,7 @@ def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
     latest = dump_ui("authenticated-ai-composer-ready.xml") or latest
     fields = find_edit_fields(latest)
     if fields:
-        _, composer_x, composer_y = fields[0]
+        composer_x, composer_y = fields[0]
         run("adb", "shell", "input", "tap", str(composer_x), str(composer_y))
         time.sleep(0.7)
     composer_xml = dump_ui("authenticated-ai-composer.xml")
