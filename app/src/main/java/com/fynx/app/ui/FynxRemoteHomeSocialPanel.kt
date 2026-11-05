@@ -1190,7 +1190,7 @@ private fun formatHomeVideoDuration(durationMs: Long): String {
     val hours = totalSeconds / 3600
     val mm = minutes.toString().padStart(2, '0')
     val ss = seconds.toString().padStart(2, '0')
-    return if (hours > 0) "$hours:$mm:$ss" else "$minutes:$ss"
+    return if (hours > 0) "$hours:$mm:$ss" else "$mm:$ss"
 }
 
 private fun applyFynxFeedVideoFit(view: TextureView, sourceAspectRatio: Float) {
