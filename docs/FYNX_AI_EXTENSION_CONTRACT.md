@@ -85,6 +85,7 @@ The existing assistant screen should behave like one continuous FYNX conversatio
 - Automatic scrolling follows new content only while the reader is already near the latest message. When the reader scrolls back, updates must not pull them away; a visible latest-message control returns them to the bottom.
 - Realtime voice retains the existing authenticated WebRTC adapter and provides distinct mute and end-session controls.
 - Keep all data and actions behind the existing authenticated conversation client and approved tool registry. Do not invent unsupported rename, regenerate, private-history, payment or destructive-action capabilities in the presentation layer.
+- Runtime visual certification opens the actual dashboard from the installed Android app, verifies its assistant header and message composer, and captures the image-attachment menu. It submits no prompt. When run through the debug-only UI entry, the screenshot proves rendering/navigation only and must not be represented as a live Gemini/backend success.
 
 ## Extension categories
 
