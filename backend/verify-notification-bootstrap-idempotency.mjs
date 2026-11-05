@@ -59,7 +59,7 @@ assert.ok(socialRoutes.includes(commentRouteMarker),
   "the top-level comment notification patch marker must match the actual social route implementation");
 
 const realtimeBootstrap = await readFile(new URL("./realtimeIsolationBootstrap.js", import.meta.url), "utf8");
-const replyRouteMarker = "await client.query('COMMIT');\\n      const row = inserted.rows[0];";
+const replyRouteMarker = "await client.query('COMMIT');\n      const row = inserted.rows[0];";
 assert.ok(realtimeBootstrap.includes(replyRouteMarker),
   "the reply notification patch marker must match the real reply route bootstrap");
 assert.ok(bootstrap.includes("notificationId:'reply-' + row.id + '-' + recipientId"),
