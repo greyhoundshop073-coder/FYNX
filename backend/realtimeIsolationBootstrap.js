@@ -177,6 +177,21 @@ async function installHomeCommentBackend() {
       if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
       const parent = await pool.query(\`SELECT c.id,c.post_id,c.parent_comment_id,c.author_id FROM social_post_comments c JOIN users u ON u.id=c.author_id WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))\`, [parentId, postId, req.user.sub]);
       if (!parent.rows[0]) return res.status(404).json({ error: 'parent comment not found' });
+      const ancestry = await pool.query(`
+        WITH RECURSIVE comment_ancestry AS (
+          SELECT c.id, c.parent_comment_id, 0 AS depth
+            FROM social_post_comments c
+           WHERE c.id=$1 AND c.post_id=$2
+          UNION ALL
+          SELECT parent.id, parent.parent_comment_id, ancestry.depth + 1
+            FROM social_post_comments parent
+            JOIN comment_ancestry ancestry ON parent.id=ancestry.parent_comment_id
+           WHERE ancestry.depth < 5
+        )
+        SELECT COALESCE(MAX(depth), 0)::int AS depth FROM comment_ancestry
+      `, [parentId, postId]);
+      const parentDepth = Number(ancestry.rows[0]?.depth || 0);
+      if (parentDepth >= 5) return res.status(400).json({ error: 'maximum reply depth is 5' });
       const directParentId = parentId;
       const author = await pool.query('SELECT id,username,display_name FROM users WHERE id=$1', [req.user.sub]);
       if (!author.rows[0]) return res.status(401).json({ error: 'author not found' });
