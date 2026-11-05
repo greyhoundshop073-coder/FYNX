@@ -72,6 +72,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
+    var feedMode by remember { mutableStateOf(context.getSharedPreferences("fynx_home_feed_view", Context.MODE_PRIVATE).getString("mode", "FOR_YOU")?.takeIf { it == "FOLLOWING" } ?: "FOR_YOU") }
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
@@ -331,7 +332,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             // when the phone itself is offline.
             val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE
             if (!activeNetworkReady) {
-                val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
+                val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context, mode = feedMode)
                 if (posts.isEmpty() && cachedPage != null) {
                     posts = cachedPage.posts
                     hasMore = cachedPage.hasMore
@@ -345,9 +346,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 feedRequestInFlight = false
                 return@launch
             }
-            val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
+            val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context, mode = feedMode)
             var cachedRevalidationStarted = false
-            FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
+            FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh, mode = feedMode)
                 .onSuccess { page ->
                     posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null
                     interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
@@ -360,7 +361,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                         loading = false
                         scope.launch {
                             try {
-                                FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
+                                FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, mode = feedMode)
                                     .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
                                     .onFailure { /* Keep the valid cached snapshot visible. */ }
                             } finally {
@@ -373,6 +374,24 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             loading = false
             if (!cachedRevalidationStarted) feedRequestInFlight = false
         }
+    }
+
+    fun changeFeedMode(nextMode: String) {
+        val normalized = if (nextMode == "FOLLOWING") "FOLLOWING" else "FOR_YOU"
+        if (feedMode == normalized || feedRequestInFlight) return
+        feedMode = normalized
+        context.getSharedPreferences("fynx_home_feed_view", Context.MODE_PRIVATE).edit().putString("mode", normalized).apply()
+        posts = emptyList()
+        hasMore = false
+        feedNextCursor = null
+        error = null
+        interactionStates = emptyMap()
+        reactionStates = emptyMap()
+        postMedia = emptyMap()
+        discoveryOffset = 0
+        discoveryHasMore = false
+        scope.launch { feedListState.scrollToItem(0) }
+        reload()
     }
 
     LaunchedEffect(publishRefreshKey) {
@@ -391,7 +410,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     fun loadMore() {
         if (loading || loadingMore || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
         feedRequestInFlight = true
-        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
+        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor, mode = feedMode).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore && feedMode == "FOR_YOU") hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
     }
     fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, count: (FynxRemoteSocialClient.SocialInteractionState) -> Int, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
@@ -461,7 +480,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             }
     }
 
-    val homeInsertions = remember(currentUsername, marketplaceListings.isNotEmpty(), peopleRecommendations.isNotEmpty(), discoveryVideos.isNotEmpty()) {
+    val homeInsertions = remember(currentUsername, marketplaceListings.isNotEmpty(), peopleRecommendations.isNotEmpty(), discoveryVideos.isNotEmpty(), feedMode) {
         // Keep interleaving deterministic for this account across refreshes/re-entry.
         // Refresh signals must update data, not reshuffle the existing Home structure.
         val seed = currentUsername.trim().lowercase().hashCode().toLong() and 0x7fffffffL
@@ -485,7 +504,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         } else {
             ordered.take(count)
         }
-        if (selected.isEmpty() || posts.isEmpty()) {
+        if (feedMode == "FOLLOWING" || selected.isEmpty() || posts.isEmpty()) {
             emptyMap()
         } else {
             val first = (2 + (seed % 5L).toInt()).coerceAtMost(posts.lastIndex)
@@ -527,15 +546,21 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     ) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { Text("Your feed", style = MaterialTheme.typography.titleMedium); Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall) }
-
+            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column {
+                    Text("Your feed", style = MaterialTheme.typography.titleMedium)
+                    Text(if (feedMode == "FOLLOWING") "Latest posts from accounts you follow" else "Posts from your network and across FYNX", style = MaterialTheme.typography.bodySmall)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(selected = feedMode == "FOR_YOU", onClick = { changeFeedMode("FOR_YOU") }, enabled = !feedRequestInFlight, label = { Text("For you") })
+                    FilterChip(selected = feedMode == "FOLLOWING", onClick = { changeFeedMode("FOLLOWING") }, enabled = !feedRequestInFlight, label = { Text("Following") })
+                }
             }
         }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading Home feed" }) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
-        if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
-        if (!loading && posts.isEmpty() && discoveryVideos.isNotEmpty()) {
+        if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(if (feedMode == "FOLLOWING") "Your Following feed is quiet" else "Your feed is ready", style = MaterialTheme.typography.titleMedium); Text(if (feedMode == "FOLLOWING") "Posts from accounts you follow will appear here. Follow people to build this timeline." else "There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
+        if (feedMode == "FOR_YOU" && !loading && posts.isEmpty() && discoveryVideos.isNotEmpty()) {
             item(key = "home_discovery_empty_feed") {
                 FynxHomeDiscoverySection(
                     videos = discoveryVideos,
