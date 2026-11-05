@@ -342,6 +342,7 @@ jobs:
         env:
           FYNX_MARKETPLACE_VISUALS_ONLY: ${{ (github.event_name == 'pull_request' && contains(github.event.pull_request.head.ref, 'fix/real-wallet-runtime-screen-capture-20261101') || github.ref == 'refs/heads/fix/real-wallet-runtime-screen-capture-20261101') && '1' || '0' }}
           FYNX_HOME_FEED_VISUALS_ONLY: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/home-feed-professional-feed-conversations-20261103' || github.ref == 'refs/heads/feat/home-feed-professional-feed-conversations-20261103') && '1' || '0' }}
+          FYNX_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101') || github.ref == 'refs/heads/feat/home-feed-professional-feed-conversations-20261103'))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101' || github.event.pull_request.head.ref == 'feat/home-feed-professional-feed-conversations-20261103')))) }}
         uses: actions/upload-artifact@v4
@@ -350,6 +351,14 @@ jobs:
           path: fynx-runtime-screenshots/
           if-no-files-found: warn
           retention-days: 14
+      - name: Reassemble debug APK after emulator certification
+        if: ${{ !cancelled() }}
+        run: |
+          ./gradlew assembleDebug --no-daemon --build-cache
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          echo "CI checkout commit: $(git rev-parse HEAD)"
+          echo "PR head commit: ${FYNX_PR_HEAD_SHA:-$GITHUB_SHA}"
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
       - name: Detect exact-commit debug APK
         id: debug_apk
         if: ${{ !cancelled() }}
