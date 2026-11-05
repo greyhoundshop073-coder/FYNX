@@ -1941,15 +1941,27 @@ def scroll_home_feed_page(index: int, home_xml: str) -> str:
         return ""
     width, height = (int(match.group(1)), int(match.group(2)))
     current = home_xml
-    for attempt in range(2):
-        x, start_y, end_y = _home_content_scroll_point(current, width, height, "up")
+    fixture_scan = HOME_FEED_FIXTURES_SEEDED and "CI TEST FIXTURE" in current
+    max_attempts = 5 if fixture_scan else 2
+    for attempt in range(max_attempts):
+        if fixture_scan:
+            # The local portrait fixture is intentionally tall. Swipe in the
+            # narrow left gutter so the gesture cannot open its video viewer,
+            # and continue until the full media surface clears the bottom nav.
+            x = max(12, int(width * 0.018))
+            start_y, end_y = int(height * 0.84), int(height * 0.22)
+        else:
+            x, start_y, end_y = _home_content_scroll_point(current, width, height, "up")
         run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
         time.sleep(0.9)
         candidate = dump_ui(f"authenticated-home-feed-scan-page-{index}-{attempt}.xml")
         if candidate and is_home_feed_runtime_surface(candidate):
-            if candidate != current or attempt == 1:
+            if candidate != current or attempt == max_attempts - 1:
                 screenshot(f"authenticated-home-feed-scan-page-{index}.png")
-                return candidate
+                if not fixture_scan or visible_home_video_preview_ratios(candidate):
+                    return candidate
+                current = candidate
+                continue
             current = candidate
             continue
         if candidate and find_control(candidate, ["Close viewer"]):
