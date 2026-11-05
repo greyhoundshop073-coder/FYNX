@@ -288,7 +288,12 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
     try {
       await ensureSocialInteractionSchema();
       const postId = validPostId(req.params?.id);
-      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      if (!postId) return res.status(404).json({ error: "post not found" });
+      const original = await pool.query("SELECT author_id,visibility FROM social_posts WHERE id=$1 LIMIT 1", [postId]);
+      if (!original.rows[0] || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      if (String(original.rows[0].author_id) !== String(req.user.sub) && original.rows[0].visibility !== "PUBLIC") {
+        return res.status(404).json({ error: "only public posts from other accounts can be reposted" });
+      }
       await pool.query("INSERT INTO social_post_reposts(post_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [postId, req.user.sub]);
       const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_post_reposts WHERE post_id=$1", [postId]);
       return res.json({ reposted: true, repostCount: Number(count.rows[0]?.count || 0) });
@@ -304,8 +309,8 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       if (!postId || !text) return res.status(400).json({ error: "quote text is required" });
       if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
       const original = await pool.query("SELECT id,author_id,visibility FROM social_posts WHERE id=$1 LIMIT 1", [postId]);
-      if (!original.rows[0] || original.rows[0].visibility !== "PUBLIC" || String(original.rows[0].author_id) === String(req.user.sub)) {
-        return res.status(404).json({ error: "only another person's public post can be quoted" });
+      if (!original.rows[0] || original.rows[0].visibility !== "PUBLIC") {
+        return res.status(404).json({ error: "only public posts can be quoted" });
       }
       await client.query("BEGIN");
       const created = await client.query(
