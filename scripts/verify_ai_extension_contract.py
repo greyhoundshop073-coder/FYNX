@@ -14,6 +14,8 @@ marketplace_ai_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceA
 marketplace_ai_photo_test = read("backend/test-marketplace-ai-photo-review.mjs")
 marketplace_ai_photo_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceAiPhotoReviewClient.kt")
 marketplace_panel = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
+social_composer = read("app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt")
+ai_writing_client = read("app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt")
 gemini_provider = read("backend/geminiAssistantProvider.js")
 provider_test = read("backend/test-gemini-assistant-provider.mjs")
 conversation = read("backend/aiConversationRoutes.js")
@@ -45,6 +47,10 @@ checks = [
     ("Seller must review and apply AI copy before publishing", "Review your AI listing draft" in marketplace_panel and "Use suggestion" in marketplace_panel and "listingCopyBusy" in marketplace_panel),
     ("Seller AI drafts are discarded when the product form changes", "latestListingCopyInputs.value == requestedInputSnapshot" in marketplace_panel and "Please generate a fresh suggestion" in marketplace_panel),
     ("AI copy does not bypass the existing Marketplace publish flow", "FynxRemoteSocialClient.createMarketplaceListing" in marketplace_panel and "listingCopySuggestion" in marketplace_panel),
+    ("Feed post composer exposes authenticated AI caption improvement beside the caption field", "AiAssistantClient.improvePostCaption(context, requestedCaption)" in social_composer and "suspend fun improvePostCaption" in ai_writing_client and "/api/assistant/agent" in ai_writing_client),
+    ("Feed AI caption suggestions require explicit user acceptance and preserve the original draft", "FYNX AI suggestion" in social_composer and "Keep my caption" in social_composer and "Use caption" in social_composer and "text = suggestion.take(4000)" in social_composer),
+    ("Feed AI caption generation rejects blank input and protects against stale draft edits", "if (clean.isBlank()) return Result.failure" in ai_writing_client and "text.trim() == requestedCaption" in social_composer and "Your caption changed while FYNX AI was preparing it." in social_composer),
+    ("Marketplace listing AI writing action shows the FYNX sparkle mark and remains review-first", "Icons.Default.AutoAwesome" in marketplace_panel and "Improve with FYNX AI" in marketplace_panel and "Review your AI listing draft" in marketplace_panel and "Use suggestion" in marketplace_panel),
 
     ("Marketplace photo review requires seller consent", "Review product photos with FYNX AI?" in marketplace_panel and "Review photos" in marketplace_panel),
     ("Marketplace photo review uses temporary bounded image inputs", 'app.post("/api/assistant/marketplace/photo-review"' in registry and "dataBase64" in registry and "MARKETPLACE_AI_PHOTO_REVIEW_MAX_TOTAL_BYTES = 9 * 1024 * 1024" in registry),
