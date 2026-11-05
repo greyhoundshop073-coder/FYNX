@@ -4,6 +4,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text(encoding="utf-8")
+CLIENT = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text(encoding="utf-8")
+SOCIAL_ROUTES = (ROOT / "backend/socialRoutes.js").read_text(encoding="utf-8")
+DISCOVERY_ROUTES = (ROOT / "backend/discoveryRoutes.js").read_text(encoding="utf-8")
 COMMENTS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt").read_text(encoding="utf-8")
 BOOTSTRAP = (ROOT / "backend/realtimeIsolationBootstrap.js").read_text(encoding="utf-8")
 REACTIONS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomePostReactionsClient.kt").read_text(encoding="utf-8")
@@ -12,6 +15,10 @@ DISCOVERY = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeDiscoverySection.
 RUNTIME_NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 checks = [
+    ("quote-post composer keeps the original attributed post attached instead of copying its media", "Quote post" in HOME and "onQuote = { quotePost = post" in HOME and "post.quotedPost?.let" in HOME and "quoted.authorUsername" in HOME),
+    ("quote-post publishing is connected to the authenticated client", "suspend fun quotePost(context: Context, id: String, text: String)" in CLIENT and '"/api/social/posts/$numericId/quote"' in CLIENT and "quotedOriginal" in CLIENT),
+    ("quote-post feed projection includes original author, text and media without exposing non-public originals", "p.quoted_post_id" in SOCIAL_ROUTES and "qp.visibility='PUBLIC'" in SOCIAL_ROUTES and "quotedOriginal" in SOCIAL_ROUTES),
+    ("quote-post API only creates attributed public quotes and persists the repost relationship transactionally", 'app.post("/api/social/posts/:id/quote"' in DISCOVERY_ROUTES and "only another person's public post can be quoted" in DISCOVERY_ROUTES and "INSERT INTO social_post_reposts" in DISCOVERY_ROUTES and "await client.query(\"COMMIT\")" in DISCOVERY_ROUTES),
     ("existing Discovery section and viewer navigation remain wired", "FynxHomeDiscoverySection(" in HOME and "onOpenVideo = { index -> openHomeDiscoveryViewer(index) }" in HOME and "FynxHomeDiscoveryViewer(" in HOME and "fun openHomeDiscoveryViewer(index: Int)" in HOME),
     ("video preview fits the post width while deriving dimensions from source ratio", "BoxWithConstraints(Modifier.fillMaxWidth())" in HOME and "previewHeight = minOf(340.dp, maxWidth / previewAspectRatio)" in HOME and "previewWidth = previewHeight * previewAspectRatio" in HOME),
     ("video preview exposes an accessible merged full-screen action", "semantics(mergeDescendants = true)" in HOME and 'onClickLabel = "Play video full screen"' in HOME and "onOpenFullscreen" in HOME),
