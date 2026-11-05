@@ -1550,7 +1550,7 @@ report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Pull request head commit: {os.environ.get('FYNX_PR_HEAD_SHA', os.environ.get('GITHUB_SHA','local'))}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
         ("Marketplace-only visual capture may use the APK's explicit debug-only local UI entry; it is not server authentication." if VISUALS_ONLY else "This journey uses a real FYNX account supplied through GitHub Actions secrets."),
-        "No fabricated users, posts, messages, listings or application records are created.",
+        "CI fixture posts, videos and comments stay inside the disposable emulator's private cache; no backend posts, uploads, comments, reposts or quotes are created.",
         "Credentials are never written to the APK or repository."]
 
 def find_exact_home_action(xml_text: str, label: str):
