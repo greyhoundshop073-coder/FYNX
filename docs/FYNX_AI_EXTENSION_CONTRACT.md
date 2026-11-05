@@ -74,6 +74,18 @@ The review is advisory only. It never modifies, enhances, saves, publishes, stor
    - realtime voice continues to use the existing server-side OpenAI WebRTC adapter until a separately reviewed migration is approved
    - provider changes must not leak into the Android APK
 
+## Assistant dashboard and conversation experience
+
+The existing assistant screen should behave like one continuous FYNX conversation, not a separate AI utility page.
+
+- The first-use state presents a clear welcome message, approved public discovery prompts (public profiles, public trending posts and active Marketplace listings), and shortcuts into existing FYNX destinations. Do not suggest saved-post history or other private account data to the assistant.
+- Conversation history is searchable. Deleting a conversation requires a confirmation step. Loading an older conversation restores its message text and its already-owned image attachments.
+- Assistant replies render readable headings, emphasis, list markers and code blocks. Text remains selectable, with copy/share actions available on assistant replies.
+- The user can stop receiving a streamed answer. A partial answer is visibly marked as incomplete; stopping the Android request must never be described as undoing a server-side action or proving that the server did not save a response.
+- Automatic scrolling follows new content only while the reader is already near the latest message. When the reader scrolls back, updates must not pull them away; a visible latest-message control returns them to the bottom.
+- Realtime voice retains the existing authenticated WebRTC adapter and provides distinct mute and end-session controls.
+- Keep all data and actions behind the existing authenticated conversation client and approved tool registry. Do not invent unsupported rename, regenerate, private-history, payment or destructive-action capabilities in the presentation layer.
+
 ## Extension categories
 
 Future capabilities may be introduced in these categories without changing the existing foundation:
