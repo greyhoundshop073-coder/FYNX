@@ -1754,17 +1754,23 @@ def visible_home_video_preview_ratios(xml_text: str) -> list[float]:
         return []
     screen_width, screen_height = map(int, match.groups())
     nav_tops = []
+    viewport_bottoms = []
     ratios = []
     expected = (9 / 16, 16 / 9, 1.0)
     for node in root.iter("node"):
         description = (node.attrib.get("content-desc") or "").strip().casefold()
-        if description == "home":
-            bounds = node.attrib.get("bounds", "")
-            nav_match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
-            if nav_match:
-                left, top, right, bottom = map(int, nav_match.groups())
-                if top >= int(screen_height * 0.70):
-                    nav_tops.append(top)
+        bounds = node.attrib.get("bounds", "")
+        nav_match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+        if nav_match:
+            node_left, node_top, node_right, node_bottom = map(int, nav_match.groups())
+            if description == "home" and node_top >= int(screen_height * 0.70):
+                nav_tops.append(node_top)
+            if (
+                node.attrib.get("scrollable", "false").lower() == "true"
+                and node_right - node_left >= screen_width * 0.70
+                and node_bottom >= int(screen_height * 0.65)
+            ):
+                viewport_bottoms.append(node_bottom)
         if "video preview" not in description or "video duration" not in description:
             continue
         bounds = node.attrib.get("bounds", "")
@@ -1775,7 +1781,11 @@ def visible_home_video_preview_ratios(xml_text: str) -> list[float]:
         width, height = right - left, bottom - top
         if width <= 0 or height <= 0:
             continue
-        safe_bottom = min(nav_tops) - 8 if nav_tops else int(screen_height * 0.84)
+        safe_bottom = (
+            min(nav_tops) - 8 if nav_tops
+            else min(viewport_bottoms) - 8 if viewport_bottoms
+            else int(screen_height * 0.84)
+        )
         if top < 96 or bottom > safe_bottom or right > screen_width or left < 0:
             continue
         ratio = width / height
@@ -1879,7 +1889,7 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                     # its short text bounds so a tall portrait video can clear the
                     # bottom navigation in one measured scroll step.
                     start_y = min(bottom - 8, int(height * 0.82))
-                    end_y = max(int(height * 0.25), top - 360)
+                    end_y = max(int(height * 0.25), top - 480)
                     if start_y - end_y < 300:
                         end_y = max(int(height * 0.25), start_y - 480)
                 else:
