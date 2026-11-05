@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -419,7 +423,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
         statusMessage = null
         failedPrompt = null
 
-        generationJob = scope.launch {
+        val activeJob = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 val result = FynxAiConversationClient.sendStreaming(
                     context,
@@ -460,12 +464,17 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                 if (attachment != null) pendingMediaId = attachment
                 errorMessage = "FYNX Assistant is temporarily unavailable. You can retry or edit your message."
             } finally {
+                val completedJob = currentCoroutineContext()[Job]
                 withContext(NonCancellable) {
-                    loading = false
-                    generationJob = null
+                    if (generationJob === completedJob) {
+                        loading = false
+                        generationJob = null
+                    }
                 }
             }
         }
+        generationJob = activeJob
+        activeJob.start()
     }
 
     LaunchedEffect(listState) {
