@@ -431,10 +431,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LaunchedEffect(publishRefreshKey) {
         // CI-only local Discovery fixtures deliberately bypass network availability;
         // normal app sessions continue to use the authenticated trending endpoint.
-        if (FynxDiscoveryClient.localVisualFixtureVideos(context) != null) {
-            loadDiscoveryVideos(true)
-            return@LaunchedEffect
-        }
+        if (FynxDiscoveryClient.localVisualFixtureVideos(context) != null) loadDiscoveryVideos(true)
+    }
+
+    LaunchedEffect(publishRefreshKey) {
         val network = FynxNetworkQuality.current(context)
         if (network == FynxNetworkQuality.Level.OFFLINE) return@LaunchedEffect
 
