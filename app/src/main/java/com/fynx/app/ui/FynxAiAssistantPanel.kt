@@ -64,6 +64,21 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.UUID
 
+private fun friendlyFynxAiError(error: Throwable, fallback: String): String {
+    val detail = error.message.orEmpty()
+    val normalized = detail.lowercase()
+    val serviceUnavailable = listOf(
+        "http 404",
+        "application not found",
+        "failed to connect",
+        "unable to resolve host",
+        "connection refused",
+        "timed out",
+        "timeout"
+    ).any(normalized::contains)
+    return if (serviceUnavailable || detail.isBlank()) fallback else detail
+}
+
 private data class FynxAiUiMessage(
     val id: String = UUID.randomUUID().toString(),
     val text: String,
@@ -112,7 +127,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                 errorMessage = null
                 FynxAiConversationClient.uploadImage(context, uri)
                     .onSuccess { pendingMediaId = it }
-                    .onFailure { errorMessage = it.message ?: "Image upload failed." }
+                    .onFailure { errorMessage = friendlyFynxAiError(it, "Image upload is unavailable right now. Please try again when your connection is restored.") }
                 pendingMediaUploading = false
             }
         }
@@ -221,7 +236,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                     failedPrompt = null
                     showConversationHistory = false
                 }
-                .onFailure { errorMessage = it.message ?: "Unable to load that conversation." }
+                .onFailure { errorMessage = friendlyFynxAiError(it, "That conversation is unavailable right now. Please try again when FYNX services are restored.") }
             historyLoading = false
         }
     }
@@ -238,7 +253,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                         startNewConversation()
                     }
                 }
-                .onFailure { errorMessage = it.message ?: "Unable to delete conversation." }
+                .onFailure { errorMessage = friendlyFynxAiError(it, "That conversation could not be deleted right now. Please try again when FYNX services are restored.") }
             deletingConversationId = null
         }
     }
@@ -280,7 +295,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                     pendingMessageAction = null
                     appendAssistantMessage("Okay, I did not send the message.")
                 }
-                .onFailure { errorMessage = it.message ?: "The pending message could not be cancelled." }
+                .onFailure { errorMessage = friendlyFynxAiError(it, "The pending message could not be cancelled because FYNX services are unavailable.") }
         }
     }
 
@@ -355,7 +370,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
             historyLoading = true
             FynxAiConversationClient.list(context)
                 .onSuccess { conversationHistory = it }
-                .onFailure { errorMessage = it.message ?: "Unable to load AI conversation history." }
+                .onFailure { errorMessage = friendlyFynxAiError(it, "Conversation history is unavailable right now. Please try again when FYNX services are restored.") }
             historyLoading = false
         }
     }
