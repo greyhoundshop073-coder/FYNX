@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 
 private const val MAX_COMMENT_LENGTH = 1000
 private const val COMMENT_PAGE_SIZE = 50
+private const val MAX_COMMENT_REPLY_DEPTH = 5
 
 private data class VisibleHomeReply(val comment: FynxRemoteSocialClient.RemoteComment, val depth: Int)
 
@@ -44,7 +45,7 @@ private fun flattenHomeReplies(
     depth: Int = 1,
     ancestors: Set<String> = emptySet()
 ): List<VisibleHomeReply> {
-    if (depth > 5 || parentId in ancestors) return emptyList()
+    if (depth > MAX_COMMENT_REPLY_DEPTH || parentId in ancestors) return emptyList()
     val nextAncestors = ancestors + parentId
     return expandedReplies[parentId].orEmpty().flatMap { child ->
         listOf(VisibleHomeReply(child, depth)) +
@@ -57,6 +58,9 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val isLocalPreview = remember(post.id) {
+        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 && post.id.startsWith("ci-home-post-")
+    }
     var comments by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }
     var text by rememberSaveable(post.id) { mutableStateOf("") }
     var commentCount by remember(post.id) { mutableIntStateOf(post.commentCount) }
@@ -125,6 +129,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         previous.currentReaction?.let { old -> optimisticCounts[old] = (optimisticCounts[old] ?: 1) - 1 }
         nextReaction?.let { new -> optimisticCounts[new] = (optimisticCounts[new] ?: 0) + 1 }
         reactionStates = reactionStates + (comment.id to FynxRemoteSocialClient.CommentReactionState(optimisticCounts.filterValues { it > 0 }, nextReaction))
+        if (isLocalPreview) return
         reactionPending = reactionPending + comment.id
         scope.launch {
             FynxRemoteSocialClient.setCommentReaction(context, post.id, comment.id, nextReaction)
@@ -149,21 +154,30 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         reactionStates[comment.id]?.counts?.values?.sum() ?: 0
     fun loadComments() {
         if (sending || loading) return
-        if ((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 && post.id.startsWith("ci-home-post-")) {
+        if (isLocalPreview) {
             val now = System.currentTimeMillis()
             val first = FynxRemoteSocialClient.RemoteComment("ci-comment-1", "This video looks amazing! The portrait preview fits naturally in the feed. ❤️", now - 8 * 60_000L, "ci-author-1", "@amara", "Amara Okafor")
             val second = FynxRemoteSocialClient.RemoteComment("ci-comment-2", "I like how the full video opens when you tap it.", now - 5 * 60_000L, "ci-author-2", "@david", "David James")
             val reply = FynxRemoteSocialClient.RemoteComment("ci-reply-1", "Exactly! It keeps the feed clean while the full video gets the space it needs.", now - 3 * 60_000L, "ci-author-3", "@zara", "Zara Bello", first.id)
+            val nestedReply = FynxRemoteSocialClient.RemoteComment("ci-reply-2", "And the thread stays attached to the right comment.", now - 2 * 60_000L, "ci-author-4", "@leo", "Leo Mensah", reply.id)
+            val thirdLevelReply = FynxRemoteSocialClient.RemoteComment("ci-reply-3", "That makes longer conversations easier to follow.", now - 1 * 60_000L, "ci-author-5", "@nina", "Nina James", nestedReply.id)
+            val previewComments = listOf(first, second, reply, nestedReply, thirdLevelReply)
             comments = listOf(first, second)
-            expandedReplies = mapOf(first.id to listOf(reply))
+            expandedReplies = mapOf(
+                first.id to listOf(reply),
+                reply.id to listOf(nestedReply),
+                nestedReply.id to listOf(thirdLevelReply)
+            )
             reactionStates = mapOf(
                 first.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LOVE" to 12, "THUMBS_UP" to 5, "LAUGH" to 3), "LOVE"),
                 second.id to FynxRemoteSocialClient.CommentReactionState(mapOf("THUMBS_UP" to 8, "WOW" to 2), null),
-                reply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LOVE" to 4), null)
+                reply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LOVE" to 4), null),
+                nestedReply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("THUMBS_UP" to 2), null),
+                thirdLevelReply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LAUGH" to 1), null)
             )
-            commentCount = maxOf(post.commentCount, 3)
+            commentCount = maxOf(post.commentCount, previewComments.size)
             onCommentCountChanged(commentCount)
-            resolveCommenterPhotos(listOf(first, second, reply))
+            resolveCommenterPhotos(previewComments)
             loading = false
             error = null
             return
@@ -214,7 +228,33 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     }
     fun send() {
         val value = text.trim(); if (value.isEmpty() || sending || loading || value.length > MAX_COMMENT_LENGTH) return
-        val parentId = replyingToId; sending = true; error = null; replyErrorId = null
+        val parentId = replyingToId
+        if (isLocalPreview) {
+            val now = System.currentTimeMillis()
+            val parentDepth = if (parentId == null || comments.any { it.id == parentId }) 0
+                else flattenHomeReplies(comments.firstOrNull()?.id.orEmpty(), expandedReplies).firstOrNull { it.comment.id == parentId }?.depth ?: 0
+            if (parentId != null && parentDepth >= MAX_COMMENT_REPLY_DEPTH) {
+                error = "Replies are limited to five levels."
+                return
+            }
+            val previewComment = FynxRemoteSocialClient.RemoteComment(
+                "ci-local-$now", value, now, "ci-local-author", "@fynx_preview", "FYNX Preview", parentId
+            )
+            if (parentId == null) {
+                comments = comments + previewComment
+            } else {
+                expandedReplies = expandedReplies + (parentId to (expandedReplies[parentId].orEmpty() + previewComment))
+            }
+            expandedReplies = expandedReplies + (previewComment.id to emptyList())
+            commentCount += 1
+            onCommentCountChanged(commentCount)
+            resolveCommenterPhotos(listOf(previewComment))
+            text = ""
+            replyingToId = null
+            error = null
+            return
+        }
+        sending = true; error = null; replyErrorId = null
         scope.launch {
             val result = if (parentId != null) FynxRemoteSocialClient.addReply(context, post.id, parentId, value) else FynxRemoteSocialClient.addComment(context, post.id, value)
             result.onSuccess { comment ->
@@ -229,6 +269,11 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     fun toggleReplies(comment: FynxRemoteSocialClient.RemoteComment) {
         if (replyLoadingId != null || sending) return
         if (expandedReplies.containsKey(comment.id)) { expandedReplies = expandedReplies - comment.id; replyErrorId = null; return }
+        if (isLocalPreview) {
+            expandedReplies = expandedReplies + (comment.id to emptyList())
+            replyErrorId = null
+            return
+        }
         replyLoadingId = comment.id; replyErrorId = null; error = null
         scope.launch {
             FynxRemoteSocialClient.replies(context, post.id, comment.id)
@@ -321,10 +366,12 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                                     HomeCommentReactionRow(reactionStates[reply.id], reactionPending.contains(reply.id)) { reaction -> reactToComment(reply, reaction) }
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                        TextButton(onClick = { if (!sending) replyingToId = reply.id }) { Text("Reply") }
-                                                        TextButton(onClick = { toggleReplies(reply) }, enabled = replyLoadingId == null && !sending) {
-                                                            val loadedReplyCount = expandedReplies[reply.id]?.size
-                                                            Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "${loadedReplyCount} replies" } else "Replies")
+                                                        if (visible.depth < MAX_COMMENT_REPLY_DEPTH) {
+                                                            TextButton(onClick = { if (!sending) replyingToId = reply.id }) { Text("Reply") }
+                                                            TextButton(onClick = { toggleReplies(reply) }, enabled = replyLoadingId == null && !sending) {
+                                                                val loadedReplyCount = expandedReplies[reply.id]?.size
+                                                                Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "${loadedReplyCount} replies" } else "Replies")
+                                                            }
                                                         }
                                                         TextButton(onClick = { shareComment(reply) }) { Text("Share") }
                                                     }
