@@ -220,7 +220,7 @@ async function installHomeCommentBackend() {
       const requestedLimit = Number(req.query?.limit);
       const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 50, 1), 100);
       const result = await pool.query(\`SELECT c.id,c.post_id,c.parent_comment_id,c.text,EXTRACT(EPOCH FROM c.created_at)*1000 AS timestamp, u.id AS author_id,u.username,u.display_name FROM social_post_comments c JOIN users u ON u.id=c.author_id WHERE c.post_id=$1 AND c.parent_comment_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3)) ORDER BY c.id ASC LIMIT $4\`, [postId, parentId, req.user.sub, limit]);
-      return res.json({ comments: result.rows.map(row => ({ id: String(row.id), postId: String(row.post_id), parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorDisplayName: row.display_name, authorUsername: row.username })) });
+      return res.json({ comments: result.rows.map(row => ({ id: String(row.id), postId: String(row.post_id), parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorId: String(row.author_id), authorDisplayName: row.display_name, authorUsername: row.username })) });
     } catch (error) {
       console.error('social comment replies', error);
       return res.status(500).json({ error: 'replies lookup failed' });
