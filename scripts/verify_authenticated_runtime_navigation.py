@@ -2122,11 +2122,35 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                         timeout=35.0,
                         prefix="authenticated-home-fullscreen-video-playback-ready"
                     )
+                    # Exercise the actual audio control in both directions; a changing
+                    # icon alone is insufficient unless the player volume is wired too.
+                    mute_toggle_ok = False
+                    if find_control(fullscreen_xml, ["Unmute full-screen video"]):
+                        unmuted_xml = tap_control(
+                            fullscreen_xml, ["Unmute full-screen video"],
+                            "authenticated-home-fullscreen-unmute",
+                            ["Mute full-screen video"]
+                        )
+                        if unmuted_xml:
+                            remuted_xml = tap_control(
+                                unmuted_xml, ["Mute full-screen video"],
+                                "authenticated-home-fullscreen-remute",
+                                ["Unmute full-screen video"]
+                            )
+                            if remuted_xml:
+                                fullscreen_xml = remuted_xml
+                                mute_toggle_ok = True
                     missing_fullscreen_actions = []
                     if not find_control(fullscreen_xml, ["Pause full-screen video", "Play full-screen video"]):
                         missing_fullscreen_actions.append("Play / pause")
                     if not find_control(fullscreen_xml, ["Unmute full-screen video", "Mute full-screen video"]):
                         missing_fullscreen_actions.append("Mute / unmute")
+                    if not mute_toggle_ok:
+                        missing_fullscreen_actions.append("Mute control did not toggle in both directions")
+                    if not re.search(r"\\d{2}:\\d{2}\\s*/\\s*\\d{2}:\\d{2}", fullscreen_xml):
+                        missing_fullscreen_actions.append("Elapsed / total playback time")
+                    if not any("progressbar" in (node.attrib.get("class") or "").lower() for node in nodes(fullscreen_xml)):
+                        missing_fullscreen_actions.append("Playback progress track")
                     if not find_control(fullscreen_xml, ["Close media viewer"]):
                         missing_fullscreen_actions.append("Close viewer")
                     if missing_fullscreen_actions:
