@@ -22,7 +22,7 @@ checks = [
     ("Home feed plays the focused video inline and reuses the same player in full screen", HOME.count("FynxFeedTextureVideo(") >= 2 and "playbackActive = playbackActive && !fullscreen" in HOME and "fullScreenControls = false" in HOME and "fullScreenControls = true" in HOME),
     ("Home video displays the measured clip duration", "videoDurationMs = visual.durationMs" in HOME and '"Video duration $durationLabel"' in HOME),
     ("Home video shows elapsed time, total time and a live progress track", '"${formatHomeVideoDuration(playbackPositionMs)} / $durationLabel"' in HOME and "playbackPositionMs.toFloat() / durationMs.toFloat()" in HOME),
-    ("Home video duration formatting supports minute and hour lengths", "formatHomeVideoDuration(durationMs: Long)" in HOME and 'padStart(2, \'0\')' in HOME),
+    ("Home video duration formatting uses stable zero-padded minute and hour labels", "formatHomeVideoDuration(durationMs: Long)" in HOME and 'padStart(2, \'0\')' in HOME and 'else "$mm:$ss"' in HOME),
     ("Home inline playback is focus-gated and full-screen playback is explicit", "playbackActive = playbackActive && !fullscreen" in HOME and "playbackActive = true" in HOME and "if (fullscreen && file != null)" in HOME),
     ("full-screen video surface and player are released safely", "DisposableEffect(surface)" in HOME and "player.release()" in HOME),
     ("comments preserve post context", '"POST CONVERSATION"' in COMMENTS and "post.authorDisplayName" in COMMENTS),
