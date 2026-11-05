@@ -687,7 +687,20 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
         ) repost ON TRUE
         LEFT JOIN social_posts qp
           ON qp.id=p.quoted_post_id
-         AND qp.visibility='PUBLIC'
+         AND (
+           qp.author_id=$1
+           OR qp.visibility='PUBLIC'
+           OR (qp.visibility='FRIENDS_ONLY' AND EXISTS (
+             SELECT 1 FROM friendships qf
+             WHERE ((qf.user_id=qp.author_id AND qf.friend_id=$1)
+                 OR (qf.user_id=$1 AND qf.friend_id=qp.author_id))
+               AND qf.status='accepted'
+           ))
+           OR (qp.visibility='SELECTED_PEOPLE' AND EXISTS (
+             SELECT 1 FROM social_post_audience qa
+             WHERE qa.post_id=qp.id AND qa.user_id=$1
+           ))
+         )
          AND NOT EXISTS(
            SELECT 1 FROM blocks qb
            WHERE (qb.blocker_id=$1 AND qb.blocked_id=qp.author_id)
