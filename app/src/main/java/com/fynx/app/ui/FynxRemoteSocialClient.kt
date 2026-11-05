@@ -25,21 +25,27 @@ object FynxRemoteSocialClient {
     private const val FEED_CACHE_KEY_PREFIX = "fynx_feed_cache_v1_"
     private const val FEED_CACHE_TIME_KEY_PREFIX = "fynx_feed_cache_time_v1_"
     private fun feedCacheAccountKey(context: Context): String? = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }
-    private fun feedCacheKey(context: Context): String? = feedCacheAccountKey(context)?.let { FEED_CACHE_KEY_PREFIX + it }
-    private fun feedCacheTimeKey(context: Context): String? = feedCacheAccountKey(context)?.let { FEED_CACHE_TIME_KEY_PREFIX + it }
+    private fun normalizedFeedMode(mode: String): String = if (mode.equals("FOLLOWING", true)) "following" else "for_you"
+    private fun feedCacheKey(context: Context, mode: String = "FOR_YOU"): String? = feedCacheAccountKey(context)?.let {
+        FEED_CACHE_KEY_PREFIX + it + if (normalizedFeedMode(mode) == "following") "_following" else ""
+    }
+    private fun feedCacheTimeKey(context: Context, mode: String = "FOR_YOU"): String? = feedCacheAccountKey(context)?.let {
+        FEED_CACHE_TIME_KEY_PREFIX + it + if (normalizedFeedMode(mode) == "following") "_following" else ""
+    }
 
     suspend fun feed(context: Context): Result<List<RemotePost>> = feedPage(context, FEED_PAGE_SIZE, 0, true).map { it.posts }
-    suspend fun feedPage(context: Context, limit: Int = FEED_PAGE_SIZE, offset: Int = 0, useCache: Boolean = false, beforeCursor: String? = null): Result<FeedPage> {
+    suspend fun feedPage(context: Context, limit: Int = FEED_PAGE_SIZE, offset: Int = 0, useCache: Boolean = false, beforeCursor: String? = null, mode: String = "FOR_YOU"): Result<FeedPage> {
         val safeLimit = limit.coerceIn(1, FEED_PAGE_SIZE)
         val safeOffset = offset.coerceAtLeast(0)
-        if (useCache && safeOffset == 0 && beforeCursor.isNullOrBlank()) readCachedFeed(context)?.let { return Result.success(it) }
+        val normalizedMode = normalizedFeedMode(mode)
+        if (useCache && safeOffset == 0 && beforeCursor.isNullOrBlank()) readCachedFeed(context, normalizedMode)?.let { return Result.success(it) }
         val cursorQuery = beforeCursor?.takeIf { it.isNotBlank() }?.let { cursor -> "&before=${URLEncoder.encode(cursor, "UTF-8")}" }.orEmpty()
-        val remote = FynxBackendClient.get(context, "/api/social/feed?limit=$safeLimit&offset=$safeOffset$cursorQuery").mapCatching { raw ->
+        val remote = FynxBackendClient.get(context, "/api/social/feed?limit=$safeLimit&offset=$safeOffset&mode=$normalizedMode$cursorQuery").mapCatching { raw ->
             val page = parseFeedPage(raw)
-            if (safeOffset == 0 && beforeCursor.isNullOrBlank()) writeCachedFeed(context, raw)
+            if (safeOffset == 0 && beforeCursor.isNullOrBlank()) writeCachedFeed(context, normalizedMode, raw)
             page
         }
-        if (safeOffset == 0 && remote.isFailure) readStaleCachedFeed(context)?.let { return Result.success(it) }
+        if (safeOffset == 0 && remote.isFailure) readStaleCachedFeed(context, normalizedMode)?.let { return Result.success(it) }
         return remote
     }
     private fun parseFeedPage(raw: String): FeedPage {
@@ -53,26 +59,39 @@ object FynxRemoteSocialClient {
         }
         return FeedPage(posts, root.optBoolean("hasMore", posts.size >= FEED_PAGE_SIZE), root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" })
     }
-    fun cachedFeedPage(context: Context): FeedPage? = readStaleCachedFeed(context)
+    fun cachedFeedPage(context: Context, mode: String = "FOR_YOU"): FeedPage? = readStaleCachedFeed(context, mode)
 
-    fun hasCachedFeed(context: Context): Boolean = runCatching { val k = feedCacheKey(context) ?: return false; val t = feedCacheTimeKey(context) ?: return false; val p = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE); val raw = p.getString(k, null) ?: return false; val saved = p.getLong(t, 0L); raw.isNotBlank() && saved > 0L && System.currentTimeMillis() - saved <= FEED_CACHE_TTL_MS }.getOrDefault(false)
+    fun hasCachedFeed(context: Context, mode: String = "FOR_YOU"): Boolean = runCatching {
+        val k = feedCacheKey(context, mode) ?: return false
+        val t = feedCacheTimeKey(context, mode) ?: return false
+        val p = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
+        val raw = p.getString(k, null) ?: return false
+        val saved = p.getLong(t, 0L)
+        raw.isNotBlank() && saved > 0L && System.currentTimeMillis() - saved <= FEED_CACHE_TTL_MS
+    }.getOrDefault(false)
 
-    private fun readCachedFeed(context: Context): FeedPage? = runCatching {
-        val k = feedCacheKey(context) ?: return null
-        val t = feedCacheTimeKey(context) ?: return null
+    private fun readCachedFeed(context: Context, mode: String): FeedPage? = runCatching {
+        val k = feedCacheKey(context, mode) ?: return null
+        val t = feedCacheTimeKey(context, mode) ?: return null
         val p = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
         val saved = p.getLong(t, 0L)
         val raw = p.getString(k, null) ?: return null
         if (System.currentTimeMillis() - saved > FEED_CACHE_TTL_MS) return null
         parseFeedPage(raw)
     }.getOrNull()
-    private fun readStaleCachedFeed(context: Context): FeedPage? = runCatching {
-        val k = feedCacheKey(context) ?: return null
+    private fun readStaleCachedFeed(context: Context, mode: String): FeedPage? = runCatching {
+        val k = feedCacheKey(context, mode) ?: return null
         val p = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
         parseFeedPage(p.getString(k, null) ?: return null)
     }.getOrNull()
-    private fun writeCachedFeed(context: Context, raw: String) { runCatching { val k = feedCacheKey(context) ?: return; val t = feedCacheTimeKey(context) ?: return; context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().putString(k, raw).putLong(t, System.currentTimeMillis()).apply() } }
-
+    private fun writeCachedFeed(context: Context, mode: String, raw: String) {
+        runCatching {
+            val k = feedCacheKey(context, mode) ?: return
+            val t = feedCacheTimeKey(context, mode) ?: return
+            context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit()
+                .putString(k, raw).putLong(t, System.currentTimeMillis()).apply()
+        }
+    }
 
     suspend fun discoveryFeed(context: Context, limit: Int = 12, offset: Int = 0): Result<FeedPage> {
         val safeLimit = limit.coerceIn(1, 20)
