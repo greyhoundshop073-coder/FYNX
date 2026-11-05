@@ -447,6 +447,21 @@ def swipe_vertical_scroll_container(xml_text: str, name: str, *, reverse: bool =
     return dump_ui(name)
 
 
+def restore_home_feed_top(xml_text: str, prefix: str = "authenticated-home-feed-restore-top") -> str:
+    """Return Home to its top position so the intentionally hidden floating navigation reappears."""
+    current = xml_text
+    for attempt in range(8):
+        if is_authenticated_home_surface(current) and is_home_feed_navigation_visible(current):
+            return current
+        candidate = swipe_vertical_scroll_container(
+            current, f"{prefix}-{attempt}.xml", reverse=True
+        )
+        if not candidate or candidate == current:
+            break
+        current = candidate
+    return current
+
+
 def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
     """Read the actual accessibility enabled state of a visible control."""
     if not xml_text:
@@ -1789,6 +1804,25 @@ def is_home_feed_navigation_visible(xml_text: str) -> bool:
     )
 
 
+def is_home_feed_runtime_surface(xml_text: str) -> bool:
+    """Recognize the mounted Home feed while its floating bottom navigation auto-hides on scroll."""
+    if not xml_text or PACKAGE not in xml_text:
+        return False
+    # These markers identify a different modal/viewer route rather than the feed.
+    if any(find_control(xml_text, [label]) for label in (
+        "Write a comment", "Close comments", "Close media viewer",
+        "Close viewer", "Like video", "Open comments",
+    )):
+        return False
+    # Home intentionally hides its floating navigation after a meaningful scroll.
+    # Continue to identify the underlying feed from its own header/post/action content.
+    return any(find_control(xml_text, [label]) for label in (
+        "Your feed", "FYNX Assistance", "Open Stories", "CI TEST FIXTURE",
+        "FYNX Visual Fixture", "Public post", "Friends post",
+        "Selected people post", "Only me post", "Comment",
+    ))
+
+
 def _home_content_scroll_point(xml_text: str, width: int, height: int, direction: str) -> tuple[int, int, int]:
     """Start on visible non-clickable caption text and drag far enough to expose tall media."""
     if xml_text:
@@ -1870,7 +1904,7 @@ def _dismiss_home_media_viewer(xml_text: str, prefix: str, timeout: float = 12.0
     while time.monotonic() < deadline:
         time.sleep(0.4)
         latest = dump_ui(prefix + "-return-home.xml")
-        if latest and is_home_feed_navigation_visible(latest) and not find_control(latest, ["Close viewer"]):
+        if latest and is_home_feed_runtime_surface(latest) and not find_control(latest, ["Close viewer"]):
             screenshot(prefix + "-returned-home.png")
             return latest
     screenshot(prefix + "-return-home-failed.png")
@@ -1891,7 +1925,7 @@ def scroll_home_feed_page(index: int, home_xml: str) -> str:
         run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
         time.sleep(0.9)
         candidate = dump_ui(f"authenticated-home-feed-scan-page-{index}-{attempt}.xml")
-        if candidate and is_home_feed_navigation_visible(candidate):
+        if candidate and is_home_feed_runtime_surface(candidate):
             if candidate != current or attempt == 1:
                 screenshot(f"authenticated-home-feed-scan-page-{index}.png")
                 return candidate
@@ -2080,7 +2114,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
 
     for page in range(1, 9):
         scanned_pages = page
-        if not is_home_feed_navigation_visible(current):
+        if not is_home_feed_runtime_surface(current):
             FAILURES.append("Home feed scan lost the Home navigation shell; refusing to continue on another screen.")
             break
 
@@ -2177,7 +2211,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                         )
                         if (
                             restored_xml
-                            and is_home_feed_navigation_visible(restored_xml)
+                            and is_home_feed_runtime_surface(restored_xml)
                             and not find_control(restored_xml, ["Close media viewer"])
                             and find_control(restored_xml, ["Video duration"])
                         ):
@@ -2237,7 +2271,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                 discovery_home = ""
                 while time.monotonic() < return_deadline:
                     candidate = dump_ui("authenticated-discovery-return-home.xml")
-                    if candidate and is_home_feed_navigation_visible(candidate):
+                    if candidate and is_home_feed_runtime_surface(candidate):
                         discovery_home = candidate
                         break
                     time.sleep(0.5)
@@ -2299,7 +2333,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
             home_after_comments = ""
             while time.monotonic() < return_home_deadline:
                 candidate = dump_ui("authenticated-home-after-comments.xml")
-                if candidate and is_home_feed_navigation_visible(candidate):
+                if candidate and is_home_feed_runtime_surface(candidate):
                     home_after_comments = candidate
                     break
                 time.sleep(0.5)
@@ -2434,12 +2468,19 @@ if not error:
     ) or xml
 
 if HOME_FEED_VISUALS_ONLY:
-    home_xml = dump_ui("authenticated-home-feed-final.xml") or xml
-    home_visible = bool(home_xml and is_authenticated_home_surface(home_xml))
+    home_xml = dump_ui("authenticated-home-feed-final-probe.xml") or xml
+    if home_xml and is_home_feed_runtime_surface(home_xml):
+        home_xml = restore_home_feed_top(home_xml)
+    home_xml = dump_ui("authenticated-home-feed-final.xml") or home_xml
+    home_visible = bool(
+        home_xml
+        and is_authenticated_home_surface(home_xml)
+        and is_home_feed_navigation_visible(home_xml)
+    )
     if home_visible:
         (ROOT / "authenticated-home-feed-final.xml").write_text(home_xml + chr(10), encoding="utf-8")
         screenshot("authenticated-home-feed-final.png")
-        report.append("- PASS: captured the actual Home Feed surface from the installed Android APK using adb screencap.")
+        report.append("- PASS: captured the actual Home Feed at its restored top position with the floating Home navigation visible.")
     elif error:
         report.append("- BLOCKED: the Home Feed was not reached: " + error)
         FAILURES.append("Home Feed visual entry: " + error)
