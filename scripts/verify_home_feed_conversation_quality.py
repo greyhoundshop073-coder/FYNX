@@ -45,7 +45,7 @@ checks = [
     ("manual video retry refreshes failed cached media", "forceRefresh: Boolean = false" in MEDIA_CACHE and "forceRefresh = reloadNonce > 0" in HOME and "forceRefresh = retryNonce > 0" in DISCOVERY),
     ("media refresh preserves the last good cached file until replacement succeeds", "file.name}.refresh" in MEDIA_CACHE and "file.name}.backup" in MEDIA_CACHE and "if (hadPrevious) backup.renameTo(file)" in MEDIA_CACHE),
     ("interrupted media refresh restores the last good cache on next access", "if (!hasUsableCachedFile() && backup.isFile" in MEDIA_CACHE and "backup.renameTo(file)" in MEDIA_CACHE and "if (!backup.renameTo(file)) return backup" in MEDIA_CACHE),
-    ("comment pagination uses the last returned row as cursor", "String(result.rows[limit - 1].id)" in BOOTSTRAP),
+    ("comment pagination returns top-level comments only and uses the last returned row as cursor", "c.parent_comment_id IS NULL" in BOOTSTRAP and "String(result.rows[limit - 1].id)" in BOOTSTRAP),
     ("pagination does not skip the look-ahead row", "String(result.rows[result.rows.length - 1].id)" not in BOOTSTRAP),
     ("backend preserves the selected reply parent", "const directParentId = parentId;" in BOOTSTRAP and "[postId, req.user.sub, directParentId, text]" in BOOTSTRAP),
     ("reply endpoints validate post and parent visibility", "visiblePost(postId, req.user.sub)" in BOOTSTRAP and "NOT EXISTS (SELECT 1 FROM blocks" in BOOTSTRAP),
