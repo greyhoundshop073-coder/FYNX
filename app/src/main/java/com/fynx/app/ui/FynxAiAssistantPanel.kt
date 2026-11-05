@@ -939,9 +939,10 @@ private fun FynxAiWelcomeContent(
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = FynxDesign.LargeCardShape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f))
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EDF3)),
+            border = BorderStroke(1.dp, Color(0xFFC8D2DE).copy(alpha = .9f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
         ) {
             Box(
                 Modifier
@@ -949,28 +950,81 @@ private fun FynxAiWelcomeContent(
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = .18f),
-                                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = .72f)
+                                Color(0xFFF9FBFD),
+                                Color(0xFFDCE3EB),
+                                Color(0xFFF2F5F8),
+                                Color(0xFFD4DDE7),
+                                Color(0xFFF8FAFC)
                             )
                         )
                     )
                     .padding(20.dp)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = .72f)) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(10.dp).size(25.dp)
-                        )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFEAE4FF),
+                            border = BorderStroke(1.dp, Color(0xFFB8A7F4).copy(alpha = .7f))
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color(0xFF7250D5),
+                                modifier = Modifier.padding(11.dp).size(24.dp)
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                "FYNX AI",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF526174),
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.2.sp
+                            )
+                            Text(
+                                "Ask · Create · Discover",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF526174)
+                            )
+                        }
                     }
-                    Text("What can we work on today?", style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "What can we work on today?",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color(0xFF1C2434)
+                    )
                     Text(
                         "Ask a question, plan something, explore FYNX, or share an image for help. Your conversations stay in your FYNX account.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color(0xFF526174)
                     )
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xFF202B3A),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = .18f))
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = .9f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                "A clear space for ideas, plans and discovery",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1001,13 +1055,20 @@ private fun FynxAiWelcomeContent(
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Explore FYNX", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(toolLinks, key = { it.first }) { (destination, label) ->
-                    AssistChip(
-                        onClick = { onOpenDestination(destination) },
-                        label = { Text(label) },
-                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
-                    )
+            toolLinks.chunked(2).forEach { rowLinks ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    rowLinks.forEach { (destination, label) ->
+                        AssistChip(
+                            modifier = Modifier.weight(1f),
+                            onClick = { onOpenDestination(destination) },
+                            label = { Text(label, maxLines = 1) },
+                            leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
+                        )
+                    }
+                    if (rowLinks.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
         }
