@@ -2267,10 +2267,22 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                     report.append("- NOTE: " + message)
                 return current
 
+            if HOME_FEED_FIXTURES_SEEDED:
+                nested_preview_markers = [
+                    "This video looks amazing!",
+                    "Exactly! It keeps the feed clean",
+                    "And the thread stays attached",
+                    "That makes longer conversations easier",
+                ]
+                missing_nested_markers = [marker for marker in nested_preview_markers if marker not in conversation_xml]
+                if missing_nested_markers:
+                    screenshot("authenticated-home-comments-thread-preview-incomplete.png")
+                    FAILURES.append("The offline Comments preview did not render every nested reply level: " + ", ".join(missing_nested_markers))
+                    return current
             (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
             screenshot("authenticated-home-comments.png")
             comments_captured = True
-            report.append("- PASS: opened the video post's own Comments conversation and verified an existing comment body plus Reply/Replies actions alongside the post context and composer. No comment or reply was sent.")
+            report.append("- PASS: opened the video post's own Comments conversation and verified the comment thread, post context, reply actions and composer. No comment or reply was sent.")
 
             run("adb", "shell", "input", "keyevent", "4")
             return_home_deadline = time.monotonic() + 15.0
