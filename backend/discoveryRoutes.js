@@ -221,6 +221,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       );
       CREATE INDEX IF NOT EXISTS social_post_reposts_post_idx ON social_post_reposts(post_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS social_post_reposts_user_idx ON social_post_reposts(user_id, created_at DESC);
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS quoted_post_id BIGINT REFERENCES social_posts(id) ON DELETE SET NULL;
     `);
   };
 
@@ -292,6 +293,35 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_post_reposts WHERE post_id=$1", [postId]);
       return res.json({ reposted: true, repostCount: Number(count.rows[0]?.count || 0) });
     } catch (error) { console.error("repost social post", error); return res.status(500).json({ error: "repost failed" }); }
+  });
+
+  app.post("/api/social/posts/:id/quote", auth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 4000) : "";
+      if (!postId || !text) return res.status(400).json({ error: "quote text is required" });
+      if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      const original = await pool.query("SELECT id,author_id,visibility FROM social_posts WHERE id=$1 LIMIT 1", [postId]);
+      if (!original.rows[0] || original.rows[0].visibility !== "PUBLIC" || String(original.rows[0].author_id) === String(req.user.sub)) {
+        return res.status(404).json({ error: "only another person's public post can be quoted" });
+      }
+      await client.query("BEGIN");
+      const created = await client.query(
+        "INSERT INTO social_posts(author_id,text,visibility,quoted_post_id) VALUES($1,$2,'PUBLIC',$3) RETURNING id",
+        [req.user.sub, text, postId]
+      );
+      await client.query("INSERT INTO social_post_reposts(post_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [postId, req.user.sub]);
+      await client.query("COMMIT");
+      return res.status(201).json({ postId: String(created.rows[0].id), quotedPostId: String(postId) });
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch {}
+      console.error("quote social post", error);
+      return res.status(500).json({ error: "quote post failed" });
+    } finally {
+      client.release();
+    }
   });
 
   app.delete("/api/social/posts/:id/repost", auth, async (req, res) => {
