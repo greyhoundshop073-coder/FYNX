@@ -71,7 +71,7 @@ checks = [
     ("video comments are matched to the same post card", "def find_home_video_post_comment_action(" in RUNTIME_NAVIGATION and "find_home_video_post_comment_action(current)" in RUNTIME_NAVIGATION),
     ("comments capture verifies a real existing comment row", "def has_visible_home_comment_row(" in RUNTIME_NAVIGATION and "and has_visible_home_comment_row(candidate)" in RUNTIME_NAVIGATION),
     ("Home header recovery does not repeat the unsafe fixed swipe", '"720", "520", "720", "2600"' not in RUNTIME_NAVIGATION),
-    ("runtime screenshot flow verifies every seeded nested reply before saving Comments evidence", 'authenticated-home-comments.png' in RUNTIME_NAVIGATION and "No comment or reply was sent." in RUNTIME_NAVIGATION and "nested_preview_markers" in RUNTIME_NAVIGATION and all(marker in RUNTIME_NAVIGATION for marker in ("This video looks amazing!", "Exactly! It keeps the feed clean", "And the thread stays attached", "That makes longer conversations easier"))),
+    ("runtime screenshot flow verifies every seeded nested reply before saving Comments evidence", 'authenticated-home-comments.png' in RUNTIME_NAVIGATION and "No comment or reply was sent." in RUNTIME_NAVIGATION and "nested_preview_markers" in RUNTIME_NAVIGATION and all(marker in RUNTIME_NAVIGATION for marker in ("Great portrait fit.", "Agreed — the feed stays uncluttered.", "And it opens the same clip.", "Easy to follow."))),
 ]
 
 failed = []
