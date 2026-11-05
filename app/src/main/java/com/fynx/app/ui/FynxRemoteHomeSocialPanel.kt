@@ -608,7 +608,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                             Text("Original post", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Text(original.authorDisplayName.ifBlank { "@${original.authorUsername}" }, style = MaterialTheme.typography.titleSmall)
                             Text(original.text, style = MaterialTheme.typography.bodySmall, maxLines = 3)
-                            if (original.mediaId != null) Text("Original post includes ${original.mediaType ?: "media"}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                            original.mediaUrl?.let { mediaPath -> RemoteSocialMedia(mediaPath, original.mediaType, playbackActive = false) }
                         }
                     }
                 }
