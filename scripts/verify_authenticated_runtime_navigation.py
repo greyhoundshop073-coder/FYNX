@@ -2655,14 +2655,45 @@ if features:
             continue
         _,ex,ey=entry
         run("adb","shell","input","tap",str(ex),str(ey))
-        time.sleep(1.2)
-        after=dump_ui(f"authenticated-{name}-destination.xml")
-        screenshot(f"authenticated-{name}.png")
-        if not after:
-            FAILURES.append("authenticated Features -> "+name)
-            continue
-        if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
-        else: FAILURES.append("authenticated Features -> "+name)
+        if name == "ai":
+            ai_deadline = time.monotonic() + 20.0
+            after = ""
+            while time.monotonic() < ai_deadline:
+                after = dump_ui("authenticated-ai-settled.xml")
+                has_header = bool(find_control(after, ["FYNX Assistant"]))
+                has_composer = bool(find_control(after, ["Message FYNX Assistant"]) or find_edit_fields(after))
+                if has_header and has_composer:
+                    break
+                time.sleep(0.5)
+            if not (find_control(after, ["FYNX Assistant"]) and (find_control(after, ["Message FYNX Assistant"]) or find_edit_fields(after))):
+                screenshot("authenticated-ai-incomplete.png")
+                (ROOT/"authenticated-ai-incomplete.xml").write_text((after or "")+"\\n", encoding="utf-8")
+                FAILURES.append("authenticated Features -> AI opened without a settled FYNX Assistant header and message composer")
+                continue
+            (ROOT/"authenticated-ai.xml").write_text(after+"\\n", encoding="utf-8")
+            screenshot("authenticated-ai.png")
+            report.append("- PASS authenticated Features -> FYNX Assistant header, message composer and real dashboard screenshot/UI hierarchy")
+            menu_xml = tap_control(after, ["Attach to FYNX Assistant"], "ai-attachment-menu", ["Add an image"])
+            if menu_xml and find_control(menu_xml, ["Add an image"]):
+                (ROOT/"authenticated-ai-attachment-menu.xml").write_text(menu_xml+"\\n", encoding="utf-8")
+                screenshot("authenticated-ai-attachment-menu.png")
+                report.append("- PASS FYNX Assistant composer attachment menu exposes the real Add an image action")
+                run("adb","shell","input","keyevent","KEYCODE_BACK")
+                time.sleep(0.4)
+            else:
+                FAILURES.append("FYNX Assistant attachment menu did not expose Add an image")
+            home_after_ai = restore_home_after_restart("authenticated-ai-return-home")
+            if not home_after_ai or find_control(home_after_ai, ["FYNX Features"]):
+                FAILURES.append("FYNX Assistant runtime capture could not return to Home")
+        else:
+            time.sleep(1.2)
+            after=dump_ui(f"authenticated-{name}-destination.xml")
+            screenshot(f"authenticated-{name}.png")
+            if not after:
+                FAILURES.append("authenticated Features -> "+name)
+                continue
+            if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
+            else: FAILURES.append("authenticated Features -> "+name)
 else: FAILURES.append("authenticated Home -> Features")
 
 # Open Wallet through the real authenticated feature search, wait for the API-backed
@@ -2783,6 +2814,7 @@ expected_authenticated_surfaces = [
     "authenticated-wallet-ussd.png",
     "authenticated-wallet-withdraw.png",
     "authenticated-ai.png",
+    "authenticated-ai-attachment-menu.png",
     "authenticated-marketplace.png",
     "authenticated-marketplace-my-shop-overview.png",
     "authenticated-marketplace-my-shop-profile.png",
