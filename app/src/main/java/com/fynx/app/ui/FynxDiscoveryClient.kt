@@ -10,6 +10,9 @@ object FynxDiscoveryClient {
     suspend fun recordEvent(context: Context, eventType: String, postId: String? = null, listingId: String? = null, targetUserId: String? = null, sessionId: String? = null, metadata: JSONObject? = null): Result<Unit> {
         val type = eventType.trim().uppercase()
         require(type in EVENT_TYPES) { "Unsupported discovery event." }
+        // CI-local Discovery fixture IDs are never sent to analytics. This guard
+        // remains effective if network connectivity changes during runtime capture.
+        if (postId?.startsWith("ci-home-discovery-") == true) return Result.success(Unit)
         val body = JSONObject().apply {
             put("eventType", type)
             postId?.toLongOrNull()?.let { put("postId", it) }
