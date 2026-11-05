@@ -1152,6 +1152,11 @@ private fun FynxFeedTextureVideo(
             onPlayingChanged(false)
         }
     }
+    LaunchedEffect(muted, prepared) {
+        if (!prepared) return@LaunchedEffect
+        // Keep the actual decoder volume in sync with the visible mute control.
+        runCatching { player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f) }
+    }
     LaunchedEffect(playbackActive, prepared) {
         if (!prepared) return@LaunchedEffect
         runCatching {
