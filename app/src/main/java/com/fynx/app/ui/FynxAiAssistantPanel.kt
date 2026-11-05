@@ -93,6 +93,7 @@ private data class FynxAiUiMessage(
 fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarketplaceListingId: String? = null) {
     var messages by remember { mutableStateOf(emptyList<FynxAiUiMessage>()) }
     var input by remember { mutableStateOf("") }
+    var hasStartedInteraction by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var creatingConversation by remember { mutableStateOf(false) }
     var historyLoading by remember { mutableStateOf(false) }
@@ -206,6 +207,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
         statusMessage = null
         failedPrompt = null
         input = ""
+        hasStartedInteraction = false
         pendingMediaId = null
         pendingMessageAction = null
         historyQuery = ""
@@ -222,6 +224,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
             FynxAiConversationClient.get(context, id)
                 .onSuccess { conversation ->
                     conversationId = conversation.id
+                    hasStartedInteraction = true
                     messages = conversation.messages.map {
                         FynxAiUiMessage(
                             id = it.id,
@@ -300,6 +303,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
     }
 
     fun connectVoice() {
+        hasStartedInteraction = true
         scope.launch {
             voiceConnecting = true
             errorMessage = null
@@ -361,6 +365,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
     LaunchedEffect(initialMarketplaceListingId) {
         val listingId = initialMarketplaceListingId?.trim().orEmpty()
         if (listingId.isNotBlank()) {
+            hasStartedInteraction = true
             input = "Help me evaluate Marketplace listing #" + listingId + ". Review its public listing details, risks, and what I should check before buying."
         }
     }
@@ -377,6 +382,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
 
     fun sendPrompt(rawPrompt: String, appendUser: Boolean) {
         val prompt = rawPrompt.trim()
+        if (prompt.isNotEmpty() || pendingMediaId != null) hasStartedInteraction = true
         if (pendingMessageAction != null) {
             val normalized = prompt.lowercase()
                 .replace(Regex("[^a-z0-9\\s]"), " ")
@@ -617,7 +623,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (messages.isEmpty()) {
+                    if (messages.isEmpty() && !hasStartedInteraction) {
                         item(key = "fynx-ai-welcome") {
                             FynxAiWelcomeContent(
                                 discoveryPrompts = discoveryPrompts,
@@ -781,6 +787,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                         value = input,
                         onValueChange = {
                             input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH)
+                            if (input.isNotBlank()) hasStartedInteraction = true
                             errorMessage = null
                             statusMessage = null
                         },
