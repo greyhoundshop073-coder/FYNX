@@ -1546,7 +1546,8 @@ def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[st
     return tap_control(xml,labels,name,expected_labels)
 
 report=["# FYNX Authenticated Runtime Visual Certification","",
-        f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
+        f"- CI checkout commit (PR merge result when applicable): {os.environ.get('GITHUB_SHA','local')}",
+        f"- Pull request head commit: {os.environ.get('FYNX_PR_HEAD_SHA', os.environ.get('GITHUB_SHA','local'))}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
         ("Marketplace-only visual capture may use the APK's explicit debug-only local UI entry; it is not server authentication." if VISUALS_ONLY else "This journey uses a real FYNX account supplied through GitHub Actions secrets."),
         "No fabricated users, posts, messages, listings or application records are created.",
@@ -2087,6 +2088,25 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
             "isDiscovery": False,
         })
 
+    # The client checks this separate preference only in debuggable builds. Its media IDs
+    # resolve to the same app-private cache files written above; no server record is made.
+    discovery_prefs = FixtureET.Element("map")
+    FixtureET.SubElement(discovery_prefs, "boolean", {"name": "home_discovery_videos", "value": "true"})
+    discovery_prefs_file = ROOT / "ci-home-discovery-fixtures.xml"
+    FixtureET.ElementTree(discovery_prefs).write(discovery_prefs_file, encoding="utf-8", xml_declaration=True)
+    staged_discovery_prefs = "/data/local/tmp/fynx-home-discovery-fixtures.xml"
+    pushed_discovery_prefs = run("adb", "push", str(discovery_prefs_file), staged_discovery_prefs, timeout=30)
+    if pushed_discovery_prefs.returncode != 0:
+        report.append("- NOTE: unable to stage the explicit local Discovery fixture preference.")
+        return False
+    copied_discovery_prefs = run(
+        "adb", "shell", "run-as", PACKAGE, "cp", staged_discovery_prefs,
+        "shared_prefs/fynx_ci_visual_fixtures.xml"
+    )
+    if copied_discovery_prefs.returncode != 0:
+        report.append("- NOTE: unable to enable the local Discovery fixture preference in the disposable emulator.")
+        return False
+
     feed_payload = {"posts": posts, "hasMore": False, "nextCursor": None}
     prefs = FixtureET.Element("map")
     cache_key = "fynx_feed_cache_v1_" + account
@@ -2140,6 +2160,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
     video_captured = False
     comments_captured = False
     discovery_viewer_captured = False
+    repost_quote_captured = False
     home_fullscreen_video_captured = False
     comment_action_seen = False
     captured_video_durations: list[str] = []
@@ -2315,6 +2336,89 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                     return dump_ui("authenticated-discovery-return-home-timeout.xml") or viewer_xml
                 current = discovery_home
 
+        # Exercise both X-style repost choices on a disposable local fixture. Opening
+        # the plain repost option is read-only here; quote composition is opened and
+        # dismissed without submitting a post or writing to the backend.
+        if HOME_FEED_FIXTURES_SEEDED and not repost_quote_captured:
+            repost_action = find_exact_home_action(current, "Repost")
+            if repost_action:
+                _, repost_x, repost_y = repost_action
+                run("adb", "shell", "input", "tap", str(repost_x), str(repost_y))
+                repost_menu_xml = ""
+                menu_deadline = time.monotonic() + 8.0
+                while time.monotonic() < menu_deadline:
+                    candidate = dump_ui("authenticated-home-repost-menu-probe.xml")
+                    if candidate and find_control(candidate, ["Quote post"]):
+                        repost_menu_xml = candidate
+                        break
+                    time.sleep(0.25)
+                plain_option_visible = False
+                if repost_menu_xml:
+                    try:
+                        menu_root = ET.fromstring(repost_menu_xml)
+                        plain_option_visible = any(
+                            (node.attrib.get("text") or "").strip() == "Repost"
+                            for node in menu_root.iter("node")
+                        )
+                    except ET.ParseError:
+                        plain_option_visible = False
+                    (ROOT / "authenticated-home-repost-menu.xml").write_text(repost_menu_xml + chr(10), encoding="utf-8")
+                    screenshot("authenticated-home-repost-menu.png")
+                    quote_action = find_exact_home_action(repost_menu_xml, "Quote post")
+                    if plain_option_visible and quote_action:
+                        _, quote_x, quote_y = quote_action
+                        run("adb", "shell", "input", "tap", str(quote_x), str(quote_y))
+                        quote_composer_xml = ""
+                        composer_deadline = time.monotonic() + 15.0
+                        while time.monotonic() < composer_deadline:
+                            candidate = dump_ui("authenticated-home-quote-composer-probe.xml")
+                            has_composer = (
+                                candidate
+                                and find_control(candidate, ["Add your thoughts", "What would you like to say about this post?"])
+                                and find_control(candidate, ["Original post"])
+                                and find_control(candidate, ["FYNX Visual Fixture"])
+                                and "CI TEST FIXTURE" in candidate
+                                and find_control(candidate, ["Video preview", "Play video full screen"])
+                            )
+                            if has_composer:
+                                quote_composer_xml = candidate
+                                break
+                            time.sleep(0.35)
+                        if quote_composer_xml:
+                            (ROOT / "authenticated-home-quote-composer.xml").write_text(quote_composer_xml + chr(10), encoding="utf-8")
+                            screenshot("authenticated-home-quote-composer.png")
+                            repost_quote_captured = True
+                            report.append(
+                                "- PASS: opened the plain Repost and Quote post choices, then verified the quote composer preserves the original author's attribution, caption and cached video preview. No repost or quote was submitted."
+                            )
+                        else:
+                            screenshot("authenticated-home-quote-composer-missing.png")
+                            FAILURES.append(
+                                "Quote post opened from the Repost menu, but the composer did not expose the original post attribution, caption, thought field and video preview together."
+                            )
+                        run("adb", "shell", "input", "keyevent", "4")
+                        returned_home = ""
+                        home_deadline = time.monotonic() + 12.0
+                        while time.monotonic() < home_deadline:
+                            candidate = dump_ui("authenticated-home-after-quote-composer.xml")
+                            if candidate and is_home_feed_runtime_surface(candidate) and not find_control(candidate, ["Original post"]):
+                                returned_home = candidate
+                                break
+                            time.sleep(0.35)
+                        if not returned_home:
+                            run("adb", "shell", "input", "keyevent", "4")
+                            time.sleep(0.6)
+                            returned_home = dump_ui("authenticated-home-after-quote-composer-retry.xml")
+                        if not returned_home or not is_home_feed_runtime_surface(returned_home):
+                            FAILURES.append("Home Feed did not return safely after dismissing the quote composer.")
+                            return returned_home or current
+                        current = returned_home
+                    else:
+                        FAILURES.append("The visible Repost menu did not expose both the plain Repost option and Quote post option.")
+                        run("adb", "shell", "input", "keyevent", "4")
+                else:
+                    FAILURES.append("The Home Feed Repost action did not open its Repost / Quote post menu.")
+
         # Pair the conversation capture with a viewport that actually exposes
         # a real inline video control. Do not count an unrelated text-post comment.
         comment_control = find_home_video_post_comment_action(current) if video_control and duration_control and (require_real_media or HOME_FEED_FIXTURES_SEEDED) else None
@@ -2376,7 +2480,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                 return dump_ui("authenticated-home-after-comments-timeout.xml") or current
             current = home_after_comments
 
-        if video_captured and comments_captured and discovery_viewer_captured:
+        if video_captured and comments_captured and discovery_viewer_captured and repost_quote_captured:
             break
         if page == 8:
             break
@@ -2433,9 +2537,18 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
         if require_real_media and not comment_action_seen:
             FAILURES.append(message)
     if not discovery_viewer_captured:
-        report.append(
-            f"- NOTE: no real Discovery video card with an accessible open action was found in {scanned_pages} Home feed viewport(s); no synthetic media was created."
+        message = (
+            f"No prepared Discovery video card with an accessible open action was found in {scanned_pages} Home feed viewport(s)."
         )
+        if HOME_FEED_FIXTURES_SEEDED:
+            FAILURES.append(message + " The explicit local Discovery fixture was enabled but did not reach the viewer.")
+            report.append("- FAIL: " + message)
+        else:
+            report.append("- NOTE: " + message + " No synthetic media was created.")
+    if HOME_FEED_FIXTURES_SEEDED and not repost_quote_captured:
+        message = "The CI-only Home Repost menu and Quote post composer were not both verified."
+        FAILURES.append(message)
+        report.append("- FAIL: " + message)
     return current
 
 
