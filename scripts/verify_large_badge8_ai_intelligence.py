@@ -65,7 +65,7 @@ check("Existing AI extension gate remains present", "AI extension contract" in e
 check("Existing AI security gate remains present", "AI security gate GREEN" in security)
 check("AI runtime certification opens the real dashboard and verifies its welcome, header and message composer", "FYNX_AI_VISUALS_ONLY" in runtime_capture and "capture_ai_assistant_surface" in runtime_capture and 'find_control(latest, ["FYNX Assistant"])' in runtime_capture and 'find_control(latest, ["Message FYNX Assistant"])' in runtime_capture and 'find_control(latest, ["What can we work on today?", "Try asking"])' in runtime_capture)
 check("AI runtime certification captures the real image-attachment menu without sending a prompt", '"authenticated-ai.png"' in runtime_capture and '"authenticated-ai-attachment-menu.png"' in runtime_capture and '["Add an image"]' in runtime_capture and "no prompt is submitted" in runtime_capture)
-check("AI welcome surface stays chat-first with compact topic chips and distinct icon colours", "LazyRow(" in panel and "starter.icon" in panel and "starter.accentColor" in panel and "Explore FYNX" not in panel)
+check("AI welcome surface stays chat-first with compact topic chips and distinct icon colours", "LazyRow(" in panel and "starter.icon" in panel and "starter.accentColor" in panel and "onClickLabel = starter.description" in panel and "Explore FYNX" not in panel)
 check("Android emulator workflow runs focused AI screenshots without requiring the backend", "FYNX_AI_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1" in runtime_runner and "FYNX_AI_VISUALS_ONLY:" in read(".github/workflows/android-build.yml"))
 
 failed = [name for name, ok in checks if not ok]

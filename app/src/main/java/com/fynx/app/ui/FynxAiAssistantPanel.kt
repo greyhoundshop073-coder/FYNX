@@ -97,6 +97,7 @@ private data class FynxAiUiMessage(
 
 private data class FynxAiDiscoveryPrompt(
     val title: String,
+    val description: String,
     val prompt: String,
     val icon: ImageVector,
     val accentColor: Color
@@ -171,42 +172,49 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
         listOf(
             FynxAiDiscoveryPrompt(
                 title = "Marketplace guide",
+                description = "Discover products, compare sellers and grow your My Shop.",
                 prompt = "Explain how the FYNX Marketplace works. Walk me through discovering products, checking sellers and listings, buying safely, and how selling through My Shop works. Ask whether I want help as a buyer or seller.",
                 icon = Icons.Default.Store,
                 accentColor = Color(0xFF007FFF)
             ),
             FynxAiDiscoveryPrompt(
                 title = "Social discovery",
+                description = "Explore public profiles, posts and conversations.",
                 prompt = "Help me discover FYNX as a social community. Explain how to find public profiles, explore posts and trending conversations, and interact safely. Ask what kind of people or content I want to discover.",
                 icon = Icons.Default.Group,
                 accentColor = Color(0xFF008000)
             ),
             FynxAiDiscoveryPrompt(
                 title = "Daily planning",
+                description = "Turn your goals into a clear, realistic day plan.",
                 prompt = "Help me organize my day and break goals into manageable tasks. Use only the details I share in this conversation. You cannot see or change my private To-Do or Calendar entries; when I am ready, guide me to the Daily Planning or Calendar shortcuts so I can add or edit items myself.",
                 icon = Icons.Default.CalendarToday,
                 accentColor = Color(0xFFE3A008)
             ),
             FynxAiDiscoveryPrompt(
                 title = "Writing assistant",
+                description = "Polish captions, product copy, bios and replies.",
                 prompt = "Explain FYNX's inline AI writing assistant. It can help improve feed post captions, Marketplace product names and descriptions, Status text, profile bios, My Shop descriptions, comments and replies. Show me how to tap Improve with FYNX AI, review the suggested draft, and choose whether to use it or keep my original. Remind me that AI never posts or sends content automatically.",
                 icon = Icons.Default.Edit,
                 accentColor = Color(0xFF7C3AED)
             ),
             FynxAiDiscoveryPrompt(
                 title = "Image understanding",
+                description = "Ask questions about a photo you share.",
                 prompt = "Show me how I can use FYNX AI to understand an image. Explain that I can attach a photo and ask questions about what is visible, then invite me to attach an image or describe what I need help with.",
                 icon = Icons.Default.Image,
                 accentColor = Color(0xFF0891B2)
             ),
             FynxAiDiscoveryPrompt(
                 title = "Voice assistant",
+                description = "Talk naturally with your FYNX AI assistant.",
                 prompt = "Explain how to talk with FYNX AI using the voice assistant. Guide me through starting a voice conversation, speaking naturally, muting the microphone, and ending the session. Ask what I would like help with by voice.",
                 icon = Icons.Default.Mic,
                 accentColor = Color(0xFFDB2777)
             ),
             FynxAiDiscoveryPrompt(
                 title = "Wallet guidance",
+                description = "Understand Wallet tools and safe next steps.",
                 prompt = "Explain FYNX Wallet and Money Tools in general terms. Never ask for or inspect my wallet PIN, bank details, balance, or private transaction history. For account-specific information, guide me to open the protected Wallet screen. You cannot move money, make payments, withdraw funds, or issue refunds.",
                 icon = Icons.Default.AccountBalanceWallet,
                 accentColor = Color(0xFFDC143C)
@@ -1045,7 +1053,7 @@ private fun FynxAiWelcomeContent(
             ) {
                 items(discoveryPrompts, key = { it.title }) { starter ->
                     Surface(
-                        modifier = Modifier.clickable { onPrompt(starter.prompt) },
+                        modifier = Modifier.clickable(onClickLabel = starter.description) { onPrompt(starter.prompt) },
                         shape = RoundedCornerShape(18.dp),
                         color = MaterialTheme.colorScheme.surface,
                         border = BorderStroke(1.dp, starter.accentColor.copy(alpha = .28f)),
