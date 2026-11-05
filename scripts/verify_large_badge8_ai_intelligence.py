@@ -63,7 +63,7 @@ check("Android realtime tool calls are bounded", "maxRealtimeToolCalls = 8" in v
 check("Android voice waits for the data channel", "dataChannelReady?.awaitWithTimeout()" in voice)
 check("Existing AI extension gate remains present", "AI extension contract" in extension and "check(" in extension)
 check("Existing AI security gate remains present", "AI security gate GREEN" in security)
-check("AI runtime certification opens the real dashboard and verifies its message composer", "FYNX_AI_VISUALS_ONLY" in runtime_capture and "capture_ai_assistant_surface" in runtime_capture and 'find_control(latest, ["FYNX Assistant"])' in runtime_capture and 'find_control(latest, ["Message FYNX Assistant"])' in runtime_capture)
+check("AI runtime certification opens the real dashboard and verifies its message composer", "FYNX_AI_VISUALS_ONLY" in runtime_capture and "capture_ai_assistant_surface" in runtime_capture and 'find_control(latest, ["FYNX Assistant"])' in runtime_capture and 'find_control(latest, ["Message FYNX Assistant"])' in runtime_capture and 'find_control(latest, ["What can we work on today?", "Try asking"])' in runtime_capture)
 check("AI runtime certification captures the real image-attachment menu without sending a prompt", '"authenticated-ai.png"' in runtime_capture and '"authenticated-ai-attachment-menu.png"' in runtime_capture and '["Add an image"]' in runtime_capture and "no prompt is submitted" in runtime_capture)
 check("Android emulator workflow runs focused AI screenshots without requiring the backend", "FYNX_AI_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1" in runtime_runner and "FYNX_AI_VISUALS_ONLY:" in read(".github/workflows/android-build.yml"))
 
