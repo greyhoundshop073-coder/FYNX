@@ -2334,10 +2334,9 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
 
             if HOME_FEED_FIXTURES_SEEDED:
                 nested_preview_markers = [
-                    "This video looks amazing!",
-                    "Exactly! It keeps the feed clean",
-                    "And the thread stays attached",
-                    "That makes longer conversations easier",
+                    "Great portrait fit.",
+                    "Agreed — the feed stays uncluttered.",
+                    "And it opens the same clip.",
                 ]
                 missing_nested_markers = [marker for marker in nested_preview_markers if marker not in conversation_xml]
                 if missing_nested_markers:
