@@ -31,6 +31,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -671,7 +672,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 shopSaving = false
                             }
                         },
-                        enabled = !shopLoading && !shopSaving && shopName.trim().length >= 2,
+                        enabled = !shopLoading && !shopSaving && !shopDescriptionAiBusy && shopName.trim().length >= 2,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (shopSaving) CircularProgressIndicator(Modifier.size(18.dp))

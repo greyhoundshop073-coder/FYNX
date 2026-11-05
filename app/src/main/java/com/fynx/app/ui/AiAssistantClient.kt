@@ -33,7 +33,7 @@ object AiAssistantClient {
         if (clean.isBlank()) return Result.failure(IllegalArgumentException("Status text is empty"))
         return sendMessage(
             context,
-            "Improve this FYNX Status text. Preserve the user's meaning, tone and all supplied facts. Make it clear, natural and engaging without adding events, achievements, relationships, promises or personal details that the user did not provide. Return only the finished Status text.\\n\\nStatus text:\\n$clean"
+            "Improve this FYNX Status text. Preserve the user's meaning, tone and all supplied facts. Make it clear, natural and engaging without adding events, achievements, relationships, promises or personal details that the user did not provide. Return only the finished Status text.\n\nStatus text:\n$clean"
         )
     }
 
@@ -42,7 +42,7 @@ object AiAssistantClient {
         if (clean.isBlank()) return Result.failure(IllegalArgumentException("Profile bio is empty"))
         return sendMessage(
             context,
-            "Improve this FYNX profile bio. Keep it concise, authentic and clear. Preserve only the user's supplied identity, interests and facts; do not invent a job, location, achievements, credentials, contact details or personal history. Return only the finished bio.\\n\\nBio:\\n$clean"
+            "Improve this FYNX profile bio. Keep it concise, authentic and clear. Preserve only the user's supplied identity, interests and facts; do not invent a job, location, achievements, credentials, contact details or personal history. Return only the finished bio.\n\nBio:\n$clean"
         )
     }
 
@@ -52,7 +52,7 @@ object AiAssistantClient {
         if (clean.isBlank() && name.isBlank()) return Result.failure(IllegalArgumentException("Add shop details first"))
         return sendMessage(
             context,
-            "Improve this FYNX My Shop description using only the shop name and description supplied by its owner. Make it professional, clear and welcoming. Do not invent services, product categories, business history, certifications, guarantees, opening hours, location, contact details or delivery promises. Return only the finished shop description.\\n\\nShop name:\\n$name\\n\\nCurrent description:\\n$clean"
+            "Improve this FYNX My Shop description using only the shop name and description supplied by its owner. Make it professional, clear and welcoming. Do not invent services, product categories, business history, certifications, guarantees, opening hours, location, contact details or delivery promises. Return only the finished shop description.\n\nShop name:\n$name\n\nCurrent description:\n$clean"
         )
     }
 
