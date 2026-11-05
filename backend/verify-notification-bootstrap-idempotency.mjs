@@ -55,5 +55,14 @@ assert.ok(bootstrap.includes("already: 'import { queueFynxNotification } from \"
   "the social route import patch must declare its already-present equivalent import");
 assert.equal(socialRoutes.split(importLine).length - 1, 1,
   "the actual canonical social routes file should have a single notification import");
+assert.ok(socialRoutes.includes(commentRouteMarker),
+  "the top-level comment notification patch marker must match the actual social route implementation");
 
-console.log("Notification bootstrap idempotency: PASS (existing import, repeat starts, required markers)");
+const realtimeBootstrap = await readFile(new URL("./realtimeIsolationBootstrap.js", import.meta.url), "utf8");
+const replyRouteMarker = "await client.query('COMMIT');\\n      const row = inserted.rows[0];";
+assert.ok(realtimeBootstrap.includes(replyRouteMarker),
+  "the reply notification patch marker must match the real reply route bootstrap");
+assert.ok(bootstrap.includes("notificationId:'reply-' + row.id + '-' + recipientId"),
+  "reply notifications use a stable recipient-specific id");
+
+console.log("Notification bootstrap idempotency: PASS (top-level comments, replies, existing import, repeat starts and required markers)");
