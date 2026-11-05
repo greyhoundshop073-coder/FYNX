@@ -2242,7 +2242,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                             fullscreen_xml,
                             ["Close media viewer"],
                             "authenticated-home-fullscreen-video-close",
-                            ["Your feed", "Home"]
+                            ["FYNX Visual Fixture", "Video preview"]
                         )
                         if (
                             restored_xml
