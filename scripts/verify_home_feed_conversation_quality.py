@@ -47,7 +47,7 @@ checks = [
     ("interrupted media refresh restores the last good cache on next access", "if (!hasUsableCachedFile() && backup.isFile" in MEDIA_CACHE and "backup.renameTo(file)" in MEDIA_CACHE and "if (!backup.renameTo(file)) return backup" in MEDIA_CACHE),
     ("comment pagination returns top-level comments only and uses the last returned row as cursor", "c.parent_comment_id IS NULL" in BOOTSTRAP and "String(result.rows[limit - 1].id)" in BOOTSTRAP),
     ("pagination does not skip the look-ahead row", "String(result.rows[result.rows.length - 1].id)" not in BOOTSTRAP),
-    ("backend preserves the selected reply parent", "const directParentId = parentId;" in BOOTSTRAP and "[postId, req.user.sub, directParentId, text]" in BOOTSTRAP),
+    ("backend preserves the selected reply parent and returns reply author identity", "const directParentId = parentId;" in BOOTSTRAP and "[postId, req.user.sub, directParentId, text]" in BOOTSTRAP and "authorId: String(row.author_id)" in BOOTSTRAP),
     ("reply endpoints validate post and parent visibility", "visiblePost(postId, req.user.sub)" in BOOTSTRAP and "NOT EXISTS (SELECT 1 FROM blocks" in BOOTSTRAP),
     ("both reply-parent visibility queries close their NOT EXISTS predicates", BOOTSTRAP.count("OR (b.blocker_id=c.author_id AND b.blocked_id=$3))") >= 2),
     ("runtime screenshot flow captures a visible inline video card", 'def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8") and 'authenticated-home-inline-video.png' in (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")),
