@@ -91,7 +91,8 @@ try {
       (101,2,'2026-11-05T10:20:00Z'),
       (102,4,'2026-11-05T10:45:00Z'),
       (103,2,'2026-11-05T10:50:00Z'),
-      (104,5,'2026-11-05T10:55:00Z');
+      (104,5,'2026-11-05T10:55:00Z'),
+      (100,1,'2026-11-05T10:30:00Z');
   `);
 
   const result = await client.query(baseQuery, [1, 100, 0]);
@@ -99,6 +100,8 @@ try {
   const byId = new Map(rows.map(row => [String(row.id), row]));
 
   assert.ok(byId.has("100"), "viewer sees their own post");
+  assert.equal(byId.get("100").reposted_by_username, "viewer", "self-repost is attributed to its author");
+  assert.equal(new Date(Number(byId.get("100").timestamp)).toISOString(), "2026-11-05T10:30:00.000Z", "self-repost advances the author's own timeline event");
   assert.ok(byId.has("107"), "viewer sees their own protected quote");
   assert.equal(String(byId.get("107").quoted_original_id), "106", "viewer sees the original protected post embedded in their own quote");
   assert.ok(byId.has("101"), "viewer sees a public post reposted by an account they follow");
@@ -114,7 +117,7 @@ try {
 
   const ids = rows.map(row => String(row.id));
   assert.equal(new Set(ids).size, ids.length, "one timeline card is returned per original post");
-  assert.equal(ids[0], "101", "followed repost event is ordered by its repost timestamp");
+  assert.equal(ids[0], "100", "self-repost event is ordered by its repost timestamp");
   const followingResult = await client.query(followingQuery, [1, 100, 0]);
   const followingIds = new Set(followingResult.rows.map(row => String(row.id)));
   assert.ok(followingIds.has("100"), "Following includes the viewer's own posts");
