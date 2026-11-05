@@ -858,6 +858,24 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         )
     ) {
         if (post.isDiscovery) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Explore, "Suggested for you", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(6.dp)); Text("Suggested for you", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
+        if (!post.repostedByUsername.isNullOrBlank()) {
+            val reposterUsername = post.repostedByUsername.orEmpty()
+            val reposterName = post.repostedByDisplayName?.takeIf { it.isNotBlank() }
+                ?: "@${reposterUsername.removePrefix("@")}"
+            Row(
+                Modifier.fillMaxWidth().padding(start = 70.dp, end = 12.dp, top = 4.dp, bottom = 0.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Icon(Icons.Default.Repeat, contentDescription = "Reposted by $reposterName", modifier = Modifier.size(14.dp), tint = FynxDesign.TextSecondary)
+                Text(
+                    if (reposterUsername.equals(currentUsername.removePrefix("@"), true)) "You reposted" else "$reposterName reposted",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = FynxDesign.TextSecondary,
+                    maxLines = 1
+                )
+            }
+        }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = if (hasActiveStatus) onOpenStatus else onOpenProfile, modifier = Modifier.size(50.dp).semantics { contentDescription = if (hasActiveStatus) "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} status" else "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} profile" }) { Box(Modifier.size(50.dp).border(if (hasActiveStatus) 2.dp else 0.dp, if (hasActiveStatus) Color(0xFF22C55E) else Color.Transparent, CircleShape).padding(if (hasActiveStatus) 2.dp else 0.dp)) { FynxRemoteProfileAvatar(profilePhotoMediaId, post.authorDisplayName.ifBlank { post.authorUsername }, Modifier.size(46.dp).clip(CircleShape), ownerUsername = post.authorUsername) } }
             Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall, maxLines = 1, modifier = Modifier.clickable { onOpenProfile() }); Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) { Text("@${post.authorUsername.removePrefix("@")} • ${relative(post.timestamp)}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1); val audienceIcon = when (post.visibility.uppercase()) { "PUBLIC" -> Icons.Default.Public; "FRIENDS_ONLY" -> Icons.Default.Group; "SELECTED_PEOPLE" -> Icons.Default.Person; "ONLY_ME" -> Icons.Default.Lock; else -> null }; audienceIcon?.let { icon -> if (post.authorUsername.equals(currentUsername.removePrefix("@"), true)) IconButton(onClick = onOpenAudienceEditor, modifier = Modifier.size(30.dp), enabled = !interactionBusy) { Icon(icon, "Change post audience", modifier = Modifier.size(16.dp), tint = FynxDesign.TextSecondary) } else Icon(icon, contentDescription = when (post.visibility.uppercase()) { "PUBLIC" -> "Public post"; "FRIENDS_ONLY" -> "Friends post"; "SELECTED_PEOPLE" -> "Selected people post"; else -> "Only me post" }, modifier = Modifier.size(14.dp), tint = FynxDesign.TextSecondary) } }; if (!post.location.isNullOrBlank()) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(Icons.Default.LocationOn, contentDescription = "Post location", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary); Text(post.location, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1) } }; if (!post.feelingActivity.isNullOrBlank()) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(Icons.Default.SentimentSatisfied, contentDescription = if (post.feelingActivityType == "ACTIVITY") "Post activity" else "Post feeling", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary); Text(if (post.feelingActivityType == "ACTIVITY") "Activity: ${post.feelingActivity}" else "Feeling: ${post.feelingActivity}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1) } } }
@@ -874,6 +892,11 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                             text = { Text(if (interactionState.reposted) "Undo repost" else "Repost") },
                             onClick = { menuOpen = false; onRepost(post.id, !interactionState.reposted) },
                             leadingIcon = { Icon(Icons.Default.Repeat, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Quote post") },
+                            onClick = { menuOpen = false; onQuote() },
+                            leadingIcon = { Icon(Icons.Default.FormatQuote, null) }
                         )
                         DropdownMenuItem(
                             text = { Text("Delete post") },
