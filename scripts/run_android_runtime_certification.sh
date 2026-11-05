@@ -22,7 +22,7 @@ if [ "${FYNX_HOME_FEED_VISUALS_ONLY:-0}" = "1" ]; then
     FYNX_HOME_FEED_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
     NAV_EXIT=$?
   else
-    echo "::notice::Backend is unavailable or E2E credentials are absent; capturing the real Home UI with the existing debug-local entry. No feed posts are fabricated."
+    echo "::notice::Backend is unavailable or E2E credentials are absent; capturing Home with explicitly local CI-only fixtures in the disposable emulator. No backend posts or uploads are created."
     FYNX_HOME_FEED_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
     NAV_EXIT=$?
   fi
