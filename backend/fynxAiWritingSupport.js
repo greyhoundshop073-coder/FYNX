@@ -1,7 +1,7 @@
 import { runGeminiAssistant } from "./geminiAssistantProvider.js";
 import { FYNX_AI_PRIVACY_INSTRUCTIONS } from "./fynxAiPrivacyPolicy.js";
 
-const WRITING_LIMITS = Object.freeze({
+const FYNX_AI_WRITING_LIMITS = Object.freeze({
   post_caption: 4000,
   status_text: 3000,
   profile_bio: 1000,
@@ -10,7 +10,7 @@ const WRITING_LIMITS = Object.freeze({
   reply: 1000
 });
 
-const WRITING_LABELS = Object.freeze({
+const FYNX_AI_WRITING_LABELS = Object.freeze({
   post_caption: "social post caption",
   status_text: "FYNX Status text",
   profile_bio: "profile bio",
@@ -50,7 +50,7 @@ export function normalizeFynxAiWritingCopyInput(input = {}) {
     throw new FynxAiWritingCopyInputError("Only the text being rewritten can be sent to FYNX AI.");
   }
   const kind = typeof input.kind === "string" ? input.kind.trim() : "";
-  const maximumLength = WRITING_LIMITS[kind];
+  const maximumLength = FYNX_AI_WRITING_LIMITS[kind];
   if (!maximumLength) throw new FynxAiWritingCopyInputError("This FYNX AI writing task is not supported.");
   const text = sanitizeWritingText(input.text, maximumLength);
   if (!text) throw new FynxAiWritingCopyInputError("Write some text before asking FYNX AI to improve it.");
@@ -58,7 +58,7 @@ export function normalizeFynxAiWritingCopyInput(input = {}) {
 }
 
 export function buildFynxAiWritingCopyPrompt(input) {
-  const label = WRITING_LABELS[input.kind];
+  const label = FYNX_AI_WRITING_LABELS[input.kind];
   return [
     "Rewrite the user's " + label + " so it is clearer, natural and engaging.",
     "Return only the finished text. Do not add a heading, explanation, quotation marks, Markdown fences or an announcement that the text was rewritten.",
