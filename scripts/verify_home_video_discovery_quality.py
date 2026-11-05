@@ -46,6 +46,11 @@ checks = [
         and "TextButton(onClick = onRetryMedia)" in home,
     ),
     (
+        "Home video mute toggle changes the active MediaPlayer volume after preparation",
+        "LaunchedEffect(muted, prepared)" in home
+        and "player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)" in home,
+    ),
+    (
         "Discovery viewer mute control updates the actual MediaPlayer volume",
         "playerState.value = player" in discovery
         and "playerState.value?.setVolume" in discovery
