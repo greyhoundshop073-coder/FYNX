@@ -148,12 +148,14 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
             "AI Creation" to "AI Creation"
         )
     }
-    // Only advertise capabilities that remain available under the approved public-data policy.
+    // These are contextual AI starters, not navigation shortcuts. Each tap starts
+    // a conversation with the selected FYNX topic already explained in the prompt.
     val discoveryPrompts = remember {
         listOf(
-            "Public profiles" to "Recommend public FYNX profiles I may want to discover.",
-            "Trending" to "Show me the latest public trending posts on FYNX.",
-            "Marketplace" to "Help me discover active FYNX Marketplace listings."
+            "Marketplace guide" to "Explain how the FYNX Marketplace works. Walk me through discovering products, checking sellers and listings, buying safely, and how selling through My Shop works. Ask whether I want help as a buyer or seller.",
+            "Social discovery" to "Help me discover FYNX as a social community. Explain how to find public profiles, explore posts and trending conversations, and interact safely. Ask what kind of people or content I want to discover.",
+            "Image understanding" to "Show me how I can use FYNX AI to understand an image. Explain that I can attach a photo and ask questions about what is visible, then invite me to attach an image or describe what I need help with.",
+            "Voice assistant" to "Explain how to talk with FYNX AI using the voice assistant. Guide me through starting a voice conversation, speaking naturally, and ending or muting it. Ask what I would like help with by voice."
         )
     }
 
