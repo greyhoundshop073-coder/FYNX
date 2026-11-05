@@ -49,6 +49,10 @@ assert.ok(bootstrap.includes("postOwner=await pool.query('SELECT author_id FROM 
   "the bootstrap notification patch targets the live top-level comment route");
 assert.ok(bootstrap.includes("notificationId:'comment-'+r.rows[0].id"),
   "top-level comment notifications use a stable id");
+assert.ok(bootstrap.includes("home comment notification failed"),
+  "a notification queue failure must not turn a saved comment into a failed comment request");
+assert.ok(bootstrap.includes("home reply notification failed"),
+  "a notification queue failure must not turn a saved reply into a failed reply request");
 const commentPatchStart = bootstrap.indexOf('marker: "const u=await pool.query');
 const commentPatchEnd = bootstrap.indexOf("\n  }\n]);", commentPatchStart);
 const commentPatch = bootstrap.slice(commentPatchStart, commentPatchEnd);
