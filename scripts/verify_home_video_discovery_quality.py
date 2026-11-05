@@ -39,6 +39,14 @@ checks = [
         and "VideoView(ctx)" not in discovery[discovery.index("private fun FynxDiscoveryPreviewCard"):discovery.index("fun FynxHomeDiscoveryViewer")],
     ),
     (
+        "full-screen Home player runtime verifies mute toggle in both directions and time/progress controls",
+        'authenticated-home-fullscreen-unmute' in navigation
+        and 'authenticated-home-fullscreen-remute' in navigation
+        and "Elapsed / total playback time" in navigation
+        and "Playback progress track" in navigation
+        and 're.search(r"\\d{2}:\\d{2}\\s*/\\s*\\d{2}:\\d{2}", fullscreen_xml)' in navigation,
+    ),
+    (
         "Home inline and full-screen video error states provide a clear retry message",
         "if (!prepared && !playbackError)" in home
         and "else if (prepared && !playbackError)" in home
