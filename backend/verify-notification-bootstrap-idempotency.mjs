@@ -49,6 +49,13 @@ assert.ok(bootstrap.includes("postOwner=await pool.query('SELECT author_id FROM 
   "the bootstrap notification patch targets the live top-level comment route");
 assert.ok(bootstrap.includes("notificationId:'comment-'+r.rows[0].id"),
   "top-level comment notifications use a stable id");
+const commentPatchStart = bootstrap.indexOf('marker: "const u=await pool.query');
+const commentPatchEnd = bootstrap.indexOf("\\n  }\\n]);", commentPatchStart);
+const commentPatch = bootstrap.slice(commentPatchStart, commentPatchEnd);
+assert.equal((commentPatch.match(/replacement:/g) || []).length, 1,
+  "top-level comment patch must have exactly one effective replacement");
+assert.ok(commentPatch.includes("r.rows[0].id") && !commentPatch.includes("result.rows[0].id"),
+  "top-level comment patch must use the live route's r result variable");
 
 assert.ok(bootstrap.includes('import { applyNotificationBootstrapPatch } from "./notificationBootstrapPatch.js";'),
   "the live bootstrap must use the tested patch helper");
