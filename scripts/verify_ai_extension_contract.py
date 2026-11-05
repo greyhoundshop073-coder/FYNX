@@ -10,6 +10,8 @@ registry = read("backend/fynxAiToolRegistry.js")
 privacy_policy = read("backend/fynxAiPrivacyPolicy.js")
 privacy_test = read("backend/test-fynx-ai-privacy-policy.mjs")
 marketplace_ai_test = read("backend/test-marketplace-ai-listing-copy.mjs")
+inline_writing_test = read("backend/test-fynx-ai-writing-copy.mjs")
+writing_support = read("backend/fynxAiWritingSupport.js")
 marketplace_ai_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceAiClient.kt")
 marketplace_ai_photo_test = read("backend/test-marketplace-ai-photo-review.mjs")
 marketplace_ai_photo_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceAiPhotoReviewClient.kt")
@@ -51,6 +53,9 @@ checks = [
     ("Seller must review and apply AI copy before publishing", "Review your AI listing draft" in marketplace_panel and "Use suggestion" in marketplace_panel and "listingCopyBusy" in marketplace_panel),
     ("Seller AI drafts are discarded when the product form changes", "latestListingCopyInputs.value == requestedInputSnapshot" in marketplace_panel and "Please generate a fresh suggestion" in marketplace_panel),
     ("AI copy does not bypass the existing Marketplace publish flow", "FynxRemoteSocialClient.createMarketplaceListing" in marketplace_panel and "listingCopySuggestion" in marketplace_panel),
+    ("Inline writing endpoint accepts only allowlisted text tasks and executes without data/action tools", "FYNX_AI_WRITING_LIMITS" in writing_support and "Object.keys(input).some(key => key !== \"kind\" && key !== \"text\")" in writing_support and "toolDefinitions: []" in writing_support and 'app.post("/api/assistant/writing-copy"' in writing_registry),
+    ("Inline writing endpoint tests authentication, redaction, no tools/history/media and response sanitization", "providerRequest.toolDefinitions" in inline_writing_test and "providerRequest.history" in inline_writing_test and "providerRequest.imageInputs" in inline_writing_test and "privateProfile" in inline_writing_test and "sanitizedReply" in inline_writing_test),
+    ("Every in-composer rewrite uses the dedicated scoped writing endpoint", all(fragment in ai_writing_client for fragment in ('"/api/assistant/writing-copy"', '"post_caption"', '"status_text"', '"profile_bio"', '"shop_description"', 'requestWritingCopy(context, kind, clean, 1000)'))),
     ("Feed post composer exposes authenticated AI caption improvement beside the caption field", "AiAssistantClient.improvePostCaption(context, requestedCaption)" in social_composer and "suspend fun improvePostCaption" in ai_writing_client and "/api/assistant/agent" in ai_writing_client),
     ("Feed AI caption suggestions require explicit user acceptance and preserve the original draft", "FYNX AI suggestion" in social_composer and "Keep my caption" in social_composer and "Use caption" in social_composer and "text = suggestion.take(4000)" in social_composer),
     ("Feed AI caption generation rejects blank input and protects against stale draft edits", "if (clean.isBlank()) return Result.failure" in ai_writing_client and "text.trim() == requestedCaption" in social_composer and "Your caption changed while FYNX AI was preparing it." in social_composer),
