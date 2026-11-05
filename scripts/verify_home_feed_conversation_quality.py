@@ -15,7 +15,8 @@ DISCOVERY = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeDiscoverySection.
 RUNTIME_NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 checks = [
-    ("quote-post composer keeps the original attributed post attached instead of copying its media", "Quote post" in HOME and "onQuote = { quotePost = post" in HOME and "post.quotedPost?.let" in HOME and "quoted.authorUsername" in HOME),
+    ("Home post action row exposes a repost button with quick repost and quote choices", 'FeedActionButton(onClick = { repostMenuOpen = true }' in HOME and "Undo repost" in HOME and "Quote post" in HOME and "onRepost(post.id" in HOME and "onQuote()" in HOME),
+    ("quote-post composer keeps the original attributed post attached instead of copying its media", "onQuote = { quotePost = post" in HOME and "post.quotedPost?.let" in HOME and "quoted.authorUsername" in HOME and "RemoteSocialMedia(mediaPath, quoted.mediaType, playbackActive = false)" in HOME),
     ("quote-post publishing is connected to the authenticated client", "suspend fun quotePost(context: Context, id: String, text: String)" in CLIENT and '"/api/social/posts/$numericId/quote"' in CLIENT and "quotedOriginal" in CLIENT),
     ("quote-post feed projection includes original author, text and media without exposing non-public originals", "p.quoted_post_id" in SOCIAL_ROUTES and "qp.visibility='PUBLIC'" in SOCIAL_ROUTES and "quotedOriginal" in SOCIAL_ROUTES),
     ("quote-post API only creates attributed public quotes and persists the repost relationship transactionally", 'app.post("/api/social/posts/:id/quote"' in DISCOVERY_ROUTES and "only another person's public post can be quoted" in DISCOVERY_ROUTES and "INSERT INTO social_post_reposts" in DISCOVERY_ROUTES and "await client.query(\"COMMIT\")" in DISCOVERY_ROUTES),
