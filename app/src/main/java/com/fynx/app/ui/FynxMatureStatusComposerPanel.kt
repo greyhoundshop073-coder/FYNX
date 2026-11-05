@@ -251,7 +251,7 @@ fun FynxMatureStatusComposerPanel(
 
     fun clearDraft() { if (publishing || recording || aiStatusBusy) return; mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; showMediaTools = false; error = null; aiStatusError = null; aiStatusSuggestion = null; aiStatusSource = null }
     fun publish() {
-        if (publishing || recording) return
+        if (publishing || recording || aiStatusBusy) return
         if (type == FynxStatusType.TEXT && text.isBlank()) { error = "Write something first."; return }
         if (type == FynxStatusType.MUSIC && selectedMusic == null) { error = "Choose a published FYNX music track first."; return }
         if (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri == null) { error = "Add your media first."; return }
@@ -640,11 +640,11 @@ fun FynxMatureStatusComposerPanel(
                             horizontalArrangement = Arrangement.spacedBy(18.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp)
                         ) {
-                            item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO || type == FynxStatusType.VIDEO, !recording && !publishing) { pickMedia.launch(arrayOf("image/*", "video/*")) } }
-                            item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.MusicNote, if (selectedMusic == null) "Add music" else "Change music", selectedMusic != null, !publishing && !recording) { onChooseMusic(); showColors = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; mediaUri = null; elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false } }
+                            item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing && !aiStatusBusy) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO || type == FynxStatusType.VIDEO, !recording && !publishing && !aiStatusBusy) { pickMedia.launch(arrayOf("image/*", "video/*")) } }
+                            item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing && !aiStatusBusy) { cameraOpen = true; showColors = false; showTools = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.MusicNote, if (selectedMusic == null) "Add music" else "Change music", selectedMusic != null, !publishing && !recording && !aiStatusBusy) { onChooseMusic(); showColors = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording && !aiStatusBusy) { type = FynxStatusType.VOICE; showColors = false; error = null; mediaUri = null; elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false } }
                         }
                     }
                     // Media tools are revealed from the photo/add control in the action row.
@@ -749,7 +749,7 @@ fun FynxMatureStatusComposerPanel(
                         } else {
                             Button(
                                 onClick = ::publish,
-                                enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type == FynxStatusType.MUSIC && selectedMusic != null) || (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri != null)),
+                                enabled = !publishing && !recording && !aiStatusBusy && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type == FynxStatusType.MUSIC && selectedMusic != null) || (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri != null)),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
                                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 9.dp)
                             ) {
