@@ -181,24 +181,20 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
         if (creatingConversation) return
         stopGeneration()
         endVoiceSession()
-        creatingConversation = true
+        // Keep the first-use dashboard and new-chat action independent of the
+        // backend. Create the persisted conversation only when the user sends
+        // their first prompt, so an offline service does not surface a raw 404
+        // or block access to the assistant composer.
+        conversationId = null
+        messages = emptyList()
         errorMessage = null
         statusMessage = null
         failedPrompt = null
         input = ""
         pendingMediaId = null
         pendingMessageAction = null
+        historyQuery = ""
         showConversationHistory = false
-        scope.launch {
-            FynxAiConversationClient.create(context)
-                .onSuccess {
-                    conversationId = it.id
-                    messages = emptyList()
-                    historyQuery = ""
-                }
-                .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX Assistant conversation." }
-            creatingConversation = false
-        }
     }
 
     fun loadConversation(id: String) {
@@ -354,14 +350,6 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
         }
     }
 
-    LaunchedEffect(Unit) {
-        creatingConversation = true
-        FynxAiConversationClient.create(context)
-            .onSuccess { conversationId = it.id }
-            .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX Assistant conversation." }
-        creatingConversation = false
-    }
-
     LaunchedEffect(showConversationHistory) {
         if (showConversationHistory) {
             historyLoading = true
@@ -392,7 +380,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
         }
 
         val activeConversation = conversationId
-        if ((prompt.isEmpty() && pendingMediaId == null) || loading || creatingConversation || activeConversation == null || pendingMediaUploading) return
+        if ((prompt.isEmpty() && pendingMediaId == null) || loading || creatingConversation || pendingMediaUploading) return
         val decision = FynxFutureIntelligencePolicy.authorize(
             permissions = listOf(FynxAiPermission(capability = FynxAiCapability.ASSISTANT, allowedScopes = setOf(FynxAiDataScope.NONE), enabled = true)),
             request = FynxAiRequest(
@@ -426,9 +414,11 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
 
         val activeJob = scope.launch(start = CoroutineStart.LAZY) {
             try {
+                val ensuredConversationId = activeConversation
+                    ?: FynxAiConversationClient.create(context).getOrThrow().id.also { conversationId = it }
                 val result = FynxAiConversationClient.sendStreaming(
                     context,
-                    activeConversation,
+                    ensuredConversationId,
                     requestMessage,
                     listOfNotNull(attachment)
                 ) { delta ->
