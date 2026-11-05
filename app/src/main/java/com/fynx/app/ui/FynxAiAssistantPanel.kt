@@ -123,6 +123,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
+            hasStartedInteraction = true
             scope.launch {
                 pendingMediaUploading = true
                 errorMessage = null
@@ -879,6 +880,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                                     IconButton(
                                         enabled = !creatingConversation && !pendingMediaUploading,
                                         onClick = {
+                                            hasStartedInteraction = true
                                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                                                 connectVoice()
                                             } else {
