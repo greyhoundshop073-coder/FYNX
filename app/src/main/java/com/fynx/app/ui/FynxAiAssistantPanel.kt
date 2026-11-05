@@ -88,6 +88,12 @@ private data class FynxAiUiMessage(
     val interrupted: Boolean = false
 )
 
+private data class FynxAiDiscoveryPrompt(
+    val title: String,
+    val description: String,
+    val prompt: String
+)
+
 /** User-facing FYNX Assistant. Private FYNX data stays inside its protected screens. */
 @Composable
 fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarketplaceListingId: String? = null) {
@@ -152,15 +158,16 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
         )
     }
     // Each discovery card starts a focused conversation; it is not a navigation alias.
+    // Keep short, user-facing descriptions separate from the full prompts sent to AI.
     val discoveryPrompts = remember {
         listOf(
-            "Marketplace guide" to "Explain how the FYNX Marketplace works. Walk me through discovering products, checking sellers and listings, buying safely, and how selling through My Shop works. Ask whether I want help as a buyer or seller.",
-            "Social discovery" to "Help me discover FYNX as a social community. Explain how to find public profiles, explore posts and trending conversations, and interact safely. Ask what kind of people or content I want to discover.",
-            "Daily planning" to "Help me organize my day and break goals into manageable tasks. Use only the details I share in this conversation. You cannot see or change my private To-Do or Calendar entries; when I am ready, guide me to the Daily Planning or Calendar shortcuts so I can add or edit items myself.",
-            "Writing assistant" to "Explain FYNX's inline AI writing assistant. It can help improve feed post captions, Marketplace product names and descriptions, Status text, profile bios, My Shop descriptions, comments and replies. Show me how to tap Improve with FYNX AI, review the suggested draft, and choose whether to use it or keep my original. Remind me that AI never posts or sends content automatically.",
-            "Image understanding" to "Show me how I can use FYNX AI to understand an image. Explain that I can attach a photo and ask questions about what is visible, then invite me to attach an image or describe what I need help with.",
-            "Voice assistant" to "Explain how to talk with FYNX AI using the voice assistant. Guide me through starting a voice conversation, speaking naturally, muting the microphone, and ending the session. Ask what I would like help with by voice.",
-            "Wallet guidance" to "Explain FYNX Wallet and Money Tools in general terms. Never ask for or inspect my wallet PIN, bank details, balance, or private transaction history. For account-specific information, guide me to open the protected Wallet screen. You cannot move money, make payments, withdraw funds, or issue refunds."
+            FynxAiDiscoveryPrompt("Marketplace guide", "Discover products, compare sellers and grow your My Shop.", "Explain how the FYNX Marketplace works. Walk me through discovering products, checking sellers and listings, buying safely, and how selling through My Shop works. Ask whether I want help as a buyer or seller."),
+            FynxAiDiscoveryPrompt("Social discovery", "Explore public profiles, posts and conversations.", "Help me discover FYNX as a social community. Explain how to find public profiles, explore posts and trending conversations, and interact safely. Ask what kind of people or content I want to discover."),
+            FynxAiDiscoveryPrompt("Daily planning", "Turn your goals into a clear, realistic day plan.", "Help me organize my day and break goals into manageable tasks. Use only the details I share in this conversation. You cannot see or change my private To-Do or Calendar entries; when I am ready, guide me to the Daily Planning or Calendar shortcuts so I can add or edit items myself."),
+            FynxAiDiscoveryPrompt("Writing assistant", "Polish captions, product copy, bios and replies.", "Explain FYNX's inline AI writing assistant. It can help improve feed post captions, Marketplace product names and descriptions, Status text, profile bios, My Shop descriptions, comments and replies. Show me how to tap Improve with FYNX AI, review the suggested draft, and choose whether to use it or keep my original. Remind me that AI never posts or sends content automatically."),
+            FynxAiDiscoveryPrompt("Image understanding", "Ask questions about a photo you share.", "Show me how I can use FYNX AI to understand an image. Explain that I can attach a photo and ask questions about what is visible, then invite me to attach an image or describe what I need help with."),
+            FynxAiDiscoveryPrompt("Voice assistant", "Talk naturally with your FYNX AI assistant.", "Explain how to talk with FYNX AI using the voice assistant. Guide me through starting a voice conversation, speaking naturally, muting the microphone, and ending the session. Ask what I would like help with by voice."),
+            FynxAiDiscoveryPrompt("Wallet guidance", "Understand Wallet tools and safe next steps.", "Explain FYNX Wallet and Money Tools in general terms. Never ask for or inspect my wallet PIN, bank details, balance, or private transaction history. For account-specific information, guide me to open the protected Wallet screen. You cannot move money, make payments, withdraw funds, or issue refunds.")
         )
     }
 
@@ -938,7 +945,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
 
 @Composable
 private fun FynxAiWelcomeContent(
-    discoveryPrompts: List<Pair<String, String>>,
+    discoveryPrompts: List<FynxAiDiscoveryPrompt>,
     toolLinks: List<Pair<String, String>>,
     onPrompt: (String) -> Unit,
     onOpenDestination: (String) -> Unit
@@ -1036,11 +1043,11 @@ private fun FynxAiWelcomeContent(
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Try asking", style = MaterialTheme.typography.titleMedium)
-            discoveryPrompts.forEach { (title, prompt) ->
+            discoveryPrompts.forEach { starter ->
                 Surface(
-                    modifier = Modifier.fillMaxWidth().clickable { onPrompt(prompt) },
+                    modifier = Modifier.fillMaxWidth().clickable { onPrompt(starter.prompt) },
                     shape = FynxDesign.CardShape,
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f)),
@@ -1048,13 +1055,36 @@ private fun FynxAiWelcomeContent(
                 ) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(11.dp)
                     ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(title, style = MaterialTheme.typography.titleSmall)
-                            Text(prompt, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFEAF3FF),
+                            border = BorderStroke(1.dp, Color(0xFFB8D7FF).copy(alpha = .75f))
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color(0xFF007FFF),
+                                modifier = Modifier.padding(8.dp).size(18.dp)
+                            )
                         }
-                        Icon(Icons.Default.Send, contentDescription = "Use suggestion", tint = MaterialTheme.colorScheme.primary)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(starter.title, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                starter.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2
+                            )
+                        }
+                        Icon(
+                            Icons.Default.Send,
+                            contentDescription = "Start this topic",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }

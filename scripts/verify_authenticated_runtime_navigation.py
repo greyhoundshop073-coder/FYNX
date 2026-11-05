@@ -1974,9 +1974,36 @@ def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
         screenshot(prefix + "-assistant-incomplete.png")
         (ROOT / (prefix + "-assistant-incomplete.xml")).write_text((latest or "") + "\n", encoding="utf-8")
         return False, "FYNX Assistant opened, but its welcome content, header and message composer did not all settle."
-    (ROOT / "authenticated-ai.xml").write_text(latest + "\n", encoding="utf-8")
-    screenshot("authenticated-ai.png")
+    (ROOT / "authenticated-ai-dashboard.xml").write_text(latest + "\n", encoding="utf-8")
+    screenshot("authenticated-ai-dashboard.png")
 
+    # Capture the Assistant's own compact discovery cards separately from Features search.
+    run("adb", "shell", "input", "swipe", "540", "1740", "540", "820", "420")
+    time.sleep(0.7)
+    discovery_xml = dump_ui("authenticated-ai-discovery.xml")
+    discovery_markers = ["Marketplace guide", "Social discovery", "Daily planning", "Writing assistant", "Image understanding", "Voice assistant", "Wallet guidance"]
+    if not discovery_xml or not any(marker in discovery_xml for marker in discovery_markers):
+        return False, "FYNX Assistant opened, but its discovery cards were not visible in the scrolled runtime hierarchy."
+    screenshot("authenticated-ai-discovery.png")
+
+    # Return to the top and focus the real composer without sending a prompt.
+    run("adb", "shell", "input", "swipe", "540", "820", "540", "1860", "420")
+    time.sleep(0.6)
+    latest = dump_ui("authenticated-ai-composer-ready.xml") or latest
+    fields = find_edit_fields(latest)
+    if fields:
+        _, composer_x, composer_y = fields[0]
+        run("adb", "shell", "input", "tap", str(composer_x), str(composer_y))
+        time.sleep(0.7)
+    composer_xml = dump_ui("authenticated-ai-composer.xml")
+    if not composer_xml or not (find_control(composer_xml, ["Message FYNX Assistant"]) or find_edit_fields(composer_xml)):
+        return False, "FYNX Assistant dashboard rendered, but its real message composer could not be focused for capture."
+    screenshot("authenticated-ai-composer.png")
+
+    # Dismiss the keyboard before opening the actual attachment menu.
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    time.sleep(0.4)
+    latest = dump_ui("authenticated-ai-attachment-ready.xml") or latest
     menu_xml = tap_control(latest, ["Attach to FYNX Assistant"], prefix + "-assistant-attachment-menu", ["Add an image"])
     menu_captured = bool(menu_xml and find_control(menu_xml, ["Add an image"]))
     if menu_captured:
@@ -1989,11 +2016,11 @@ def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
         return False, "FYNX Assistant rendered, but the runtime navigator could not return to Home."
     if not menu_captured:
         return False, "FYNX Assistant rendered, but its real image-attachment menu did not expose Add an image."
-    return True, "Captured the real FYNX Assistant welcome/conversation screen and image-attachment menu without sending a prompt."
+    return True, "Captured the actual FYNX Assistant dashboard, discovery cards, focused composer and image-attachment menu without sending a prompt."
 
 
 if AI_VISUALS_ONLY:
-    scope_line = "- Capture scope: FYNX Assistant dashboard and image-attachment menu only; no prompt is submitted and no FYNX account data is fabricated."
+    scope_line = "- Capture scope: actual FYNX Assistant dashboard, discovery cards, focused message composer and image-attachment menu; no prompt is submitted and no FYNX account data is fabricated."
     report.append(scope_line)
     if error:
         report += ["", "## FYNX Assistant screenshots", "- BLOCKED: Home was not reached: " + error, "", "## Result: BLOCKED"]
@@ -2003,6 +2030,7 @@ if AI_VISUALS_ONLY:
     captured, message = capture_ai_assistant_surface("ai-visual")
     if captured:
         report.append("- PASS: " + message)
+        report.append("- Screenshots: authenticated-ai-dashboard.png, authenticated-ai-discovery.png, authenticated-ai-composer.png and authenticated-ai-attachment-menu.png.")
         report.append("- Session: " + LOGIN_MODE + "; screenshots prove rendered UI/navigation only and do not certify live Gemini/backend replies.")
     else:
         report.append("- FAIL: " + message)
