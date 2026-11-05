@@ -261,6 +261,15 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         discoveryVideosLoading = true
         val offset = if (reset) 0 else discoveryVideosOffset
         scope.launch {
+            val localFixtures = FynxDiscoveryClient.localVisualFixtureVideos(context)
+            if (localFixtures != null) {
+                val existing = if (reset) emptyList() else discoveryVideos
+                discoveryVideos = (existing + localFixtures).distinctBy { it.id }
+                discoveryVideosOffset = localFixtures.size
+                discoveryVideosHasMore = false
+                discoveryVideosLoading = false
+                return@launch
+            }
             FynxDiscoveryClient.trending(context, 12, offset).onSuccess { page ->
                 val videoPosts = page.filter { it.mediaId != null && it.mediaType.equals("video", true) }
                 val existing = if (reset) emptyList() else discoveryVideos
@@ -420,6 +429,12 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         scope.launch { runCatching { FynxDiscoveryClient.recordView(context, postId) } }
     }
     LaunchedEffect(publishRefreshKey) {
+        // CI-only local Discovery fixtures deliberately bypass network availability;
+        // normal app sessions continue to use the authenticated trending endpoint.
+        if (FynxDiscoveryClient.localVisualFixtureVideos(context) != null) {
+            loadDiscoveryVideos(true)
+            return@LaunchedEffect
+        }
         val network = FynxNetworkQuality.current(context)
         if (network == FynxNetworkQuality.Level.OFFLINE) return@LaunchedEffect
 
