@@ -1065,7 +1065,8 @@ private fun FynxFeedTextureVideo(
                 )
                 LinearProgressIndicator(
                     progress = { (playbackPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    modifier = Modifier.fillMaxWidth().height(3.dp)
+                        .semantics { contentDescription = "Video playback progress" },
                     color = Color.White,
                     trackColor = Color.White.copy(alpha = 0.32f)
                 )
