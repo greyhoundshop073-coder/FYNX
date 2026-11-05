@@ -177,7 +177,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             )
             commentCount = maxOf(post.commentCount, previewComments.size)
             onCommentCountChanged(commentCount)
-            resolveCommenterPhotos(previewComments)
+            // Local preview authors intentionally use initials; avoid all profile/backend lookups.
             loading = false
             error = null
             return
@@ -248,7 +248,6 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             expandedReplies = expandedReplies + (previewComment.id to emptyList())
             commentCount += 1
             onCommentCountChanged(commentCount)
-            resolveCommenterPhotos(listOf(previewComment))
             text = ""
             replyingToId = null
             error = null
