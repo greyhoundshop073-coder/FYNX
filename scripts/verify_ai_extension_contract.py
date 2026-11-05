@@ -25,6 +25,9 @@ android_client = read("app/src/main/java/com/fynx/app/ui/FynxAiConversationClien
 android_voice = read("app/src/main/java/com/fynx/app/ui/FynxAiVoiceSession.kt")
 android_panel = read("app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt")
 backend_client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
+runtime_capture = read("scripts/verify_authenticated_runtime_navigation.py")
+runtime_runner = read("scripts/run_android_runtime_certification.sh")
+android_workflow = read(".github/workflows/android-build.yml")
 
 checks = [
     ("mandatory privacy boundary documents protected data", "wallet balances" in doc and "private FYNX chat messages" in doc and "KYC" in doc and "saved-post history" in doc),
@@ -83,6 +86,9 @@ checks = [
     ("Android conversation client parses delta and completion events through FYNX transport", "FynxBackendClient.postJsonStream" in android_client and "suspend fun sendStreaming" in android_client and '"delta"' in android_client and '"complete"' in android_client),
     ("Android AI panel renders streamed deltas and restores failed prompts for retry", "FynxAiConversationClient.sendStreaming" in android_panel and "withContext(Dispatchers.Main.immediate)" in android_panel and "failedPrompt = requestMessage" in android_panel),
     ("AI extension contract documents optional SSE transport and JSON compatibility", "Server-Sent Events (SSE)" in doc and "streamGenerateContent" in doc and "default request/JSON response contract remains compatible" in doc),
+    ("AI dashboard runtime capture uses the installed app and verifies the real message composer", "FYNX_AI_VISUALS_ONLY" in runtime_capture and "capture_ai_assistant_surface" in runtime_capture and 'find_control(latest, ["FYNX Assistant"])' in runtime_capture and 'find_control(latest, ["Message FYNX Assistant"])' in runtime_capture),
+    ("AI dashboard runtime capture verifies the image menu and never submits a prompt", '"authenticated-ai.png"' in runtime_capture and '"authenticated-ai-attachment-menu.png"' in runtime_capture and '["Add an image"]' in runtime_capture and "no prompt is submitted" in runtime_capture),
+    ("AI PR enables emulator screenshot capture and backend-independent fallback", "feature/ai-streaming-reliability-20261105" in android_workflow and "FYNX_AI_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1" in runtime_runner),
     ("AI welcome screen renders approved discovery prompts and FYNX shortcuts", "FynxAiWelcomeContent" in android_panel and "Try asking" in android_panel and "Explore FYNX" in android_panel and "onOpenDestination" in android_panel),
     ("AI welcome suggestions do not offer protected saved-post history", "Show me my saved FYNX posts" not in android_panel and "get_my_saved_posts" not in registry),
     ("AI conversation history is searchable and deletion is confirmed", "historyQuery" in android_panel and "AlertDialog(" in android_panel and "Delete conversation?" in android_panel and "Keep conversation" in android_panel),
