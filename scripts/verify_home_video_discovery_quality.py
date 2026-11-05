@@ -9,6 +9,40 @@ navigation = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_
 
 checks = [
     (
+        "offline Discovery fixtures are opt-in, debuggable-build-only, and use the seeded private media cache",
+        "localVisualFixtureVideos" in client
+        and "ApplicationInfo.FLAG_DEBUGGABLE" in client
+        and '"fynx_ci_visual_fixtures"' in client
+        and '"home_discovery_videos"' in client
+        and '"ci-home-discovery-portrait"' in client
+        and "FynxDiscoveryClient.localVisualFixtureVideos(context)" in home
+        and "ci-home-discovery-fixtures.xml" in navigation,
+    ),
+    (
+        "runtime certification exercises both repost choices and the original-media quote composer without submitting",
+        "repost_quote_captured" in navigation
+        and 'find_exact_home_action(current, "Repost")' in navigation
+        and 'find_exact_home_action(repost_menu_xml, "Quote post")' in navigation
+        and "plain_option_visible" in navigation
+        and "authenticated-home-quote-composer.png" in navigation
+        and "No repost or quote was submitted." in navigation,
+    ),
+    (
+        "quote-post backend stores a distinct public commentary post linked to another public post transactionally",
+        'app.post("/api/social/posts/:id/quote"' in backend
+        and "quoted_post_id" in backend
+        and "visibility !== \"PUBLIC\"" in backend
+        and "String(original.rows[0].author_id) === String(req.user.sub)" in backend
+        and '"BEGIN"' in backend
+        and '"COMMIT"' in backend
+        and '"ROLLBACK"' in backend,
+    ),
+    (
+        "feed quote projection excludes non-public originals and blocked users",
+        "qp.visibility='PUBLIC'" in (ROOT / "backend/socialRoutes.js").read_text(encoding="utf-8")
+        and "qb.blocker_id=$1" in (ROOT / "backend/socialRoutes.js").read_text(encoding="utf-8"),
+    ),
+    (
         "video visual extraction reads a real frame and source display ratio",
         "MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH" in discovery
         and "MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT" in discovery
