@@ -128,3 +128,12 @@ Where a user is already writing content, the local composer may offer an AI spar
 These actions use the authenticated `/api/assistant/writing-copy` endpoint, which accepts only an allowlisted writing kind and the text being rewritten. It has no database, discovery, conversation or action tools, no conversation history, and no media inputs. Requests must contain only the text and minimal form context needed for the requested rewrite. Do not pass private profile/account data, wallet or order details, uploaded media, credentials, or hidden app state. Prompts must preserve user-supplied facts and must not invent claims, identity details, product specifications, business services, guarantees, or personal history.
 
 Every generated result is a draft. It must be previewed in the same writing flow and require an explicit user choice to apply it. It must never auto-publish, auto-send, auto-save, or perform an action on the user's behalf. If the source draft changes while generation is running, discard the stale suggestion and ask the user to generate again. Keep the existing content validation, moderation, permissions, audience, and publishing/sending flow unchanged.
+
+
+## User-led planning and protected money guidance
+
+The assistant may help a user think through a daily plan using only the details the user chooses to share in that conversation. A planning starter is guidance, not permission to read or modify To-Do tasks or Calendar entries. Until an individually reviewed, user-scoped action contract exists, users add or change those records through the normal To-Do and Calendar screens.
+
+Wallet and Money Tools starters may explain general navigation and concepts only. The AI must not request or inspect a wallet PIN, bank details, balance, private transaction history, payout details or KYC information. It must direct users to the protected Wallet or Money Tools screen for account-specific information. Transfers, payments, withdrawals, refunds and other financial actions remain unavailable to the assistant.
+
+The dashboard must distinguish contextual discovery cards (which start a conversation) from Explore FYNX shortcuts (which open real app destinations). Do not keep a shortcut that routes back to the assistant itself or implies a separate AI tool screen that does not exist.
