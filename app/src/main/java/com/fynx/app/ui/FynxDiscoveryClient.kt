@@ -29,6 +29,53 @@ object FynxDiscoveryClient {
     suspend fun recordInterested(context: Context, postId: String): Result<Unit> = recordEvent(context, "INTERESTED", postId = postId)
     suspend fun recordNotInterested(context: Context, postId: String): Result<Unit> = recordEvent(context, "NOT_INTERESTED", postId = postId)
 
+    /**
+     * Explicitly enabled, debug-only Discovery fixtures for the disposable CI emulator.
+     * The media IDs point at the same account-scoped files seeded by the runtime script;
+     * release builds and ordinary debug sessions never receive synthetic Discovery posts.
+     */
+    fun localVisualFixtureVideos(context: Context): List<TrendingPost>? {
+        val debuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        val enabled = context.getSharedPreferences("fynx_ci_visual_fixtures", Context.MODE_PRIVATE)
+            .getBoolean("home_discovery_videos", false)
+        if (!debuggable || !enabled) return null
+        val now = System.currentTimeMillis()
+        return listOf(
+            TrendingPost(
+                id = "ci-home-discovery-portrait",
+                authorUsername = "@fynx_visual_fixture",
+                authorDisplayName = "FYNX Visual Fixture",
+                text = "CI TEST FIXTURE — Discovery portrait video. Local-only preview; not published or uploaded.",
+                mediaId = "ci-home-portrait",
+                mediaType = "video",
+                timestamp = now,
+                likeCount = 12,
+                commentCount = 3,
+                shareCount = 0,
+                saveCount = 0,
+                score = 100.0,
+                authorId = "ci-local-fixture-author",
+                visibility = "PUBLIC"
+            ),
+            TrendingPost(
+                id = "ci-home-discovery-landscape",
+                authorUsername = "@fynx_visual_fixture",
+                authorDisplayName = "FYNX Visual Fixture",
+                text = "CI TEST FIXTURE — Discovery landscape video. Local-only preview; not published or uploaded.",
+                mediaId = "ci-home-landscape",
+                mediaType = "video",
+                timestamp = now - 1_000L,
+                likeCount = 9,
+                commentCount = 2,
+                shareCount = 0,
+                saveCount = 0,
+                score = 90.0,
+                authorId = "ci-local-fixture-author",
+                visibility = "PUBLIC"
+            )
+        )
+    }
+
     suspend fun trending(context: Context, limit: Int = 30, offset: Int = 0): Result<List<TrendingPost>> =
         FynxBackendClient.get(context, "/api/discovery/trending?limit=${limit.coerceIn(30, 50)}&offset=${offset.coerceAtLeast(0)}").mapCatching { raw ->
             val array = JSONObject(raw).optJSONArray("posts") ?: JSONArray()
