@@ -619,6 +619,10 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await ensureSocialFeedRepostSchema();
       const limit = Math.min(Math.max(Number(req.query?.limit) || 20, 1), 50);
       const offset = Math.min(Math.max(Number(req.query?.offset) || 0, 0), 1000000);
+      const feedMode = req.query?.mode === "following" ? "following" : "for_you";
+      const modeFilter = feedMode === "following"
+        ? "AND (p.author_id=$1 OR EXISTS (SELECT 1 FROM social_follows sfm WHERE sfm.follower_id=$1 AND sfm.followed_id=p.author_id) OR repost.user_id IS NOT NULL)"
+        : "";
       const rawCursor = typeof req.query?.before === 'string' ? req.query.before.trim().slice(0, 512) : '';
       let cursorCreatedAt = null;
       let cursorId = null;
@@ -657,11 +661,11 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           (SELECT COUNT(*) FROM social_post_comments c WHERE c.post_id=p.id) comment_count,
           EXISTS(SELECT 1 FROM social_post_likes l WHERE l.post_id=p.id AND l.user_id=$1) liked_by_current_user,
           EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=$1 AND f.followed_id=p.author_id) followed_by_current_user,
-          repost.username reposted_by_username, repost.display_name reposted_by_display_name
+          repost.username reposted_by_username, repost.display_name reposted_by_display_name, repost.user_id reposted_by_user_id
         FROM social_posts p
         JOIN users u ON u.id=p.author_id
         LEFT JOIN LATERAL (
-          SELECT ru.username, ru.display_name, sr.created_at
+          SELECT ru.username, ru.display_name, sr.created_at, sr.user_id
           FROM social_post_reposts sr
           JOIN users ru ON ru.id=sr.user_id
           WHERE sr.post_id=p.id
@@ -710,6 +714,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id)
              OR (b.blocker_id=p.author_id AND b.blocked_id=$1)
         )
+        ${modeFilter}
         ${pagination}
         ORDER BY COALESCE(repost.created_at,p.created_at) DESC, p.id DESC
         LIMIT $2${rawCursor ? '' : ' OFFSET $3'}
