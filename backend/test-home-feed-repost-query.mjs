@@ -81,7 +81,10 @@ try {
       (102,3,'unfollowed repost sample','PUBLIC','2026-11-05T10:10:00Z'),
       (103,6,'restricted original','FRIENDS_ONLY','2026-11-05T09:45:00Z'),
       (104,3,'blocked reposter sample','PUBLIC','2026-11-05T10:05:00Z'),
-      (105,2,'followed account post','PUBLIC','2026-11-05T09:50:00Z');
+      (105,2,'followed account post','PUBLIC','2026-11-05T09:50:00Z'),
+      (106,1,'my protected original','ONLY_ME','2026-11-05T09:40:00Z'),
+      (107,1,'my protected quote','ONLY_ME','2026-11-05T09:42:00Z');
+    UPDATE social_posts SET quoted_post_id=106 WHERE id=107;
     INSERT INTO social_follows(follower_id,followed_id) VALUES (1,2),(1,5);
     INSERT INTO blocks(blocker_id,blocked_id) VALUES (1,5);
     INSERT INTO social_post_reposts(post_id,user_id,created_at) VALUES
@@ -96,6 +99,8 @@ try {
   const byId = new Map(rows.map(row => [String(row.id), row]));
 
   assert.ok(byId.has("100"), "viewer sees their own post");
+  assert.ok(byId.has("107"), "viewer sees their own protected quote");
+  assert.equal(String(byId.get("107").quoted_original_id), "106", "viewer sees the original protected post embedded in their own quote");
   assert.ok(byId.has("101"), "viewer sees a public post reposted by an account they follow");
   assert.equal(byId.get("101").reposted_by_username, "followed_reposter", "followed repost is attributed");
   assert.equal(new Date(Number(byId.get("101").timestamp)).toISOString(), "2026-11-05T10:20:00.000Z", "followed repost timestamp advances the timeline event");
@@ -113,6 +118,7 @@ try {
   const followingResult = await client.query(followingQuery, [1, 100, 0]);
   const followingIds = new Set(followingResult.rows.map(row => String(row.id)));
   assert.ok(followingIds.has("100"), "Following includes the viewer's own posts");
+  assert.ok(followingIds.has("107"), "Following includes the viewer's own protected quote");
   assert.ok(followingIds.has("101"), "Following includes public originals reposted by followed accounts");
   assert.ok(followingIds.has("105"), "Following includes posts authored by followed accounts");
   assert.ok(!followingIds.has("102"), "Following excludes public posts from unfollowed accounts");
