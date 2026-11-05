@@ -45,7 +45,7 @@ for needle in ('Icons.Default.Favorite','Icons.Default.ChatBubbleOutline','Icons
     require(home, needle, f"Home reliability surface {needle}")
 for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNextCursor','discoveryFeed(context, 3, offset)','discoveryOffset','discoveryHasMore','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','lastVisibleIndex >= totalItems - 6','!loadingMore && !discoveryLoadingMore && !feedRequestInFlight','if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)'):
     require(home, needle, f"feed recovery/pagination {needle}")
-for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFeed(context)','if (safeOffset == 0 && remote.isFailure)'):
+for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context, normalizedMode)','readStaleCachedFeed(context, normalizedMode)','if (safeOffset == 0 && remote.isFailure)'):
     require(client, needle, f"offline feed recovery {needle}")
 for needle in ('onCommentCountChanged','expandedReplies','parentCommentId','nextCursor'):
     require(comments_panel, needle, f"comment/reply lifecycle {needle}")
@@ -176,7 +176,7 @@ else:
 require(home, 'networkReady: Boolean? = null', "Home feed receives the authoritative app connection state")
 require(home, 'val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE', "Home feed uses device transport state rather than backend health as its offline gate")
 require(home, 'Backend health is not the same as device connectivity', "Home feed still requests data when backend health probe fails")
-require(home, 'FynxRemoteSocialClient.cachedFeedPage(context)', "Home feed restores the account-scoped cached snapshot while offline")
+require(home, 'FynxRemoteSocialClient.cachedFeedPage(context, mode = feedMode)', "Home feed restores the selected account-scoped timeline cache while offline")
 require(home, 'if (networkReady == true) reload()', "Home feed automatically revalidates when the app connection returns")
 require(home, 'You\'re offline. Connect to a network to load your feed.', "Home feed shows a settled offline state instead of a permanent spinner")
 require(home, 'LaunchedEffect(publishRefreshKey) {\n        val network = FynxNetworkQuality.current(context)', "Home secondary refresh observes network quality")
