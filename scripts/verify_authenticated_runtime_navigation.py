@@ -449,13 +449,19 @@ def swipe_vertical_scroll_container(xml_text: str, name: str, *, reverse: bool =
 
 def restore_home_feed_top(xml_text: str, prefix: str = "authenticated-home-feed-restore-top") -> str:
     """Return Home to its top position so the intentionally hidden floating navigation reappears."""
+    size = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
+    if not match:
+        return xml_text
+    width, height = int(match.group(1)), int(match.group(2))
     current = xml_text
     for attempt in range(8):
         if is_authenticated_home_surface(current) and is_home_feed_navigation_visible(current):
             return current
-        candidate = swipe_vertical_scroll_container(
-            current, f"{prefix}-{attempt}.xml", reverse=True
-        )
+        x, start_y, end_y = _home_content_scroll_point(current, width, height, "down")
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        time.sleep(0.65)
+        candidate = dump_ui(f"{prefix}-{attempt}.xml")
         if not candidate or candidate == current:
             break
         current = candidate
@@ -1877,8 +1883,13 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                     if start_y - end_y < 300:
                         end_y = max(int(height * 0.25), start_y - 480)
                 else:
+                    # Restore the feed toward the top from a safe caption start.
+                    # The long downward drag also lets the shell's scroll observer
+                    # bring its intentionally hidden floating navigation back.
                     start_y = top + 8
-                    end_y = bottom - 8
+                    end_y = min(int(height * 0.82), bottom + 480)
+                    if end_y - start_y < 300:
+                        end_y = min(int(height * 0.82), start_y + 480)
                 if abs(end_y - start_y) < 240:
                     continue
                 candidates.append((score, x, start_y, end_y))
