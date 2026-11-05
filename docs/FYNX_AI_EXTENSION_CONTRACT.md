@@ -119,3 +119,12 @@ When adding a capability:
 ## Future-proofing
 
 This contract intentionally creates a stable seam for later additions such as smarter FYNX search, recommendations, translation, media assistance, planning, and other approved AI tools. Those additions should extend the registry/capability layer rather than rewrite the foundation.
+
+
+## Inline FYNX AI writing assistance
+
+Where a user is already writing content, the local composer may offer an AI sparkle action rather than forcing the user to leave for the AI dashboard. Current inline writing surfaces include feed captions, text Status updates, profile bios, My Shop descriptions, product listing copy, and social comments/replies.
+
+These actions use the authenticated FYNX AI transport. Requests must contain only the text and minimal form context needed for the requested rewrite. Do not pass private profile/account data, wallet or order details, uploaded media, credentials, or hidden app state. Prompts must preserve user-supplied facts and must not invent claims, identity details, product specifications, business services, guarantees, or personal history.
+
+Every generated result is a draft. It must be previewed in the same writing flow and require an explicit user choice to apply it. It must never auto-publish, auto-send, auto-save, or perform an action on the user's behalf. If the source draft changes while generation is running, discard the stale suggestion and ask the user to generate again. Keep the existing content validation, moderation, permissions, audience, and publishing/sending flow unchanged.

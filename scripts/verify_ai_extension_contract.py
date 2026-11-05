@@ -19,6 +19,7 @@ ai_writing_client = read("app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt
 status_composer = read("app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt")
 profile_editor = read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt")
 seller_center = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt")
+comments_composer = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
 gemini_provider = read("backend/geminiAssistantProvider.js")
 provider_test = read("backend/test-gemini-assistant-provider.mjs")
 conversation = read("backend/aiConversationRoutes.js")
@@ -58,6 +59,8 @@ checks = [
     ("Profile bio editor offers authenticated AI rewriting without auto-saving", "AiAssistantClient.improveProfileBio(context, requestedBio)" in profile_editor and "Keep my bio" in profile_editor and "Use bio" in profile_editor and "onSave(profile.copy" in profile_editor),
     ("My Shop description offers authenticated AI rewriting without changing saved shop data automatically", "AiAssistantClient.improveShopDescription(context, requestedName, requestedDescription)" in seller_center and "Keep my description" in seller_center and "Use description" in seller_center and "patchJson(context, \"/api/marketplace/my-shop\"" in seller_center),
     ("Status, bio and shop AI writing preserve drafts when inputs change during generation", "text.trim() == requestedText" in status_composer and "bio.trim() == requestedBio" in profile_editor and "shopName.trim() == requestedName && shopDescription.trim() == requestedDescription" in seller_center),
+    ("Comment and reply composer offers authenticated AI rewriting with explicit review and no automatic send", "AiAssistantClient.improveCommentText(context, requestedText, replyingTo != null)" in comments_composer and "Keep my draft" in comments_composer and "Use suggestion" in comments_composer and "fun send()" in comments_composer),
+    ("Comment AI preserves thread context and invalidates stale suggestions", "val requestedText = text.trim()" in comments_composer and "text.trim() == requestedText" in comments_composer and "replyingTo != null" in comments_composer and "aiCommentSuggestion = null" in comments_composer),
 
     ("Marketplace photo review requires seller consent", "Review product photos with FYNX AI?" in marketplace_panel and "Review photos" in marketplace_panel),
     ("Marketplace photo review uses temporary bounded image inputs", 'app.post("/api/assistant/marketplace/photo-review"' in registry and "dataBase64" in registry and "MARKETPLACE_AI_PHOTO_REVIEW_MAX_TOTAL_BYTES = 9 * 1024 * 1024" in registry),

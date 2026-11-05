@@ -56,6 +56,16 @@ object AiAssistantClient {
         )
     }
 
+    suspend fun improveCommentText(context: Context, comment: String, isReply: Boolean): Result<String> {
+        val clean = comment.trim().take(1000)
+        if (clean.isBlank()) return Result.failure(IllegalArgumentException("Comment is empty"))
+        val kind = if (isReply) "reply" else "comment"
+        return sendMessage(
+            context,
+            "Improve this FYNX social $kind. Preserve the user's intended meaning and facts. Make it clearer, natural and respectful, without adding claims, threats, personal details, insults or assumptions. Keep it concise and suitable for a public conversation. Return only the finished $kind.\n\nOriginal $kind:\n$clean"
+        )
+    }
+
     suspend fun translateText(context: Context, text: String, targetLanguage: String): Result<String> {
         val cleanText = text.trim().take(8000)
         val language = targetLanguage.trim().take(80)
