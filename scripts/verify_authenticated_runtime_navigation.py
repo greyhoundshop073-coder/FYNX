@@ -1962,13 +1962,18 @@ def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
         latest = dump_ui(prefix + "-assistant-settled.xml")
         has_header = bool(find_control(latest, ["FYNX Assistant"]))
         has_composer = bool(find_control(latest, ["Message FYNX Assistant"]) or find_edit_fields(latest))
-        if has_header and has_composer:
+        has_welcome = bool(find_control(latest, ["What can we work on today?", "Try asking"]))
+        if has_header and has_composer and has_welcome:
             break
         time.sleep(0.5)
-    if not (find_control(latest, ["FYNX Assistant"]) and (find_control(latest, ["Message FYNX Assistant"]) or find_edit_fields(latest))):
+    if not (
+        find_control(latest, ["FYNX Assistant"])
+        and (find_control(latest, ["Message FYNX Assistant"]) or find_edit_fields(latest))
+        and find_control(latest, ["What can we work on today?", "Try asking"])
+    ):
         screenshot(prefix + "-assistant-incomplete.png")
         (ROOT / (prefix + "-assistant-incomplete.xml")).write_text((latest or "") + "\n", encoding="utf-8")
-        return False, "FYNX Assistant opened, but its visible header and message composer did not both settle."
+        return False, "FYNX Assistant opened, but its welcome content, header and message composer did not all settle."
     (ROOT / "authenticated-ai.xml").write_text(latest + "\n", encoding="utf-8")
     screenshot("authenticated-ai.png")
 
@@ -2662,13 +2667,18 @@ if features:
                 after = dump_ui("authenticated-ai-settled.xml")
                 has_header = bool(find_control(after, ["FYNX Assistant"]))
                 has_composer = bool(find_control(after, ["Message FYNX Assistant"]) or find_edit_fields(after))
-                if has_header and has_composer:
+                has_welcome = bool(find_control(after, ["What can we work on today?", "Try asking"]))
+                if has_header and has_composer and has_welcome:
                     break
                 time.sleep(0.5)
-            if not (find_control(after, ["FYNX Assistant"]) and (find_control(after, ["Message FYNX Assistant"]) or find_edit_fields(after))):
+            if not (
+                find_control(after, ["FYNX Assistant"])
+                and (find_control(after, ["Message FYNX Assistant"]) or find_edit_fields(after))
+                and find_control(after, ["What can we work on today?", "Try asking"])
+            ):
                 screenshot("authenticated-ai-incomplete.png")
                 (ROOT/"authenticated-ai-incomplete.xml").write_text((after or "")+"\n", encoding="utf-8")
-                FAILURES.append("authenticated Features -> AI opened without a settled FYNX Assistant header and message composer")
+                FAILURES.append("authenticated Features -> AI did not render its welcome content, header and message composer")
                 continue
             (ROOT/"authenticated-ai.xml").write_text(after+"\n", encoding="utf-8")
             screenshot("authenticated-ai.png")
