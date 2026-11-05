@@ -9,6 +9,11 @@ navigation = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_
 
 checks = [
     (
+        "local Discovery fixture views and engagements never emit analytics writes",
+        'postId?.startsWith("ci-home-discovery-") == true' in client
+        and "return Result.success(Unit)" in client,
+    ),
+    (
         "offline Discovery fixtures are opt-in, debuggable-build-only, and use the seeded private media cache",
         "localVisualFixtureVideos" in client
         and "ApplicationInfo.FLAG_DEBUGGABLE" in client
