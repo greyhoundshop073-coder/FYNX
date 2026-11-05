@@ -2149,7 +2149,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                         missing_fullscreen_actions.append("Mute control did not toggle in both directions")
                     if not re.search(r"\d{2}:\d{2}\s*/\s*\d{2}:\d{2}", fullscreen_xml):
                         missing_fullscreen_actions.append("Elapsed / total playback time")
-                    if not any("progressbar" in (node.attrib.get("class") or "").lower() for node in nodes(fullscreen_xml)):
+                    if not find_control(fullscreen_xml, ["Video playback progress"]):
                         missing_fullscreen_actions.append("Playback progress track")
                     if not find_control(fullscreen_xml, ["Close media viewer"]):
                         missing_fullscreen_actions.append("Close viewer")
