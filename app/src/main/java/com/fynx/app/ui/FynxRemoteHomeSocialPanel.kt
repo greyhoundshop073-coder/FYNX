@@ -940,18 +940,18 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
             if (!mine) FeedActionButton(onClick = { repostMenuOpen = true }, enabled = !interactionBusy, icon = Icons.Default.Repeat, label = "Repost", count = interactionState.repostCount, active = interactionState.reposted)
             FeedActionButton(onClick = onShare, enabled = !interactionBusy, icon = Icons.Default.Share, label = "Share")
             FeedActionButton(onClick = { onSave(post.id, !interactionState.saved) }, enabled = !interactionBusy, icon = if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, label = if (interactionState.saved) "Saved" else "Save", count = interactionState.savedCount, active = interactionState.saved)
-        }
-        DropdownMenu(expanded = repostMenuOpen, onDismissRequest = { repostMenuOpen = false }) {
-            DropdownMenuItem(
-                text = { Text(if (interactionState.reposted) "Undo repost" else "Repost") },
-                onClick = { repostMenuOpen = false; onRepost(post.id, !interactionState.reposted) },
-                leadingIcon = { Icon(Icons.Default.Repeat, null) }
-            )
-            DropdownMenuItem(
-                text = { Text("Quote post") },
-                onClick = { repostMenuOpen = false; onQuote() },
-                leadingIcon = { Icon(Icons.Default.FormatQuote, null) }
-            )
+            DropdownMenu(expanded = repostMenuOpen, onDismissRequest = { repostMenuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (interactionState.reposted) "Undo repost" else "Repost") },
+                    onClick = { repostMenuOpen = false; onRepost(post.id, !interactionState.reposted) },
+                    leadingIcon = { Icon(Icons.Default.Repeat, null) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Quote post") },
+                    onClick = { repostMenuOpen = false; onQuote() },
+                    leadingIcon = { Icon(Icons.Default.FormatQuote, null) }
+                )
+            }
         }
         if (reactionState.total > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text(reactionSummary(reactionState), style = MaterialTheme.typography.labelMedium, color = FynxDesign.TextSecondary, modifier = Modifier.combinedClickable(role = Role.Button, onClickLabel = "Open people who reacted", onClick = onOpenReactionUsers)) }
     }
