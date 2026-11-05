@@ -669,7 +669,6 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           FROM social_post_reposts sr
           JOIN users ru ON ru.id=sr.user_id
           WHERE sr.post_id=p.id
-            AND sr.user_id<>p.author_id
             AND (
               sr.user_id=$1
               OR EXISTS (
