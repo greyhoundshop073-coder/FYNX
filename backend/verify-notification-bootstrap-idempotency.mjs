@@ -50,7 +50,7 @@ assert.ok(bootstrap.includes("postOwner=await pool.query('SELECT author_id FROM 
 assert.ok(bootstrap.includes("notificationId:'comment-'+r.rows[0].id"),
   "top-level comment notifications use a stable id");
 const commentPatchStart = bootstrap.indexOf('marker: "const u=await pool.query');
-const commentPatchEnd = bootstrap.indexOf("\\n  }\\n]);", commentPatchStart);
+const commentPatchEnd = bootstrap.indexOf("\n  }\n]);", commentPatchStart);
 const commentPatch = bootstrap.slice(commentPatchStart, commentPatchEnd);
 assert.equal((commentPatch.match(/replacement:/g) || []).length, 1,
   "top-level comment patch must have exactly one effective replacement");
