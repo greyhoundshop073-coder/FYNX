@@ -309,14 +309,24 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       if (!postId || !text) return res.status(400).json({ error: "quote text is required" });
       if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
       const original = await pool.query("SELECT id,author_id,visibility FROM social_posts WHERE id=$1 LIMIT 1", [postId]);
-      if (!original.rows[0] || original.rows[0].visibility !== "PUBLIC") {
-        return res.status(404).json({ error: "only public posts can be quoted" });
+      const isOwnPost = original.rows[0] && String(original.rows[0].author_id) === String(req.user.sub);
+      if (!original.rows[0] || (!isOwnPost && original.rows[0].visibility !== "PUBLIC")) {
+        return res.status(404).json({ error: "only public posts from other accounts can be quoted" });
       }
+      // A quote of your own protected post must retain the original audience.
+      // Other people's protected posts are never made shareable by a quote.
+      const quoteVisibility = isOwnPost ? original.rows[0].visibility : "PUBLIC";
       await client.query("BEGIN");
       const created = await client.query(
-        "INSERT INTO social_posts(author_id,text,visibility,quoted_post_id) VALUES($1,$2,'PUBLIC',$3) RETURNING id",
-        [req.user.sub, text, postId]
+        "INSERT INTO social_posts(author_id,text,visibility,quoted_post_id) VALUES($1,$2,$3,$4) RETURNING id",
+        [req.user.sub, text, quoteVisibility, postId]
       );
+      if (quoteVisibility === "SELECTED_PEOPLE") {
+        await client.query(
+          "INSERT INTO social_post_audience(post_id,user_id) SELECT $1,user_id FROM social_post_audience WHERE post_id=$2 ON CONFLICT DO NOTHING",
+          [created.rows[0].id, postId]
+        );
+      }
       await client.query("INSERT INTO social_post_reposts(post_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [postId, req.user.sub]);
       await client.query("COMMIT");
       return res.status(201).json({ postId: String(created.rows[0].id), quotedPostId: String(postId) });
