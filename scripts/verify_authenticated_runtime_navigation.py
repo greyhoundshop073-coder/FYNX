@@ -2667,15 +2667,15 @@ if features:
                 time.sleep(0.5)
             if not (find_control(after, ["FYNX Assistant"]) and (find_control(after, ["Message FYNX Assistant"]) or find_edit_fields(after))):
                 screenshot("authenticated-ai-incomplete.png")
-                (ROOT/"authenticated-ai-incomplete.xml").write_text((after or "")+"\\n", encoding="utf-8")
+                (ROOT/"authenticated-ai-incomplete.xml").write_text((after or "")+"\n", encoding="utf-8")
                 FAILURES.append("authenticated Features -> AI opened without a settled FYNX Assistant header and message composer")
                 continue
-            (ROOT/"authenticated-ai.xml").write_text(after+"\\n", encoding="utf-8")
+            (ROOT/"authenticated-ai.xml").write_text(after+"\n", encoding="utf-8")
             screenshot("authenticated-ai.png")
             report.append("- PASS authenticated Features -> FYNX Assistant header, message composer and real dashboard screenshot/UI hierarchy")
             menu_xml = tap_control(after, ["Attach to FYNX Assistant"], "ai-attachment-menu", ["Add an image"])
             if menu_xml and find_control(menu_xml, ["Add an image"]):
-                (ROOT/"authenticated-ai-attachment-menu.xml").write_text(menu_xml+"\\n", encoding="utf-8")
+                (ROOT/"authenticated-ai-attachment-menu.xml").write_text(menu_xml+"\n", encoding="utf-8")
                 screenshot("authenticated-ai-attachment-menu.png")
                 report.append("- PASS FYNX Assistant composer attachment menu exposes the real Add an image action")
                 run("adb","shell","input","keyevent","KEYCODE_BACK")
