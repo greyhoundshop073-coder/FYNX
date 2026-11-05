@@ -96,14 +96,14 @@ try {
   assert.ok(byId.has("100"), "viewer sees their own post");
   assert.ok(byId.has("101"), "viewer sees a public post reposted by an account they follow");
   assert.equal(byId.get("101").reposted_by_username, "followed_reposter", "followed repost is attributed");
-  assert.equal(new Date(byId.get("101").timestamp).toISOString(), "2026-11-05T10:20:00.000Z", "followed repost timestamp advances the timeline event");
+  assert.equal(new Date(Number(byId.get("101").timestamp)).toISOString(), "2026-11-05T10:20:00.000Z", "followed repost timestamp advances the timeline event");
   assert.ok(byId.has("102"), "public original remains in feed even without a followed repost");
   assert.equal(byId.get("102").reposted_by_username, null, "unfollowed repost is not attributed");
-  assert.equal(new Date(byId.get("102").timestamp).toISOString(), "2026-11-05T10:10:00.000Z", "unfollowed repost cannot advance the viewer's timeline");
+  assert.equal(new Date(Number(byId.get("102").timestamp)).toISOString(), "2026-11-05T10:10:00.000Z", "unfollowed repost cannot advance the viewer's timeline");
   assert.ok(!byId.has("103"), "reposting does not expose a restricted original to an unapproved viewer");
   assert.ok(byId.has("104"), "public original remains visible independently of a blocked reposter");
   assert.equal(byId.get("104").reposted_by_username, null, "blocked reposter is excluded from attribution");
-  assert.equal(new Date(byId.get("104").timestamp).toISOString(), "2026-11-05T10:05:00.000Z", "blocked repost cannot advance the viewer's timeline");
+  assert.equal(new Date(Number(byId.get("104").timestamp)).toISOString(), "2026-11-05T10:05:00.000Z", "blocked repost cannot advance the viewer's timeline");
 
   const ids = rows.map(row => String(row.id));
   assert.equal(new Set(ids).size, ids.length, "one timeline card is returned per original post");
