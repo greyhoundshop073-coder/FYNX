@@ -2367,7 +2367,9 @@ if install.returncode!=0:
 prepare_debug_visual_capture_permissions()
 xml,error=login()
 if HOME_FEED_VISUALS_ONLY and not error and LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
-    seed_offline_home_feed_visual_fixtures(USERNAME or "marketplace_visual_check")
+    fixtures_ready = seed_offline_home_feed_visual_fixtures(USERNAME or "marketplace_visual_check")
+    if not fixtures_ready:
+        FAILURES.append("Home Feed offline visual fixtures could not be seeded; refusing to accept a screenshot-only partial run.")
     # The helper relaunches Home after seeding so Compose reads the fresh test cache.
     xml = dump_ui("ci-home-feed-fixture-entry.xml") or xml
 if HOME_FEED_VISUALS_ONLY and not error:
@@ -2428,10 +2430,17 @@ if HOME_FEED_VISUALS_ONLY:
             "authenticated-home-comments.png",
         )
     )
-    capture_result = "GREEN" if not FAILURES and media_proof_complete else "PARTIAL" if not FAILURES else "RED"
+    if not media_proof_complete:
+        missing_evidence = [
+            name for name in (
+                "authenticated-home-inline-video.png",
+                "authenticated-home-fullscreen-video.png",
+                "authenticated-home-comments.png",
+            ) if not (ROOT / name).is_file()
+        ]
+        FAILURES.append("Home Feed visual certification is incomplete; missing required evidence: " + ", ".join(missing_evidence))
+    capture_result = "GREEN" if not FAILURES and media_proof_complete else "RED"
     report += ["", f"## Result: {capture_result}"]
-    if not media_proof_complete and not FAILURES:
-        report.append("- The real Home screen was captured, but full video/comment proof requires existing live media and conversation data.")
     if FAILURES:
         report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
     (ROOT / "FYNX-home-feed-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
