@@ -232,7 +232,9 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         if (isLocalPreview) {
             val now = System.currentTimeMillis()
             val parentDepth = if (parentId == null || comments.any { it.id == parentId }) 0
-                else flattenHomeReplies(comments.firstOrNull()?.id.orEmpty(), expandedReplies).firstOrNull { it.comment.id == parentId }?.depth ?: 0
+                else comments.asSequence()
+                    .flatMap { root -> flattenHomeReplies(root.id, expandedReplies).asSequence() }
+                    .firstOrNull { it.comment.id == parentId }?.depth ?: 0
             if (parentId != null && parentDepth >= MAX_COMMENT_REPLY_DEPTH) {
                 error = "Replies are limited to five levels."
                 return
