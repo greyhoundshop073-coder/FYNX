@@ -11,10 +11,11 @@ const queryEnd = source.indexOf(queryEndMarker, queryStart);
 assert.ok(queryStart >= 0 && queryEnd > queryStart, "Home feed SQL query can be extracted");
 let query = source.slice(queryStart + "const r = await pool.query(`".length, queryEnd);
 assert.ok(query.includes("${pagination}"), "Home feed query retains cursor pagination placeholder");
+assert.ok(query.includes("${modeFilter}"), "Home feed query retains the timeline-mode placeholder");
 assert.ok(query.includes("${rawCursor ? '' : ' OFFSET $3'}"), "Home feed query retains offset pagination placeholder");
-query = query
-  .replace("${pagination}", "AND TRUE")
-  .replace("${rawCursor ? '' : ' OFFSET $3'}", " OFFSET $3");
+const followingFilter = "AND (p.author_id=$1 OR EXISTS (SELECT 1 FROM social_follows sfm WHERE sfm.follower_id=$1 AND sfm.followed_id=p.author_id) OR repost.user_id IS NOT NULL)";
+const baseQuery = query.replace("${modeFilter}", "").replace("${pagination}", "AND TRUE").replace("${rawCursor ? '' : ' OFFSET $3'}", " OFFSET $3");
+const followingQuery = query.replace("${modeFilter}", followingFilter).replace("${pagination}", "AND TRUE").replace("${rawCursor ? '' : ' OFFSET $3'}", " OFFSET $3");
 
 const client = new Client({
   host: process.env.PGHOST || "localhost",
@@ -79,7 +80,8 @@ try {
       (101,3,'followed repost sample','PUBLIC','2026-11-05T09:30:00Z'),
       (102,3,'unfollowed repost sample','PUBLIC','2026-11-05T10:10:00Z'),
       (103,6,'restricted original','FRIENDS_ONLY','2026-11-05T09:45:00Z'),
-      (104,3,'blocked reposter sample','PUBLIC','2026-11-05T10:05:00Z');
+      (104,3,'blocked reposter sample','PUBLIC','2026-11-05T10:05:00Z'),
+      (105,2,'followed account post','PUBLIC','2026-11-05T09:50:00Z');
     INSERT INTO social_follows(follower_id,followed_id) VALUES (1,2),(1,5);
     INSERT INTO blocks(blocker_id,blocked_id) VALUES (1,5);
     INSERT INTO social_post_reposts(post_id,user_id,created_at) VALUES
@@ -89,7 +91,7 @@ try {
       (104,5,'2026-11-05T10:55:00Z');
   `);
 
-  const result = await client.query(query, [1, 100, 0]);
+  const result = await client.query(baseQuery, [1, 100, 0]);
   const rows = result.rows;
   const byId = new Map(rows.map(row => [String(row.id), row]));
 
@@ -108,7 +110,16 @@ try {
   const ids = rows.map(row => String(row.id));
   assert.equal(new Set(ids).size, ids.length, "one timeline card is returned per original post");
   assert.equal(ids[0], "101", "followed repost event is ordered by its repost timestamp");
-  console.log("HOME FEED REPOST POSTGRES INTEGRATION: GREEN");
+  const followingResult = await client.query(followingQuery, [1, 100, 0]);
+  const followingIds = new Set(followingResult.rows.map(row => String(row.id)));
+  assert.ok(followingIds.has("100"), "Following includes the viewer's own posts");
+  assert.ok(followingIds.has("101"), "Following includes public originals reposted by followed accounts");
+  assert.ok(followingIds.has("105"), "Following includes posts authored by followed accounts");
+  assert.ok(!followingIds.has("102"), "Following excludes public posts from unfollowed accounts");
+  assert.ok(!followingIds.has("103"), "Following still hides restricted originals that the viewer cannot see");
+  assert.ok(!followingIds.has("104"), "Following excludes content only reposted by an account the viewer blocked");
+
+  console.log("HOME FEED REPOST + FOLLOWING POSTGRES INTEGRATION: GREEN");
 } finally {
   await client.query("ROLLBACK");
   await client.end();
