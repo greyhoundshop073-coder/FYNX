@@ -826,6 +826,7 @@ private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource
 private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, profilePhotoMediaId: String?, hasActiveStatus: Boolean, interactionState: FynxRemoteSocialClient.SocialInteractionState, reactionState: FynxHomePostReactionsClient.ReactionState, interactionBusy: Boolean, mediaItems: List<FynxHomePostMediaClient.PostMediaItem>, playbackActive: Boolean, onOpenProfile: () -> Unit, onOpenStatus: () -> Unit, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onReport: () -> Unit, onInterested: (String) -> Unit, onNotInterested: (String) -> Unit, onSave: (String, Boolean) -> Unit, onRepost: (String, Boolean) -> Unit, onQuote: () -> Unit, onShare: () -> Unit, onOpenReactionPicker: () -> Unit, onReact: (String, String) -> Unit, onOpenAudienceEditor: () -> Unit, reactionPickerOpen: Boolean, onOpenReactionUsers: () -> Unit, onOpenMarketplace: () -> Unit, onOpenVideoDiscovery: () -> Unit, onOpenMediaViewer: (List<FynxHomePostMediaClient.PostMediaItem>, Int) -> Unit) {
     val context = LocalContext.current
     var menuOpen by remember(post.id) { mutableStateOf(false) }
+    var repostMenuOpen by remember(post.id) { mutableStateOf(false) }
     val marketplaceListingId = Regex("""(?m)^Listing ID:\s*(\d+)\s*$""").find(post.text)?.groupValues?.getOrNull(1)
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true); val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER); val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
     val openMarketplaceTarget: (() -> Unit)? = if (marketplaceAd) { { if (marketplaceListingId.isNullOrBlank()) onOpenMarketplace() else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(marketplaceListingId)))) } } else null
@@ -877,8 +878,6 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                                 onClick = { menuOpen = false; onSave(post.id, !interactionState.saved) },
                                 leadingIcon = { Icon(if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, null) }
                             )
-                            DropdownMenuItem(text = { Text(if (interactionState.reposted) "Undo repost" else "Repost") }, onClick = { menuOpen = false; onRepost(post.id, !interactionState.reposted) }, leadingIcon = { Icon(Icons.Default.Repeat, null) })
-                            DropdownMenuItem(text = { Text("Quote post") }, onClick = { menuOpen = false; onQuote() }, leadingIcon = { Icon(Icons.Default.FormatQuote, null) })
                             DropdownMenuItem(text = { Text("I'm interested") }, onClick = { menuOpen = false; onInterested(post.id) })
                             DropdownMenuItem(text = { Text("Share post") }, onClick = { menuOpen = false; onShare() }, leadingIcon = { Icon(Icons.Default.Share, null) })
                             DropdownMenuItem(text = { Text("I'm not interested") }, onClick = { menuOpen = false; onNotInterested(post.id) })
@@ -938,8 +937,21 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
             FeedActionButton(onClick = { onLike(post.id) }, onLongClick = onOpenReactionPicker, enabled = !interactionBusy, icon = if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, label = "Like", longClickLabel = "Open post reactions", count = reactionState.total.coerceAtLeast(post.likeCount), active = post.likedByCurrentUser)
             FeedActionButton(onClick = onComment, enabled = !interactionBusy, icon = Icons.Default.ChatBubbleOutline, label = "Comment", count = post.commentCount)
+            if (!mine) FeedActionButton(onClick = { repostMenuOpen = true }, enabled = !interactionBusy, icon = Icons.Default.Repeat, label = "Repost", count = interactionState.repostCount, active = interactionState.reposted)
             FeedActionButton(onClick = onShare, enabled = !interactionBusy, icon = Icons.Default.Share, label = "Share")
             FeedActionButton(onClick = { onSave(post.id, !interactionState.saved) }, enabled = !interactionBusy, icon = if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, label = if (interactionState.saved) "Saved" else "Save", count = interactionState.savedCount, active = interactionState.saved)
+        }
+        DropdownMenu(expanded = repostMenuOpen, onDismissRequest = { repostMenuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text(if (interactionState.reposted) "Undo repost" else "Repost") },
+                onClick = { repostMenuOpen = false; onRepost(post.id, !interactionState.reposted) },
+                leadingIcon = { Icon(Icons.Default.Repeat, null) }
+            )
+            DropdownMenuItem(
+                text = { Text("Quote post") },
+                onClick = { repostMenuOpen = false; onQuote() },
+                leadingIcon = { Icon(Icons.Default.FormatQuote, null) }
+            )
         }
         if (reactionState.total > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text(reactionSummary(reactionState), style = MaterialTheme.typography.labelMedium, color = FynxDesign.TextSecondary, modifier = Modifier.combinedClickable(role = Role.Button, onClickLabel = "Open people who reacted", onClick = onOpenReactionUsers)) }
     }
