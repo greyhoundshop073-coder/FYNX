@@ -81,8 +81,17 @@ checks = [
     ("Android stream transport falls back to bounded JSON for older backends", "Older backends may ignore Accept: text/event-stream" in backend_client and "MAX_RESPONSE_BYTES" in backend_client and "connection.contentType" in backend_client),
     ("Android conversation client keeps legacy JSON AI responses usable", "if (!response.has(\"assistantMessage\"))" in android_client and "response.optString(\"type\") == \"complete\"" in android_client),
     ("Android conversation client parses delta and completion events through FYNX transport", "FynxBackendClient.postJsonStream" in android_client and "suspend fun sendStreaming" in android_client and '"delta"' in android_client and '"complete"' in android_client),
-    ("Android AI panel renders streamed deltas and restores failed prompts for retry", "FynxAiConversationClient.sendStreaming" in android_panel and "withContext(Dispatchers.Main)" in android_panel and "failedPrompt = prompt" in android_panel),
+    ("Android AI panel renders streamed deltas and restores failed prompts for retry", "FynxAiConversationClient.sendStreaming" in android_panel and "withContext(Dispatchers.Main.immediate)" in android_panel and "failedPrompt = requestMessage" in android_panel),
     ("AI extension contract documents optional SSE transport and JSON compatibility", "Server-Sent Events (SSE)" in doc and "streamGenerateContent" in doc and "default request/JSON response contract remains compatible" in doc),
+    ("AI welcome screen renders approved discovery prompts and FYNX shortcuts", "FynxAiWelcomeContent" in android_panel and "Try asking" in android_panel and "Explore FYNX" in android_panel and "onOpenDestination" in android_panel),
+    ("AI welcome suggestions do not offer protected saved-post history", "Show me my saved FYNX posts" not in android_panel and "get_my_saved_posts" not in registry),
+    ("AI conversation history is searchable and deletion is confirmed", "historyQuery" in android_panel and "AlertDialog(" in android_panel and "Delete conversation?" in android_panel and "Keep conversation" in android_panel),
+    ("AI streaming can be stopped without leaving a permanent loading state", "fun stopGeneration()" in android_panel and "Icons.Default.StopCircle" in android_panel and "CoroutineStart.LAZY" in android_panel and "currentCoroutineContext()[Job]" in android_panel),
+    ("AI voice mode exposes an explicit disconnect control", "fun endVoiceSession()" in android_panel and "End voice session" in android_panel),
+    ("AI chat follows the latest response without dragging readers away from older messages", "snapshotFlow" in android_panel and "followingLatest" in android_panel and "Latest ↓" in android_panel and "items(messages, key = { it.id })" in android_panel),
+    ("AI conversation reload preserves image attachments", "attachmentIds = it.attachmentIds" in android_panel and "message.attachmentIds.forEach" in android_panel and "FynxRemoteMedia(" in android_panel),
+    ("AI messages render selectable headings, lists and formatted text", "buildFynxAiMarkdown" in android_panel and "SelectionContainer" in android_panel and "fontWeight = FontWeight.Bold" in android_panel and "append(\"•  \" )" not in android_panel),
+    ("Image-only AI prompts send a non-empty user instruction", "val requestMessage = prompt.ifBlank { \"Analyze the attached image.\" }" in android_panel),
 ]
 
 failed = [name for name, ok in checks if not ok]
