@@ -24,7 +24,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -41,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -90,8 +97,9 @@ private data class FynxAiUiMessage(
 
 private data class FynxAiDiscoveryPrompt(
     val title: String,
-    val description: String,
-    val prompt: String
+    val prompt: String,
+    val icon: ImageVector,
+    val accentColor: Color
 )
 
 /** User-facing FYNX Assistant. Private FYNX data stays inside its protected screens. */
@@ -161,13 +169,48 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
     // Keep short, user-facing descriptions separate from the full prompts sent to AI.
     val discoveryPrompts = remember {
         listOf(
-            FynxAiDiscoveryPrompt("Marketplace guide", "Discover products, compare sellers and grow your My Shop.", "Explain how the FYNX Marketplace works. Walk me through discovering products, checking sellers and listings, buying safely, and how selling through My Shop works. Ask whether I want help as a buyer or seller."),
-            FynxAiDiscoveryPrompt("Social discovery", "Explore public profiles, posts and conversations.", "Help me discover FYNX as a social community. Explain how to find public profiles, explore posts and trending conversations, and interact safely. Ask what kind of people or content I want to discover."),
-            FynxAiDiscoveryPrompt("Daily planning", "Turn your goals into a clear, realistic day plan.", "Help me organize my day and break goals into manageable tasks. Use only the details I share in this conversation. You cannot see or change my private To-Do or Calendar entries; when I am ready, guide me to the Daily Planning or Calendar shortcuts so I can add or edit items myself."),
-            FynxAiDiscoveryPrompt("Writing assistant", "Polish captions, product copy, bios and replies.", "Explain FYNX's inline AI writing assistant. It can help improve feed post captions, Marketplace product names and descriptions, Status text, profile bios, My Shop descriptions, comments and replies. Show me how to tap Improve with FYNX AI, review the suggested draft, and choose whether to use it or keep my original. Remind me that AI never posts or sends content automatically."),
-            FynxAiDiscoveryPrompt("Image understanding", "Ask questions about a photo you share.", "Show me how I can use FYNX AI to understand an image. Explain that I can attach a photo and ask questions about what is visible, then invite me to attach an image or describe what I need help with."),
-            FynxAiDiscoveryPrompt("Voice assistant", "Talk naturally with your FYNX AI assistant.", "Explain how to talk with FYNX AI using the voice assistant. Guide me through starting a voice conversation, speaking naturally, muting the microphone, and ending the session. Ask what I would like help with by voice."),
-            FynxAiDiscoveryPrompt("Wallet guidance", "Understand Wallet tools and safe next steps.", "Explain FYNX Wallet and Money Tools in general terms. Never ask for or inspect my wallet PIN, bank details, balance, or private transaction history. For account-specific information, guide me to open the protected Wallet screen. You cannot move money, make payments, withdraw funds, or issue refunds.")
+            FynxAiDiscoveryPrompt(
+                title = "Marketplace guide",
+                prompt = "Explain how the FYNX Marketplace works. Walk me through discovering products, checking sellers and listings, buying safely, and how selling through My Shop works. Ask whether I want help as a buyer or seller.",
+                icon = Icons.Default.Store,
+                accentColor = Color(0xFF007FFF)
+            ),
+            FynxAiDiscoveryPrompt(
+                title = "Social discovery",
+                prompt = "Help me discover FYNX as a social community. Explain how to find public profiles, explore posts and trending conversations, and interact safely. Ask what kind of people or content I want to discover.",
+                icon = Icons.Default.Group,
+                accentColor = Color(0xFF008000)
+            ),
+            FynxAiDiscoveryPrompt(
+                title = "Daily planning",
+                prompt = "Help me organize my day and break goals into manageable tasks. Use only the details I share in this conversation. You cannot see or change my private To-Do or Calendar entries; when I am ready, guide me to the Daily Planning or Calendar shortcuts so I can add or edit items myself.",
+                icon = Icons.Default.CalendarToday,
+                accentColor = Color(0xFFE3A008)
+            ),
+            FynxAiDiscoveryPrompt(
+                title = "Writing assistant",
+                prompt = "Explain FYNX's inline AI writing assistant. It can help improve feed post captions, Marketplace product names and descriptions, Status text, profile bios, My Shop descriptions, comments and replies. Show me how to tap Improve with FYNX AI, review the suggested draft, and choose whether to use it or keep my original. Remind me that AI never posts or sends content automatically.",
+                icon = Icons.Default.Edit,
+                accentColor = Color(0xFF7C3AED)
+            ),
+            FynxAiDiscoveryPrompt(
+                title = "Image understanding",
+                prompt = "Show me how I can use FYNX AI to understand an image. Explain that I can attach a photo and ask questions about what is visible, then invite me to attach an image or describe what I need help with.",
+                icon = Icons.Default.Image,
+                accentColor = Color(0xFF0891B2)
+            ),
+            FynxAiDiscoveryPrompt(
+                title = "Voice assistant",
+                prompt = "Explain how to talk with FYNX AI using the voice assistant. Guide me through starting a voice conversation, speaking naturally, muting the microphone, and ending the session. Ask what I would like help with by voice.",
+                icon = Icons.Default.Mic,
+                accentColor = Color(0xFFDB2777)
+            ),
+            FynxAiDiscoveryPrompt(
+                title = "Wallet guidance",
+                prompt = "Explain FYNX Wallet and Money Tools in general terms. Never ask for or inspect my wallet PIN, bank details, balance, or private transaction history. For account-specific information, guide me to open the protected Wallet screen. You cannot move money, make payments, withdraw funds, or issue refunds.",
+                icon = Icons.Default.AccountBalanceWallet,
+                accentColor = Color(0xFFDC143C)
+            )
         )
     }
 
@@ -645,9 +688,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                         item(key = "fynx-ai-welcome") {
                             FynxAiWelcomeContent(
                                 discoveryPrompts = discoveryPrompts,
-                                toolLinks = toolLinks,
-                                onPrompt = { sendPrompt(it, true) },
-                                onOpenDestination = onOpenDestination
+                                onPrompt = { sendPrompt(it, true) }
                             )
                         }
                     } else {
@@ -946,166 +987,94 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
 @Composable
 private fun FynxAiWelcomeContent(
     discoveryPrompts: List<FynxAiDiscoveryPrompt>,
-    toolLinks: List<Pair<String, String>>,
-    onPrompt: (String) -> Unit,
-    onOpenDestination: (String) -> Unit
+    onPrompt: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EDF3)),
-            border = BorderStroke(1.dp, Color(0xFFC8D2DE).copy(alpha = .9f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+            border = BorderStroke(1.dp, Color(0xFFBED7FF)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
-            Box(
-                Modifier
+            Row(
+                modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         Brush.linearGradient(
-                            listOf(
-                                Color(0xFFF9FBFD),
-                                Color(0xFFDCE3EB),
-                                Color(0xFFF2F5F8),
-                                Color(0xFFD4DDE7),
-                                Color(0xFFF8FAFC)
-                            )
+                            listOf(Color(0xFFF5F9FF), Color(0xFFE7F1FF))
                         )
                     )
-                    .padding(20.dp)
+                    .padding(horizontal = 16.dp, vertical = 15.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0xFFEAE4FF),
-                            border = BorderStroke(1.dp, Color(0xFFB8A7F4).copy(alpha = .7f))
-                        ) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color(0xFF7250D5),
-                                modifier = Modifier.padding(11.dp).size(24.dp)
-                            )
-                        }
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                "FYNX AI",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF526174),
-                                fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 1.2.sp
-                            )
-                            Text(
-                                "Ask · Create · Discover",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF526174)
-                            )
-                        }
-                    }
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFFDCEBFF),
+                    border = BorderStroke(1.dp, Color(0xFFB8D7FF))
+                ) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = "FYNX AI",
+                        tint = Color(0xFF007FFF),
+                        modifier = Modifier.padding(10.dp).size(24.dp)
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "What can we work on today?",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color(0xFF1C2434)
+                        "Hello! How can I help today?",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF1C2434),
+                        fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "Ask a question, plan something, explore FYNX, or share an image for help. Your conversations stay in your FYNX account.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        "Ask a question or share a photo to get started.",
+                        style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF526174)
                     )
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF202B3A),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = .18f))
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color.White.copy(alpha = .9f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                "A clear space for ideas, plans and discovery",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Try asking", style = MaterialTheme.typography.titleMedium)
-            discoveryPrompts.forEach { starter ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth().clickable { onPrompt(starter.prompt) },
-                    shape = FynxDesign.CardShape,
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f)),
-                    tonalElevation = 1.dp
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(11.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0xFFEAF3FF),
-                            border = BorderStroke(1.dp, Color(0xFFB8D7FF).copy(alpha = .75f))
-                        ) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color(0xFF007FFF),
-                                modifier = Modifier.padding(8.dp).size(18.dp)
-                            )
-                        }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(starter.title, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                starter.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2
-                            )
-                        }
-                        Icon(
-                            Icons.Default.Send,
-                            contentDescription = "Start this topic",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
                 }
             }
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Explore FYNX", style = MaterialTheme.typography.titleMedium)
-            toolLinks.chunked(2).forEach { rowLinks ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    rowLinks.forEach { (destination, label) ->
-                        AssistChip(
-                            modifier = Modifier.weight(1f),
-                            onClick = { onOpenDestination(destination) },
-                            label = { Text(label, maxLines = 1) },
-                            leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
-                        )
+            Text("Try asking", style = MaterialTheme.typography.titleMedium)
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(end = 4.dp)
+            ) {
+                items(discoveryPrompts, key = { it.title }) { starter ->
+                    Surface(
+                        modifier = Modifier.clickable { onPrompt(starter.prompt) },
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, starter.accentColor.copy(alpha = .28f)),
+                        tonalElevation = 1.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = starter.accentColor.copy(alpha = .12f)
+                            ) {
+                                Icon(
+                                    starter.icon,
+                                    contentDescription = null,
+                                    tint = starter.accentColor,
+                                    modifier = Modifier.padding(7.dp).size(17.dp)
+                                )
+                            }
+                            Text(
+                                starter.title,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                        }
                     }
-                    if (rowLinks.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
         }
