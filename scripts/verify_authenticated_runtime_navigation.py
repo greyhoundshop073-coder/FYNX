@@ -1834,9 +1834,18 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                 # away from the header controls, bottom navigation and media tile.
                 score = abs(center_y - height * 0.64) - min(node_height, 280) * 0.20 - min(len(value), 180) * 0.08
                 x = max(20, min(width - 20, left + min(28, max(8, node_width // 16))))
-                start_y = bottom - 8 if direction == "up" else top + 8
-                end_y = top + 8 if direction == "up" else bottom - 8
-                if end_y == start_y:
+                if direction == "up":
+                    # Start on the safe, non-clickable caption, but drag well above
+                    # its short text bounds so a tall portrait video can clear the
+                    # bottom navigation in one measured scroll step.
+                    start_y = min(bottom - 8, int(height * 0.82))
+                    end_y = max(int(height * 0.25), top - 360)
+                    if start_y - end_y < 300:
+                        end_y = max(int(height * 0.25), start_y - 480)
+                else:
+                    start_y = top + 8
+                    end_y = bottom - 8
+                if abs(end_y - start_y) < 240:
                     continue
                 candidates.append((score, x, start_y, end_y))
             if candidates:
