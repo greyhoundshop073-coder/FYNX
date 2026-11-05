@@ -48,8 +48,10 @@ permissions:
   id-token: write
 
 concurrency:
-  group: fynx-android-${{ github.workflow }}-${{ github.sha }}
-  cancel-in-progress: false
+  # Keep only the newest validation for a PR (or branch push); commit-SHA groups
+  # leave every intermediate build queued and waste the Android emulator runners.
+  group: fynx-android-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
 
 env:
   GOOGLE_CLOUD_PROJECT: fynx-f0868
