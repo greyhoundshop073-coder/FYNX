@@ -1790,7 +1790,7 @@ def is_home_feed_navigation_visible(xml_text: str) -> bool:
 
 
 def _home_content_scroll_point(xml_text: str, width: int, height: int, direction: str) -> tuple[int, int, int]:
-    """Choose a vertical drag wholly inside a visible, non-clickable feed caption when possible."""
+    """Start on visible non-clickable caption text and drag far enough to expose tall media."""
     if xml_text:
         try:
             root = ET.fromstring(xml_text)
