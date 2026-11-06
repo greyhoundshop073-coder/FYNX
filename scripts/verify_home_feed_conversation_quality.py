@@ -86,7 +86,14 @@ checks = [
     ("Home visual certification fails when fixture seeding or any required screenshot is missing", "fixtures_ready = seed_offline_home_feed_visual_fixtures" in RUNTIME_NAVIGATION and "if not fixtures_ready:" in RUNTIME_NAVIGATION and "Home Feed visual certification is incomplete; missing required evidence:" in RUNTIME_NAVIGATION and 'capture_result = "GREEN" if not FAILURES and media_proof_complete else "RED"' in RUNTIME_NAVIGATION),
     ("Home feed scan follows the mounted feed while navigation auto-hides, then restores top with a safe downward caption gesture", "def is_home_feed_runtime_surface(xml_text: str) -> bool:" in RUNTIME_NAVIGATION and "if not is_home_feed_runtime_surface(current):" in RUNTIME_NAVIGATION and "def restore_home_feed_top(" in RUNTIME_NAVIGATION and ' _home_content_scroll_point(current, width, height, "down")' in RUNTIME_NAVIGATION and "end_y = min(int(height * 0.82), bottom + 480)" in RUNTIME_NAVIGATION and "is_home_feed_navigation_visible(home_xml)" in RUNTIME_NAVIGATION and "refusing to continue on another screen" in RUNTIME_NAVIGATION),
     ("Home screenshot capture scans multiple real feed viewports", "def scroll_home_feed_page(index: int, home_xml: str)" in RUNTIME_NAVIGATION and "for page in range(1, 9)" in RUNTIME_NAVIGATION),
-    ("Home scanner scrolls offline fixtures from safe non-clickable feed content, away from Android's edge-back and bottom-navigation zones", "fixture_scan = HOME_FEED_FIXTURES_SEEDED and \"CI TEST FIXTURE\" in current" in RUNTIME_NAVIGATION and "x = max(64, int(width * 0.075))" in RUNTIME_NAVIGATION and "start_y, end_y = int(height * 0.78), int(height * 0.22)" in RUNTIME_NAVIGATION and "max_attempts = 5 if fixture_scan else 2" in RUNTIME_NAVIGATION and "visible_home_video_preview_ratios(candidate)" in RUNTIME_NAVIGATION),
+    ("Home scanner scrolls fixtures from safe non-clickable captions across portrait, landscape and square video posts",
+        "fixture_scan = HOME_FEED_FIXTURES_SEEDED and \"CI TEST FIXTURE\" in current" in RUNTIME_NAVIGATION
+        and "max_attempts = 5 if fixture_scan else 2" in RUNTIME_NAVIGATION
+        and "_home_content_scroll_point(current, width, height, \"up\")" in RUNTIME_NAVIGATION
+        and "A fixed left-gutter swipe is unsafe on full-width landscape clips" in RUNTIME_NAVIGATION
+        and "visible_home_video_preview_ratios(candidate)" in RUNTIME_NAVIGATION
+        and "x = max(64, int(width * 0.075))" not in RUNTIME_NAVIGATION
+        and "start_y, end_y = int(height * 0.78), int(height * 0.22)" not in RUNTIME_NAVIGATION),
     ("Home scanner closes an accidentally opened media viewer safely", "def _dismiss_home_media_viewer(" in RUNTIME_NAVIGATION and 'find_control(xml_text, ["Close viewer"])' in RUNTIME_NAVIGATION),
     ("video comments are matched to the same post card", "def find_home_video_post_comment_action(" in RUNTIME_NAVIGATION and "find_home_video_post_comment_action(current)" in RUNTIME_NAVIGATION),
     ("comments capture verifies a real existing comment row", "def has_visible_home_comment_row(" in RUNTIME_NAVIGATION and "and has_visible_home_comment_row(candidate)" in RUNTIME_NAVIGATION),
