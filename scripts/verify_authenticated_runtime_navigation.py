@@ -12,7 +12,8 @@ ROOT=Path("fynx-runtime-screenshots"); ROOT.mkdir(parents=True,exist_ok=True)
 PACKAGE="com.fynx.app"
 USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
-VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1"
+AI_VISUALS_ONLY=os.environ.get("FYNX_AI_VISUALS_ONLY") == "1"
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
@@ -1468,7 +1469,7 @@ def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[st
 report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
-        ("Marketplace-only visual capture may use the APK's explicit debug-only local UI entry; it is not server authentication." if VISUALS_ONLY else "This journey uses a real FYNX account supplied through GitHub Actions secrets."),
+        ("FYNX Assistant/Marketplace visual capture may use the APK's explicit debug-only local UI entry; it is not server authentication." if VISUALS_ONLY else "This journey uses a real FYNX account supplied through GitHub Actions secrets."),
         "No fabricated users, posts, messages, listings or application records are created.",
         "Credentials are never written to the APK or repository."]
 
@@ -1876,6 +1877,171 @@ def capture_wallet_from_features(prefix:str):
     if not action_screens_captured:
         return False, result_message+" Add Money, bank-transfer and Withdraw screenshots were not all captured."
     return True, result_message+" Also captured the real Add Money, bank-transfer readiness and Withdraw screens."
+
+
+def find_ai_feature_entry(xml_text: str):
+    """Locate the actual FYNX AI feature card below the Features search field."""
+    if not xml_text:
+        return None
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+    search_bottom = None
+    for node in root.iter("node"):
+        if node.attrib.get("class") == "android.widget.EditText":
+            try:
+                _, search_bottom = map(
+                    int, node.attrib.get("bounds", "").split("][", 1)[1].strip("[]").split(",")
+                )
+                break
+            except (ValueError, IndexError):
+                pass
+    for node in root.iter("node"):
+        label = (node.attrib.get("text") or "").strip().casefold()
+        if label != "fynx ai assistant" or node.attrib.get("class") == "android.widget.EditText":
+            continue
+        current = parents.get(id(node))
+        while current is not None:
+            if current.attrib.get("clickable", "false").lower() == "true":
+                try:
+                    left_top, right_bottom = current.attrib.get("bounds", "").split("][", 1)
+                    left, top = map(int, left_top.strip("[]").split(","))
+                    right, bottom = map(int, right_bottom.strip("[]").split(","))
+                    center = _center(current)
+                    if center and right - left >= 500 and 70 <= bottom - top <= 320 and (search_bottom is None or top >= search_bottom):
+                        return center
+                except (ValueError, IndexError):
+                    pass
+            current = parents.get(id(current))
+    return None
+
+
+def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
+    """Capture the actual AI dashboard and composer from the running app without sending a prompt."""
+    home = restore_home_after_restart(prefix + "-home") or dump_ui(prefix + "-home-current.xml")
+    if not home or not find_control(home, ["Chat"]) or not find_control(home, ["Friends"]):
+        return False, "Home could not be restored before opening FYNX Assistant."
+    features = tap_control(home, ["More", "Features"], prefix + "-features", ["FYNX Features"])
+    if not features:
+        return False, "Home -> Features did not open for the AI screen capture."
+    search = find_control(features, ["Search FYNX tools"])
+    if not search:
+        return False, "Features search was not visible while locating FYNX AI Assistant."
+    _, sx, sy = search
+    run("adb", "shell", "input", "tap", str(sx), str(sy))
+    time.sleep(0.25)
+    run("adb", "shell", "input", "keyevent", "KEYCODE_CTRL_A")
+    run("adb", "shell", "input", "keyevent", "KEYCODE_DEL")
+    typed = input_text("FYNX AI Assistant")
+    if typed.returncode != 0:
+        return False, "Could not search the real Features list for FYNX AI Assistant."
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    deadline = time.monotonic() + 8.0
+    latest_features = ""
+    target = None
+    while time.monotonic() < deadline:
+        latest_features = dump_ui(prefix + "-features-ai-search.xml")
+        target = find_ai_feature_entry(latest_features)
+        if target:
+            break
+        time.sleep(0.4)
+    if not target:
+        screenshot(prefix + "-features-ai-entry-missing.png")
+        return False, "The real FYNX AI Assistant feature card did not appear in Features search."
+    x, y = target
+    run("adb", "logcat", "-c")
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    deadline = time.monotonic() + 20.0
+    latest = ""
+    while time.monotonic() < deadline:
+        latest = dump_ui(prefix + "-assistant-settled.xml")
+        has_header = bool(find_control(latest, ["FYNX Assistant"]))
+        has_composer = bool(find_control(latest, ["Message FYNX Assistant"]) or find_edit_fields(latest))
+        has_welcome = bool(find_control(latest, ["What can we work on today?", "Try asking"]))
+        if has_header and has_composer and has_welcome:
+            break
+        time.sleep(0.5)
+    if not (
+        find_control(latest, ["FYNX Assistant"])
+        and (find_control(latest, ["Message FYNX Assistant"]) or find_edit_fields(latest))
+        and find_control(latest, ["What can we work on today?", "Try asking"])
+    ):
+        screenshot(prefix + "-assistant-incomplete.png")
+        (ROOT / (prefix + "-assistant-incomplete.xml")).write_text((latest or "") + "\n", encoding="utf-8")
+        return False, "FYNX Assistant opened, but its welcome content, header and message composer did not all settle."
+    (ROOT / "authenticated-ai-dashboard.xml").write_text(latest + "\n", encoding="utf-8")
+    screenshot("authenticated-ai-dashboard.png")
+
+    # Capture the Assistant's own compact discovery cards separately from Features search.
+    run("adb", "shell", "input", "swipe", "540", "1740", "540", "820", "420")
+    time.sleep(0.7)
+    discovery_xml = dump_ui("authenticated-ai-discovery.xml")
+    discovery_markers = ["Marketplace guide", "Social discovery", "Daily planning", "Writing assistant", "Image understanding", "Voice assistant", "Wallet guidance"]
+    if not discovery_xml or not any(marker in discovery_xml for marker in discovery_markers):
+        return False, "FYNX Assistant opened, but its discovery cards were not visible in the scrolled runtime hierarchy."
+    screenshot("authenticated-ai-discovery.png")
+
+    # Return to the top and focus the real composer without sending a prompt.
+    run("adb", "shell", "input", "swipe", "540", "820", "540", "1860", "420")
+    time.sleep(0.6)
+    latest = dump_ui("authenticated-ai-composer-ready.xml") or latest
+    fields = find_edit_fields(latest)
+    if fields:
+        composer_x, composer_y = fields[0]
+        run("adb", "shell", "input", "tap", str(composer_x), str(composer_y))
+        time.sleep(0.7)
+    composer_xml = dump_ui("authenticated-ai-composer.xml")
+    if not composer_xml or not (find_control(composer_xml, ["Message FYNX Assistant"]) or find_edit_fields(composer_xml)):
+        return False, "FYNX Assistant dashboard rendered, but its real message composer could not be focused for capture."
+    screenshot("authenticated-ai-composer.png")
+
+    # Dismiss the keyboard before opening the actual attachment menu.
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    time.sleep(0.4)
+    latest = dump_ui("authenticated-ai-attachment-ready.xml") or latest
+    menu_xml = tap_control(latest, ["Attach to FYNX Assistant"], prefix + "-assistant-attachment-menu", ["Add an image"])
+    menu_captured = bool(menu_xml and find_control(menu_xml, ["Add an image"]))
+    if menu_captured:
+        (ROOT / "authenticated-ai-attachment-menu.xml").write_text(menu_xml + "\n", encoding="utf-8")
+        screenshot("authenticated-ai-attachment-menu.png")
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        time.sleep(0.4)
+    home_after = restore_home_after_restart(prefix + "-return-home")
+    if not home_after or find_control(home_after, ["FYNX Features"]):
+        return False, "FYNX Assistant rendered, but the runtime navigator could not return to Home."
+    if not menu_captured:
+        return False, "FYNX Assistant rendered, but its real image-attachment menu did not expose Add an image."
+    return True, "Captured the actual FYNX Assistant dashboard, discovery cards, focused composer and image-attachment menu without sending a prompt."
+
+
+if AI_VISUALS_ONLY:
+    scope_line = "- Capture scope: actual FYNX Assistant dashboard, discovery cards, focused message composer and image-attachment menu; no prompt is submitted and no FYNX account data is fabricated."
+    report.append(scope_line)
+    if error:
+        report += ["", "## FYNX Assistant screenshots", "- BLOCKED: Home was not reached: " + error, "", "## Result: BLOCKED"]
+        (ROOT / "FYNX-ai-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(2)
+    captured, message = capture_ai_assistant_surface("ai-visual")
+    if captured:
+        report.append("- PASS: " + message)
+        report.append("- Screenshots: authenticated-ai-dashboard.png, authenticated-ai-discovery.png, authenticated-ai-composer.png and authenticated-ai-attachment-menu.png.")
+        report.append("- Session: " + LOGIN_MODE + "; screenshots prove rendered UI/navigation only and do not certify live Gemini/backend replies.")
+    else:
+        report.append("- FAIL: " + message)
+        FAILURES.append("FYNX Assistant runtime visual capture: " + message)
+    report += ["", "## Evidence boundary",
+               "- Screenshots are captured from the installed Android emulator using adb screencap; UI hierarchies come from Android UIAutomator.",
+               "- No prompt is submitted, no message is sent, and no private account data is included.",
+               "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    (ROOT / "FYNX-ai-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
 
 
 # Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an
@@ -2522,14 +2688,50 @@ if features:
             continue
         _,ex,ey=entry
         run("adb","shell","input","tap",str(ex),str(ey))
-        time.sleep(1.2)
-        after=dump_ui(f"authenticated-{name}-destination.xml")
-        screenshot(f"authenticated-{name}.png")
-        if not after:
-            FAILURES.append("authenticated Features -> "+name)
-            continue
-        if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
-        else: FAILURES.append("authenticated Features -> "+name)
+        if name == "ai":
+            ai_deadline = time.monotonic() + 20.0
+            after = ""
+            while time.monotonic() < ai_deadline:
+                after = dump_ui("authenticated-ai-settled.xml")
+                has_header = bool(find_control(after, ["FYNX Assistant"]))
+                has_composer = bool(find_control(after, ["Message FYNX Assistant"]) or find_edit_fields(after))
+                has_welcome = bool(find_control(after, ["What can we work on today?", "Try asking"]))
+                if has_header and has_composer and has_welcome:
+                    break
+                time.sleep(0.5)
+            if not (
+                find_control(after, ["FYNX Assistant"])
+                and (find_control(after, ["Message FYNX Assistant"]) or find_edit_fields(after))
+                and find_control(after, ["What can we work on today?", "Try asking"])
+            ):
+                screenshot("authenticated-ai-incomplete.png")
+                (ROOT/"authenticated-ai-incomplete.xml").write_text((after or "")+"\n", encoding="utf-8")
+                FAILURES.append("authenticated Features -> AI did not render its welcome content, header and message composer")
+                continue
+            (ROOT/"authenticated-ai.xml").write_text(after+"\n", encoding="utf-8")
+            screenshot("authenticated-ai.png")
+            report.append("- PASS authenticated Features -> FYNX Assistant header, message composer and real dashboard screenshot/UI hierarchy")
+            menu_xml = tap_control(after, ["Attach to FYNX Assistant"], "ai-attachment-menu", ["Add an image"])
+            if menu_xml and find_control(menu_xml, ["Add an image"]):
+                (ROOT/"authenticated-ai-attachment-menu.xml").write_text(menu_xml+"\n", encoding="utf-8")
+                screenshot("authenticated-ai-attachment-menu.png")
+                report.append("- PASS FYNX Assistant composer attachment menu exposes the real Add an image action")
+                run("adb","shell","input","keyevent","KEYCODE_BACK")
+                time.sleep(0.4)
+            else:
+                FAILURES.append("FYNX Assistant attachment menu did not expose Add an image")
+            home_after_ai = restore_home_after_restart("authenticated-ai-return-home")
+            if not home_after_ai or find_control(home_after_ai, ["FYNX Features"]):
+                FAILURES.append("FYNX Assistant runtime capture could not return to Home")
+        else:
+            time.sleep(1.2)
+            after=dump_ui(f"authenticated-{name}-destination.xml")
+            screenshot(f"authenticated-{name}.png")
+            if not after:
+                FAILURES.append("authenticated Features -> "+name)
+                continue
+            if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
+            else: FAILURES.append("authenticated Features -> "+name)
 else: FAILURES.append("authenticated Home -> Features")
 
 # Open Wallet through the real authenticated feature search, wait for the API-backed
@@ -2650,6 +2852,7 @@ expected_authenticated_surfaces = [
     "authenticated-wallet-ussd.png",
     "authenticated-wallet-withdraw.png",
     "authenticated-ai.png",
+    "authenticated-ai-attachment-menu.png",
     "authenticated-marketplace.png",
     "authenticated-marketplace-my-shop-overview.png",
     "authenticated-marketplace-my-shop-profile.png",

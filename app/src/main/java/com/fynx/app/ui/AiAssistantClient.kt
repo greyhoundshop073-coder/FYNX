@@ -5,6 +5,17 @@ import org.json.JSONObject
 
 /** Authenticated client for the FYNX AI backend. */
 object AiAssistantClient {
+    private suspend fun requestWritingCopy(context: Context, kind: String, text: String, maximumLength: Int): Result<String> {
+        val body = JSONObject().put("kind", kind).put("text", text.take(maximumLength)).toString()
+        return FynxBackendClient.postJson(context, "/api/assistant/writing-copy", body).mapCatching { raw ->
+            val suggestion = JSONObject(raw).optString("suggestion").trim()
+            if (suggestion.isBlank() || suggestion.length > maximumLength) {
+                throw IllegalStateException("FYNX AI returned an incomplete writing suggestion.")
+            }
+            suggestion
+        }
+    }
+
     suspend fun sendMessage(
         context: Context,
         message: String,
@@ -25,7 +36,34 @@ object AiAssistantClient {
     suspend fun improvePostCaption(context: Context, caption: String): Result<String> {
         val clean = caption.trim().take(4000)
         if (clean.isBlank()) return Result.failure(IllegalArgumentException("Caption is empty"))
-        return sendMessage(context, "Improve this social-media post caption. Keep the user's original meaning and facts, make it natural, clear and engaging, and do not add invented personal details. Return only the finished caption.\n\nCaption:\n$clean")
+        return requestWritingCopy(context, "post_caption", clean, 4000)
+    }
+
+    suspend fun improveStatusText(context: Context, statusText: String): Result<String> {
+        val clean = statusText.trim().take(3000)
+        if (clean.isBlank()) return Result.failure(IllegalArgumentException("Status text is empty"))
+        return requestWritingCopy(context, "status_text", clean, 3000)
+    }
+
+    suspend fun improveProfileBio(context: Context, bio: String): Result<String> {
+        val clean = bio.trim().take(1000)
+        if (clean.isBlank()) return Result.failure(IllegalArgumentException("Profile bio is empty"))
+        return requestWritingCopy(context, "profile_bio", clean, 1000)
+    }
+
+    suspend fun improveShopDescription(context: Context, shopName: String, description: String): Result<String> {
+        val name = shopName.trim().take(120)
+        val clean = description.trim().take(800)
+        if (clean.isBlank() && name.isBlank()) return Result.failure(IllegalArgumentException("Add shop details first"))
+        val source = listOf(name, clean).filter { it.isNotBlank() }.joinToString(" — ").take(800)
+        return requestWritingCopy(context, "shop_description", source, 800)
+    }
+
+    suspend fun improveCommentText(context: Context, comment: String, isReply: Boolean): Result<String> {
+        val clean = comment.trim().take(1000)
+        if (clean.isBlank()) return Result.failure(IllegalArgumentException("Comment is empty"))
+        val kind = if (isReply) "reply" else "comment"
+        return requestWritingCopy(context, kind, clean, 1000)
     }
 
     suspend fun translateText(context: Context, text: String, targetLanguage: String): Result<String> {

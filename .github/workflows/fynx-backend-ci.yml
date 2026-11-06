@@ -133,6 +133,8 @@ jobs:
           node --check fynxAiPrivacyPolicy.js
           node test-fynx-ai-privacy-policy.mjs
           node --check fynxAiToolRegistry.js
+          node --check fynxAiWritingSupport.js
+          node test-fynx-ai-writing-copy.mjs
           node test-marketplace-ai-listing-copy.mjs
           node test-marketplace-ai-photo-review.mjs
           node --check aiConversationRoutes.js

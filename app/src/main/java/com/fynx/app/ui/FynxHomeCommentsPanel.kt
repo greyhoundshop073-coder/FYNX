@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
@@ -39,6 +40,9 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     val listState = rememberLazyListState()
     var comments by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }
     var text by rememberSaveable(post.id) { mutableStateOf("") }
+    var aiCommentBusy by remember(post.id) { mutableStateOf(false) }
+    var aiCommentError by remember(post.id) { mutableStateOf<String?>(null) }
+    var aiCommentSuggestion by remember(post.id) { mutableStateOf<String?>(null) }
     var commentCount by remember(post.id) { mutableIntStateOf(post.commentCount) }
     var loading by remember(post.id) { mutableStateOf(false) }
     var loadingMore by remember(post.id) { mutableStateOf(false) }
@@ -130,7 +134,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             result.onSuccess { comment ->
                 comments = (comments + comment).distinctBy { it.id }; resolveCommenterPhotos(listOf(comment)); commentCount += 1; onCommentCountChanged(commentCount)
                 if (comment.parentCommentId != null) { val parent = comment.parentCommentId!!; expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id })) }
-                text = ""; replyingToId = null
+                text = ""; aiCommentSuggestion = null; aiCommentError = null; replyingToId = null
                 if (comment.parentCommentId == null) scope.launch { val topLevelCount = comments.count { it.parentCommentId == null }; listState.animateScrollToItem((topLevelCount - 1 + if (nextCursor != null) 1 else 0).coerceAtLeast(0)) }
             }.onFailure { failure -> if (parentId != null) replyErrorId = parentId; error = failure.message ?: if (parentId != null) "Unable to send reply." else "Unable to send comment." }
             sending = false
@@ -147,7 +151,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             replyLoadingId = null
         }
     }
-    LaunchedEffect(post.id) { comments = emptyList(); text = ""; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); resetPagingState(); loadComments() }
+    LaunchedEffect(post.id) { comments = emptyList(); text = ""; aiCommentSuggestion = null; aiCommentError = null; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); resetPagingState(); loadComments() }
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         BackHandler(onBack = onClose)
@@ -198,12 +202,69 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                     HorizontalDivider()
                     if (replyingTo != null) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Text("Replying to ${replyingTo!!.authorDisplayName.ifBlank { replyingTo!!.authorUsername }}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f)); TextButton(onClick = { replyingToId = null }) { Text("Cancel") }
                     }
-                    Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
-                        Column(Modifier.weight(1f)) {
+                    Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            OutlinedButton(
+                                onClick = {
+                                    val requestedText = text.trim()
+                                    if (requestedText.isNotBlank()) {
+                                        aiCommentBusy = true
+                                        aiCommentError = null
+                                        aiCommentSuggestion = null
+                                        scope.launch {
+                                            AiAssistantClient.improveCommentText(context, requestedText, replyingTo != null)
+                                                .onSuccess { suggestion ->
+                                                    if (text.trim() == requestedText) aiCommentSuggestion = suggestion.trim().take(MAX_COMMENT_LENGTH)
+                                                    else aiCommentError = "Your comment changed while FYNX AI was preparing it. Please try again."
+                                                }
+                                                .onFailure { failure ->
+                                                    aiCommentError = failure.message?.takeIf { it.isNotBlank() }
+                                                        ?: "FYNX AI could not improve this comment. Please try again."
+                                                }
+                                            aiCommentBusy = false
+                                        }
+                                    }
+                                },
+                                enabled = text.isNotBlank() && !sending && !loading && !aiCommentBusy
+                            ) {
+                                if (aiCommentBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                else Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (aiCommentBusy) "Improving…" else "Improve with AI")
+                            }
+                        }
+                        aiCommentError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                        aiCommentSuggestion?.takeIf { it.isNotBlank() }?.let { suggestion ->
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("FYNX AI suggestion", style = MaterialTheme.typography.titleSmall)
+                                    }
+                                    Text(suggestion, style = MaterialTheme.typography.bodyMedium)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = { aiCommentSuggestion = null }) { Text("Keep my draft") }
+                                        Button(onClick = {
+                                            text = suggestion.take(MAX_COMMENT_LENGTH)
+                                            aiCommentSuggestion = null
+                                            aiCommentError = null
+                                        }) { Text("Use suggestion") }
+                                    }
+                                }
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                             OutlinedTextField(
                                 value = text,
-                                onValueChange = { text = it.take(MAX_COMMENT_LENGTH) },
-                                modifier = Modifier.fillMaxWidth(),
+                                onValueChange = { value ->
+                                    if (value != text) {
+                                        aiCommentSuggestion = null
+                                        aiCommentError = null
+                                    }
+                                    text = value.take(MAX_COMMENT_LENGTH)
+                                },
+                                modifier = Modifier.weight(1f),
                                 placeholder = { Text(if (replyingTo == null) "Write a comment…" else "Write a reply…") },
                                 minLines = 1,
                                 maxLines = 4,
@@ -217,9 +278,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                     }
                                 }
                             )
-                            Text("${text.length}/$MAX_COMMENT_LENGTH", Modifier.fillMaxWidth().padding(top = 2.dp, end = 4.dp), textAlign = TextAlign.End, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Spacer(Modifier.width(4.dp))
+                        Text("${text.length}/$MAX_COMMENT_LENGTH", Modifier.fillMaxWidth().padding(top = 2.dp, end = 4.dp), textAlign = TextAlign.End, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

@@ -48,6 +48,9 @@ The review is advisory only. It never modifies, enhances, saves, publishes, stor
 2. **Android AI transport** — `FynxAiConversationClient.kt` and `FynxAiVoiceSession.kt`
    - all AI traffic goes through the authenticated FYNX backend
    - keep the central `FynxBackendClient` transport boundary
+   - text conversations may negotiate Server-Sent Events (SSE) on the existing owned-conversation message route; the default request/JSON response contract remains compatible
+   - Android must parse bounded SSE events through `FynxBackendClient`, retain the authenticated FYNX session, and never call Gemini directly
+   - if an older deployed backend ignores the SSE preference and returns the established JSON envelope, Android must accept that bounded JSON response as a compatibility fallback
 
 3. **FYNX AI backend** — `aiConversationRoutes.js`, `aiRealtimeRoutes.js`
    - authenticate the FYNX user before AI access
@@ -65,9 +68,24 @@ The review is advisory only. It never modifies, enhances, saves, publishes, stor
 
 5. **Provider adapters**
    - normal text conversations and image understanding use the server-side Gemini adapter in `geminiAssistantProvider.js`
+   - text replies may use Gemini `streamGenerateContent` SSE so the Android panel can render user-visible text deltas as they arrive; non-streaming callers keep the existing `generateContent` path
+   - thought-only model parts must not be forwarded to the user-visible stream; tool calls still execute only through the approved registry and the final reply is persisted before the completion event
    - Gemini credentials are read only from the backend `GEMINI_API_KEY` environment variable and sent in the `x-goog-api-key` request header
    - realtime voice continues to use the existing server-side OpenAI WebRTC adapter until a separately reviewed migration is approved
    - provider changes must not leak into the Android APK
+
+## Assistant dashboard and conversation experience
+
+The existing assistant screen should behave like one continuous FYNX conversation, not a separate AI utility page.
+
+- The first-use state presents a clear welcome message, approved public discovery prompts (public profiles, public trending posts and active Marketplace listings), and shortcuts into existing FYNX destinations. Do not suggest saved-post history or other private account data to the assistant.
+- Conversation history is searchable. Deleting a conversation requires a confirmation step. Loading an older conversation restores its message text and its already-owned image attachments.
+- Assistant replies render readable headings, emphasis, list markers and code blocks. Text remains selectable, with copy/share actions available on assistant replies.
+- The user can stop receiving a streamed answer. A partial answer is visibly marked as incomplete; stopping the Android request must never be described as undoing a server-side action or proving that the server did not save a response.
+- Automatic scrolling follows new content only while the reader is already near the latest message. When the reader scrolls back, updates must not pull them away; a visible latest-message control returns them to the bottom.
+- Realtime voice retains the existing authenticated WebRTC adapter and provides distinct mute and end-session controls.
+- Keep all data and actions behind the existing authenticated conversation client and approved tool registry. Do not invent unsupported rename, regenerate, private-history, payment or destructive-action capabilities in the presentation layer.
+- Runtime visual certification opens the actual dashboard from the installed Android app, verifies its assistant header and message composer, and captures the image-attachment menu. It submits no prompt. When run through the debug-only UI entry, the screenshot proves rendering/navigation only and must not be represented as a live Gemini/backend success.
 
 ## Extension categories
 
@@ -87,6 +105,9 @@ A new capability is **not** allowed to bypass these layers by adding a second Op
 When adding a capability:
 
 - preserve all existing endpoints and response contracts unless a migration is explicitly required
+- preserve the normal JSON response for existing callers; streaming is negotiated only when the caller explicitly requests `text/event-stream`
+- send ordered `delta`, `complete`, or generic `error` events; the `complete` payload carries the persisted message and pending confirmation action
+- do not claim a streamed reply is saved until the server confirms the completed database commit
 - preserve current AI conversations and stored messages
 - preserve existing message confirmation behavior
 - preserve realtime voice session authentication
@@ -98,3 +119,21 @@ When adding a capability:
 ## Future-proofing
 
 This contract intentionally creates a stable seam for later additions such as smarter FYNX search, recommendations, translation, media assistance, planning, and other approved AI tools. Those additions should extend the registry/capability layer rather than rewrite the foundation.
+
+
+## Inline FYNX AI writing assistance
+
+Where a user is already writing content, the local composer may offer an AI sparkle action rather than forcing the user to leave for the AI dashboard. Current inline writing surfaces include feed captions, text Status updates, profile bios, My Shop descriptions, product listing copy, and social comments/replies.
+
+These actions use the authenticated `/api/assistant/writing-copy` endpoint, which accepts only an allowlisted writing kind and the text being rewritten. It has no database, discovery, conversation or action tools, no conversation history, and no media inputs. Requests must contain only the text and minimal form context needed for the requested rewrite. Do not pass private profile/account data, wallet or order details, uploaded media, credentials, or hidden app state. Prompts must preserve user-supplied facts and must not invent claims, identity details, product specifications, business services, guarantees, or personal history.
+
+Every generated result is a draft. It must be previewed in the same writing flow and require an explicit user choice to apply it. It must never auto-publish, auto-send, auto-save, or perform an action on the user's behalf. If the source draft changes while generation is running, discard the stale suggestion and ask the user to generate again. Keep the existing content validation, moderation, permissions, audience, and publishing/sending flow unchanged.
+
+
+## User-led planning and protected money guidance
+
+The assistant may help a user think through a daily plan using only the details the user chooses to share in that conversation. A planning starter is guidance, not permission to read or modify To-Do tasks or Calendar entries. Until an individually reviewed, user-scoped action contract exists, users add or change those records through the normal To-Do and Calendar screens.
+
+Wallet and Money Tools starters may explain general navigation and concepts only. The AI must not request or inspect a wallet PIN, bank details, balance, private transaction history, payout details or KYC information. It must direct users to the protected Wallet or Money Tools screen for account-specific information. Transfers, payments, withdrawals, refunds and other financial actions remain unavailable to the assistant.
+
+The dashboard must distinguish contextual discovery cards (which start a conversation) from Explore FYNX shortcuts (which open real app destinations). Do not keep a shortcut that routes back to the assistant itself or implies a separate AI tool screen that does not exist.

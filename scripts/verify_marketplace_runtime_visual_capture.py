@@ -34,12 +34,18 @@ checks = [
     ),
     (
         "Android CI attempts focused Marketplace/My Shop capture after instrumentation failure",
-        'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
-        and 'else\n  # A red instrumentation test must not suppress Marketplace/My Shop screenshot evidence.' in runner,
+        'if [ "${FYNX_AI_VISUALS_ONLY:-0}" = "1" ]; then' in runner
+        and 'FYNX_AI_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
+        and 'FYNX_LOCAL_VISUALS_ONLY=1 FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
+        and 'Preserve the existing Marketplace/My Shop visual fallback for its workstream.' in runner
+        and 'exit "$TEST_EXIT"' in runner,
     ),
     (
         "visual capture failure cannot turn a red instrumentation run green",
-        'if [ "$VISUAL_EXIT" -ne 0 ]; then' in runner and 'exit "$TEST_EXIT"' in runner,
+        'if [ "${VISUAL_EXIT}" -ne 0 ]; then' in runner
+        and 'visual capture did not complete' in runner
+        and 'the instrumentation result remains ${TEST_EXIT}' in runner
+        and 'exit "$TEST_EXIT"' in runner,
     ),
     (
         "green instrumentation selects authenticated navigation only when backend health is ready",
