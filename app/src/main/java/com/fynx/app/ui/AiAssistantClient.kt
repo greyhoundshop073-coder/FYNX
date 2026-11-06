@@ -71,10 +71,10 @@ object AiAssistantClient {
         val language = targetLanguage.trim().take(80)
         if (cleanText.isBlank()) return Result.failure(IllegalArgumentException("Text is empty"))
         if (language.isBlank()) return Result.failure(IllegalArgumentException("Target language is required"))
-        return sendMessage(
-            context,
-            "Translate the following user-provided text into $language. Preserve the original meaning, names, numbers, links, formatting intent and uncertainty. Do not add commentary, explanations, invented facts, or change the speaker's intent. Return only the translation.\n\nText:\n$cleanText"
-        )
+        val prompt = runCatching {
+            FynxAiTranslation.buildPrompt(cleanText, language)
+        }.getOrElse { return Result.failure(it) }
+        return sendMessage(context, prompt)
     }
 
     suspend fun createProductMarketingCopy(

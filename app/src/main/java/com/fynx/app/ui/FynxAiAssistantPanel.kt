@@ -125,6 +125,9 @@ fun FynxAiAssistantPanel(
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
     var showComposerTools by remember { mutableStateOf(false) }
+    var showTranslationDialog by remember { mutableStateOf(false) }
+    var translationSourceText by remember { mutableStateOf("") }
+    var translationTargetLanguage by remember { mutableStateOf("English") }
     var conversationId by remember { mutableStateOf<String?>(null) }
     var conversationHistory by remember { mutableStateOf<List<FynxAiConversationSummary>>(emptyList()) }
     var showConversationHistory by remember { mutableStateOf(false) }
@@ -915,6 +918,15 @@ fun FynxAiAssistantPanel(
                                             imagePicker.launch("image/*")
                                         }
                                     )
+                                    DropdownMenuItem(
+                                        text = { Text("Translate text") },
+                                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                                        onClick = {
+                                            translationSourceText = input
+                                            showTranslationDialog = true
+                                            showComposerTools = false
+                                        }
+                                    )
                                     toolLinks.forEach { (destination, label) ->
                                         DropdownMenuItem(
                                             text = { Text(label) },
@@ -989,6 +1001,67 @@ fun FynxAiAssistantPanel(
                 )
             }
         }
+    }
+
+    if (showTranslationDialog) {
+        AlertDialog(
+            onDismissRequest = { showTranslationDialog = false },
+            title = { Text("Translate text") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Choose the language and add the text you want FYNX AI to translate.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = translationTargetLanguage,
+                        onValueChange = { translationTargetLanguage = it.take(FynxAiTranslation.MAX_LANGUAGE_LENGTH) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Translate into") },
+                        placeholder = { Text("e.g. English, Hausa, Yoruba or French") },
+                        shape = FynxDesign.ControlShape
+                    )
+                    OutlinedTextField(
+                        value = translationSourceText,
+                        onValueChange = { translationSourceText = it.take(FynxAiTranslation.MAX_SOURCE_LENGTH) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 4,
+                        maxLines = 6,
+                        label = { Text("Text to translate") },
+                        placeholder = { Text("Type or paste your text here…") },
+                        supportingText = {
+                            Text("${translationSourceText.length}/${FynxAiTranslation.MAX_SOURCE_LENGTH}")
+                        },
+                        shape = FynxDesign.ControlShape
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = translationSourceText.isNotBlank() &&
+                        translationTargetLanguage.isNotBlank() &&
+                        !loading && !creatingConversation && !pendingMediaUploading,
+                    onClick = {
+                        val prompt = runCatching {
+                            FynxAiTranslation.buildPrompt(translationSourceText, translationTargetLanguage)
+                        }.getOrElse {
+                            errorMessage = it.message ?: "Check the translation text and target language."
+                            return@TextButton
+                        }
+                        showTranslationDialog = false
+                        translationSourceText = ""
+                        sendPrompt(prompt, true)
+                    }
+                ) {
+                    Text("Translate")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTranslationDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 
     if (conversationPendingDelete != null) {
