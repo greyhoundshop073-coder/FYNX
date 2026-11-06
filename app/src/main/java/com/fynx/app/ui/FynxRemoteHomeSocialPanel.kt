@@ -491,7 +491,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
         val ordered = available.sortedBy { type -> seed xor type.hashCode().toLong() }
         val count = when {
-            ordered.isEmpty() || posts.size < 3 -> 0
+            ordered.isEmpty() || posts.isEmpty() -> 0
+            posts.size < 3 -> if (discoveryVideos.isNotEmpty() && "discovery" in ordered) 1 else 0
             ordered.size == 1 -> 1
             seed % 5L == 0L -> 0
             posts.size < 8 -> 1
