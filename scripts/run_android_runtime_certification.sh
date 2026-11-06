@@ -13,6 +13,24 @@ adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.tx
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
+if [ "${FYNX_HOME_FEED_VISUALS_ONLY:-0}" = "1" ]; then
+  # Home Feed certification is independent of Marketplace and AI visual work.
+  # Use an authenticated session only when the configured backend is healthy;
+  # otherwise use the APK's debug-local UI entry and emulator-only fixtures.
+  if [ -n "${FYNX_E2E_USERNAME:-}" ] && [ -n "${FYNX_E2E_PASSWORD:-}" ] && node --input-type=module -e 'const base = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(new RegExp("/+$"), ""); try { const response = await fetch(`${base}/health`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }); const body = await response.json().catch(() => null); if (!response.ok || body?.ok !== true || body?.service !== "fynx-backend" || body?.database !== "ready") process.exitCode = 1; } catch { process.exitCode = 1; }'; then
+    echo "::notice::Home Feed visual certification is using the CI test account because the backend is healthy."
+    FYNX_HOME_FEED_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    NAV_EXIT=$?
+  else
+    echo "::notice::Home Feed visual certification is using isolated debug-local fixtures; no backend posts or uploads are created."
+    FYNX_HOME_FEED_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    NAV_EXIT=$?
+  fi
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+  if [ "$NAV_EXIT" -ne 0 ] && [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$NAV_EXIT"; fi
+  exit "$TEST_EXIT"
+fi
+
 if [ "${TEST_EXIT}" -eq 0 ]; then
   if [ "${FYNX_AI_VISUALS_ONLY:-0}" = "1" ]; then
     # This assistant-dashboard visual audit is intentionally backend-independent:
