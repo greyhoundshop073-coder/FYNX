@@ -1962,18 +1962,20 @@ def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
         latest = dump_ui(prefix + "-assistant-settled.xml")
         has_header = bool(find_control(latest, ["FYNX Assistant"]))
         has_composer = bool(find_control(latest, ["Message FYNX Assistant"]) or find_edit_fields(latest))
-        has_welcome = bool(find_control(latest, ["What can we work on today?", "Try asking"]))
+        has_welcome = bool(find_control(latest, ["Try asking"]))
+        has_personalized_greeting = bool(find_control(latest, ["Hello,"]))
         if has_header and has_composer and has_welcome:
             break
         time.sleep(0.5)
     if not (
         find_control(latest, ["FYNX Assistant"])
         and (find_control(latest, ["Message FYNX Assistant"]) or find_edit_fields(latest))
-        and find_control(latest, ["What can we work on today?", "Try asking"])
+        and find_control(latest, ["Try asking"])
+        and has_personalized_greeting
     ):
         screenshot(prefix + "-assistant-incomplete.png")
         (ROOT / (prefix + "-assistant-incomplete.xml")).write_text((latest or "") + "\n", encoding="utf-8")
-        return False, "FYNX Assistant opened, but its welcome content, header and message composer did not all settle."
+        return False, "FYNX Assistant opened, but its personalized welcome, discovery section, header and message composer did not all settle."
     (ROOT / "authenticated-ai-dashboard.xml").write_text(latest + "\n", encoding="utf-8")
     screenshot("authenticated-ai-dashboard.png")
 
