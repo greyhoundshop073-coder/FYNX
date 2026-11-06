@@ -105,7 +105,13 @@ private data class FynxAiDiscoveryPrompt(
 
 /** User-facing FYNX Assistant. Private FYNX data stays inside its protected screens. */
 @Composable
-fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarketplaceListingId: String? = null) {
+fun FynxAiAssistantPanel(
+    onOpenDestination: (String) -> Unit = {},
+    initialMarketplaceListingId: String? = null,
+    currentUserDisplayName: String = "there",
+    currentUsername: String? = null,
+    currentUserPhotoUri: String? = null
+) {
     var messages by remember { mutableStateOf(emptyList<FynxAiUiMessage>()) }
     var input by remember { mutableStateOf("") }
     var hasStartedInteraction by remember { mutableStateOf(false) }
@@ -696,6 +702,9 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
                         item(key = "fynx-ai-welcome") {
                             FynxAiWelcomeContent(
                                 discoveryPrompts = discoveryPrompts,
+                                currentUserDisplayName = currentUserDisplayName,
+                                currentUsername = currentUsername,
+                                currentUserPhotoUri = currentUserPhotoUri,
                                 onPrompt = { sendPrompt(it, true) }
                             )
                         }
@@ -995,6 +1004,9 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarket
 @Composable
 private fun FynxAiWelcomeContent(
     discoveryPrompts: List<FynxAiDiscoveryPrompt>,
+    currentUserDisplayName: String,
+    currentUsername: String?,
+    currentUserPhotoUri: String?,
     onPrompt: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -1017,27 +1029,22 @@ private fun FynxAiWelcomeContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = Color(0xFFDCEBFF),
-                    border = BorderStroke(1.dp, Color(0xFFB8D7FF))
-                ) {
-                    Icon(
-                        Icons.Default.AutoAwesome,
-                        contentDescription = "FYNX AI",
-                        tint = Color(0xFF007FFF),
-                        modifier = Modifier.padding(10.dp).size(24.dp)
-                    )
-                }
+                FynxProfileImage(
+                    name = currentUserDisplayName,
+                    uriString = currentUserPhotoUri,
+                    modifier = Modifier.size(46.dp).clip(CircleShape),
+                    ownerUsername = currentUsername
+                )
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "Hello! How can I help today?",
+                        "Hello, " + currentUserDisplayName.trim().ifBlank { "there" } + "!",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color(0xFF1C2434),
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
                     )
                     Text(
-                        "Ask a question or share a photo to get started.",
+                        "How can I help today?",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF526174)
                     )
