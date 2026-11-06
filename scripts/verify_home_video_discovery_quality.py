@@ -169,7 +169,7 @@ checks = [
     (
         "runtime feed scrolling starts from visible non-clickable captions on full-width landscape clips",
         '_home_content_scroll_point(current, width, height, "up")' in navigation
-        and "the video can consume the gesture instead of the parent LazyColumn scrolling" in navigation,
+        and "video can consume the gesture instead of the parent LazyColumn scrolling" in navigation,
     ),
     (
         "final Home navigation detection requires the visible bottom Home label",
