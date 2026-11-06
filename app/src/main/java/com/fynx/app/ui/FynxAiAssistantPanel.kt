@@ -138,6 +138,7 @@ fun FynxAiAssistantPanel(
     var pendingMediaUploading by remember { mutableStateOf(false) }
     var pendingMessageAction by remember { mutableStateOf<FynxAiPendingMessageAction?>(null) }
     var generationJob by remember { mutableStateOf<Job?>(null) }
+    var voiceConnectionJob by remember { mutableStateOf<Job?>(null) }
     var followingLatest by remember { mutableStateOf(true) }
 
     val scope = rememberCoroutineScope()
@@ -263,6 +264,9 @@ fun FynxAiAssistantPanel(
     }
 
     fun endVoiceSession() {
+        // Cancel the in-flight SDP/ICE handshake as well as releasing native WebRTC resources.
+        voiceConnectionJob?.cancel()
+        voiceConnectionJob = null
         voiceEngine.close()
         voiceConnected = false
         voiceConnecting = false
@@ -395,50 +399,60 @@ fun FynxAiAssistantPanel(
     }
 
     fun connectVoice() {
+        if (voiceConnecting || voiceConnected) return
         hasStartedInteraction = true
-        scope.launch {
-            voiceConnecting = true
-            errorMessage = null
-            voiceEngine.connect(
-                onStateChanged = { state, error ->
-                    voiceConnecting = state == FynxAiWebRtcEngine.State.CONNECTING
-                    voiceConnected = state == FynxAiWebRtcEngine.State.CONNECTED
-                    if (state == FynxAiWebRtcEngine.State.CONNECTED) voiceMuted = false
-                    if (error != null) errorMessage = error
-                },
-                onEvent = { rawEvent ->
-                    parseRealtimeAssistantEvent(rawEvent)?.let { spoken ->
-                        appendAssistantMessage(spoken)
-                        val transcript = extractRealtimeUserTranscript(rawEvent)
-                        if (transcript != null && pendingMessageAction != null) {
-                            val normalized = transcript.trim().lowercase()
-                                .replace(Regex("[^a-z0-9\\s]"), " ")
-                                .replace(Regex("\\s+"), " ")
-                                .trim()
-                            when {
-                                normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$")) -> confirmPendingMessage()
-                                normalized.matches(Regex("^(no|nope|cancel|dont|do not|not now|stop)( please)?$")) -> cancelPendingMessage()
+        voiceConnecting = true
+        errorMessage = null
+        voiceConnectionJob = scope.launch {
+            try {
+                val result = voiceEngine.connect(
+                    onStateChanged = { state, error ->
+                        voiceConnecting = state == FynxAiWebRtcEngine.State.CONNECTING
+                        voiceConnected = state == FynxAiWebRtcEngine.State.CONNECTED
+                        if (state == FynxAiWebRtcEngine.State.CONNECTED) voiceMuted = false
+                        if (error != null) errorMessage = error
+                    },
+                    onEvent = { rawEvent ->
+                        parseRealtimeAssistantEvent(rawEvent)?.let { spoken ->
+                            appendAssistantMessage(spoken)
+                            val transcript = extractRealtimeUserTranscript(rawEvent)
+                            if (transcript != null && pendingMessageAction != null) {
+                                val normalized = transcript.trim().lowercase()
+                                    .replace(Regex("[^a-z0-9\\s]"), " ")
+                                    .replace(Regex("\\s+"), " ")
+                                    .trim()
+                                when {
+                                    normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$")) -> confirmPendingMessage()
+                                    normalized.matches(Regex("^(no|nope|cancel|dont|do not|not now|stop)( please)?$")) -> cancelPendingMessage()
+                                }
                             }
                         }
+                    },
+                    onToolResult = { name, output ->
+                        if (name == "prepare_send_message") {
+                            runCatching { JSONObject(output) }.getOrNull()
+                                ?.takeIf { it.optBoolean("confirmationRequired") }
+                                ?.let { action ->
+                                    val recipient = action.optJSONObject("recipient")
+                                    pendingMessageAction = FynxAiPendingMessageAction(
+                                        action.optString("actionId"),
+                                        recipient?.optString("username", "") ?: "",
+                                        recipient?.optString("displayName", "") ?: "",
+                                        action.optString("message")
+                                    )
+                                }
+                        }
                     }
-                },
-                onToolResult = { name, output ->
-                    if (name == "prepare_send_message") {
-                        runCatching { JSONObject(output) }.getOrNull()
-                            ?.takeIf { it.optBoolean("confirmationRequired") }
-                            ?.let { action ->
-                                val recipient = action.optJSONObject("recipient")
-                                pendingMessageAction = FynxAiPendingMessageAction(
-                                    action.optString("actionId"),
-                                    recipient?.optString("username", "") ?: "",
-                                    recipient?.optString("displayName", "") ?: "",
-                                    action.optString("message")
-                                )
-                            }
-                    }
+                )
+                result.onFailure {
+                    errorMessage = friendlyFynxAiError(it, "FYNX Assistant voice could not connect. Check your internet connection and try again.")
                 }
-            )
-            voiceConnecting = false
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } finally {
+                voiceConnecting = false
+                if (voiceConnectionJob === currentCoroutineContext()[Job]) voiceConnectionJob = null
+            }
         }
     }
 

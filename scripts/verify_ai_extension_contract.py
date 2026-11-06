@@ -29,6 +29,7 @@ realtime = read("backend/aiRealtimeRoutes.js")
 assistant_parser = read("backend/assistantJsonBodyParser.js")
 assistant_parser_test = read("backend/test-assistant-json-body-parser.mjs")
 voice = read("backend/aiVoiceSession.js")
+android_voice_engine = read("app/src/main/java/com/fynx/app/ui/FynxAiWebRtcEngine.kt")
 android_client = read("app/src/main/java/com/fynx/app/ui/FynxAiConversationClient.kt")
 android_voice = read("app/src/main/java/com/fynx/app/ui/FynxAiVoiceSession.kt")
 android_panel = read("app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt")
@@ -98,6 +99,9 @@ checks = [
     ("Android text AI stays on FYNX backend transport", "FynxBackendClient.get" in android_client and "FynxBackendClient.postJson" in android_client),
     ("Android realtime session stays on FYNX backend transport", "FynxBackendClient.postJson" in android_voice),
     ("central HTTPS transport remains the Android network boundary", "PRODUCTION_BASE_URL = \"https://fynx-backend-testing-testing.up.railway.app\"" in backend_client and "startsWith(\"https://\")" in backend_client),
+    ("voice setup cancellation tears down the Android WebRTC handshake", "voiceConnectionJob?.cancel()" in android_panel and "catch (cancelled: CancellationException)" in android_voice_engine and "throw cancelled" in android_voice_engine),
+    ("voice UI reports connected only after the realtime data channel is ready", android_voice_engine.index("dataChannelReady?.awaitWithTimeout()") < android_voice_engine.index("setState(State.CONNECTED, null)")),
+    ("voice setup timeouts provide an actionable network error", "FYNX AI voice connection timed out" in android_voice_engine),
     ("AI panel remains presentation layer", "FynxAiConversationClient" in android_panel and "FynxAiWebRtcEngine" in android_panel),
     ("future sensitive writes remain confirmation-gated", "confirmationRequired" in registry and "NEVER sends the message" in registry),
     ("future financial/destructive writes remain blocked by policy", "Never perform payments, refunds, purchases, transfers, deletions, or settings changes" in registry),

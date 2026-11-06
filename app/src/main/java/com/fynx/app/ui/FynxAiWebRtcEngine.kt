@@ -2,6 +2,8 @@ package com.fynx.app.ui
 
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,25 +48,64 @@ class FynxAiWebRtcEngine(
     private var onEvent: ((String) -> Unit)? = null
     private var onToolResult: ((String, String) -> Unit)? = null
     init { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()); factory = PeerConnectionFactory.builder().createPeerConnectionFactory() }
-    suspend fun connect(onStateChanged: (State, String?) -> Unit = { _, _ -> }, onEvent: (String) -> Unit = {}, onToolResult: (String, String) -> Unit = { _, _ -> }): Result<Unit> = runCatching {
-        require(state != State.CONNECTING && state != State.CONNECTED) { "FYNX AI voice is already connected" }
-        if (toolJob.isCancelled) {
-            toolJob = SupervisorJob()
-            toolScope = CoroutineScope(toolJob + Dispatchers.IO)
+    suspend fun connect(onStateChanged: (State, String?) -> Unit = { _, _ -> }, onEvent: (String) -> Unit = {}, onToolResult: (String, String) -> Unit = { _, _ -> }): Result<Unit> {
+        return try {
+            require(state != State.CONNECTING && state != State.CONNECTED) { "FYNX AI voice is already connected" }
+            if (toolJob.isCancelled) {
+                toolJob = SupervisorJob()
+                toolScope = CoroutineScope(toolJob + Dispatchers.IO)
+            }
+            handledToolCalls.clear()
+            realtimeToolCallCount.set(0)
+            this.onStateChanged = onStateChanged
+            this.onEvent = onEvent
+            this.onToolResult = onToolResult
+            setState(State.CONNECTING, null)
+
+            val connection = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), observer())
+                ?: error("Unable to create FYNX AI peer connection")
+            peerConnection = connection
+            audioSource = factory.createAudioSource(MediaConstraints())
+            audioTrack = factory.createAudioTrack("fynx-ai-microphone", audioSource)
+            audioTrack?.setEnabled(true)
+            audioTrack?.let { connection.addTrack(it) }
+
+            dataChannelReady = CompletableDeferred()
+            eventsChannel = connection.createDataChannel("oai-events", DataChannel.Init()).also {
+                it.registerObserver(dataChannelObserver())
+            }
+
+            val offer = createOffer(connection)
+            iceGatheringReady = CompletableDeferred()
+            connection.setLocalDescriptionAwait(offer)
+            awaitLocalDescription()
+            iceGatheringReady?.awaitWithTimeout()
+
+            val localSdp = connection.localDescription?.description
+                ?: error("FYNX AI local SDP is unavailable")
+            val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp).getOrThrow()
+            require(answerSdp.isNotBlank()) { "FYNX AI returned an empty SDP answer" }
+            connection.setRemoteDescriptionAwait(
+                SessionDescription(SessionDescription.Type.ANSWER, answerSdp)
+            )
+
+            // Do not present the session as connected until the event channel is usable.
+            dataChannelReady?.awaitWithTimeout()
+            if (!sendEvent("{\\"type\\":\\"response.create\\"}")) {
+                error("FYNX AI voice event channel is unavailable")
+            }
+            setState(State.CONNECTED, null)
+            Result.success(Unit)
+        } catch (cancelled: CancellationException) {
+            // User navigation or the Cancel control must stop the pending handshake.
+            close()
+            throw cancelled
+        } catch (error: Throwable) {
+            setState(State.FAILED, error.message ?: "FYNX AI voice connection failed")
+            close()
+            Result.failure(error)
         }
-        handledToolCalls.clear()
-        realtimeToolCallCount.set(0)
-        this.onStateChanged = onStateChanged; this.onEvent = onEvent; this.onToolResult = onToolResult; setState(State.CONNECTING, null)
-        val connection = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), observer()) ?: error("Unable to create FYNX AI peer connection")
-        peerConnection = connection
-        audioSource = factory.createAudioSource(MediaConstraints()); audioTrack = factory.createAudioTrack("fynx-ai-microphone", audioSource); audioTrack?.setEnabled(true); audioTrack?.let { connection.addTrack(it) }
-        dataChannelReady = CompletableDeferred()
-        eventsChannel = connection.createDataChannel("oai-events", DataChannel.Init()).also { it.registerObserver(dataChannelObserver()) }
-        val offer = createOffer(connection); iceGatheringReady = CompletableDeferred(); connection.setLocalDescriptionAwait(offer); awaitLocalDescription(); iceGatheringReady?.awaitWithTimeout()
-        val localSdp = connection.localDescription?.description ?: error("FYNX AI local SDP is unavailable")
-        val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp).getOrThrow(); require(answerSdp.isNotBlank()) { "FYNX AI returned an empty SDP answer" }
-        connection.setRemoteDescriptionAwait(SessionDescription(SessionDescription.Type.ANSWER, answerSdp)); setState(State.CONNECTED, null); dataChannelReady?.awaitWithTimeout(); if (!sendEvent("{\"type\":\"response.create\"}")) error("FYNX AI voice event channel is unavailable"); Unit
-    }.onFailure { error -> setState(State.FAILED, error.message ?: "FYNX AI voice connection failed"); close() }
+    }
     fun setMicrophoneEnabled(enabled: Boolean) { audioTrack?.setEnabled(enabled) }
     fun sendEvent(json: String): Boolean { val channel = eventsChannel ?: return false; if (channel.state() != DataChannel.State.OPEN) return false; return channel.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) }
     fun close() {
@@ -95,6 +136,7 @@ class FynxAiWebRtcEngine(
         }
         toolScope.launch {
             val result = FynxAiVoiceSession.executeTool(appContext, name, arguments)
+            if (toolJob.isCancelled) return@launch
             val output = result.getOrElse { error -> JSONObject().put("error", error.message ?: "tool request failed").toString() }
             onToolResult?.invoke(name, output)
             val response = JSONObject()
@@ -106,7 +148,16 @@ class FynxAiWebRtcEngine(
             }
         }
     }
-    private suspend fun <T> CompletableDeferred<T>.awaitWithTimeout(): T = withTimeout(15_000) { await() }
+    private suspend fun <T> CompletableDeferred<T>.awaitWithTimeout(): T {
+        return try {
+            withTimeout(15_000) { await() }
+        } catch (timeout: TimeoutCancellationException) {
+            throw IllegalStateException(
+                "FYNX AI voice connection timed out. Check your internet connection and try again.",
+                timeout
+            )
+        }
+    }
     private fun observer() = object : PeerConnection.Observer {
         override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) { if (state == PeerConnection.IceConnectionState.FAILED) { setState(State.FAILED, "FYNX AI network connection failed"); close() } }
