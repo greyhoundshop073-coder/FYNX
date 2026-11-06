@@ -455,15 +455,17 @@ def restore_home_feed_top(xml_text: str, prefix: str = "authenticated-home-feed-
         return xml_text
     width, height = int(match.group(1)), int(match.group(2))
     current = xml_text
-    for attempt in range(8):
+    for attempt in range(12):
         if is_authenticated_home_surface(current) and is_home_feed_navigation_visible(current):
             return current
         x, start_y, end_y = _home_content_scroll_point(current, width, height, "down")
-        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
-        time.sleep(0.65)
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "700")
+        time.sleep(0.85)
         candidate = dump_ui(f"{prefix}-{attempt}.xml")
-        if not candidate or candidate == current:
-            break
+        if not candidate:
+            continue
+        # Compose can publish an identical hierarchy while a scroll gesture is
+        # still settling. Keep bounded retries rather than stopping on one snapshot.
         current = candidate
     return current
 
@@ -1814,11 +1816,31 @@ def visible_home_video_duration_labels(xml_text: str) -> list[str]:
     return list(dict.fromkeys(labels))
 
 def is_home_feed_navigation_visible(xml_text: str) -> bool:
-    """Recognize the persistent Home bottom-navigation destination while the header collapses."""
-    return bool(
-        xml_text and PACKAGE in xml_text
-        and find_control(xml_text, ["Home"])
-    )
+    """Recognize the visible Home destination label in the bottom navigation."""
+    if not xml_text or PACKAGE not in xml_text:
+        return False
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    display = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", display)
+    screen_height = int(match.group(2)) if match else 0
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        text_value = (node.attrib.get("text") or "").strip().casefold()
+        description = (node.attrib.get("content-desc") or "").strip().casefold()
+        if text_value != "home" and description != "home":
+            continue
+        bounds = node.attrib.get("bounds", "")
+        item_match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+        if not item_match:
+            continue
+        _, top, _, bottom = map(int, item_match.groups())
+        if bottom > top and (screen_height == 0 or top >= int(screen_height * 0.68)):
+            return True
+    return False
 
 
 def is_home_feed_runtime_surface(xml_text: str) -> bool:
@@ -1945,16 +1967,10 @@ def scroll_home_feed_page(index: int, home_xml: str) -> str:
     fixture_scan = HOME_FEED_FIXTURES_SEEDED and "CI TEST FIXTURE" in current
     max_attempts = 5 if fixture_scan else 2
     for attempt in range(max_attempts):
-        if fixture_scan:
-            # The local portrait fixture is intentionally tall. Start inside
-            # the non-clickable post-caption area, far enough from Android's
-            # left-edge Back gesture, and above the bottom navigation. This
-            # scrolls the feed rather than being consumed by the system gesture
-            # or a Home navigation control.
-            x = max(64, int(width * 0.075))
-            start_y, end_y = int(height * 0.78), int(height * 0.22)
-        else:
-            x, start_y, end_y = _home_content_scroll_point(current, width, height, "up")
+        # Use visible, non-clickable caption text for fixture and production posts.
+        # A fixed left-gutter swipe is unsafe on full-width landscape clips: the
+        # video can consume the gesture instead of the parent LazyColumn scrolling.
+        x, start_y, end_y = _home_content_scroll_point(current, width, height, "up")
         run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
         time.sleep(0.9)
         candidate = dump_ui(f"authenticated-home-feed-scan-page-{index}-{attempt}.xml")
