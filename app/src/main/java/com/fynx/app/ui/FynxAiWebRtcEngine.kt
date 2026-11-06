@@ -91,7 +91,7 @@ class FynxAiWebRtcEngine(
 
             // Do not present the session as connected until the event channel is usable.
             dataChannelReady?.awaitWithTimeout()
-            if (!sendEvent("{\\"type\\":\\"response.create\\"}")) {
+            if (!sendEvent("{\"type\":\"response.create\"}")) {
                 error("FYNX AI voice event channel is unavailable")
             }
             setState(State.CONNECTED, null)
