@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -444,10 +445,14 @@ private fun DiscoveryActionButton(
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.45f)) {
-            IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(50.dp)) {
+            IconButton(
+                onClick = onClick,
+                enabled = enabled,
+                modifier = Modifier.size(50.dp).semantics { contentDescription = label }
+            ) {
                 Icon(
                     icon,
-                    contentDescription = label,
+                    contentDescription = null,
                     tint = if (active) Color(0xFFFF5277) else Color.White,
                     modifier = Modifier.size(25.dp)
                 )
@@ -623,7 +628,10 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
                 modifier = Modifier.align(Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .padding(end = 18.dp, bottom = 24.dp)
-                    .size(48.dp),
+                    .size(48.dp)
+                    .semantics {
+                        contentDescription = if (muted) "Unmute Discovery video" else "Mute Discovery video"
+                    },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Black.copy(alpha = 0.42f),
                     contentColor = Color.White
@@ -631,7 +639,7 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
             ) {
                 Icon(
                     if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
-                    if (muted) "Unmute Discovery video" else "Mute Discovery video"
+                    contentDescription = null
                 )
             }
         }
@@ -654,11 +662,13 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
                             }
                         }
                     },
-                    modifier = Modifier.size(58.dp)
+                    modifier = Modifier.size(58.dp).semantics {
+                        contentDescription = if (playing) "Pause Discovery video" else "Play Discovery video"
+                    }
                 ) {
                     Icon(
                         if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        if (playing) "Pause Discovery video" else "Play Discovery video",
+                        contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(34.dp)
                     )
