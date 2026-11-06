@@ -748,7 +748,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
@@ -799,7 +799,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var error by remember { mutableStateOf<String?>(null) }
     var discoveryFallbackWarning by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
-    var sellerStoreUsername by remember { mutableStateOf<String?>(null) }
+    var sellerStoreUsername by remember(currentUsername) { mutableStateOf<String?>(null) }
     var checkoutListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var paymentOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var protectedOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
@@ -1009,12 +1009,34 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 else -> {
                     if (result.isSuccess) {
                         val (items, more, fallbackWarning) = result.getOrThrow()
-                        withContext(Dispatchers.IO) {
-                            FynxMarketplaceFeedCache.write(context, requestQuery, requestCategory, cacheLocation, items, more)
+                        // If discovery returns an empty page, recover only the signed-in seller's
+                        // currently published stock through the authenticated seller-filtered route.
+                        // The backend enforces active, in-stock visibility and account-block rules.
+                        val ownerListings = if (
+                            items.isEmpty() &&
+                            currentUsername.isNotBlank() &&
+                            !requestNearbyMode
+                        ) {
+                            FynxRemoteSocialClient.listings(
+                                context,
+                                query = requestQuery,
+                                category = requestCategory,
+                                seller = currentUsername.removePrefix("@").trim()
+                            ).getOrNull().orEmpty()
+                        } else {
+                            emptyList()
                         }
-                        listings = (listOfNotNull(pinned) + items).distinctBy { it.id }
+                        val resolvedItems = (items + ownerListings).distinctBy { it.id }
+                        withContext(Dispatchers.IO) {
+                            FynxMarketplaceFeedCache.write(context, requestQuery, requestCategory, cacheLocation, resolvedItems, more)
+                        }
+                        listings = (listOfNotNull(pinned) + resolvedItems).distinctBy { it.id }
                         hasMoreListings = more
-                        discoveryFallbackWarning = fallbackWarning
+                        discoveryFallbackWarning = when {
+                            fallbackWarning != null -> fallbackWarning
+                            items.isEmpty() && ownerListings.isNotEmpty() -> "Showing your published products while Marketplace discovery refreshes."
+                            else -> null
+                        }
                         nextListingsOffset = 24
                     } else if (cachedPage != null) {
                         discoveryFallbackWarning = "Showing saved products from your last visit. FYNX could not refresh; product availability may have changed."
@@ -1176,6 +1198,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         }
     }
 
+    LaunchedEffect(initialSellerUsername) {
+        val seller = initialSellerUsername?.trim().orEmpty()
+        if (seller.isNotBlank()) {
+            sellerStoreUsername = seller
+            onInitialSellerOpened()
+        }
+    }
+
     LaunchedEffect(initialListingId) {
         val listingId = initialListingId?.trim().orEmpty()
         if (listingId.isNotBlank()) {
@@ -1213,6 +1243,15 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
                         Text("My Shop", maxLines = 1)
+                    }
+                    OutlinedButton(
+                        onClick = { sellerStoreUsername = currentUsername.removePrefix("@").trim() },
+                        enabled = currentUsername.isNotBlank() && !currentUsername.trim().equals("preview", ignoreCase = true),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Marketplace profile", maxLines = 1)
                     }
                     OutlinedButton(onClick = { showOrders = true; reloadOrders() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                         Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(17.dp))
@@ -1998,6 +2037,7 @@ private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceLis
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
                 Text(listing.category + " • " + (reputation?.let { it.successfulSales.toString() + " sales" } ?: "New seller"), maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                reputation?.let { MarketplaceSellerTierBadge(it.tier) }
                 if (reputation != null && reputation.reviewCount > 0) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary); Text(" " + String.format(Locale.US, "%.1f", reputation.averageRating), style = MaterialTheme.typography.labelSmall) } }
                 TextButton(onClick = onProfile, contentPadding = PaddingValues(0.dp)) { Text("View Store") }
             }
@@ -2059,6 +2099,7 @@ private fun MarketplaceDetails(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text("Seller:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(l.sellerDisplayName.ifBlank { l.sellerUsername }, fontWeight = FontWeight.SemiBold)
+                        sellerReputation?.let { MarketplaceSellerTierBadge(it.tier) }
                         if (l.location.isNotBlank()) {
                             Text("Location: ${l.location}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

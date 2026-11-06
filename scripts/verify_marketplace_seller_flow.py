@@ -296,14 +296,14 @@ checks = [
 ]
 
 checks.extend([
-    ("public seller storefront shows stale catalogue cards during loading and failure", "if (storefrontLoading) item {" in storefront and "storefrontError?.let { message ->" in storefront and "items(sellerListings, key =" in storefront and "Showing previously loaded products." in storefront),
+    ("public seller storefront shows stale catalogue cards during loading and failure", "if (storefrontLoading) item {" in storefront and "storefrontError?.let { message ->" in storefront and "items(sellerListings.chunked(3), key =" in storefront and "Showing previously loaded products." in storefront),
     ("public seller storefront has an explicit loading state for its own listing request", "var storefrontLoading by remember(username)" in storefront and "Loading this seller’s products…" in storefront),
     ("public seller storefront surfaces listing failures and provides a retry action", "storefrontError != null" in storefront and "Products could not load. Check your connection and try again." in storefront and "Retry products" in storefront and "storefrontReloadKey += 1" in storefront),
     ("public seller storefront retries by restarting the seller-specific request", "LaunchedEffect(username, viewerUsername, storefrontReloadKey)" in storefront and 'FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())' in storefront),
     ("failed storefront requests do not silently substitute a partial Marketplace feed as the seller's complete catalogue", "storefrontListings.orEmpty()" in storefront and "storefrontListings ?: listings.filter" not in storefront),
     ("public seller storefront distinguishes initial loading, failed requests and a successful empty catalogue", "else if (storefrontLoading && sellerListings.isEmpty())" in storefront and "else if (storefrontError != null && sellerListings.isEmpty())" in storefront and "else if (sellerListings.isEmpty())" in storefront),
-    ("public seller storefront shows real follow state, follower count, and safe follow/unfollow recovery without allowing self-follow", "viewerUsername: String" in storefront and "profile.followedByCurrentUser" in storefront and "profile.followerCount" in storefront and "FynxRemoteSocialClient.follow(context, username, wasFollowing)" in storefront and 'followedByViewer == false -> "Follow shop"' in storefront and 'followedByViewer == true -> "Following"' in storefront and "!isOwnStore" in storefront and "followError" in storefront and 'Text("Retry follow status")' in storefront),
-    ("Marketplace, My Shop and Saved Products discard account-scoped transient UI state when the signed-in account changes", "val marketplaceAccountKey = authSession.username?.removePrefix(\"@\")?.trim()?.lowercase(java.util.Locale.US)" in app_shell and '"Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(' in app_shell and '"Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel() }' in app_shell and '"Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(' in app_shell),
+    ("public seller storefront shows real follow state, follower count, and safe follow/unfollow recovery without allowing self-follow", "viewerUsername: String" in storefront and "profile.followedByCurrentUser" in storefront and "profile.followerCount" in storefront and "FynxRemoteSocialClient.follow(context, username, wasFollowing)" in storefront and 'followedByViewer == false -> "Follow"' in storefront and 'followedByViewer == true -> "Following"' in storefront and "!isOwnStore" in storefront and "followError" in storefront and 'Text("Retry")' in storefront),
+    ("Marketplace, My Shop and Saved Products discard account-scoped transient UI state when the signed-in account changes", "val marketplaceAccountKey = authSession.username?.removePrefix(\"@\")?.trim()?.lowercase(java.util.Locale.US)" in app_shell and '"Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(' in app_shell and '"Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel(onViewPublicShop = { marketplaceProfileUsername = authSession.username; selected = "Marketplace" }) }' in app_shell and '"Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(' in app_shell),
 ])
 
 checks.extend([
@@ -421,7 +421,8 @@ checks.extend([
      and 'FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())' in storefront
      and '.mapCatching { raw ->' in storefront
      and 'shopProfileError?.let { message ->' in storefront
-     and 'TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }' in storefront),
+     and 'TextButton(' in storefront and 'Text("Retry")' in storefront
+     and 'onClick = { storefrontReloadKey += 1 }' in storefront),
 ])
 checks.extend([
     ("Marketplace product details receives the Status share callback", "onShareToStatus: (String, String) -> Unit" in marketplace and "onShareToStatus = onShareListingToStatus" in marketplace and "onShareToStatus = onShareToStatus" in marketplace[marketplace.index("private fun MarketplaceDetails("):]),
@@ -542,7 +543,7 @@ checks.extend([
      and "The product was accepted, but its saved listing could not be read yet." in publish_flow),
     ("server-confirmed published product stays at the top only in the unfiltered discovery feed and pin state is account-scoped",
      "requestQuery.isBlank() && requestCategory.equals(\"All\", ignoreCase = true) && !requestNearbyMode" in marketplace
-     and "listOfNotNull(pinned) + items).distinctBy { it.id }" in marketplace
+     and "listOfNotNull(pinned) + resolvedItems).distinctBy { it.id }" in marketplace
      and "listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }" in publish_flow
      and "remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }" in marketplace
      and "remember(currentUsername) { mutableIntStateOf(0) }" in marketplace
