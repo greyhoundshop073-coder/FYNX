@@ -83,6 +83,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
                EXTRACT(EPOCH FROM p.created_at) * 1000 AS timestamp,
                COALESCE(l.likes,0) AS like_count,
                COALESCE(c.comments,0) AS comment_count,
+               EXISTS (SELECT 1 FROM social_post_likes mine WHERE mine.post_id=p.id AND mine.user_id=$1) AS liked_by_current_user,
                COALESCE(e.shares,0) AS share_count,
                COALESCE(e.saves,0) AS save_count,
                (COALESCE(l.likes,0) * 3 + COALESCE(c.comments,0) * 5 + COALESCE(e.shares,0) * 7 + COALESCE(e.saves,0) * 6)
@@ -115,7 +116,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
           mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null,
           mediaUrl: row.media_id == null ? null : `/api/social/media/${row.media_id}`, timestamp: Number(row.timestamp), likeCount: Number(row.like_count),
           commentCount: Number(row.comment_count), shareCount: Number(row.share_count), saveCount: Number(row.save_count),
-          likedByCurrentUser: false, followedByCurrentUser: false, isDiscovery: true,
+          likedByCurrentUser: Boolean(row.liked_by_current_user), followedByCurrentUser: false, isDiscovery: true,
           discoveryScore: Number(row.discovery_score || 0)
         })),
         hasMore
@@ -220,6 +221,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       );
       CREATE INDEX IF NOT EXISTS social_post_reposts_post_idx ON social_post_reposts(post_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS social_post_reposts_user_idx ON social_post_reposts(user_id, created_at DESC);
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS quoted_post_id BIGINT REFERENCES social_posts(id) ON DELETE SET NULL;
     `);
   };
 
@@ -286,11 +288,55 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
     try {
       await ensureSocialInteractionSchema();
       const postId = validPostId(req.params?.id);
-      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      if (!postId) return res.status(404).json({ error: "post not found" });
+      const original = await pool.query("SELECT author_id,visibility FROM social_posts WHERE id=$1 LIMIT 1", [postId]);
+      if (!original.rows[0] || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      if (String(original.rows[0].author_id) !== String(req.user.sub) && original.rows[0].visibility !== "PUBLIC") {
+        return res.status(404).json({ error: "only public posts from other accounts can be reposted" });
+      }
       await pool.query("INSERT INTO social_post_reposts(post_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [postId, req.user.sub]);
       const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_post_reposts WHERE post_id=$1", [postId]);
       return res.json({ reposted: true, repostCount: Number(count.rows[0]?.count || 0) });
     } catch (error) { console.error("repost social post", error); return res.status(500).json({ error: "repost failed" }); }
+  });
+
+  app.post("/api/social/posts/:id/quote", auth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 4000) : "";
+      if (!postId || !text) return res.status(400).json({ error: "quote text is required" });
+      if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      const original = await pool.query("SELECT id,author_id,visibility FROM social_posts WHERE id=$1 LIMIT 1", [postId]);
+      const isOwnPost = original.rows[0] && String(original.rows[0].author_id) === String(req.user.sub);
+      if (!original.rows[0] || (!isOwnPost && original.rows[0].visibility !== "PUBLIC")) {
+        return res.status(404).json({ error: "only public posts from other accounts can be quoted" });
+      }
+      // A quote of your own protected post must retain the original audience.
+      // Other people's protected posts are never made shareable by a quote.
+      const quoteVisibility = isOwnPost ? original.rows[0].visibility : "PUBLIC";
+      await client.query("BEGIN");
+      const created = await client.query(
+        "INSERT INTO social_posts(author_id,text,visibility,quoted_post_id) VALUES($1,$2,$3,$4) RETURNING id",
+        [req.user.sub, text, quoteVisibility, postId]
+      );
+      if (quoteVisibility === "SELECTED_PEOPLE") {
+        await client.query(
+          "INSERT INTO social_post_audience(post_id,user_id) SELECT $1,user_id FROM social_post_audience WHERE post_id=$2 ON CONFLICT DO NOTHING",
+          [created.rows[0].id, postId]
+        );
+      }
+      await client.query("INSERT INTO social_post_reposts(post_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [postId, req.user.sub]);
+      await client.query("COMMIT");
+      return res.status(201).json({ postId: String(created.rows[0].id), quotedPostId: String(postId) });
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch {}
+      console.error("quote social post", error);
+      return res.status(500).json({ error: "quote post failed" });
+    } finally {
+      client.release();
+    }
   });
 
   app.delete("/api/social/posts/:id/repost", auth, async (req, res) => {

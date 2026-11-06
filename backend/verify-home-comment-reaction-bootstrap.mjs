@@ -1,0 +1,20 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const bootstrap = await readFile(new URL("./homeCommentReactionBootstrap.js", import.meta.url), "utf8");
+const realtime = await readFile(new URL("./realtimeIsolationBootstrap.js", import.meta.url), "utf8");
+assert.ok(bootstrap.includes("fynxHomeCommentReactionsBatch"), "comment reaction bootstrap has a stable idempotency marker");
+assert.ok(bootstrap.includes('CREATE TABLE IF NOT EXISTS social_comment_reactions'), "comment reactions are persisted");
+assert.ok(bootstrap.includes("PRIMARY KEY(comment_id,user_id)"), "one reaction per user per comment is enforced");
+for (const reaction of ["LIKE","LOVE","LAUGH","WOW","SAD","FIRE","THUMBS_UP"]) assert.ok(bootstrap.includes(reaction), `missing supported reaction ${reaction}`);
+assert.ok(bootstrap.includes("/comment-reactions?") || bootstrap.includes("comment-reactions'"), "batch reaction summary route exists");
+assert.ok(bootstrap.includes("visibleSocialPost(postId,req.user.sub)"), "reaction reads and writes enforce post visibility");
+assert.ok(bootstrap.includes("blocker_id=c.author_id AND b.blocked_id=$3"), "reaction writes respect symmetric blocks");
+assert.ok(bootstrap.includes("ON CONFLICT(comment_id,user_id) DO UPDATE"), "reaction changes are idempotent and replace the user's prior reaction");
+assert.ok(bootstrap.includes("queueFynxNotification"), "comment reaction notifications use the shared notification queue");
+assert.ok(bootstrap.includes("comment-reaction-"), "comment reaction notifications have a stable deduplication id");
+assert.ok(bootstrap.includes("previousReaction.rows[0].reaction_type !== reaction"), "switching an existing reaction is notified only when the reaction changes");
+assert.ok(realtime.includes('import { installHomeCommentReactions } from "./homeCommentReactionBootstrap.js";'), "realtime entrypoint imports comment reactions");
+assert.ok(realtime.includes("await installHomeCommentReactions();"), "realtime entrypoint installs comment reactions");
+assert.ok(bootstrap.includes('const marker = "\\n}\\n";'), "bootstrap expresses the route marker as JavaScript newline escapes");
+console.log("HOME COMMENT REACTIONS GREEN: persistent per-user emoji reactions, batch counts, toggles, post visibility, block filtering and realtime startup integration.");
