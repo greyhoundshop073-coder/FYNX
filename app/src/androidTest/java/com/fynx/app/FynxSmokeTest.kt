@@ -1,7 +1,6 @@
 package com.fynx.app
 
 import android.content.Intent
-import android.net.Uri
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -45,11 +44,6 @@ class FynxSmokeTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val device = UiDevice.getInstance(instrumentation)
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("fynx://profile/alice")).apply {
-            addCategory(Intent.CATEGORY_BROWSABLE)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-
         device.pressHome()
         SystemClock.sleep(500)
         val component = "${context.packageName}/.MainActivity"
