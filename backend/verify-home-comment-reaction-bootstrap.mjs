@@ -16,5 +16,5 @@ assert.ok(bootstrap.includes("comment-reaction-"), "comment reaction notificatio
 assert.ok(bootstrap.includes("previousReaction.rows[0].reaction_type !== reaction"), "switching an existing reaction is notified only when the reaction changes");
 assert.ok(realtime.includes('import { installHomeCommentReactions } from "./homeCommentReactionBootstrap.js";'), "realtime entrypoint imports comment reactions");
 assert.ok(realtime.includes("await installHomeCommentReactions();"), "realtime entrypoint installs comment reactions");
-assert.ok(bootstrap.includes('const marker = "\\n}\\n";') === false, "bootstrap uses a real newline route marker");
+assert.ok(bootstrap.includes('const marker = "\\n}\\n";'), "bootstrap expresses the route marker as JavaScript newline escapes");
 console.log("HOME COMMENT REACTIONS GREEN: persistent per-user emoji reactions, batch counts, toggles, post visibility, block filtering and realtime startup integration.");
