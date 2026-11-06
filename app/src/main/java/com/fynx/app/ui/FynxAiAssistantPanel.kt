@@ -139,6 +139,20 @@ fun FynxAiAssistantPanel(
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var welcomeDisplayName by remember(currentUsername, currentUserDisplayName) {
+        mutableStateOf(currentUserDisplayName.trim().takeUnless { it.isBlank() || it.equals("Your name", ignoreCase = true) }
+            ?: currentUsername?.removePrefix("@")?.trim().orEmpty().ifBlank { "there" })
+    }
+    LaunchedEffect(currentUsername, currentUserDisplayName) {
+        val username = currentUsername?.removePrefix("@")?.trim().orEmpty()
+        if (username.isNotBlank() && FynxBackendClient.hasAccessToken(context)) {
+            FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
+                welcomeDisplayName = profile.displayName.trim()
+                    .takeUnless { it.isBlank() || it.equals("Your name", ignoreCase = true) }
+                    ?: profile.username.removePrefix("@").ifBlank { username }
+            }
+        }
+    }
     val listState = rememberLazyListState()
     val voiceEngine = remember { FynxAiWebRtcEngine(context) }
 
@@ -702,7 +716,7 @@ fun FynxAiAssistantPanel(
                         item(key = "fynx-ai-welcome") {
                             FynxAiWelcomeContent(
                                 discoveryPrompts = discoveryPrompts,
-                                currentUserDisplayName = currentUserDisplayName,
+                                currentUserDisplayName = welcomeDisplayName,
                                 currentUsername = currentUsername,
                                 currentUserPhotoUri = currentUserPhotoUri,
                                 onPrompt = { sendPrompt(it, true) }
