@@ -162,6 +162,22 @@ checks = [
         and '"discovery" in ordered' in home,
     ),
     (
+        "Home Discovery remains reachable when For You has only one or two feed posts",
+        'posts.size < 3 -> if (discoveryVideos.isNotEmpty() && "discovery" in ordered) 1 else 0' in home
+        and '"discovery" -> item(key = "home_discovery_${postIndex}")' in home,
+    ),
+    (
+        "runtime feed scrolling starts from visible non-clickable captions on full-width landscape clips",
+        '_home_content_scroll_point(current, width, height, "up")' in navigation
+        and "the video can consume the gesture instead of the parent LazyColumn scrolling" in navigation,
+    ),
+    (
+        "final Home navigation detection requires the visible bottom Home label",
+        'text_value != "home" and description != "home"' in navigation
+        and 'node.attrib.get("visible-to-user", "true")' in navigation
+        and 'screen_height * 0.68' in navigation,
+    ),
+    (
         "opening Discovery records each page view once rather than double-counting the first view",
         "FynxDiscoveryClient.recordView(context, video.id)" in discovery
         and "fun openHomeDiscoveryViewer(index: Int)" in home
