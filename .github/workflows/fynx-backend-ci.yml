@@ -178,6 +178,8 @@ jobs:
         run: node verify-notification-bootstrap-idempotency.mjs
       - name: Verify Home post reaction SQL contract
         run: node verify-social-post-reaction-bootstrap.mjs
+      - name: Verify Home comment reaction bootstrap and realtime registration
+        run: node verify-home-comment-reaction-bootstrap.mjs
       - name: Verify Home feed repost timeline and visibility in PostgreSQL
         run: node test-home-feed-repost-query.mjs
 
