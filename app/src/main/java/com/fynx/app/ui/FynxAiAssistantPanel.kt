@@ -274,8 +274,8 @@ fun FynxAiAssistantPanel(
         readAloudConnectionJob?.cancel()
         readAloudConnectionJob = null
         if (readAloudMessageId != null) {
-            readAloudEngine.sendEvent("{\\"type\\":\\"response.cancel\\"}")
-            readAloudEngine.sendEvent("{\\"type\\":\\"output_audio_buffer.clear\\"}")
+            readAloudEngine.sendEvent(JSONObject().put("type", "response.cancel").toString())
+            readAloudEngine.sendEvent(JSONObject().put("type", "output_audio_buffer.clear").toString())
         }
         readAloudEngine.close()
         readAloudMessageId = null
@@ -376,8 +376,8 @@ fun FynxAiAssistantPanel(
             return
         }
         readAloudPaused = true
-        readAloudEngine.sendEvent("{\\"type\\":\\"response.cancel\\"}")
-        readAloudEngine.sendEvent("{\\"type\\":\\"output_audio_buffer.clear\\"}")
+            readAloudEngine.sendEvent(JSONObject().put("type", "response.cancel").toString())
+            readAloudEngine.sendEvent(JSONObject().put("type", "output_audio_buffer.clear").toString())
     }
 
     fun resumeReadAloud() {
