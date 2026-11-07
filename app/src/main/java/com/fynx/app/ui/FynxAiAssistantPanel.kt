@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloat
@@ -76,6 +77,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.util.UUID
 
@@ -157,6 +159,12 @@ fun FynxAiAssistantPanel(
     var readAloudRemainingText by remember { mutableStateOf("") }
     var readAloudTranscript by remember { mutableStateOf("") }
     var readAloudConnectionJob by remember { mutableStateOf<Job?>(null) }
+    var readAloudWaveform by remember { mutableStateOf<List<Float>>(emptyList()) }
+    var readAloudDurationMs by remember { mutableLongStateOf(0L) }
+    var readAloudElapsedMs by remember { mutableLongStateOf(0L) }
+    var readAloudElapsedBeforeSegment by remember { mutableLongStateOf(0L) }
+    var readAloudSegmentStartedAt by remember { mutableLongStateOf(0L) }
+    var readAloudTranscriptPrefix by remember { mutableStateOf("") }
     val messageFeedback = remember { mutableStateMapOf<String, Int>() }
 
     val scope = rememberCoroutineScope()
@@ -178,6 +186,19 @@ fun FynxAiAssistantPanel(
     val listState = rememberLazyListState()
     val voiceEngine = remember { FynxAiWebRtcEngine(context) }
     val readAloudEngine = remember { FynxAiWebRtcEngine(context) }
+
+    LaunchedEffect(readAloudMessageId, readAloudPaused, readAloudConnecting, readAloudSegmentStartedAt) {
+        while (
+            readAloudMessageId != null &&
+            !readAloudPaused &&
+            !readAloudConnecting &&
+            readAloudSegmentStartedAt > 0L
+        ) {
+            readAloudElapsedMs = readAloudElapsedBeforeSegment +
+                (SystemClock.elapsedRealtime() - readAloudSegmentStartedAt).coerceAtLeast(0L)
+            delay(200)
+        }
+    }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -284,6 +305,12 @@ fun FynxAiAssistantPanel(
         readAloudSourceText = ""
         readAloudRemainingText = ""
         readAloudTranscript = ""
+        readAloudTranscriptPrefix = ""
+        readAloudWaveform = emptyList()
+        readAloudDurationMs = 0L
+        readAloudElapsedMs = 0L
+        readAloudElapsedBeforeSegment = 0L
+        readAloudSegmentStartedAt = 0L
     }
 
     fun finishReadAloud(messageId: String) {
@@ -296,6 +323,12 @@ fun FynxAiAssistantPanel(
         readAloudSourceText = ""
         readAloudRemainingText = ""
         readAloudTranscript = ""
+        readAloudTranscriptPrefix = ""
+        readAloudWaveform = emptyList()
+        readAloudDurationMs = 0L
+        readAloudElapsedMs = 0L
+        readAloudElapsedBeforeSegment = 0L
+        readAloudSegmentStartedAt = 0L
     }
 
     fun requestReadAloud(messageId: String, text: String) {
@@ -305,6 +338,12 @@ fun FynxAiAssistantPanel(
         readAloudSourceText = text
         readAloudRemainingText = text
         readAloudTranscript = ""
+        readAloudTranscriptPrefix = ""
+        readAloudWaveform = emptyList()
+        readAloudDurationMs = 0L
+        readAloudElapsedMs = 0L
+        readAloudElapsedBeforeSegment = 0L
+        readAloudSegmentStartedAt = 0L
         readAloudPaused = false
         readAloudConnecting = true
         readAloudConnectionJob = scope.launch {
@@ -327,12 +366,40 @@ fun FynxAiAssistantPanel(
                         if (readAloudMessageId != messageId) return@launch
                         val event = runCatching { JSONObject(rawEvent) }.getOrNull() ?: return@launch
                         when (event.optString("type")) {
-                            "response.created", "output_audio_buffer.started" -> {
+                            "output_audio_buffer.started" -> {
                                 readAloudConnecting = false
+                                if (readAloudSegmentStartedAt == 0L) {
+                                    readAloudSegmentStartedAt = SystemClock.elapsedRealtime()
+                                }
+                            }
+                            "response.output_audio.delta" -> {
+                                val audioDelta = event.optString("delta")
+                                if (audioDelta.isNotBlank()) {
+                                    readAloudWaveform = FynxAiReadAloud.appendPcmWaveform(readAloudWaveform, audioDelta)
+                                    readAloudDurationMs += FynxAiReadAloud.pcmDurationMillis(audioDelta)
+                                }
                             }
                             "response.audio_transcript.delta", "response.output_audio_transcript.delta" -> {
                                 readAloudTranscript += event.optString("delta")
                                 readAloudConnecting = false
+                            }
+                            "response.output_audio_transcript.done" -> {
+                                val completeTranscript = event.optString("transcript")
+                                if (completeTranscript.isNotBlank()) {
+                                    readAloudTranscript = readAloudTranscriptPrefix + completeTranscript
+                                }
+                            }
+                            "response.done" -> {
+                                val response = event.optJSONObject("response")
+                                val responseStatus = response?.optString("status").orEmpty()
+                                if (!readAloudPaused && responseStatus in setOf("failed", "incomplete")) {
+                                    val detail = response?.optJSONObject("status_details")?.optString("reason").orEmpty()
+                                    errorMessage = friendlyFynxAiError(
+                                        IllegalStateException(detail),
+                                        "FYNX could not finish reading this response. Please try again."
+                                    )
+                                    finishReadAloud(messageId)
+                                }
                             }
                             "output_audio_buffer.stopped" -> {
                                 if (!readAloudPaused) finishReadAloud(messageId)
@@ -370,10 +437,11 @@ fun FynxAiAssistantPanel(
     fun pauseReadAloud() {
         val messageId = readAloudMessageId ?: return
         if (readAloudPaused || readAloudConnecting) return
-        readAloudRemainingText = FynxAiReadAloud.remainingText(readAloudSourceText, readAloudTranscript)
-        if (readAloudRemainingText.isBlank()) {
-            finishReadAloud(messageId)
-            return
+        if (readAloudSegmentStartedAt > 0L) {
+            readAloudElapsedBeforeSegment +=
+                (SystemClock.elapsedRealtime() - readAloudSegmentStartedAt).coerceAtLeast(0L)
+            readAloudSegmentStartedAt = 0L
+            readAloudElapsedMs = readAloudElapsedBeforeSegment
         }
         readAloudPaused = true
         readAloudEngine.sendEvent(JSONObject().put("type", "response.cancel").toString())
@@ -381,9 +449,16 @@ fun FynxAiAssistantPanel(
     }
 
     fun resumeReadAloud() {
-        if (!readAloudPaused || readAloudRemainingText.isBlank()) return
+        if (!readAloudPaused) return
+        readAloudRemainingText = FynxAiReadAloud.remainingText(readAloudSourceText, readAloudTranscript)
+        if (readAloudRemainingText.isBlank()) {
+            finishReadAloud(readAloudMessageId ?: return)
+            return
+        }
+        readAloudTranscriptPrefix = readAloudTranscript
         readAloudPaused = false
         readAloudConnecting = true
+        readAloudSegmentStartedAt = 0L
         val sent = readAloudEngine.sendEvent(FynxAiReadAloud.buildResponseEvent(readAloudRemainingText))
         if (!sent) {
             errorMessage = "FYNX could not resume voice playback. Tap Read aloud to start again."
@@ -900,6 +975,9 @@ fun FynxAiAssistantPanel(
                                 feedback = messageFeedback[message.id] ?: 0,
                                 speaking = readAloudMessageId == message.id && !readAloudPaused,
                                 readAloudProgress = if (readAloudMessageId == message.id) readAloudTranscript.takeLast(140) else "",
+                                waveformLevels = if (readAloudMessageId == message.id) readAloudWaveform else emptyList(),
+                                elapsedMs = if (readAloudMessageId == message.id) readAloudElapsedMs else 0L,
+                                durationMs = if (readAloudMessageId == message.id) readAloudDurationMs else 0L,
                                 paused = readAloudMessageId == message.id && readAloudPaused,
                                 connecting = readAloudMessageId == message.id && readAloudConnecting,
                                 onCopy = { copyText(message.text) },
@@ -1637,71 +1715,102 @@ private fun VoiceListeningIndicator(muted: Boolean, onClick: () -> Unit) {
 private fun ReadAloudPlayer(
     paused: Boolean,
     connecting: Boolean,
+    waveformLevels: List<Float>,
+    elapsedMs: Long,
+    durationMs: Long,
     onPlayPause: () -> Unit,
     onStop: () -> Unit
 ) {
-    val transition = rememberInfiniteTransition(label = "fynxReadAloudWaveform")
+    val safeDuration = maxOf(durationMs, elapsedMs)
+    val progress = if (safeDuration > 0L) {
+        (elapsedMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+    val visibleLevels = (0 until thirtyWaveBars).map { index ->
+        if (waveformLevels.isEmpty()) {
+            0.15f + ((index % 5) * 0.025f)
+        } else {
+            val sampleIndex = ((index.toFloat() / thirtyWaveBars) * waveformLevels.size)
+                .toInt().coerceIn(0, waveformLevels.lastIndex)
+            waveformLevels[sampleIndex].coerceIn(0.10f, 1f)
+        }
+    }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f))
+        color = Color(0xFF292929),
+        border = BorderStroke(1.dp, Color(0xFF454545))
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            IconButton(
-                onClick = onPlayPause,
-                enabled = !connecting,
-                modifier = Modifier.size(42.dp).background(Color.White, CircleShape)
-            ) {
-                Icon(
-                    if (paused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                    contentDescription = if (paused) "Resume read aloud" else "Pause read aloud",
-                    tint = Color(0xFF101010),
-                    modifier = Modifier.size(25.dp)
-                )
-            }
-            Text(
-                if (connecting) "…" else if (paused) "Paused" else "LIVE",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold
-            )
             Row(
-                modifier = Modifier.weight(1f).height(42.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
             ) {
-                repeat( thirtyWaveBars ) { index ->
-                    val target = .18f + (((index * 17 + 11) % 23) / 28f)
-                    val animated by transition.animateFloat(
-                        initialValue = target * .55f,
-                        targetValue = target,
-                        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                            animation = androidx.compose.animation.core.tween(380 + (index % 7) * 95),
-                            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-                        ),
-                        label = "readWave$index"
+                IconButton(
+                    onClick = onPlayPause,
+                    enabled = !connecting,
+                    modifier = Modifier.size(42.dp).background(Color.White, CircleShape)
+                ) {
+                    Icon(
+                        if (paused || connecting) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        contentDescription = if (paused) "Resume read aloud" else "Pause read aloud",
+                        tint = Color(0xFF101010),
+                        modifier = Modifier.size(25.dp)
                     )
-                    val height = if (paused) (target * 42f).dp else (animated * 42f).dp
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(height.coerceAtLeast(4.dp))
-                            .clip(RoundedCornerShape(50))
-                            .background(
-                                if (paused) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .48f)
-                                else Color(0xFF007FFF)
-                            )
+                }
+                Text(
+                    FynxAiReadAloud.formatPlaybackTime(elapsedMs) + " / " +
+                        FynxAiReadAloud.formatPlaybackTime(safeDuration),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                Row(
+                    modifier = Modifier.weight(1f).height(40.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    visibleLevels.forEachIndexed { index, level ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height((5.dp + (level * 34f).dp).coerceAtMost(39.dp))
+                                .clip(RoundedCornerShape(50))
+                                .background(
+                                    if (index < (progress * thirtyWaveBars).toInt()) Color.White
+                                    else Color(0xFF858585)
+                                )
+                        )
+                    }
+                }
+                IconButton(onClick = onStop, modifier = Modifier.size(38.dp)) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Stop reading response",
+                        tint = Color.White,
+                        modifier = Modifier.size(23.dp)
                     )
                 }
             }
-            IconButton(onClick = onStop, modifier = Modifier.size(38.dp)) {
-                Icon(Icons.Default.Close, contentDescription = "Stop reading response", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp))
-            }
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50)),
+                color = Color(0xFF007FFF),
+                trackColor = Color(0xFF555555)
+            )
+            Text(
+                when {
+                    connecting -> "Connecting to FYNX natural voice…"
+                    paused -> "Paused · resume to continue reading"
+                    else -> "FYNX is reading this answer aloud"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFFE0E0E0)
+            )
         }
     }
 }
@@ -1714,6 +1823,9 @@ internal fun AiChatBubble(
     feedback: Int,
     speaking: Boolean,
     readAloudProgress: String,
+    waveformLevels: List<Float>,
+    elapsedMs: Long,
+    durationMs: Long,
     paused: Boolean,
     connecting: Boolean,
     onCopy: () -> Unit,
@@ -1796,8 +1908,11 @@ internal fun AiChatBubble(
                     (speaking || paused || connecting)
                 ) {
                     ReadAloudPlayer(
-                        paused = paused || connecting,
+                        paused = paused,
                         connecting = connecting,
+                        waveformLevels = waveformLevels,
+                        elapsedMs = elapsedMs,
+                        durationMs = durationMs,
                         onPlayPause = onSpeak,
                         onStop = onStopSpeaking
                     )

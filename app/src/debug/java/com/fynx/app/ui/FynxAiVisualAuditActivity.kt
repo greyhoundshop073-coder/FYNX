@@ -4,13 +4,21 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,6 +56,7 @@ class FynxAiVisualAuditActivity : ComponentActivity() {
                 )
             ) {
                 when (screen) {
+                    "chat" -> FynxAiChatScreenAudit()
                     "actions" -> FynxAiResponseActionAudit(active = false)
                     "reading" -> FynxAiResponseActionAudit(active = true)
                     else -> {
@@ -100,6 +109,9 @@ private fun FynxAiResponseActionAudit(active: Boolean) {
                 feedback = 0,
                 speaking = active,
                 readAloudProgress = if (active) "FYNX AI can read the full answer aloud in a clear, natural conversational voice." else "",
+                waveformLevels = if (active) listOf(0.18f, 0.42f, 0.76f, 0.34f, 0.58f, 0.88f, 0.31f, 0.67f, 0.45f, 0.94f, 0.27f, 0.55f, 0.72f, 0.38f, 0.81f, 0.22f, 0.63f, 0.49f, 0.91f, 0.36f, 0.68f, 0.29f, 0.84f, 0.43f, 0.74f, 0.33f, 0.59f, 0.96f, 0.25f, 0.52f) else emptyList(),
+                elapsedMs = if (active) 18_000L else 0L,
+                durationMs = if (active) 63_000L else 0L,
                 paused = false,
                 connecting = false,
                 onCopy = {},
@@ -109,5 +121,119 @@ private fun FynxAiResponseActionAudit(active: Boolean) {
                 onShare = {}
             )
         }
+    }
+}
+
+@Composable
+private fun FynxAiChatScreenAudit() {
+    var draft by remember { mutableStateOf("") }
+    Column(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Icon(
+                    Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(9.dp).size(22.dp)
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text("FYNX Assistant", style = MaterialTheme.typography.titleLarge)
+                Text("Ask · Create · Discover", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = {}) { Icon(Icons.Default.Add, contentDescription = "Start new conversation") }
+            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, contentDescription = "Conversation history") }
+        }
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            AiChatBubble(
+                message = FynxAiUiMessage(
+                    id = "audit-user-message",
+                    text = "Can you explain how FYNX AI helps me save time?",
+                    fromUser = true
+                ),
+                feedback = 0,
+                speaking = false,
+                readAloudProgress = "",
+                waveformLevels = emptyList(),
+                elapsedMs = 0L,
+                durationMs = 0L,
+                paused = false,
+                connecting = false,
+                onCopy = {},
+                onSpeak = {},
+                onStopSpeaking = {},
+                onFeedback = {},
+                onShare = {}
+            )
+            AiChatBubble(
+                message = FynxAiUiMessage(
+                    id = "audit-assistant-message",
+                    text = "FYNX AI can help you write, understand information, plan your day and work through questions. You can read the answer, copy or share it, or tap the speaker to hear the complete response in FYNX's natural voice.",
+                    fromUser = false
+                ),
+                feedback = 0,
+                speaking = false,
+                readAloudProgress = "",
+                waveformLevels = emptyList(),
+                elapsedMs = 0L,
+                durationMs = 0L,
+                paused = false,
+                connecting = false,
+                onCopy = {},
+                onSpeak = {},
+                onStopSpeaking = {},
+                onFeedback = {},
+                onShare = {}
+            )
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .65f))
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {}) {
+                    Icon(Icons.Default.Add, contentDescription = "Attach to FYNX Assistant")
+                }
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Message FYNX Assistant…") },
+                    maxLines = 4
+                )
+                IconButton(onClick = {}) {
+                    Icon(Icons.Default.Mic, contentDescription = "Start voice conversation with FYNX Assistant")
+                }
+                IconButton(onClick = {}) {
+                    Icon(Icons.Default.Send, contentDescription = "Send message")
+                }
+            }
+        }
+        Text(
+            "FYNX Assistant can make mistakes. Check important information.",
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 6.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

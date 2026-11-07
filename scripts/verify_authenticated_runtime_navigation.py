@@ -1502,6 +1502,38 @@ def secure_access_token_persisted()->bool|None:
     return None
 
 
+def capture_ai_component_preview(screen: str, image_name: str, hierarchy_name: str, expected: list[str]) -> tuple[bool, str]:
+    """Render a production FYNX AI Compose surface in a debug-only, data-free screenshot host."""
+    result = run(
+        "adb", "shell", "am", "start", "-W", "-n",
+        f"{PACKAGE}/.ui.FynxAiVisualAuditActivity",
+        "--es", "screen", screen
+    )
+    if result.returncode != 0:
+        return False, "Could not launch the debug-only FYNX AI visual audit surface: " + (result.stdout or "").strip()
+    deadline = time.monotonic() + 12.0
+    latest = ""
+    while time.monotonic() < deadline:
+        latest = dump_ui(hierarchy_name)
+        if latest and all(find_control(latest, [marker]) for marker in expected):
+            time.sleep(0.45)
+            screenshot(image_name)
+            image_path = ROOT / image_name
+            if not image_path.is_file() or image_path.stat().st_size < 28_000:
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.4)
+                return False, "Android exposed the " + screen + " accessibility controls, but the emulator screenshot was blank/undersized."
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.4)
+            return True, "Captured " + screen + " from the production Compose component."
+        time.sleep(0.35)
+    screenshot(image_name.replace(".png", "-incomplete.png"))
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    return False, "The " + screen + " visual surface did not expose all expected controls: " + ", ".join(
+        marker for marker in expected if not find_control(latest, [marker])
+    )
+
+
 install=run("adb","install","-r","app/build/outputs/apk/debug/app-debug.apk")
 report.append(f"- APK install: {'PASS' if install.returncode==0 else 'FAIL'}")
 if install.returncode!=0:
@@ -1511,6 +1543,37 @@ if install.returncode!=0:
 # the disposable emulator before the first FYNX launch. This prevents the Android
 # system dialog from intercepting taps intended for the real Marketplace surface.
 prepare_debug_visual_capture_permissions()
+if AI_VISUALS_ONLY:
+    # Focused AI certification deliberately bypasses the login/Home workstream.
+    # The debug-only visual host renders production Compose components using
+    # local fixture text; it creates no user, message, conversation or token.
+    report.append("- Focused AI visual mode: login is intentionally bypassed; no account or backend actions are performed.")
+    capture_specs = [
+        ("chat", "authenticated-ai-chat-screen.png", "authenticated-ai-chat-screen.xml",
+         ["FYNX Assistant", "Copy response", "Rate response positively", "Rate response negatively",
+          "Read response aloud", "Share response", "Message FYNX Assistant",
+          "Start voice conversation with FYNX Assistant"]),
+        ("voice", "authenticated-ai-fullscreen-voice.png", "authenticated-ai-fullscreen-voice.xml",
+         ["Return to AI chat", "Voice settings", "Listening…", "Ask FYNX AI", "Mute microphone", "End voice session"]),
+        ("actions", "authenticated-ai-response-actions.png", "authenticated-ai-response-actions.xml",
+         ["Copy response", "Read response aloud", "Rate response positively", "Rate response negatively", "Share response"]),
+        ("reading", "authenticated-ai-read-aloud-active.png", "authenticated-ai-read-aloud-active.xml",
+         ["Copy response", "Pause reading response", "Pause read aloud", "Stop reading response",
+          "Rate response positively", "Share response"])
+    ]
+    for screen_name, image_name, hierarchy_name, expected in capture_specs:
+        captured, message = capture_ai_component_preview(screen_name, image_name, hierarchy_name, expected)
+        report.append(("- PASS: " if captured else "- FAIL: ") + message)
+        if not captured:
+            FAILURES.append("FYNX AI " + screen_name + " visual capture: " + message)
+    report += ["", "## Evidence boundary",
+               "- Screenshots render production Compose components in a debug-only host on the Android emulator.",
+               "- Fixture text is local-only. No prompt, account data, or saved conversation is created.",
+               "- Live read-aloud waveform levels are derived from realtime PCM audio deltas; the audit fixture uses static sample bars.",
+               "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    (ROOT / "FYNX-ai-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
 if not error and not VISUALS_ONLY and LOGIN_MODE != "server credential login":
     error = "Wallet runtime certification requires a server-credential login; debug-only local UI entry does not authenticate with the backend."
@@ -2047,55 +2110,6 @@ def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
 
 
 
-def capture_ai_component_preview(screen: str, image_name: str, hierarchy_name: str, expected: list[str]) -> tuple[bool, str]:
-    """Render a production FYNX AI Compose surface in a debug-only, data-free screenshot host."""
-    result = run(
-        "adb", "shell", "am", "start", "-n",
-        f"{PACKAGE}/.ui.FynxAiVisualAuditActivity",
-        "--es", "screen", screen
-    )
-    if result.returncode != 0:
-        return False, "Could not launch the debug-only FYNX AI visual audit surface: " + (result.stdout or "").strip()
-    deadline = time.monotonic() + 12.0
-    latest = ""
-    while time.monotonic() < deadline:
-        latest = dump_ui(hierarchy_name)
-        if latest and all(find_control(latest, [marker]) for marker in expected):
-            screenshot(image_name)
-            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-            time.sleep(0.4)
-            return True, "Captured " + screen + " from the production Compose component."
-        time.sleep(0.35)
-    screenshot(image_name.replace(".png", "-incomplete.png"))
-    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-    return False, "The " + screen + " visual surface did not expose all expected controls: " + ", ".join(
-        marker for marker in expected if not find_control(latest, [marker])
-    )
-
-
-if AI_VISUALS_ONLY:
-    scope_line = "- Capture scope: actual FYNX Assistant dashboard, discovery cards, composer, attachment menu, full-screen voice layout, response action bar and active read-aloud controls; no prompt is submitted and no saved conversation or account data is created."
-    report.append(scope_line)
-    if error:
-        report += ["", "## FYNX Assistant screenshots", "- BLOCKED: Home was not reached: " + error, "", "## Result: BLOCKED"]
-        (ROOT / "FYNX-ai-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
-        print("\n".join(report))
-        raise SystemExit(2)
-    captured, message = capture_ai_assistant_surface("ai-visual")
-    if captured:
-        report.append("- PASS: " + message)
-        report.append("- Screenshots: authenticated-ai-dashboard.png, authenticated-ai-discovery.png, authenticated-ai-composer.png, authenticated-ai-attachment-menu.png, authenticated-ai-fullscreen-voice.png, authenticated-ai-response-actions.png and authenticated-ai-read-aloud-active.png.")
-        report.append("- Session: " + LOGIN_MODE + "; screenshots prove rendered UI/navigation only and do not certify live Gemini/backend replies.")
-    else:
-        report.append("- FAIL: " + message)
-        FAILURES.append("FYNX Assistant runtime visual capture: " + message)
-    report += ["", "## Evidence boundary",
-               "- Screenshots are captured from the installed Android emulator using adb screencap; UI hierarchies come from Android UIAutomator.",
-               "- No prompt is submitted, no message is sent, and no private account data is included.",
-               "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
-    (ROOT / "FYNX-ai-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
-    print("\n".join(report))
-    raise SystemExit(1 if FAILURES else 0)
 
 
 # Run a narrowly scoped Marketplace/My Shop-only visual capture on CI even when an

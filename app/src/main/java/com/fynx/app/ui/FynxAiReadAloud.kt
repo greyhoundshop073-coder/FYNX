@@ -2,9 +2,17 @@ package com.fynx.app.ui
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.Base64
+import java.util.Locale
+import kotlin.math.sqrt
 
 /** Read a stored answer through FYNX's server-configured realtime voice, without microphone input. */
 internal object FynxAiReadAloud {
+    const val OUTPUT_SAMPLE_RATE = 24_000
+    private const val PCM_BYTES_PER_SAMPLE = 2
+
     fun buildResponseEvent(text: String): String {
         require(text.isNotBlank()) { "There is no response text to read." }
         val inputMessage = JSONObject()
@@ -18,6 +26,16 @@ internal object FynxAiReadAloud {
             .put("conversation", "none")
             .put("input", JSONArray().put(inputMessage))
             .put("output_modalities", JSONArray().put("audio"))
+            .put(
+                "audio",
+                JSONObject().put(
+                    "output",
+                    JSONObject().put(
+                        "format",
+                        JSONObject().put("type", "audio/pcm").put("rate", OUTPUT_SAMPLE_RATE)
+                    )
+                )
+            )
             .put("tool_choice", "none")
             .put("tools", JSONArray())
             .put(
@@ -30,11 +48,50 @@ internal object FynxAiReadAloud {
         return JSONObject().put("type", "response.create").put("response", response).toString()
     }
 
+    /** Convert one PCM 24 kHz delta into short RMS waveform samples for the inline player. */
+    fun appendPcmWaveform(current: List<Float>, base64AudioDelta: String, maxBars: Int = 120): List<Float> {
+        if (base64AudioDelta.isBlank() || maxBars <= 0) return current.takeLast(maxBars.coerceAtLeast(0))
+        val bytes = runCatching { Base64.getDecoder().decode(base64AudioDelta) }.getOrNull() ?: return current
+        val sampleCount = bytes.size / PCM_BYTES_PER_SAMPLE
+        if (sampleCount == 0) return current
+        val barCount = minOf(maxBars, maxOf(1, sampleCount / 240))
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val appended = ArrayList<Float>(barCount)
+        for (bar in 0 until barCount) {
+            val start = (bar.toLong() * sampleCount / barCount).toInt()
+            val end = (((bar + 1L) * sampleCount / barCount).toInt()).coerceAtLeast(start + 1)
+            var sumSquares = 0.0
+            var count = 0
+            for (sampleIndex in start until minOf(end, sampleCount)) {
+                val sample = buffer.getShort(sampleIndex * PCM_BYTES_PER_SAMPLE).toInt()
+                val normalized = sample / 32768.0
+                sumSquares += normalized * normalized
+                count++
+            }
+            val rms = if (count == 0) 0.0 else sqrt(sumSquares / count)
+            appended += (rms * 3.5).coerceIn(0.10, 1.0).toFloat()
+        }
+        return (current + appended).takeLast(maxBars)
+    }
+
+    /** Duration represented by a PCM 24 kHz, signed 16-bit mono audio delta. */
+    fun pcmDurationMillis(base64AudioDelta: String): Long {
+        if (base64AudioDelta.isBlank()) return 0L
+        val byteCount = runCatching { Base64.getDecoder().decode(base64AudioDelta).size }.getOrNull() ?: return 0L
+        val sampleCount = byteCount / PCM_BYTES_PER_SAMPLE
+        return sampleCount * 1000L / OUTPUT_SAMPLE_RATE
+    }
+
+    fun formatPlaybackTime(milliseconds: Long): String {
+        val totalSeconds = (milliseconds.coerceAtLeast(0L) / 1000L)
+        return String.format(Locale.US, "%02d:%02d", totalSeconds / 60L, totalSeconds % 60L)
+    }
+
     /** Resume at the latest recognized word boundary without repeating the whole answer. */
     fun remainingText(source: String, transcript: String): String {
         if (source.isBlank()) return ""
         if (transcript.isBlank()) return source
-        val wordPattern = Regex("""[\p{L}\p{N}]+""")
+        val wordPattern = Regex("""[p{L}p{N}]+""")
         val sourceWords = wordPattern.findAll(source).toList()
         val spokenWords = wordPattern.findAll(transcript).map { it.value.lowercase() }.toList()
         if (sourceWords.isEmpty() || spokenWords.isEmpty()) return source
