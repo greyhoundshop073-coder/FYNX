@@ -1642,7 +1642,7 @@ def has_visible_home_comment_row(xml_text: str) -> bool:
     has_reply = "reply" in texts or "reply" in descriptions
     has_thread_action = bool(
         descriptions.intersection({"open replies", "collapse replies"})
-        or any(re.fullmatch(r"\\d+\\s+replies", value) for value in texts)
+        or any(re.fullmatch(r"\d+\s+replies", value) for value in texts)
     )
     excluded = {
         "comments", "post conversation", "reply", "replies", "no replies",
