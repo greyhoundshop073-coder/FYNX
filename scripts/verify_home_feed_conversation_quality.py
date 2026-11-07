@@ -118,3 +118,6 @@ for label, passed in checks:
 if failed:
     raise SystemExit(f"Home Feed conversation quality gate failed: {len(failed)} check(s)")
 print("HOME FEED VIDEO + THREADS QUALITY GATE: GREEN")
+
+check("Comment reactions open as a compact horizontal emoji tray on long press", "onLongClick = { pickerOpen = true }" in comments_panel and "androidx.compose.ui.window.Popup(" in comments_panel and "horizontalArrangement = Arrangement.spacedBy(2.dp)" in comments_panel and "choices.forEach { (type, emoji, label) ->" in comments_panel and "onReact(type)" in comments_panel)
+check("A normal comment Like tap still applies the default Love reaction without opening the tray", "onClick = { onReact(\"LOVE\") }" in comments_panel and "onLongClick = { pickerOpen = true }" in comments_panel)

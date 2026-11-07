@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -754,10 +755,38 @@ private fun HomeCommentActionBar(
                 else Text(activeEmoji, style = MaterialTheme.typography.titleSmall)
                 if (totalReactions > 0) Text(" $totalReactions", style = MaterialTheme.typography.labelSmall)
             }
-            DropdownMenu(expanded = pickerOpen, onDismissRequest = { pickerOpen = false }) {
-                choices.forEach { (type, emoji, label) ->
-                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Text(emoji) },
-                        onClick = { pickerOpen = false; onReact(type) }, enabled = !pending)
+            if (pickerOpen) {
+                androidx.compose.ui.window.Popup(
+                    alignment = Alignment.TopCenter,
+                    onDismissRequest = { pickerOpen = false }
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 14.dp,
+                        tonalElevation = 5.dp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            choices.forEach { (type, emoji, label) ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable(enabled = !pending) {
+                                            pickerOpen = false
+                                            onReact(type)
+                                        }
+                                        .padding(horizontal = 7.dp, vertical = 8.dp)
+                                ) {
+                                    Text(emoji, style = MaterialTheme.typography.titleLarge)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
