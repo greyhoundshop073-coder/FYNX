@@ -2,6 +2,9 @@ package com.fynx.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -19,7 +22,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.content.pm.ApplicationInfo
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -32,12 +38,32 @@ import kotlinx.coroutines.launch
 
 private const val MAX_COMMENT_LENGTH = 1000
 private const val COMMENT_PAGE_SIZE = 50
+private const val MAX_COMMENT_REPLY_DEPTH = 5
+
+private data class VisibleHomeReply(val comment: FynxRemoteSocialClient.RemoteComment, val depth: Int)
+
+private fun flattenHomeReplies(
+    parentId: String,
+    expandedReplies: Map<String, List<FynxRemoteSocialClient.RemoteComment>>,
+    depth: Int = 1,
+    ancestors: Set<String> = emptySet()
+): List<VisibleHomeReply> {
+    if (depth > MAX_COMMENT_REPLY_DEPTH || parentId in ancestors) return emptyList()
+    val nextAncestors = ancestors + parentId
+    return expandedReplies[parentId].orEmpty().flatMap { child ->
+        listOf(VisibleHomeReply(child, depth)) +
+            flattenHomeReplies(child.id, expandedReplies, depth + 1, nextAncestors)
+    }
+}
 
 @Composable
 fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommentId: String? = null, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val isLocalPreview = remember(post.id) {
+        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 && post.id.startsWith("ci-home-post-")
+    }
     var comments by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }
     var text by rememberSaveable(post.id) { mutableStateOf("") }
     var aiCommentBusy by remember(post.id) { mutableStateOf(false) }
@@ -54,9 +80,15 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var replyErrorId by remember(post.id) { mutableStateOf<String?>(null) }
     var expandedReplies by remember(post.id) { mutableStateOf<Map<String, List<FynxRemoteSocialClient.RemoteComment>>>(emptyMap()) }
     var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var reactionStates by remember(post.id) { mutableStateOf<Map<String, FynxRemoteSocialClient.CommentReactionState>>(emptyMap()) }
+    var reactionPending by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var commentSort by rememberSaveable(post.id) { mutableStateOf("Relevant") }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
-    val replyingTo = replyingToId?.let { id -> comments.firstOrNull { it.id == id } }
+    val availableComments = remember(comments, expandedReplies) {
+        (comments + expandedReplies.values.flatten()).distinctBy { it.id }
+    }
+    val replyingTo = replyingToId?.let { id -> availableComments.firstOrNull { it.id == id } }
 
     fun resolveCommenterPhotos(items: List<FynxRemoteSocialClient.RemoteComment>) {
         val names = items.map { it.authorUsername.removePrefix("@").trim() }
@@ -85,13 +117,81 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             if (resolved.isNotEmpty()) authorPhotos = authorPhotos + resolved
         }
     }
+
+    fun loadReactions(items: List<FynxRemoteSocialClient.RemoteComment>) {
+        val ids = items.map { it.id }.distinct()
+        if (ids.isEmpty()) return
+        scope.launch {
+            FynxRemoteSocialClient.commentReactions(context, post.id, ids).onSuccess { loaded ->
+                reactionStates = reactionStates + loaded
+            }
+        }
+    }
+    fun reactToComment(comment: FynxRemoteSocialClient.RemoteComment, selected: String) {
+        if (comment.id in reactionPending) return
+        val previous = reactionStates[comment.id] ?: FynxRemoteSocialClient.CommentReactionState(emptyMap(), null)
+        val nextReaction = if (previous.currentReaction == selected) null else selected
+        val optimisticCounts = previous.counts.toMutableMap()
+        previous.currentReaction?.let { old -> optimisticCounts[old] = (optimisticCounts[old] ?: 1) - 1 }
+        nextReaction?.let { new -> optimisticCounts[new] = (optimisticCounts[new] ?: 0) + 1 }
+        reactionStates = reactionStates + (comment.id to FynxRemoteSocialClient.CommentReactionState(optimisticCounts.filterValues { it > 0 }, nextReaction))
+        if (isLocalPreview) return
+        reactionPending = reactionPending + comment.id
+        scope.launch {
+            FynxRemoteSocialClient.setCommentReaction(context, post.id, comment.id, nextReaction)
+                .onSuccess { confirmed -> reactionStates = reactionStates + (comment.id to confirmed) }
+                .onFailure { reactionStates = reactionStates + (comment.id to previous); error = it.message ?: "Reaction could not be saved." }
+            reactionPending = reactionPending - comment.id
+        }
+    }
     fun resetPagingState() { nextCursor = null; consumedCursors.value = emptySet(); loadingMore = false }
+
+    fun shareComment(comment: FynxRemoteSocialClient.RemoteComment) {
+        val author = comment.authorDisplayName.ifBlank { comment.authorUsername }
+        val shareText = "$author on FYNX: ${comment.text}"
+        runCatching {
+            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, shareText)
+            }, "Share comment"))
+        }.onFailure { error = it.message ?: "Comment could not be shared." }
+    }
+    fun commentEngagement(comment: FynxRemoteSocialClient.RemoteComment): Int =
+        reactionStates[comment.id]?.counts?.values?.sum() ?: 0
     fun loadComments() {
         if (sending || loading) return
+        if (isLocalPreview) {
+            val now = System.currentTimeMillis()
+            val first = FynxRemoteSocialClient.RemoteComment("ci-comment-1", "Great portrait fit. ❤️", now - 8 * 60_000L, "ci-author-1", "@amara", "Amara Okafor")
+            val second = FynxRemoteSocialClient.RemoteComment("ci-comment-2", "Full-screen playback feels smooth.", now - 5 * 60_000L, "ci-author-2", "@david", "David James")
+            val reply = FynxRemoteSocialClient.RemoteComment("ci-reply-1", "Agreed — the feed stays uncluttered.", now - 3 * 60_000L, "ci-author-3", "@zara", "Zara Bello", first.id)
+            val nestedReply = FynxRemoteSocialClient.RemoteComment("ci-reply-2", "And it opens the same clip.", now - 2 * 60_000L, "ci-author-4", "@leo", "Leo Mensah", reply.id)
+            val thirdLevelReply = FynxRemoteSocialClient.RemoteComment("ci-reply-3", "Easy to follow.", now - 1 * 60_000L, "ci-author-5", "@nina", "Nina James", nestedReply.id)
+            val previewComments = listOf(first, second, reply, nestedReply, thirdLevelReply)
+            comments = listOf(first, second)
+            expandedReplies = mapOf(
+                first.id to listOf(reply),
+                reply.id to listOf(nestedReply),
+                nestedReply.id to listOf(thirdLevelReply)
+            )
+            reactionStates = mapOf(
+                first.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LOVE" to 12, "THUMBS_UP" to 5, "LAUGH" to 3), "LOVE"),
+                second.id to FynxRemoteSocialClient.CommentReactionState(mapOf("THUMBS_UP" to 8, "WOW" to 2), null),
+                reply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LOVE" to 4), null),
+                nestedReply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("THUMBS_UP" to 2), null),
+                thirdLevelReply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LAUGH" to 1), null)
+            )
+            commentCount = maxOf(post.commentCount, previewComments.size)
+            onCommentCountChanged(commentCount)
+            // Local preview authors intentionally use initials; avoid all profile/backend lookups.
+            loading = false
+            error = null
+            return
+        }
         loading = true; error = null; replyLoadingId = null; replyErrorId = null; expandedReplies = emptyMap(); resetPagingState()
         scope.launch {
             FynxRemoteSocialClient.commentsPage(context, post.id, null, COMMENT_PAGE_SIZE)
-                .onSuccess { page -> comments = page.comments.distinctBy { it.id }; resolveCommenterPhotos(comments); nextCursor = page.nextCursor }
+                .onSuccess { page -> comments = page.comments.distinctBy { it.id }; resolveCommenterPhotos(comments); loadReactions(comments); nextCursor = page.nextCursor }
                 .onFailure { failure -> comments = emptyList(); error = if (failure.message?.contains("404") == true) "This post is no longer available." else failure.message ?: "Unable to load comments." }
             loading = false
         }
@@ -99,12 +199,18 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     LaunchedEffect(comments, highlightedCommentId) {
         val targetId = highlightedCommentId ?: return@LaunchedEffect
         val target = comments.firstOrNull { it.id == targetId } ?: return@LaunchedEffect
-        val parentId = target.parentCommentId
-        if (parentId != null && expandedReplies[parentId].orEmpty().none { it.id == targetId }) {
-            expandedReplies = expandedReplies + (parentId to ((expandedReplies[parentId].orEmpty() + target).distinctBy { it.id }))
+        val commentLookup = comments.associateBy { it.id }
+        var child = target
+        while (child.parentCommentId != null) {
+            val parent = commentLookup[child.parentCommentId] ?: break
+            val existing = expandedReplies[parent.id].orEmpty()
+            if (existing.none { it.id == child.id }) {
+                expandedReplies = expandedReplies + (parent.id to (existing + child).distinctBy { it.id })
+            }
+            child = parent
         }
         val topLevel = comments.filter { it.parentCommentId == null }
-        val index = topLevel.indexOfFirst { it.id == (parentId ?: targetId) }
+        val index = topLevel.indexOfFirst { it.id == child.id }
         if (index >= 0) {
             listState.animateScrollToItem(index + if (nextCursor != null) 1 else 0)
             highlightedCommentId = null
@@ -119,7 +225,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                 .onSuccess { page ->
                     val existingIds = comments.asSequence().map { it.id }.toHashSet()
                     val fresh = page.comments.filterNot { existingIds.contains(it.id) }
-                    comments = (fresh + comments).distinctBy { it.id }; resolveCommenterPhotos(fresh)
+                    comments = (fresh + comments).distinctBy { it.id }; resolveCommenterPhotos(fresh); loadReactions(fresh)
                     nextCursor = page.nextCursor?.takeUnless { it == cursor || consumedCursors.value.contains(it) }
                 }
                 .onFailure { failure -> consumedCursors.value = consumedCursors.value - cursor; error = failure.message ?: "Unable to load more comments." }
@@ -128,7 +234,34 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     }
     fun send() {
         val value = text.trim(); if (value.isEmpty() || sending || loading || value.length > MAX_COMMENT_LENGTH) return
-        val parentId = replyingToId; sending = true; error = null; replyErrorId = null
+        val parentId = replyingToId
+        if (isLocalPreview) {
+            val now = System.currentTimeMillis()
+            val parentDepth = if (parentId == null || comments.any { it.id == parentId }) 0
+                else comments.asSequence()
+                    .flatMap { root -> flattenHomeReplies(root.id, expandedReplies).asSequence() }
+                    .firstOrNull { it.comment.id == parentId }?.depth ?: 0
+            if (parentId != null && parentDepth >= MAX_COMMENT_REPLY_DEPTH) {
+                error = "Replies are limited to five levels."
+                return
+            }
+            val previewComment = FynxRemoteSocialClient.RemoteComment(
+                "ci-local-$now", value, now, "ci-local-author", "@fynx_preview", "FYNX Preview", parentId
+            )
+            if (parentId == null) {
+                comments = comments + previewComment
+            } else {
+                expandedReplies = expandedReplies + (parentId to (expandedReplies[parentId].orEmpty() + previewComment))
+            }
+            expandedReplies = expandedReplies + (previewComment.id to emptyList())
+            commentCount += 1
+            onCommentCountChanged(commentCount)
+            text = ""
+            replyingToId = null
+            error = null
+            return
+        }
+        sending = true; error = null; replyErrorId = null
         scope.launch {
             val result = if (parentId != null) FynxRemoteSocialClient.addReply(context, post.id, parentId, value) else FynxRemoteSocialClient.addComment(context, post.id, value)
             result.onSuccess { comment ->
@@ -143,10 +276,15 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     fun toggleReplies(comment: FynxRemoteSocialClient.RemoteComment) {
         if (replyLoadingId != null || sending) return
         if (expandedReplies.containsKey(comment.id)) { expandedReplies = expandedReplies - comment.id; replyErrorId = null; return }
+        if (isLocalPreview) {
+            expandedReplies = expandedReplies + (comment.id to emptyList())
+            replyErrorId = null
+            return
+        }
         replyLoadingId = comment.id; replyErrorId = null; error = null
         scope.launch {
             FynxRemoteSocialClient.replies(context, post.id, comment.id)
-                .onSuccess { loaded -> val unique = loaded.distinctBy { it.id }; expandedReplies = expandedReplies + mapOf(comment.id to unique); resolveCommenterPhotos(unique) }
+                .onSuccess { loaded -> val unique = loaded.distinctBy { it.id }; expandedReplies = expandedReplies + mapOf(comment.id to unique); resolveCommenterPhotos(unique); loadReactions(unique) }
                 .onFailure { failure -> replyErrorId = comment.id; error = failure.message ?: "Unable to load replies." }
             replyLoadingId = null
         }
@@ -164,35 +302,103 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                         IconButton(onClick = { if (!loading && !sending && replyLoadingId == null) loadComments() }, enabled = !loading && !sending && replyLoadingId == null) { Icon(Icons.Default.Refresh, "Refresh comments") }
                     }
                     HorizontalDivider()
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Sort by", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(8.dp))
+                        FilterChip(selected = commentSort == "Relevant", onClick = { commentSort = "Relevant" }, label = { Text("Relevant") })
+                        Spacer(Modifier.width(7.dp))
+                        FilterChip(selected = commentSort == "Newest", onClick = { commentSort = "Newest" }, label = { Text("Newest") })
+                    }
+                    HorizontalDivider()
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text("POST CONVERSATION", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            post.text.ifBlank { "Join the conversation and share a thoughtful reply." },
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Started by ${post.authorDisplayName.ifBlank { post.authorUsername }}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    HorizontalDivider()
                     when {
                         loading -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         error != null && comments.isEmpty() -> Column(Modifier.fillMaxWidth().weight(1f).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text(error!!, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(12.dp)); OutlinedButton(onClick = { loadComments() }) { Text("Retry") } }
                         comments.isEmpty() -> Column(Modifier.fillMaxWidth().weight(1f).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text("No comments yet", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Start the conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         else -> LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             if (nextCursor != null) item(key = "comments_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !sending, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more comments…" else "Load earlier comments") } }
-                            items(comments.filter { it.parentCommentId == null }, key = { it.id }) { comment ->
+                            items((if (commentSort == "Newest") comments.filter { it.parentCommentId == null }.sortedByDescending { it.timestamp } else comments.filter { it.parentCommentId == null }.sortedWith(compareByDescending<FynxRemoteSocialClient.RemoteComment> { commentEngagement(it) }.thenByDescending { it.timestamp })), key = { it.id }) { comment ->
                                 Column(Modifier.fillMaxWidth()) {
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                                         val photo = authorPhotos[comment.authorUsername.removePrefix("@").trim().lowercase()]
-                                        FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(38.dp).clip(CircleShape), ownerUsername = comment.authorUsername); Spacer(Modifier.width(10.dp))
+                                        FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(40.dp).clip(CircleShape), ownerUsername = comment.authorUsername)
+                                        Spacer(Modifier.width(11.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge)
+                                            Spacer(Modifier.height(3.dp))
                                             Text(comment.text, style = MaterialTheme.typography.bodyMedium)
+                                            HomeCommentReactionRow(reactionStates[comment.id], reactionPending.contains(comment.id)) { reaction -> reactToComment(comment, reaction) }
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 TextButton(onClick = { if (!sending) replyingToId = comment.id }) { Text("Reply") }
-                                                TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending) { val loadedReplyCount = expandedReplies[comment.id]?.size; Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "$loadedReplyCount replies" } else "Replies") }
+                                                TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending) {
+                                                    val loadedReplyCount = expandedReplies[comment.id]?.size
+                                                    Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "$loadedReplyCount replies" } else "Replies")
+                                                }
+                                                TextButton(onClick = { shareComment(comment) }) { Text("Share") }
                                             }
                                         }
                                     }
-                                    expandedReplies[comment.id].orEmpty().forEach { reply ->
-                                        Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
-                                            val photo = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
-                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); Text(reply.text, style = MaterialTheme.typography.bodyMedium); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    flattenHomeReplies(comment.id, expandedReplies).forEach { visible ->
+                                        val reply = visible.comment
+                                        val indentation = (50 + (visible.depth - 1) * 20).dp
+                                        Column(Modifier.fillMaxWidth().padding(start = indentation, top = 7.dp)) {
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                                                val replyPhoto = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
+                                                FynxRemoteProfileAvatar(replyPhoto, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername)
+                                                Spacer(Modifier.width(8.dp))
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium)
+                                                    Spacer(Modifier.height(2.dp))
+                                                    Text(reply.text, style = MaterialTheme.typography.bodyMedium)
+                                                    HomeCommentReactionRow(reactionStates[reply.id], reactionPending.contains(reply.id)) { reaction -> reactToComment(reply, reaction) }
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        if (visible.depth < MAX_COMMENT_REPLY_DEPTH) {
+                                                            TextButton(onClick = { if (!sending) replyingToId = reply.id }) { Text("Reply") }
+                                                            TextButton(onClick = { toggleReplies(reply) }, enabled = replyLoadingId == null && !sending) {
+                                                                val loadedReplyCount = expandedReplies[reply.id]?.size
+                                                                Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "${loadedReplyCount} replies" } else "Replies")
+                                                            }
+                                                        }
+                                                        TextButton(onClick = { shareComment(reply) }) { Text("Share") }
+                                                    }
+                                                }
+                                            }
+                                            if (replyLoadingId == reply.id) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 2.dp))
+                                            if (replyErrorId == reply.id && replyLoadingId == null) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text("Replies couldn't be loaded.", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                                                    TextButton(onClick = { toggleReplies(reply) }, enabled = !sending) { Text("Retry") }
+                                                }
+                                            }
                                         }
                                     }
-                                    if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 48.dp, top = 4.dp))
-                                    if (replyErrorId == comment.id && replyLoadingId == null) Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text("Replies couldn't be loaded.", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall); TextButton(onClick = { toggleReplies(comment) }, enabled = !sending) { Text("Retry") }
+                                    if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 50.dp, top = 4.dp))
+                                    if (replyErrorId == comment.id && replyLoadingId == null) {
+                                        Row(Modifier.fillMaxWidth().padding(start = 50.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Replies couldn't be loaded.", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                                            TextButton(onClick = { toggleReplies(comment) }, enabled = !sending) { Text("Retry") }
+                                        }
                                     }
                                 }
                             }
@@ -225,7 +431,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                         }
                                     }
                                 },
-                                enabled = text.isNotBlank() && !sending && !loading && !aiCommentBusy
+                                enabled = text.isNotBlank() && !sending && !loading && !aiCommentBusy && !isLocalPreview
                             ) {
                                 if (aiCommentBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                 else Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
@@ -274,7 +480,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                 keyboardActions = KeyboardActions(onSend = { send() }),
                                 trailingIcon = {
                                     IconButton(onClick = { send() }, enabled = text.trim().isNotEmpty() && !sending && !loading) {
-                                        if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, "Send comment")
+                                        if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, if (replyingTo == null) "Send comment" else "Send reply")
                                     }
                                 }
                             )
@@ -290,4 +496,36 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
 private fun relative(timestamp: Long): String {
     val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L))
     return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" }
+}
+@Composable
+private fun HomeCommentReactionRow(
+    state: FynxRemoteSocialClient.CommentReactionState?,
+    pending: Boolean,
+    onReact: (String) -> Unit
+) {
+    val options = listOf(
+        Triple("LOVE", "❤️", Color(0xFFE53935)),
+        Triple("LAUGH", "😂", Color(0xFFFFA000)),
+        Triple("THUMBS_UP", "👍", Color(0xFF1976D2)),
+        Triple("WOW", "😮", Color(0xFF1976D2)),
+        Triple("SAD", "😢", Color(0xFF1976D2)),
+        Triple("FIRE", "🔥", Color(0xFFFF7043)),
+        Triple("LIKE", "👏", Color(0xFF1976D2))
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        options.forEach { (type, emoji, tint) ->
+            val count = state?.counts?.get(type) ?: 0
+            val selected = state?.currentReaction == type
+            TextButton(onClick = { onReact(type) }, enabled = !pending,
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                Text(if (count > 0) "$emoji $count" else emoji,
+                    color = if (selected) tint else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
 }

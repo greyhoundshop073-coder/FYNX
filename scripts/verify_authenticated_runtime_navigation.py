@@ -13,7 +13,9 @@ PACKAGE="com.fynx.app"
 USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 AI_VISUALS_ONLY=os.environ.get("FYNX_AI_VISUALS_ONLY") == "1"
-VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY
+HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
+HOME_FEED_FIXTURES_SEEDED=False
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
@@ -146,6 +148,7 @@ DIAGNOSTIC_MARKERS = (
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
+    "Video preview", "Play video full screen", "Pause full-screen video", "Play full-screen video", "Unmute full-screen video", "Mute full-screen video", "Close media viewer", "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video", "Close Discovery",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
@@ -445,6 +448,29 @@ def swipe_vertical_scroll_container(xml_text: str, name: str, *, reverse: bool =
     return dump_ui(name)
 
 
+def restore_home_feed_top(xml_text: str, prefix: str = "authenticated-home-feed-restore-top") -> str:
+    """Return Home to its top position so the intentionally hidden floating navigation reappears."""
+    size = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
+    if not match:
+        return xml_text
+    width, height = int(match.group(1)), int(match.group(2))
+    current = xml_text
+    for attempt in range(12):
+        if is_authenticated_home_surface(current) and is_home_feed_navigation_visible(current):
+            return current
+        x, start_y, end_y = _home_content_scroll_point(current, width, height, "down")
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "700")
+        time.sleep(0.85)
+        candidate = dump_ui(f"{prefix}-{attempt}.xml")
+        if not candidate:
+            continue
+        # Compose can publish an identical hierarchy while a scroll gesture is
+        # still settling. Keep bounded retries rather than stopping on one snapshot.
+        current = candidate
+    return current
+
+
 def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
     """Read the actual accessibility enabled state of a visible control."""
     if not xml_text:
@@ -475,6 +501,62 @@ def camera_wait_for_control(
     screenshot(f"{prefix}-timeout.png")
     (ROOT / f"{prefix}-timeout.xml").write_text(latest + chr(10), encoding="utf-8")
     return latest
+
+def _home_header_is_restored(xml_text: str) -> bool:
+    first_sections_visible = (
+        find_control(xml_text, ["Status"])
+        and find_control(xml_text, ["FYNX Assistance"])
+        and find_control(xml_text, ["Your feed"])
+    )
+    header_controls_visible = (
+        find_control(xml_text, ["Open FYNX camera"])
+        and find_control(xml_text, ["Profile menu, three dots"])
+        and find_control(xml_text, ["Chat"])
+        and find_control(xml_text, ["Friends"])
+    )
+    return bool(first_sections_visible and header_controls_visible)
+
+
+def restore_home_header(current_xml: str, prefix: str, attempts: int = 6) -> tuple[str, bool]:
+    """Restore the real Home header without dragging across a tappable video surface."""
+    latest = current_xml
+    if find_control(latest, ["Close viewer"]):
+        latest = _dismiss_home_media_viewer(latest, prefix + "-dismiss-viewer") or ""
+        if not latest:
+            FAILURES.append(prefix + ": could not close the Home media viewer safely")
+            return current_xml, False
+
+    # Most authenticated journeys already return to Home at its top. Accept that
+    # real state immediately instead of swiping across the first video card.
+    if _home_header_is_restored(latest):
+        screenshot(prefix + "-home-header-restored.png")
+        (ROOT / (prefix + "-home-header-restored.xml")).write_text(latest + chr(10), encoding="utf-8")
+        return latest, True
+
+    size = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
+    if not match:
+        FAILURES.append(prefix + ": emulator dimensions unavailable; Home header restoration was not attempted")
+        return latest, False
+    width, height = (int(match.group(1)), int(match.group(2)))
+
+    for attempt in range(max(2, attempts)):
+        x, start_y, end_y = _home_content_scroll_point(latest, width, height, "down")
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "600")
+        time.sleep(0.8)
+        candidate = dump_ui(f"{prefix}-scroll-top-{attempt}.xml") or latest
+        if find_control(candidate, ["Close viewer"]):
+            candidate = _dismiss_home_media_viewer(candidate, prefix + "-dismiss-viewer-" + str(attempt)) or candidate
+        latest = candidate
+        if _home_header_is_restored(latest):
+            screenshot(prefix + "-home-header-restored.png")
+            (ROOT / (prefix + "-home-header-restored.xml")).write_text(latest + chr(10), encoding="utf-8")
+            return latest, True
+
+    screenshot(prefix + "-home-header-not-restored.png")
+    (ROOT / (prefix + "-home-header-not-restored.xml")).write_text(latest + chr(10), encoding="utf-8")
+    FAILURES.append(prefix + ": Home did not return to its visible first sections/header after safe feed-text gestures")
+    return latest, False
 
 def camera_return_to_home(current_xml: str, prefix: str, attempts: int = 6) -> str:
     """Dismiss camera/editor surfaces using Back until the real Home camera entry returns."""
@@ -1498,11 +1580,1122 @@ def capture_ai_component_preview(screen: str, image_name: str, hierarchy_name: s
     )
 
 report=["# FYNX Authenticated Runtime Visual Certification","",
-        f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
+        f"- CI checkout commit (PR merge result when applicable): {os.environ.get('GITHUB_SHA','local')}",
+        f"- Pull request head commit: {os.environ.get('FYNX_PR_HEAD_SHA', os.environ.get('GITHUB_SHA','local'))}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
         ("FYNX Assistant/Marketplace visual capture may use the APK's explicit debug-only local UI entry; it is not server authentication." if VISUALS_ONLY else "This journey uses a real FYNX account supplied through GitHub Actions secrets."),
-        "No fabricated users, posts, messages, listings or application records are created.",
+        "CI fixture posts, videos and comments stay inside the disposable emulator's private cache; no backend posts, uploads, comments, reposts or quotes are created.",
         "Credentials are never written to the APK or repository."]
+
+def find_exact_home_action(xml_text: str, label: str):
+    """Find an exact labeled Home action, not text inside a user's caption."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+    for node in root.iter("node"):
+        values = (
+            (node.attrib.get("text") or "").strip(),
+            (node.attrib.get("content-desc") or "").strip(),
+        )
+        if not any(value.casefold() == label.casefold() for value in values):
+            continue
+        target = node
+        current = node
+        while current is not None:
+            if current.attrib.get("clickable", "false").lower() == "true" and _center(current):
+                target = current
+                break
+            current = parents.get(id(current))
+        center = _center(target)
+        if center:
+            return label, center[0], center[1]
+    return None
+
+
+
+
+def has_visible_home_comment_row(xml_text: str) -> bool:
+    """Require an actual rendered comment body and its Reply/Replies actions, not just the composer."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    parents = {}
+    all_nodes = list(root.iter("node"))
+    for parent in all_nodes:
+        for child in list(parent):
+            parents[id(child)] = parent
+
+    visible = [
+        node for node in all_nodes
+        if node.attrib.get("visible-to-user", "true").lower() != "false"
+    ]
+    reply_controls = [
+        node for node in visible
+        if (node.attrib.get("text") or "").strip().casefold() == "reply"
+        or (node.attrib.get("content-desc") or "").strip().casefold() == "reply"
+    ]
+    replies_controls = [
+        node for node in visible
+        if re.fullmatch(
+            r"(?:\d+\s+)?(?:replies|no replies)",
+            " ".join(((node.attrib.get("text") or "") + " " + (node.attrib.get("content-desc") or "")).split()).casefold()
+        )
+    ]
+    if not reply_controls or not replies_controls:
+        return False
+
+    excluded = {
+        "comments", "post conversation", "reply", "replies", "no replies",
+        "write a comment…", "write a comment...", "send comment", "close comments",
+        "refresh comments", "started by", "comment", "like", "share", "save",
+    }
+
+    def ancestor_chain(node):
+        chain = []
+        current = node
+        while current is not None:
+            chain.append(current)
+            current = parents.get(id(current))
+        return chain
+
+    for body_node in visible:
+        body = (body_node.attrib.get("text") or "").strip()
+        if len(body) < 2 or body.casefold() in excluded:
+            continue
+        body_path = ancestor_chain(body_node)
+        for reply_node in reply_controls:
+            reply_path = ancestor_chain(reply_node)
+            reply_ids = {id(item) for item in reply_path}
+            row = next((item for item in body_path if id(item) in reply_ids), None)
+            if row is None or row is root:
+                continue
+            row_ids = {id(item) for item in row.iter("node")}
+            has_replies_action = any(id(item) in row_ids for item in replies_controls)
+            if not has_replies_action:
+                continue
+            row_texts = {
+                (item.attrib.get("text") or "").strip()
+                for item in row.iter("node")
+                if item.attrib.get("visible-to-user", "true").lower() != "false"
+            }
+            meaningful = [value for value in row_texts if value and value.casefold() not in excluded]
+            if len(meaningful) >= 2:
+                return True
+    return False
+
+def find_home_video_post_comment_action(xml_text: str):
+    """Return Comment only when its node shares a post-card ancestor with a real video duration."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+
+    video_nodes = [
+        node for node in root.iter("node")
+        if "video duration" in (
+            (node.attrib.get("content-desc") or "") + " " + (node.attrib.get("text") or "")
+        ).casefold()
+    ]
+    comment_nodes = [
+        node for node in root.iter("node")
+        if (node.attrib.get("content-desc") or "").strip().casefold() == "comment"
+        or (node.attrib.get("text") or "").strip().casefold() == "comment"
+    ]
+    if not video_nodes or not comment_nodes:
+        return None
+
+    def ancestors(node):
+        result = []
+        current = node
+        while current is not None:
+            result.append(current)
+            current = parents.get(id(current))
+        return result
+
+    try:
+        display_width, display_height = map(int, re.search(
+            r"(?:Physical|Override) size:\s*(\d+)x(\d+)",
+            run("adb", "shell", "wm", "size").stdout or ""
+        ).groups())
+    except (AttributeError, ValueError):
+        return None
+
+    for video_node in video_nodes:
+        video_center = _center(video_node)
+        if not video_center:
+            continue
+        video_path = ancestors(video_node)
+        for comment_node in comment_nodes:
+            comment_center = _center(comment_node)
+            if not comment_center:
+                continue
+            comment_path_ids = {id(node) for node in ancestors(comment_node)}
+            card = next((node for node in video_path if id(node) in comment_path_ids), None)
+            if card is None or card is root:
+                continue
+            bounds = card.attrib.get("bounds", "")
+            try:
+                left_top, right_bottom = bounds.split("][", 1)
+                left, top = map(int, left_top.strip("[]").split(","))
+                right, bottom = map(int, right_bottom.strip("[]").split(","))
+            except (ValueError, IndexError):
+                continue
+            card_width, card_height = right - left, bottom - top
+            if (
+                card_width < display_width * 0.70
+                or card_height < 120
+                or card_height >= display_height * 0.93
+                or not (left <= video_center[0] <= right and top <= video_center[1] <= bottom)
+                or not (left <= comment_center[0] <= right and top <= comment_center[1] <= bottom)
+            ):
+                continue
+            target = comment_node
+            current = comment_node
+            while current is not None:
+                if current.attrib.get("clickable", "false").lower() == "true" and _center(current):
+                    target = current
+                    break
+                current = parents.get(id(current))
+            center = _center(target)
+            if center:
+                return "Comment", center[0], center[1]
+    return None
+
+
+def visible_home_video_preview_ratios(xml_text: str) -> list[float]:
+    """Measure fully visible, unclipped Home video surfaces in the safe feed viewport.
+
+    Android clips accessibility bounds for media that is partly behind the bottom
+    navigation bar. Those clipped rectangles are not valid source aspect ratios
+    and must not be counted as a successful adaptive-size check.
+    """
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    display = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", display)
+    if not match:
+        return []
+    screen_width, screen_height = map(int, match.groups())
+    nav_tops = []
+    viewport_bottoms = []
+    ratios = []
+    expected = (9 / 16, 16 / 9, 1.0)
+    for node in root.iter("node"):
+        description = (node.attrib.get("content-desc") or "").strip().casefold()
+        bounds = node.attrib.get("bounds", "")
+        nav_match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+        if nav_match:
+            node_left, node_top, node_right, node_bottom = map(int, nav_match.groups())
+            if description == "home" and node_top >= int(screen_height * 0.70):
+                nav_tops.append(node_top)
+            if (
+                node.attrib.get("scrollable", "false").lower() == "true"
+                and node_right - node_left >= screen_width * 0.70
+                and node_bottom >= int(screen_height * 0.65)
+            ):
+                viewport_bottoms.append(node_bottom)
+        if "video preview" not in description or "video duration" not in description:
+            continue
+        bounds = node.attrib.get("bounds", "")
+        item_match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+        if not item_match:
+            continue
+        left, top, right, bottom = map(int, item_match.groups())
+        width, height = right - left, bottom - top
+        if width <= 0 or height <= 0:
+            continue
+        safe_bottom = (
+            min(nav_tops) - 8 if nav_tops
+            else min(viewport_bottoms) - 8 if viewport_bottoms
+            else int(screen_height * 0.84)
+        )
+        if top < 96 or bottom > safe_bottom or right > screen_width or left < 0:
+            continue
+        ratio = width / height
+        if any(abs(ratio - target) <= 0.055 for target in expected):
+            ratios.append(ratio)
+    return ratios
+
+def visible_home_video_duration_labels(xml_text: str) -> list[str]:
+    """Read measured duration badges from visible real Home video cards."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    labels = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        value = " ".join((
+            (node.attrib.get("content-desc") or "").strip(),
+            (node.attrib.get("text") or "").strip()
+        ))
+        match = re.search(r"video duration\s+(\d{1,2}:\d{2}(?::\d{2})?)", value, re.IGNORECASE)
+        if match:
+            labels.append(match.group(1))
+    return list(dict.fromkeys(labels))
+
+def is_home_feed_navigation_visible(xml_text: str) -> bool:
+    """Recognize the visible Home destination label in the bottom navigation."""
+    if not xml_text or PACKAGE not in xml_text:
+        return False
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    display = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", display)
+    screen_height = int(match.group(2)) if match else 0
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        text_value = (node.attrib.get("text") or "").strip().casefold()
+        description = (node.attrib.get("content-desc") or "").strip().casefold()
+        if text_value != "home" and description != "home":
+            continue
+        bounds = node.attrib.get("bounds", "")
+        item_match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+        if not item_match:
+            continue
+        _, top, _, bottom = map(int, item_match.groups())
+        if bottom > top and (screen_height == 0 or top >= int(screen_height * 0.68)):
+            return True
+    return False
+
+
+def is_home_feed_runtime_surface(xml_text: str) -> bool:
+    """Recognize the mounted Home feed while its floating bottom navigation auto-hides on scroll."""
+    if not xml_text or PACKAGE not in xml_text:
+        return False
+    # These markers identify a different modal/viewer route rather than the feed.
+    if any(find_control(xml_text, [label]) for label in (
+        "Write a comment", "Close comments", "Close media viewer",
+        "Close viewer", "Like video", "Open comments",
+    )):
+        return False
+    # Home intentionally hides its floating navigation after a meaningful scroll.
+    # Continue to identify the underlying feed from its own header/post/action content.
+    return any(find_control(xml_text, [label]) for label in (
+        "Your feed", "FYNX Assistance", "Open Stories", "CI TEST FIXTURE",
+        "FYNX Visual Fixture", "Public post", "Friends post",
+        "Selected people post", "Only me post", "Comment",
+    ))
+
+
+def _home_content_scroll_point(xml_text: str, width: int, height: int, direction: str) -> tuple[int, int, int]:
+    """Start on visible non-clickable caption text and drag far enough to expose tall media."""
+    if xml_text:
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            root = None
+        if root is not None:
+            parents = {}
+            for parent in root.iter("node"):
+                for child in list(parent):
+                    parents[id(child)] = parent
+            candidates = []
+            for node in root.iter("node"):
+                if node.attrib.get("visible-to-user", "true").lower() == "false":
+                    continue
+                value = (node.attrib.get("text") or "").strip()
+                if len(value) < 14:
+                    continue
+                bounds = node.attrib.get("bounds", "")
+                try:
+                    left_top, right_bottom = bounds.split("][", 1)
+                    left, top = map(int, left_top.strip("[]").split(","))
+                    right, bottom = map(int, right_bottom.strip("[]").split(","))
+                except (ValueError, IndexError):
+                    continue
+                node_width, node_height = right - left, bottom - top
+                center_y = (top + bottom) // 2
+                if node_width < width * 0.45 or node_height < 44:
+                    continue
+                if top < height * 0.30 or bottom > height * 0.88:
+                    continue
+                ancestor = parents.get(id(node))
+                clickable_parent = False
+                while ancestor is not None:
+                    if ancestor.attrib.get("clickable", "false").lower() == "true":
+                        clickable_parent = True
+                        break
+                    ancestor = parents.get(id(ancestor))
+                if clickable_parent:
+                    continue
+                # Prefer a substantial post caption in the middle of the feed,
+                # away from the header controls, bottom navigation and media tile.
+                score = abs(center_y - height * 0.64) - min(node_height, 280) * 0.20 - min(len(value), 180) * 0.08
+                x = max(20, min(width - 20, left + min(28, max(8, node_width // 16))))
+                if direction == "up":
+                    # Start on the safe, non-clickable caption, but drag well above
+                    # its short text bounds so a tall portrait video can clear the
+                    # bottom navigation in one measured scroll step.
+                    start_y = min(bottom - 8, int(height * 0.82))
+                    end_y = max(int(height * 0.25), top - 480)
+                    if start_y - end_y < 300:
+                        end_y = max(int(height * 0.25), start_y - 480)
+                else:
+                    # Restore the feed toward the top from a safe caption start.
+                    # The long downward drag also lets the shell's scroll observer
+                    # bring its intentionally hidden floating navigation back.
+                    start_y = top + 8
+                    end_y = min(int(height * 0.82), bottom + 480)
+                    if end_y - start_y < 300:
+                        end_y = min(int(height * 0.82), start_y + 480)
+                if abs(end_y - start_y) < 240:
+                    continue
+                candidates.append((score, x, start_y, end_y))
+            if candidates:
+                _, x, start_y, end_y = min(candidates, key=lambda item: item[0])
+                return x, start_y, end_y
+    # Fallback stays in the narrow left gutter, outside the media action controls.
+    x = max(20, min(width - 20, int(width * 0.025)))
+    if direction == "up":
+        return x, int(height * 0.70), int(height * 0.50)
+    return x, int(height * 0.50), int(height * 0.70)
+
+
+def scroll_home_action_row_into_safe_viewport(xml_text: str, name: str, action_finder, *, max_swipes: int = 3) -> str:
+    """Scroll a Home post's action row above the floating bottom-nav hit area before tapping.
+
+    The floating Home toolbar can cover a post action row while UIAutomator still
+    reports the covered controls as visible. Use the existing non-clickable caption
+    gesture (never the media surface or an action button) and verify the target's
+    actual clickable bounds after each swipe.
+    """
+    size = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", size)
+    if not match:
+        FAILURES.append(f"{name}: could not read emulator dimensions before tapping the Home action row.")
+        return ""
+
+    width, height = map(int, match.groups())
+    # UIAutomator may omit the floating Compose navigation overlay entirely.
+    # Reserve its lower screen region rather than trusting a covered node's
+    # visible-to-user flag as proof that its center is actually tappable.
+    safe_bottom = int(height * 0.78)
+    current = xml_text
+    scrolled = False
+
+    for attempt in range(max_swipes + 1):
+        control = action_finder(current) if current else None
+        if control and 96 < control[2] < safe_bottom:
+            if scrolled:
+                report.append(f"- PASS: moved the {name} action row into the unobstructed Home touch area before tapping.")
+                (ROOT / f"authenticated-home-{name}-action-safe.xml").write_text(current + chr(10), encoding="utf-8")
+                screenshot(f"authenticated-home-{name}-action-safe.png")
+            return current
+
+        if attempt >= max_swipes:
+            break
+        if not current or not is_home_feed_runtime_surface(current):
+            break
+
+        x, start_y, end_y = _home_content_scroll_point(current, width, height, "up")
+        if start_y - end_y < 240:
+            break
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        scrolled = True
+        deadline = time.monotonic() + 5.0
+        candidate = ""
+        while time.monotonic() < deadline:
+            time.sleep(0.35)
+            candidate = dump_ui(f"authenticated-home-{name}-action-safe-probe-{attempt}.xml")
+            if candidate and is_home_feed_runtime_surface(candidate):
+                # Keep checking while the requested action remains behind the
+                # floating toolbar; stop as soon as the actual hit target is safe.
+                candidate_control = action_finder(candidate)
+                if candidate_control and 96 < candidate_control[2] < safe_bottom:
+                    current = candidate
+                    break
+                current = candidate
+            else:
+                candidate = ""
+        if not candidate:
+            break
+
+    control = action_finder(current) if current else None
+    if not control or not (96 < control[2] < safe_bottom):
+        screenshot(f"authenticated-home-{name}-action-unsafe.png")
+        FAILURES.append(
+            f"{name}: Home action row could not be scrolled above the floating bottom-navigation hit area; "
+            "refusing to tap an obscured control."
+        )
+        return ""
+    report.append(f"- PASS: moved the {name} action row into the unobstructed Home touch area before tapping.")
+    (ROOT / f"authenticated-home-{name}-action-safe.xml").write_text(current + chr(10), encoding="utf-8")
+    screenshot(f"authenticated-home-{name}-action-safe.png")
+    return current
+
+
+def _dismiss_home_media_viewer(xml_text: str, prefix: str, timeout: float = 12.0) -> str:
+    """Use the viewer's own Close action and wait for the real Home destination."""
+    close_control = find_control(xml_text, ["Close viewer"])
+    if not close_control:
+        return ""
+    _, x, y = close_control
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    deadline = time.monotonic() + timeout
+    latest = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.4)
+        latest = dump_ui(prefix + "-return-home.xml")
+        if latest and is_home_feed_runtime_surface(latest) and not find_control(latest, ["Close viewer"]):
+            screenshot(prefix + "-returned-home.png")
+            return latest
+    screenshot(prefix + "-return-home-failed.png")
+    return ""
+
+
+def scroll_home_feed_page(index: int, home_xml: str) -> str:
+    """Scroll from a safe text region; dismiss an accidentally opened viewer before retrying."""
+    size = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
+    if not match:
+        FAILURES.append("Home feed scan could not read emulator dimensions; refusing an unverified swipe.")
+        return ""
+    width, height = (int(match.group(1)), int(match.group(2)))
+    current = home_xml
+    fixture_scan = HOME_FEED_FIXTURES_SEEDED and "CI TEST FIXTURE" in current
+    max_attempts = 5 if fixture_scan else 2
+    for attempt in range(max_attempts):
+        # Use visible, non-clickable caption text for fixture and production posts.
+        # A fixed left-gutter swipe is unsafe on full-width landscape clips: the
+        # video can consume the gesture instead of the parent LazyColumn scrolling.
+        x, start_y, end_y = _home_content_scroll_point(current, width, height, "up")
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        time.sleep(0.9)
+        candidate = dump_ui(f"authenticated-home-feed-scan-page-{index}-{attempt}.xml")
+        if candidate and is_home_feed_runtime_surface(candidate):
+            if candidate != current or attempt == max_attempts - 1:
+                screenshot(f"authenticated-home-feed-scan-page-{index}.png")
+                if not fixture_scan or visible_home_video_preview_ratios(candidate):
+                    return candidate
+                current = candidate
+                continue
+            current = candidate
+            continue
+        if candidate and find_control(candidate, ["Close viewer"]):
+            restored = _dismiss_home_media_viewer(candidate, f"authenticated-home-feed-scan-page-{index}")
+            if restored:
+                current = restored
+                continue
+        return ""
+    return ""
+
+
+def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
+    """Seed disposable emulator caches with clearly labelled local-only media fixtures.
+
+    This writes only to the CI emulator's private app sandbox. It never creates a
+    server post, uploads media, submits comments, or changes user/backend records.
+    """
+    global HOME_FEED_FIXTURES_SEEDED
+    if not HOME_FEED_VISUALS_ONLY or LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
+        return False
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        report.append("- NOTE: ffmpeg is unavailable; local Home video fixtures were not seeded.")
+        return False
+
+    # Derive the cache namespace from the username actually persisted by FynxAuthStore,
+    # not from a guessed CI label. Do not seed if the debug-local account is absent.
+    stored_auth = run("adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_auth.xml")
+    if stored_auth.returncode != 0:
+        report.append("- NOTE: the debug-local FYNX account preferences were not readable; Home video fixtures were not seeded.")
+        return False
+    try:
+        auth_root = ET.fromstring(stored_auth.stdout)
+        stored_username = next(
+            (node.text or "").strip().lower()
+            for node in auth_root.findall("string")
+            if node.attrib.get("name") == "username"
+        )
+        signed_in = next(
+            (node.attrib.get("value") == "true")
+            for node in auth_root.findall("boolean")
+            if node.attrib.get("name") == "signed_in"
+        )
+    except (ET.ParseError, StopIteration):
+        report.append("- NOTE: FYNX local account preferences did not contain a valid signed-in username; Home video fixtures were not seeded.")
+        return False
+    account = stored_username
+    if not signed_in or not account:
+        report.append("- NOTE: FYNX debug-local account was not signed in; Home video fixtures were not seeded.")
+        return False
+
+    import hashlib
+    import xml.etree.ElementTree as FixtureET
+
+    media_specs = [
+        ("portrait", "360x640"),
+        ("landscape", "640x360"),
+        ("square", "480x480"),
+    ]
+    # Stop the app before replacing its SharedPreferences file so an older
+    # in-memory snapshot cannot be flushed over the local fixture cache.
+    stopped = run("adb", "shell", "am", "force-stop", PACKAGE)
+    if stopped.returncode != 0:
+        report.append("- NOTE: unable to stop FYNX safely before seeding local visual fixtures.")
+        return False
+
+    account_cache_key = hashlib.sha256(("account:" + account).encode("utf-8")).hexdigest()
+    cache_relative_dir = f"files/fynx_media_cache_v2/{account_cache_key}"
+    mkdir = run("adb", "shell", "run-as", PACKAGE, "mkdir", "-p", cache_relative_dir)
+    if mkdir.returncode != 0:
+        report.append("- NOTE: unable to create the app-private media fixture directory: " + (mkdir.stdout or "").strip())
+        return False
+
+    posts = []
+    now_ms = int(time.time() * 1000)
+    for index, (shape, dimensions) in enumerate(media_specs):
+        media_id = f"ci-home-{shape}"
+        media_path = f"/api/social/media/{media_id}"
+        local_video = ROOT / f"ci-home-feed-{shape}.mp4"
+        generation = run(
+            ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", f"testsrc2=size={dimensions}:rate=24:duration=6",
+            "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(local_video),
+            timeout=60
+        )
+        if generation.returncode != 0 or not local_video.is_file() or local_video.stat().st_size <= 0:
+            report.append(f"- NOTE: could not generate the local {shape} MP4 fixture: {(generation.stdout or '').strip()}")
+            return False
+        if local_video.stat().st_size > 12 * 1024 * 1024:
+            report.append(f"- NOTE: generated {shape} MP4 exceeded the app media-cache size limit.")
+            return False
+
+        cache_name = hashlib.sha256(("video:" + media_path).encode("utf-8")).hexdigest() + ".mp4"
+        destination = f"{cache_relative_dir}/{cache_name}"
+        staged_path = f"/data/local/tmp/fynx-home-feed-{shape}.mp4"
+        pushed = run("adb", "push", str(local_video), staged_path, timeout=30)
+        if pushed.returncode != 0:
+            report.append(f"- NOTE: unable to stage the {shape} fixture on the emulator: {(pushed.stdout or '').strip()}")
+            return False
+        copied = run("adb", "shell", "run-as", PACKAGE, "cp", staged_path, destination)
+        if copied.returncode != 0:
+            report.append(f"- NOTE: unable to copy the {shape} fixture into the app cache: {(copied.stdout or '').strip()}")
+            return False
+        posts.append({
+            "id": f"ci-home-post-{shape}",
+            "authorId": "ci-local-fixture-author",
+            "authorUsername": "fynx_visual_fixture",
+            "authorDisplayName": "FYNX Visual Fixture",
+            "text": f"CI TEST FIXTURE — {shape.upper()} video ({dimensions.replace('x', ':')}). Local-only preview; not published or uploaded.",
+            "visibility": "PUBLIC",
+            "mediaId": media_id,
+            "mediaType": "video",
+            "mediaUrl": media_path,
+            "timestamp": now_ms - index * 60_000,
+            "likeCount": 12 + index,
+            "commentCount": 3 + index,
+            "likedByCurrentUser": False,
+            "followedByCurrentUser": False,
+            "isDiscovery": False,
+        })
+
+    # The client checks this separate preference only in debuggable builds. Its media IDs
+    # resolve to the same app-private cache files written above; no server record is made.
+    discovery_prefs = FixtureET.Element("map")
+    FixtureET.SubElement(discovery_prefs, "boolean", {"name": "home_discovery_videos", "value": "true"})
+    discovery_prefs_file = ROOT / "ci-home-discovery-fixtures.xml"
+    FixtureET.ElementTree(discovery_prefs).write(discovery_prefs_file, encoding="utf-8", xml_declaration=True)
+    staged_discovery_prefs = "/data/local/tmp/fynx-home-discovery-fixtures.xml"
+    pushed_discovery_prefs = run("adb", "push", str(discovery_prefs_file), staged_discovery_prefs, timeout=30)
+    if pushed_discovery_prefs.returncode != 0:
+        report.append("- NOTE: unable to stage the explicit local Discovery fixture preference.")
+        return False
+    copied_discovery_prefs = run(
+        "adb", "shell", "run-as", PACKAGE, "cp", staged_discovery_prefs,
+        "shared_prefs/fynx_ci_visual_fixtures.xml"
+    )
+    if copied_discovery_prefs.returncode != 0:
+        report.append("- NOTE: unable to enable the local Discovery fixture preference in the disposable emulator.")
+        return False
+
+    feed_payload = {"posts": posts, "hasMore": False, "nextCursor": None}
+    prefs = FixtureET.Element("map")
+    cache_key = "fynx_feed_cache_v1_" + account
+    time_key = "fynx_feed_cache_time_v1_" + account
+    FixtureET.SubElement(prefs, "string", {"name": cache_key}).text = json.dumps(feed_payload, separators=(",", ":"))
+    FixtureET.SubElement(prefs, "long", {"name": time_key, "value": str(now_ms)})
+    prefs_file = ROOT / "ci-home-feed-cache.xml"
+    FixtureET.ElementTree(prefs).write(prefs_file, encoding="utf-8", xml_declaration=True)
+    staged_prefs = "/data/local/tmp/fynx-home-feed-cache.xml"
+    pushed_prefs = run("adb", "push", str(prefs_file), staged_prefs, timeout=30)
+    if pushed_prefs.returncode != 0:
+        report.append("- NOTE: unable to stage the local Home feed cache: " + (pushed_prefs.stdout or "").strip())
+        return False
+    ensure_prefs = run("adb", "shell", "run-as", PACKAGE, "mkdir", "-p", "shared_prefs")
+    copied_prefs = run("adb", "shell", "run-as", PACKAGE, "cp", staged_prefs, "shared_prefs/fynx_feed_cache.xml")
+    if ensure_prefs.returncode != 0 or copied_prefs.returncode != 0:
+        report.append("- NOTE: unable to seed the app-private Home feed cache.")
+        return False
+
+    relaunched = run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "fynx://home", PACKAGE, timeout=30)
+    if relaunched.returncode != 0:
+        report.append("- NOTE: local Home cache was seeded, but the app could not be relaunched to read it.")
+        return False
+
+    latest = ""
+    deadline = time.monotonic() + 25.0
+    while time.monotonic() < deadline:
+        latest = dump_ui("ci-home-feed-fixture-loaded.xml")
+        if latest and find_control(latest, ["Your feed"]) and not find_control(latest, ["Loading Home feed"]):
+            break
+        time.sleep(0.5)
+    if not latest or not find_control(latest, ["Your feed"]):
+        report.append("- NOTE: local fixture cache was written, but Home did not expose its feed after relaunch.")
+        return False
+
+    HOME_FEED_FIXTURES_SEEDED = True
+    report.append("- PASS: seeded 3 clearly labelled local CI videos (portrait 360x640, landscape 640x360, square 480x480) in the disposable emulator's account-scoped cache only; nothing was posted or uploaded.")
+    return True
+
+
+def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True) -> str:
+    """Capture Home surfaces; CI-only debug comments are in-memory and never sent to the backend."""
+    current = home_xml
+    if not is_authenticated_home_surface(current):
+        FAILURES.append("Home was not visible when Home Feed visual certification began.")
+        return current
+
+    (ROOT / "authenticated-home-feed.xml").write_text(current + chr(10), encoding="utf-8")
+    screenshot("authenticated-home-feed.png")
+
+    video_captured = False
+    comments_captured = False
+    discovery_viewer_captured = False
+    repost_quote_captured = False
+    home_fullscreen_video_captured = False
+    comment_action_seen = False
+    captured_video_durations: list[str] = []
+    captured_video_preview_ratios: list[float] = []
+    scanned_pages = 0
+    previous_xml = ""
+
+    for page in range(1, 9):
+        scanned_pages = page
+        if not is_home_feed_runtime_surface(current):
+            FAILURES.append("Home feed scan lost the Home navigation shell; refusing to continue on another screen.")
+            break
+
+        duration_control = find_control(current, ["Video duration"])
+        video_control = (
+            find_control(current, ["Play video full screen"])
+            or find_control(current, ["Video preview"])
+        ) if duration_control else None
+        duration_labels = visible_home_video_duration_labels(current)
+        preview_ratios_on_page = visible_home_video_preview_ratios(current)
+        if video_control and duration_control and duration_labels and preview_ratios_on_page:
+            page_xml_name = f"authenticated-home-inline-video-page-{page}.xml"
+            page_png_name = f"authenticated-home-inline-video-page-{page}.png"
+            (ROOT / page_xml_name).write_text(current + "\n", encoding="utf-8")
+            # A measured duration badge means the real media metadata has loaded.
+            # Preserve a dedicated full-resolution screenshot for every viewport
+            # containing a visible video duration, not just the first Home screen.
+            time.sleep(0.8)
+            screenshot(page_png_name)
+            if not video_captured:
+                (ROOT / "authenticated-home-inline-video.xml").write_text(current + "\n", encoding="utf-8")
+                screenshot("authenticated-home-inline-video.png")
+            video_captured = True
+            for duration in duration_labels:
+                if duration not in captured_video_durations:
+                    captured_video_durations.append(duration)
+            for ratio in preview_ratios_on_page:
+                if not any(abs(existing - ratio) < 0.025 for existing in captured_video_preview_ratios):
+                    captured_video_preview_ratios.append(ratio)
+
+            if not home_fullscreen_video_captured:
+                fullscreen_xml = tap_control(
+                    current,
+                    ["Play video full screen", "Video preview"],
+                    "authenticated-home-fullscreen-video-open",
+                    ["Unmute full-screen video", "Mute full-screen video", "Pause full-screen video", "Play full-screen video", "Close media viewer"]
+                )
+                if fullscreen_xml:
+                    fullscreen_xml = camera_wait_for_control(
+                        fullscreen_xml,
+                        ["Unmute full-screen video", "Mute full-screen video"],
+                        timeout=35.0,
+                        prefix="authenticated-home-fullscreen-video-player-ready"
+                    )
+                    fullscreen_xml = camera_wait_for_control(
+                        fullscreen_xml,
+                        ["Pause full-screen video"],
+                        timeout=35.0,
+                        prefix="authenticated-home-fullscreen-video-playback-ready"
+                    )
+                    # Exercise the actual audio control in both directions; a changing
+                    # icon alone is insufficient unless the player volume is wired too.
+                    mute_toggle_ok = False
+                    if find_control(fullscreen_xml, ["Unmute full-screen video"]):
+                        unmuted_xml = tap_control(
+                            fullscreen_xml, ["Unmute full-screen video"],
+                            "authenticated-home-fullscreen-unmute",
+                            ["Mute full-screen video"]
+                        )
+                        if unmuted_xml:
+                            remuted_xml = tap_control(
+                                unmuted_xml, ["Mute full-screen video"],
+                                "authenticated-home-fullscreen-remute",
+                                ["Unmute full-screen video"]
+                            )
+                            if remuted_xml:
+                                fullscreen_xml = remuted_xml
+                                mute_toggle_ok = True
+                    missing_fullscreen_actions = []
+                    if not find_control(fullscreen_xml, ["Pause full-screen video"]):
+                        missing_fullscreen_actions.append("Video did not enter active playback")
+                    if not find_control(fullscreen_xml, ["Unmute full-screen video", "Mute full-screen video"]):
+                        missing_fullscreen_actions.append("Mute / unmute")
+                    if not mute_toggle_ok:
+                        missing_fullscreen_actions.append("Mute control did not toggle in both directions")
+                    if not re.search(r"\d{2}:\d{2}\s*/\s*\d{2}:\d{2}", fullscreen_xml):
+                        missing_fullscreen_actions.append("Elapsed / total playback time")
+                    if not find_control(fullscreen_xml, ["Video playback progress"]):
+                        missing_fullscreen_actions.append("Playback progress track")
+                    if not find_control(fullscreen_xml, ["Close media viewer"]):
+                        missing_fullscreen_actions.append("Close viewer")
+                    if missing_fullscreen_actions:
+                        FAILURES.append("Full-screen Home video is missing controls: " + ", ".join(missing_fullscreen_actions))
+                        screenshot("authenticated-home-fullscreen-video-actions-missing.png")
+                        (ROOT / "authenticated-home-fullscreen-video-actions-missing.xml").write_text(fullscreen_xml + chr(10), encoding="utf-8")
+                    else:
+                        screenshot("authenticated-home-fullscreen-video.png")
+                        (ROOT / "authenticated-home-fullscreen-video.xml").write_text(fullscreen_xml + chr(10), encoding="utf-8")
+                        restored_xml = tap_control(
+                            fullscreen_xml,
+                            ["Close media viewer"],
+                            "authenticated-home-fullscreen-video-close",
+                            ["FYNX Visual Fixture", "Video preview"]
+                        )
+                        if (
+                            restored_xml
+                            and is_home_feed_runtime_surface(restored_xml)
+                            and not find_control(restored_xml, ["Close media viewer"])
+                            and find_control(restored_xml, ["Video duration"])
+                        ):
+                            current = restored_xml
+                            home_fullscreen_video_captured = True
+                        else:
+                            FAILURES.append("Closing the full-screen Home video did not restore the Home feed navigation.")
+
+        discovery_control = find_control(current, ["Open Discovery video"])
+        if discovery_control and not discovery_viewer_captured:
+            viewer_xml = tap_control(
+                current,
+                ["Open Discovery video"],
+                "authenticated-home-discovery-video-open",
+                ["Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video"]
+            )
+            if viewer_xml:
+                # Do not count the viewer as a playable video until the real
+                # VideoView has prepared and exposed its mute control.
+                viewer_xml = camera_wait_for_control(
+                    viewer_xml,
+                    ["Unmute Discovery video", "Mute Discovery video"],
+                    timeout=35.0,
+                    prefix="authenticated-discovery-video-player-ready"
+                )
+                missing_actions = []
+                if not find_control(viewer_xml, ["Like video", "Unlike video"]):
+                    missing_actions.append("Like / Unlike")
+                if not find_control(viewer_xml, ["Open comments"]):
+                    missing_actions.append("Comments")
+                if not find_control(viewer_xml, ["Share video"]):
+                    missing_actions.append("Share")
+                if not find_control(viewer_xml, ["Unmute Discovery video", "Mute Discovery video"]):
+                    missing_actions.append("Mute / unmute")
+                if not find_control(viewer_xml, ["Pause Discovery video", "Play Discovery video"]):
+                    missing_actions.append("Playback controls")
+                if missing_actions:
+                    screenshot("authenticated-discovery-video-actions-missing.png")
+                    (ROOT / "authenticated-discovery-video-actions-missing.xml").write_text(
+                        viewer_xml + chr(10), encoding="utf-8"
+                    )
+                    FAILURES.append(
+                        "Discovery video viewer is missing visible action controls: "
+                        + ", ".join(missing_actions)
+                    )
+                else:
+                    screenshot("authenticated-discovery-video-viewer.png")
+                    (ROOT / "authenticated-discovery-video-viewer.xml").write_text(
+                        viewer_xml + chr(10), encoding="utf-8"
+                    )
+                    discovery_viewer_captured = True
+                    report.append(
+                        "- PASS: opened a real, prepared Discovery video and captured its viewer with playback, mute, Like, Comments and Share controls; no interaction or post was submitted."
+                    )
+                run("adb", "shell", "input", "keyevent", "4")
+                return_deadline = time.monotonic() + 15.0
+                discovery_home = ""
+                while time.monotonic() < return_deadline:
+                    candidate = dump_ui("authenticated-discovery-return-home.xml")
+                    if candidate and is_home_feed_runtime_surface(candidate):
+                        discovery_home = candidate
+                        break
+                    time.sleep(0.5)
+                if not discovery_home:
+                    FAILURES.append("Discovery video viewer did not return to the Home feed safely.")
+                    return dump_ui("authenticated-discovery-return-home-timeout.xml") or viewer_xml
+                current = discovery_home
+
+        # Exercise both X-style repost choices on a disposable local fixture. Opening
+        # the plain repost option is read-only here; quote composition is opened and
+        # dismissed without submitting a post or writing to the backend.
+        if HOME_FEED_FIXTURES_SEEDED and not repost_quote_captured:
+            current = scroll_home_action_row_into_safe_viewport(
+                current, "repost", lambda value: find_exact_home_action(value, "Repost")
+            )
+            repost_action = find_exact_home_action(current, "Repost") if current else None
+            if repost_action:
+                _, repost_x, repost_y = repost_action
+                run("adb", "shell", "input", "tap", str(repost_x), str(repost_y))
+                repost_menu_xml = ""
+                menu_deadline = time.monotonic() + 8.0
+                while time.monotonic() < menu_deadline:
+                    candidate = dump_ui("authenticated-home-repost-menu-probe.xml")
+                    if candidate and find_control(candidate, ["Quote post"]):
+                        repost_menu_xml = candidate
+                        break
+                    time.sleep(0.25)
+                plain_option_visible = False
+                if repost_menu_xml:
+                    try:
+                        menu_root = ET.fromstring(repost_menu_xml)
+                        plain_option_visible = any(
+                            (node.attrib.get("text") or "").strip() == "Repost"
+                            for node in menu_root.iter("node")
+                        )
+                    except ET.ParseError:
+                        plain_option_visible = False
+                    (ROOT / "authenticated-home-repost-menu.xml").write_text(repost_menu_xml + chr(10), encoding="utf-8")
+                    screenshot("authenticated-home-repost-menu.png")
+                    quote_action = find_exact_home_action(repost_menu_xml, "Quote post")
+                    if plain_option_visible and quote_action:
+                        _, quote_x, quote_y = quote_action
+                        run("adb", "shell", "input", "tap", str(quote_x), str(quote_y))
+                        quote_composer_xml = ""
+                        composer_deadline = time.monotonic() + 15.0
+                        while time.monotonic() < composer_deadline:
+                            candidate = dump_ui("authenticated-home-quote-composer-probe.xml")
+                            has_composer = (
+                                candidate
+                                and find_control(candidate, ["Add your thoughts", "What would you like to say about this post?"])
+                                and find_control(candidate, ["Original post"])
+                                and find_control(candidate, ["FYNX Visual Fixture"])
+                                and "CI TEST FIXTURE" in candidate
+                                and find_control(candidate, ["Video preview", "Play video full screen"])
+                            )
+                            if has_composer:
+                                quote_composer_xml = candidate
+                                break
+                            time.sleep(0.35)
+                        if quote_composer_xml:
+                            (ROOT / "authenticated-home-quote-composer.xml").write_text(quote_composer_xml + chr(10), encoding="utf-8")
+                            screenshot("authenticated-home-quote-composer.png")
+                            repost_quote_captured = True
+                            report.append(
+                                "- PASS: opened the plain Repost and Quote post choices, then verified the quote composer preserves the original author's attribution, caption and cached video preview. No repost or quote was submitted."
+                            )
+                        else:
+                            screenshot("authenticated-home-quote-composer-missing.png")
+                            FAILURES.append(
+                                "Quote post opened from the Repost menu, but the composer did not expose the original post attribution, caption, thought field and video preview together."
+                            )
+                        run("adb", "shell", "input", "keyevent", "4")
+                        returned_home = ""
+                        home_deadline = time.monotonic() + 12.0
+                        while time.monotonic() < home_deadline:
+                            candidate = dump_ui("authenticated-home-after-quote-composer.xml")
+                            if candidate and is_home_feed_runtime_surface(candidate) and not find_control(candidate, ["Original post"]):
+                                returned_home = candidate
+                                break
+                            time.sleep(0.35)
+                        if not returned_home:
+                            run("adb", "shell", "input", "keyevent", "4")
+                            time.sleep(0.6)
+                            returned_home = dump_ui("authenticated-home-after-quote-composer-retry.xml")
+                        if not returned_home or not is_home_feed_runtime_surface(returned_home):
+                            FAILURES.append("Home Feed did not return safely after dismissing the quote composer.")
+                            return returned_home or current
+                        current = returned_home
+                    else:
+                        FAILURES.append("The visible Repost menu did not expose both the plain Repost option and Quote post option.")
+                        run("adb", "shell", "input", "keyevent", "4")
+                else:
+                    FAILURES.append("The Home Feed Repost action did not open its Repost / Quote post menu.")
+
+        # Pair the conversation capture with a viewport that actually exposes
+        # a real inline video control. Do not count an unrelated text-post comment.
+        comment_control = find_home_video_post_comment_action(current) if video_control and duration_control and (require_real_media or HOME_FEED_FIXTURES_SEEDED) else None
+        if comment_control and not comments_captured:
+            current = scroll_home_action_row_into_safe_viewport(
+                current, "comments", find_home_video_post_comment_action
+            )
+            comment_control = find_home_video_post_comment_action(current) if current else None
+            if not comment_control:
+                return current or home_xml
+            comment_action_seen = True
+            _, x, y = comment_control
+            run("adb", "logcat", "-c")
+            run("adb", "shell", "input", "tap", str(x), str(y))
+            deadline = time.monotonic() + 12.0
+            conversation_xml = ""
+            while time.monotonic() < deadline:
+                candidate = dump_ui("authenticated-home-comments-probe.xml")
+                if (
+                    candidate
+                    and find_control(candidate, ["Comments"])
+                    and find_control(candidate, ["Write a comment"])
+                    and has_visible_home_comment_row(candidate)
+                ):
+                    conversation_xml = candidate
+                    break
+                time.sleep(0.5)
+
+            if not conversation_xml:
+                screenshot("authenticated-home-comments-open-failed.png")
+                comments_panel_opened = bool(
+                    find_control(candidate, ["Comments"])
+                    and find_control(candidate, ["Write a comment"])
+                ) if candidate else False
+                message = (
+                    "The Comments panel opened, but no rendered comment/reply row was available; "
+                    "the debug-local CI fixture never writes a comment to the backend."
+                    if comments_panel_opened else
+                    "The Home video Comment hit target did not open the Comments panel; "
+                    "the debug-local CI fixture never writes a comment to the backend; the verifier had first moved the action row above the floating navigation."
+                )
+                if require_real_media:
+                    FAILURES.append(message)
+                else:
+                    report.append("- NOTE: " + message)
+                (ROOT / "authenticated-home-comments-open-failed.xml").write_text(
+                    (candidate or "") + chr(10), encoding="utf-8"
+                )
+                return current
+
+            if HOME_FEED_FIXTURES_SEEDED:
+                nested_preview_markers = [
+                    "Great portrait fit.",
+                    "Agreed — the feed stays uncluttered.",
+                    "And it opens the same clip.",
+                ]
+                missing_nested_markers = [marker for marker in nested_preview_markers if marker not in conversation_xml]
+                if missing_nested_markers:
+                    screenshot("authenticated-home-comments-thread-preview-incomplete.png")
+                    FAILURES.append("The offline Comments preview did not render every nested reply level: " + ", ".join(missing_nested_markers))
+                    return current
+            (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
+            screenshot("authenticated-home-comments.png")
+            comments_captured = True
+            report.append("- PASS: opened the video post's own Comments conversation and verified the comment thread, post context, reply actions and composer. No comment or reply was sent.")
+
+            run("adb", "shell", "input", "keyevent", "4")
+            return_home_deadline = time.monotonic() + 15.0
+            home_after_comments = ""
+            while time.monotonic() < return_home_deadline:
+                candidate = dump_ui("authenticated-home-after-comments.xml")
+                if candidate and is_home_feed_runtime_surface(candidate):
+                    home_after_comments = candidate
+                    break
+                time.sleep(0.5)
+            if not home_after_comments:
+                FAILURES.append("Home Feed visual capture could not return safely from the Comments conversation.")
+                return dump_ui("authenticated-home-after-comments-timeout.xml") or current
+            current = home_after_comments
+
+        if video_captured and comments_captured and discovery_viewer_captured and repost_quote_captured:
+            break
+        if page == 8:
+            break
+
+        next_xml = scroll_home_feed_page(page, current)
+        if not next_xml or next_xml == current or next_xml == previous_xml:
+            break
+        previous_xml, current = current, next_xml
+
+    if HOME_FEED_FIXTURES_SEEDED:
+        expected_ratios = {"portrait 9:16": 9 / 16, "landscape 16:9": 16 / 9, "square 1:1": 1.0}
+        ratio_matches = {
+            label: min((abs(value - expected) for value in captured_video_preview_ratios), default=999.0) <= 0.035
+            for label, expected in expected_ratios.items()
+        }
+        passed_ratios = [label for label, passed in ratio_matches.items() if passed]
+        missing_ratios = [label for label, passed in ratio_matches.items() if not passed]
+        if missing_ratios:
+            FAILURES.append(
+                "Rendered Home video preview bounds did not confirm all source ratios: "
+                + ", ".join(missing_ratios)
+                + ". Measured ratios: "
+                + ", ".join(f"{value:.3f}" for value in captured_video_preview_ratios)
+            )
+        else:
+            report.append("- PASS: Android accessibility bounds confirmed all three adaptive Home preview ratios: " + ", ".join(passed_ratios) + ".")
+    if video_captured:
+        if HOME_FEED_FIXTURES_SEEDED:
+            report.append(
+                "- PASS: Home inline playback metadata was read from the local CI video fixtures: "
+                + ", ".join(captured_video_durations)
+                + ". These are disposable test files, not real user posts."
+            )
+        else:
+            report.append(
+                "- PASS: measured Home inline video duration(s) captured from real media metadata: "
+                + ", ".join(captured_video_durations)
+                + ". Dedicated full-resolution feed screenshots were saved per viewport."
+            )
+    else:
+        message = (
+            f"No real inline Home video with a measured duration and playback controls was found "
+            f"in {scanned_pages} scanned feed viewport(s); no synthetic post was created."
+        )
+        report.append(("- NOTE: " if not require_real_media else "- FAIL: ") + message)
+        if require_real_media:
+            FAILURES.append(message)
+    if not comments_captured:
+        message = (
+            f"No Comment conversation belonging to a video post was captured "
+            f"across {scanned_pages} scanned Home feed viewport(s); CI-only preview comments remain local to the disposable debug emulator."
+        )
+        report.append(("- NOTE: " if not require_real_media else "- FAIL: ") + message)
+        if require_real_media and not comment_action_seen:
+            FAILURES.append(message)
+    if not discovery_viewer_captured:
+        message = (
+            f"No prepared Discovery video card with an accessible open action was found in {scanned_pages} Home feed viewport(s)."
+        )
+        if HOME_FEED_FIXTURES_SEEDED:
+            FAILURES.append(message + " The explicit local Discovery fixture was enabled but did not reach the viewer.")
+            report.append("- FAIL: " + message)
+        else:
+            report.append("- NOTE: " + message + " No synthetic media was created.")
+    if HOME_FEED_FIXTURES_SEEDED and not repost_quote_captured:
+        message = "The CI-only Home Repost menu and Quote post composer were not both verified."
+        FAILURES.append(message)
+        report.append("- FAIL: " + message)
+    return current
+
+
+
 
 if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     report += ["","## Result: BLOCKED","- FYNX_E2E_USERNAME and FYNX_E2E_PASSWORD repository secrets are required for authenticated visual certification."]
@@ -1574,6 +2767,105 @@ if AI_VISUALS_ONLY:
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
+if HOME_FEED_VISUALS_ONLY and not error and LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+    fixtures_ready = seed_offline_home_feed_visual_fixtures(USERNAME or "marketplace_visual_check")
+    if not fixtures_ready:
+        FAILURES.append("Home Feed offline visual fixtures could not be seeded; refusing to accept a screenshot-only partial run.")
+    # The helper relaunches Home after seeding so Compose reads the fresh test cache.
+    xml = dump_ui("ci-home-feed-fixture-entry.xml") or xml
+if HOME_FEED_VISUALS_ONLY and not error:
+    # Match the supplied X-style reference with the real Android dark theme before
+    # the first Home screenshot is taken.
+    night_mode = run("adb", "shell", "cmd", "uimode", "night", "yes", timeout=15)
+    if night_mode.returncode != 0:
+        night_mode = run("adb", "shell", "settings", "put", "secure", "ui_night_mode", "2", timeout=15)
+    if night_mode.returncode == 0:
+        time.sleep(1.2)
+        xml = dismiss_runtime_permission_prompt() or dump_ui("home-feed-dark-mode.xml") or xml
+if not error:
+    xml = capture_home_feed_visuals(
+        xml,
+        require_real_media=LOGIN_MODE != "debug-only local UI entry (not server-authenticated)"
+    ) or xml
+
+if HOME_FEED_VISUALS_ONLY:
+    home_xml = dump_ui("authenticated-home-feed-final-probe.xml") or xml
+    if home_xml and is_home_feed_runtime_surface(home_xml):
+        restored_home_xml = restore_home_feed_top(home_xml)
+        # Keep the verified restored hierarchy. A second immediate UI dump can
+        # race Compose's auto-hide/semantics update and overwrite a good Home
+        # snapshot with a transient hierarchy that omits the bottom navigation.
+        if (restored_home_xml
+                and is_authenticated_home_surface(restored_home_xml)
+                and is_home_feed_navigation_visible(restored_home_xml)):
+            home_xml = restored_home_xml
+    final_probe_xml = dump_ui("authenticated-home-feed-final.xml")
+    if (final_probe_xml
+            and is_authenticated_home_surface(final_probe_xml)
+            and is_home_feed_navigation_visible(final_probe_xml)):
+        home_xml = final_probe_xml
+    home_visible = bool(
+        home_xml
+        and is_authenticated_home_surface(home_xml)
+        and is_home_feed_navigation_visible(home_xml)
+    )
+    if home_visible:
+        (ROOT / "authenticated-home-feed-final.xml").write_text(home_xml + chr(10), encoding="utf-8")
+        screenshot("authenticated-home-feed-final.png")
+        report.append("- PASS: captured the actual Home Feed at its restored top position with the floating Home navigation visible.")
+    elif error:
+        report.append("- BLOCKED: the Home Feed was not reached: " + error)
+        FAILURES.append("Home Feed visual entry: " + error)
+    else:
+        report.append("- FAIL: Home navigation markers were not visible after the Home capture.")
+        FAILURES.append("Home Feed visual capture did not retain the Home navigation surface.")
+
+    if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+        report.append("- Session: explicit debug-local UI entry. This proves rendered UI/navigation only, not live account data.")
+    else:
+        report.append("- Session: server-authenticated Home Feed session.")
+
+    if HOME_FEED_FIXTURES_SEEDED:
+        report.append("- Evidence scope: video sizing, muted inline playback and tap-to-fullscreen were exercised with local-only CI fixtures in the disposable emulator; no backend post was created.")
+    if not (ROOT / "authenticated-home-inline-video.png").is_file():
+        report.append("- LIMITATION: no playable Home video was available for screenshot verification; no production or backend data was created.")
+    if not (ROOT / "authenticated-home-fullscreen-video.png").is_file():
+        report.append("- LIMITATION: full-screen video interaction could not be demonstrated without an available Home video or successful local CI fixture.")
+    if not (ROOT / "authenticated-home-comments.png").is_file():
+        report.append("- LIMITATION: the local read-only comment thread was not captured; no backend comment or reply was created.")
+
+    report += ["", "## Home Feed evidence files"]
+    report += [
+        "- authenticated-home-feed.png",
+        "- authenticated-home-feed-final.png" if home_visible else "- Home final screenshot not captured",
+        "- authenticated-home-inline-video.png" if (ROOT / "authenticated-home-inline-video.png").is_file() else "- Inline video screenshot unavailable",
+        "- authenticated-home-fullscreen-video.png" if (ROOT / "authenticated-home-fullscreen-video.png").is_file() else "- Full-screen screenshot unavailable",
+    ]
+    media_proof_complete = all(
+        (ROOT / name).is_file()
+        for name in (
+            "authenticated-home-inline-video.png",
+            "authenticated-home-fullscreen-video.png",
+            "authenticated-home-comments.png",
+        )
+    )
+    if not media_proof_complete:
+        missing_evidence = [
+            name for name in (
+                "authenticated-home-inline-video.png",
+                "authenticated-home-fullscreen-video.png",
+                "authenticated-home-comments.png",
+            ) if not (ROOT / name).is_file()
+        ]
+        FAILURES.append("Home Feed visual certification is incomplete; missing required evidence: " + ", ".join(missing_evidence))
+    capture_result = "GREEN" if not FAILURES and media_proof_complete else "RED"
+    report += ["", f"## Result: {capture_result}"]
+    if FAILURES:
+        report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
+    (ROOT / "FYNX-home-feed-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(0 if not FAILURES else 1)
+
 if not error and not VISUALS_ONLY and LOGIN_MODE != "server credential login":
     error = "Wallet runtime certification requires a server-credential login; debug-only local UI entry does not authenticate with the backend."
     FAILURES.append(error)
@@ -2333,34 +3625,78 @@ else:
             report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
-    # Capture the real Settings home from the authenticated running APK.
-    profile_xml=tap_control(xml,["Open FYNX profile"],"settings-open-profile",["Edit profile","Settings"])
-    if profile_xml:
-        settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
-        if settings_xml:
-            report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
+    # The Home header collapses while scrolling through long video posts. Restore
+    # it before tapping header-only controls so stale coordinates cannot hit feed media.
+    xml, home_header_ready = restore_home_header(xml, "authenticated-before-settings")
+    if home_header_ready:
+        # Capture the restored Home header before tapping the profile avatar.
+        # The avatar itself is the primary, direct route to Profile; do not
+        # depend on the overflow menu's transient dropdown semantics.
+        screenshot("authenticated-before-settings-profile-entry.png")
+        (ROOT / "authenticated-before-settings-profile-entry.xml").write_text(
+            xml + chr(10), encoding="utf-8"
+        )
+        profile_xml=tap_control(
+            xml, ["Open FYNX profile"], "settings-open-profile",
+            ["Edit profile", "Settings"]
+        )
+        if profile_xml:
+            settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
+            if settings_xml:
+                report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
+            else:
+                FAILURES.append("profile -> Settings home did not open")
         else:
-            FAILURES.append("profile -> Settings home did not open")
-    else:
-        FAILURES.append("Home -> profile entry did not open for Settings visual capture")
-    # Return through the app's own back stack. Do not force-stop/relaunch here:
-    # offline/local test sessions may be in-memory and a cold start can send the
-    # emulator back to the sign-in gate, making unrelated navigation checks fail.
+            FAILURES.append("Visible Home avatar -> Profile did not open")
+    # Settings and Profile are separate in-app destinations. First leave the
+    # destination with Back; only after Home is confirmed should we scroll its feed.
+    home_xml = dump_ui("authenticated-after-settings-return-initial.xml") or xml
     for step in range(3):
-        current=dump_ui(f"authenticated-after-settings-back-{step}.xml")
-        if find_control(current,["Open FYNX camera"]) or find_control(current,["Chat"]) and find_control(current,["Friends"]):
-            xml=current
+        if (find_control(home_xml, ["Open FYNX camera"])
+                and find_control(home_xml, ["Chat"])
+                and find_control(home_xml, ["Friends"])):
             break
-        run("adb","shell","input","keyevent","4")
+        if find_control(home_xml, ["Profile"]) or find_control(home_xml, ["Search settings", "Account & Profile"]):
+            run("adb", "shell", "input", "keyevent", "4")
+            time.sleep(0.8)
+            home_xml = dump_ui(f"authenticated-after-settings-back-{step}.xml") or home_xml
+            continue
+        # If a transient destination has no stable marker, allow one Back action,
+        # then inspect again. Never send repeated Back presses after Home appears.
+        run("adb", "shell", "input", "keyevent", "4")
         time.sleep(0.8)
+        home_xml = dump_ui(f"authenticated-after-settings-back-{step}.xml") or home_xml
+
+    home_header_ready = (
+        find_control(home_xml, ["Open FYNX camera"])
+        and find_control(home_xml, ["Chat"])
+        and find_control(home_xml, ["Friends"])
+    )
+    if home_header_ready:
+        xml, home_header_ready = restore_home_header(
+            home_xml, "authenticated-after-settings-back", attempts=6
+        )
+    else:
+        xml = home_xml
+        FAILURES.append(
+            "Settings visual capture did not return to the authenticated Home destination"
+        )
+
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
+    if home_header_ready:
+        # A permission prompt can momentarily change the UI hierarchy; restore the
+        # actual Home top after dismissal, without using Back on a Home screen.
+        xml, home_header_ready = restore_home_header(xml, "authenticated-before-camera")
     if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
-    xml = capture_camera_post_journey(xml, "authenticated-camera")
-    if xml and find_control(xml, ["Open FYNX camera"]):
-        report.append("- PASS Home -> camera effects, photo editing, safe Retake and video-effects journey")
+    if home_header_ready:
+        xml = capture_camera_post_journey(xml, "authenticated-camera")
+        if xml and find_control(xml, ["Open FYNX camera"]):
+            report.append("- PASS Home -> camera effects, photo editing, safe Retake and video-effects journey")
+        else:
+            FAILURES.append("authenticated camera effects journey did not return to Home")
     else:
-        FAILURES.append("authenticated camera effects journey did not return to Home")
+        FAILURES.append("camera journey was not attempted because the authenticated Home header was not restored")
     # The debug saved-device entry is intentionally a local UI-only route, not
     # server authentication. Do not cold-start it: that returns to Sign In and
     # makes unrelated navigation checks fail for the wrong reason. Certify the
