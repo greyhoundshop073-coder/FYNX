@@ -94,7 +94,7 @@ private fun friendlyFynxAiError(error: Throwable, fallback: String): String {
     return if (serviceUnavailable || detail.isBlank()) fallback else detail
 }
 
-private data class FynxAiUiMessage(
+internal data class FynxAiUiMessage(
     val id: String = UUID.randomUUID().toString(),
     val text: String,
     val fromUser: Boolean,
