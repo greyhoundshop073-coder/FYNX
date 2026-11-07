@@ -517,6 +517,7 @@ fun FynxAiAssistantPanel(
     fun startNewConversation() {
         if (creatingConversation) return
         stopGeneration()
+        stopReadAloud()
         endVoiceSession()
         // Keep the first-use dashboard and new-chat action independent of the
         // backend. Create the persisted conversation only when the user sends
@@ -537,6 +538,7 @@ fun FynxAiAssistantPanel(
 
     fun loadConversation(id: String) {
         stopGeneration()
+        stopReadAloud()
         endVoiceSession()
         historyLoading = true
         errorMessage = null
@@ -625,6 +627,7 @@ fun FynxAiAssistantPanel(
 
     fun connectVoice() {
         if (voiceConnecting || voiceConnected) return
+        stopReadAloud()
         hasStartedInteraction = true
         voiceConnecting = true
         errorMessage = null
@@ -724,11 +727,13 @@ fun FynxAiAssistantPanel(
                 .replace(Regex("\\s+"), " ")
                 .trim()
             if (normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$"))) {
+                stopReadAloud()
                 confirmPendingMessage()
                 input = ""
                 return
             }
             if (normalized.matches(Regex("^(no|nope|cancel|dont|do not|not now|stop)( please)?$"))) {
+                stopReadAloud()
                 cancelPendingMessage()
                 input = ""
                 return
@@ -737,6 +742,7 @@ fun FynxAiAssistantPanel(
 
         val activeConversation = conversationId
         if ((prompt.isEmpty() && pendingMediaId == null) || loading || creatingConversation || pendingMediaUploading) return
+        stopReadAloud()
         val decision = FynxFutureIntelligencePolicy.authorize(
             permissions = listOf(FynxAiPermission(capability = FynxAiCapability.ASSISTANT, allowedScopes = setOf(FynxAiDataScope.NONE), enabled = true)),
             request = FynxAiRequest(
