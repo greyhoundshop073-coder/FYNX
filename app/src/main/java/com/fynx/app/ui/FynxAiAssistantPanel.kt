@@ -1440,11 +1440,19 @@ internal fun FynxAiFullScreenVoice(
 ) {
     var showSettings by remember { mutableStateOf(false) }
     val transition = rememberInfiniteTransition(label = "fynxVoiceOrb")
+    val orbAnimation = when {
+        error != null || muted -> Triple(1.0f, 1.0f, 900)
+        connecting -> Triple(0.98f, 1.035f, 900)
+        connected && phase == "THINKING" -> Triple(0.98f, 1.045f, 720)
+        connected && phase == "SPEAKING" -> Triple(0.98f, 1.065f, 420)
+        connected -> Triple(0.98f, 1.04f, 1500)
+        else -> Triple(0.99f, 1.015f, 1800)
+    }
     val pulse by transition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
+        initialValue = orbAnimation.first,
+        targetValue = orbAnimation.second,
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(1800),
+            animation = androidx.compose.animation.core.tween(orbAnimation.third),
             repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
         ),
         label = "fynxVoiceOrbPulse"
