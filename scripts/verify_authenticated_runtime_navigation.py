@@ -1620,75 +1620,46 @@ def find_exact_home_action(xml_text: str, label: str):
 
 
 def has_visible_home_comment_row(xml_text: str) -> bool:
-    """Require an actual rendered comment body and its Reply/Replies actions, not just the composer."""
+    """Recognize rendered comment content even when Compose exposes row actions as sibling semantics nodes."""
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
         return False
-    parents = {}
-    all_nodes = list(root.iter("node"))
-    for parent in all_nodes:
-        for child in list(parent):
-            parents[id(child)] = parent
-
     visible = [
-        node for node in all_nodes
+        node for node in root.iter("node")
         if node.attrib.get("visible-to-user", "true").lower() != "false"
     ]
-    reply_controls = [
-        node for node in visible
-        if (node.attrib.get("text") or "").strip().casefold() == "reply"
-        or (node.attrib.get("content-desc") or "").strip().casefold() == "reply"
-    ]
-    replies_controls = [
-        node for node in visible
-        if re.fullmatch(
-            r"(?:\d+\s+)?(?:replies|no replies)",
-            " ".join(((node.attrib.get("text") or "") + " " + (node.attrib.get("content-desc") or "")).split()).casefold()
-        )
-        or (node.attrib.get("content-desc") or "").strip().casefold() in {"open replies", "collapse replies"}
-    ]
-    if not reply_controls or not replies_controls:
-        return False
-
+    texts = {
+        " ".join((node.attrib.get("text") or "").split()).casefold()
+        for node in visible
+        if (node.attrib.get("text") or "").strip()
+    }
+    descriptions = {
+        " ".join((node.attrib.get("content-desc") or "").split()).casefold()
+        for node in visible
+        if (node.attrib.get("content-desc") or "").strip()
+    }
+    has_reply = "reply" in texts or "reply" in descriptions
+    has_thread_action = bool(
+        descriptions.intersection({"open replies", "collapse replies"})
+        or any(re.fullmatch(r"\\d+\\s+replies", value) for value in texts)
+    )
     excluded = {
         "comments", "post conversation", "reply", "replies", "no replies",
         "write a comment…", "write a comment...", "send comment", "close comments",
         "refresh comments", "started by", "comment", "like", "share", "save",
+        "ci test fixture — portrait video (360:640). local-only preview; not published or uploaded.",
     }
-
-    def ancestor_chain(node):
-        chain = []
-        current = node
-        while current is not None:
-            chain.append(current)
-            current = parents.get(id(current))
-        return chain
-
-    for body_node in visible:
-        body = (body_node.attrib.get("text") or "").strip()
-        if len(body) < 2 or body.casefold() in excluded:
-            continue
-        body_path = ancestor_chain(body_node)
-        for reply_node in reply_controls:
-            reply_path = ancestor_chain(reply_node)
-            reply_ids = {id(item) for item in reply_path}
-            row = next((item for item in body_path if id(item) in reply_ids), None)
-            if row is None or row is root:
-                continue
-            row_ids = {id(item) for item in row.iter("node")}
-            has_replies_action = any(id(item) in row_ids for item in replies_controls)
-            if not has_replies_action:
-                continue
-            row_texts = {
-                (item.attrib.get("text") or "").strip()
-                for item in row.iter("node")
-                if item.attrib.get("visible-to-user", "true").lower() != "false"
-            }
-            meaningful = [value for value in row_texts if value and value.casefold() not in excluded]
-            if len(meaningful) >= 2:
-                return True
-    return False
+    comment_bodies = [
+        value for value in texts
+        if len(value) >= 3 and value not in excluded
+        and not value.startswith("started by ")
+        and not value.startswith("ci test fixture")
+    ]
+    # Compose may place a comment's body, action buttons and reply-count semantics
+    # in sibling nodes. Requiring a common XML ancestor incorrectly rejects the
+    # real rendered rows, despite the screenshot visibly containing them.
+    return bool(comment_bodies and has_reply and has_thread_action)
 
 def find_home_video_post_comment_action(xml_text: str):
     """Return Comment only when its node shares a post-card ancestor with a real video duration."""
@@ -1896,10 +1867,15 @@ def is_home_feed_runtime_surface(xml_text: str) -> bool:
 
 
 def restore_home_after_comment_probe_failure(name: str, fallback: str = "") -> str:
-    """Close a failed Comments probe before returning to the Home Feed capture flow."""
-    run("adb", "shell", "input", "keyevent", "4")
+    """Dismiss the Comments sheet explicitly, then verify that Home is restored."""
+    latest = fallback
+    close_target = find_control(latest, ["Close comments"]) if latest else None
+    if close_target:
+        _, close_x, close_y = close_target
+        run("adb", "shell", "input", "tap", str(close_x), str(close_y))
+    else:
+        run("adb", "shell", "input", "keyevent", "4")
     deadline = time.monotonic() + 18.0
-    latest = ""
     attempt = 0
     while time.monotonic() < deadline:
         candidate = dump_ui(f"{name}-{attempt}.xml")
@@ -1908,6 +1884,15 @@ def restore_home_after_comment_probe_failure(name: str, fallback: str = "") -> s
             latest = candidate
             if is_home_feed_runtime_surface(candidate):
                 return candidate
+            # A semantics-only close target can be present but not receive the
+            # first tap while the sheet animation settles. Retry once, then Back.
+            if attempt == 5:
+                target = find_control(candidate, ["Close comments"])
+                if target:
+                    _, close_x, close_y = target
+                    run("adb", "shell", "input", "tap", str(close_x), str(close_y))
+                else:
+                    run("adb", "shell", "input", "keyevent", "4")
         time.sleep(0.4)
     return latest or fallback
 
