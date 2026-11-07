@@ -105,7 +105,7 @@ internal object FynxAiReadAloud {
     fun remainingText(source: String, transcript: String): String {
         if (source.isBlank()) return ""
         if (transcript.isBlank()) return source
-        val wordPattern = Regex("""[p{L}p{N}]+""")
+        val wordPattern = Regex("""[\p{L}\p{N}]+""")
         val sourceWords = wordPattern.findAll(source).toList()
         val spokenWords = wordPattern.findAll(transcript).map { it.value.lowercase() }.toList()
         if (sourceWords.isEmpty() || spokenWords.isEmpty()) return source
