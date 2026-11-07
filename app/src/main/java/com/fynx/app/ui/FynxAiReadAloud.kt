@@ -124,7 +124,9 @@ internal object FynxAiReadAloud {
         if (maxSpokenWords <= 0) return source
 
         val transcriptWords = wordPattern.findAll(transcript).toList()
-        if (transcriptWords.isEmpty()) {
+        if (transcriptWords.size < maxSpokenWords) {
+            // Transcript events may lag behind the audio currently playing. In that
+            // case the PCM-derived playback clock is the safer resume boundary.
             val boundary = sourceWords[maxSpokenWords - 1].range.last + 1
             return source.substring(boundary).trimStart { character ->
                 character.isWhitespace() || character in ".,;:!?…—–-"

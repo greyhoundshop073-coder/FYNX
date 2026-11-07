@@ -118,12 +118,12 @@ class FynxAiReadAloudTest {
     }
 
     @Test
-    fun usesTranscriptWhenItIsBehindThePlaybackEstimate() {
+    fun usesPlaybackClockWhenTranscriptIsBehindTheAudio() {
         assertEquals(
-            "four five six seven eight nine ten.",
+            "nine ten.",
             FynxAiReadAloud.remainingTextAtPlaybackPosition(
                 "one two three four five six seven eight nine ten.",
-                "one two three",
+                "one two",
                 elapsedMs = 8_000L,
                 durationMs = 10_000L
             )
