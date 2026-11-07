@@ -101,11 +101,48 @@ internal object FynxAiReadAloud {
         return String.format(Locale.US, "%02d:%02d", totalSeconds / 60L, totalSeconds % 60L)
     }
 
+    /**
+     * Bound a possibly-ahead generated transcript by the measured playback position.
+     * Realtime transcripts can finish generating before buffered audio finishes playing;
+     * using the full transcript alone could incorrectly skip the rest on pause/resume.
+     */
+    fun remainingTextAtPlaybackPosition(
+        source: String,
+        transcript: String,
+        elapsedMs: Long,
+        durationMs: Long
+    ): String {
+        if (source.isBlank()) return ""
+        if (durationMs <= 0L) return remainingText(source, transcript)
+        if (elapsedMs >= durationMs) return ""
+
+        val wordPattern = Regex("""[\p{L}\p{N}]+""")
+        val sourceWords = wordPattern.findAll(source).toList()
+        if (sourceWords.isEmpty()) return source
+        val progress = (elapsedMs.toDouble() / durationMs.toDouble()).coerceIn(0.0, 1.0)
+        val maxSpokenWords = (sourceWords.size * progress).toInt()
+        if (maxSpokenWords <= 0) return source
+
+        val transcriptWords = wordPattern.findAll(transcript).toList()
+        if (transcriptWords.size < maxSpokenWords) {
+            // Transcript events may lag behind the audio currently playing. In that
+            // case the PCM-derived playback clock is the safer resume boundary.
+            val boundary = sourceWords[maxSpokenWords - 1].range.last + 1
+            return source.substring(boundary).trimStart { character ->
+                character.isWhitespace() || character in ".,;:!?…—–-"
+            }
+        }
+        val boundedTranscript = transcriptWords
+            .take(maxSpokenWords)
+            .joinToString(" ") { it.value }
+        return remainingText(source, boundedTranscript)
+    }
+
     /** Resume at the latest recognized word boundary without repeating the whole answer. */
     fun remainingText(source: String, transcript: String): String {
         if (source.isBlank()) return ""
         if (transcript.isBlank()) return source
-        val wordPattern = Regex("""[p{L}p{N}]+""")
+        val wordPattern = Regex("""[\p{L}\p{N}]+""")
         val sourceWords = wordPattern.findAll(source).toList()
         val spokenWords = wordPattern.findAll(transcript).map { it.value.lowercase() }.toList()
         if (sourceWords.isEmpty() || spokenWords.isEmpty()) return source

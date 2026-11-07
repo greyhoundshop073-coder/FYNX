@@ -92,6 +92,58 @@ class FynxAiReadAloudTest {
     }
 
     @Test
+    fun doesNotSkipQueuedSpeechWhenRealtimeTranscriptIsAheadOfPlayback() {
+        assertEquals(
+            "six seven eight nine ten.",
+            FynxAiReadAloud.remainingTextAtPlaybackPosition(
+                "one two three four five six seven eight nine ten.",
+                "one two three four five six seven eight nine ten.",
+                elapsedMs = 5_000L,
+                durationMs = 10_000L
+            )
+        )
+    }
+
+    @Test
+    fun resumesByAudioProgressWhenTranscriptHasNotArrivedYet() {
+        assertEquals(
+            "six seven eight nine ten.",
+            FynxAiReadAloud.remainingTextAtPlaybackPosition(
+                "one two three four five six seven eight nine ten.",
+                "",
+                elapsedMs = 5_000L,
+                durationMs = 10_000L
+            )
+        )
+    }
+
+    @Test
+    fun usesPlaybackClockWhenTranscriptIsBehindTheAudio() {
+        assertEquals(
+            "nine ten.",
+            FynxAiReadAloud.remainingTextAtPlaybackPosition(
+                "one two three four five six seven eight nine ten.",
+                "one two",
+                elapsedMs = 8_000L,
+                durationMs = 10_000L
+            )
+        )
+    }
+
+    @Test
+    fun playbackAtDurationHasNoRemainingText() {
+        assertEquals(
+            "",
+            FynxAiReadAloud.remainingTextAtPlaybackPosition(
+                "one two three.",
+                "one two three.",
+                elapsedMs = 10_000L,
+                durationMs = 10_000L
+            )
+        )
+    }
+
+    @Test
     fun keepsTheFullTextWhenNothingMatches() {
         assertEquals("The order has shipped.", FynxAiReadAloud.remainingText(
             "The order has shipped.", "unmatched transcript"

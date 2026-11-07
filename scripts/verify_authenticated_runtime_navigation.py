@@ -1977,7 +1977,7 @@ def scroll_home_action_row_into_safe_viewport(xml_text: str, name: str, action_f
     actual clickable bounds after each swipe.
     """
     size = run("adb", "shell", "wm", "size").stdout or ""
-    match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", size)
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
     if not match:
         FAILURES.append(f"{name}: could not read emulator dimensions before tapping the Home action row.")
         return ""

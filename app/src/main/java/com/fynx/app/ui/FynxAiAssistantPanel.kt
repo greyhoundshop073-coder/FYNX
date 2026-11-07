@@ -450,7 +450,12 @@ fun FynxAiAssistantPanel(
 
     fun resumeReadAloud() {
         if (!readAloudPaused) return
-        readAloudRemainingText = FynxAiReadAloud.remainingText(readAloudSourceText, readAloudTranscript)
+        readAloudRemainingText = FynxAiReadAloud.remainingTextAtPlaybackPosition(
+            readAloudSourceText,
+            readAloudTranscript,
+            readAloudElapsedMs,
+            readAloudDurationMs
+        )
         if (readAloudRemainingText.isBlank()) {
             finishReadAloud(readAloudMessageId ?: return)
             return
