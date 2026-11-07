@@ -42,11 +42,12 @@ class FynxAiPcmAudioPlayerInstrumentationTest {
             val prepared = player.prepare()
             assertTrue("Android PCM playback should initialize: ${prepared.exceptionOrNull()?.message}", prepared.isSuccess)
 
-            // One second of 24 kHz mono PCM16 silence: no audible output during device CI.
-            val silentPcm = ByteArray(24_000 * 2)
+            // Four seconds of 24 kHz mono PCM16 silence: no audible output, with ample
+            // queue remaining even if the emulator test thread is briefly delayed.
+            val silentPcm = ByteArray(96_000 * 2)
             val encoded = Base64.encodeToString(silentPcm, Base64.NO_WRAP)
             assertTrue("The PCM chunk should be accepted by the player.", player.enqueueBase64Delta(encoded))
-            assertEquals("The duration should be derived from queued PCM frames.", 1_000L, player.durationMillis())
+            assertEquals("The duration should be derived from queued PCM frames.", 4_000L, player.durationMillis())
 
             player.play()
             assertTrue(
@@ -70,14 +71,24 @@ class FynxAiPcmAudioPlayerInstrumentationTest {
             )
 
             player.play()
+            val resumeDeadline = SystemClock.uptimeMillis() + 1_500L
+            while (player.elapsedMillis() <= frozenPosition + 120L && SystemClock.uptimeMillis() < resumeDeadline) {
+                SystemClock.sleep(25L)
+            }
+            val resumedPosition = player.elapsedMillis()
+            assertTrue(
+                "The same PCM playback head must advance after resume (paused=$frozenPosition, resumed=$resumedPosition, error=${player.errorMessage()}).",
+                resumedPosition > frozenPosition + 100L
+            )
+            assertTrue("PCM output must remain healthy after resume: ${player.errorMessage()}", player.errorMessage() == null)
+
             player.markStreamCompleted()
-            val completionDeadline = SystemClock.uptimeMillis() + 3_000L
+            val completionDeadline = SystemClock.uptimeMillis() + 5_000L
             while (!player.isPlaybackComplete() && SystemClock.uptimeMillis() < completionDeadline) {
                 SystemClock.sleep(25L)
             }
             assertTrue("The same queued PCM should finish after resuming.", player.isPlaybackComplete())
-            assertTrue("Playback must continue beyond the paused position.", player.elapsedMillis() > pausedPosition + 100L)
-            assertEquals(1_000L, player.durationMillis())
+            assertEquals(4_000L, player.durationMillis())
         } finally {
             player.close()
             device.pressHome()
