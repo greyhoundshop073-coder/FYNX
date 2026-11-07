@@ -11,7 +11,9 @@ object FynxRemoteSocialClient {
     data class RemotePost(val id: String, val authorId: String, val authorUsername: String, val authorDisplayName: String, val text: String, val visibility: String, val mediaId: String?, val mediaType: String?, val mediaUrl: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val likedByCurrentUser: Boolean, val followedByCurrentUser: Boolean, val isDiscovery: Boolean = false, val discoveryScore: Double = 0.0, val textBackground: String? = null, val textBackgroundColor: Long? = null, val textForegroundColor: Long? = null, val location: String? = null, val musicMediaId: String? = null, val musicTitle: String? = null, val musicArtist: String? = null, val musicDurationMs: Long = 0L, val feelingActivityType: String? = null, val feelingActivity: String? = null, val quotedPostId: String? = null, val quotedPost: QuotedPostPreview? = null, val repostedByUsername: String? = null, val repostedByDisplayName: String? = null)
     data class QuotedPostPreview(val id: String, val authorUsername: String, val authorDisplayName: String, val text: String, val mediaId: String?, val mediaType: String?, val mediaUrl: String?)
     data class FeedPage(val posts: List<RemotePost>, val hasMore: Boolean, val nextCursor: String? = null)
-    data class RemoteComment(val id: String, val text: String, val timestamp: Long, val authorId: String, val authorUsername: String, val authorDisplayName: String, val parentCommentId: String? = null)
+    data class RemoteComment(val id: String, val text: String, val timestamp: Long, val authorId: String, val authorUsername: String, val authorDisplayName: String, val parentCommentId: String? = null, val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val linkedPostId: String? = null)
+    data class CommentEngagementState(val replyCount: Int = 0, val repostCount: Int = 0, val viewCount: Int = 0, val bookmarkCount: Int = 0, val reposted: Boolean = false, val bookmarked: Boolean = false)
+    data class LinkedVideoPreview(val postId: String, val text: String, val authorUsername: String, val authorDisplayName: String, val mediaId: String, val mediaType: String, val mediaUrl: String)
     data class CommentPage(val comments: List<RemoteComment>, val nextCursor: String?)
     data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)
     data class RemoteUser(val id: String, val username: String, val displayName: String)
@@ -307,6 +309,102 @@ object FynxRemoteSocialClient {
         val safe = text.trim().takeIf { it.isNotBlank() && it.length <= 1000 } ?: return Result.failure(IllegalArgumentException("Comment must be 1-1000 characters."))
         return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/comments", JSONObject().put("text", safe).toString()).mapCatching { parseRemoteComment(JSONObject(it).getJSONObject("comment")) }
     }
+    suspend fun addCommentExperience(
+        context: Context,
+        postId: String,
+        text: String,
+        parentCommentId: String?,
+        mediaUri: Uri?,
+        mediaKind: String?,
+        linkedPostId: String?
+    ): Result<RemoteComment> {
+        val numericPost = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val safeText = text.trim()
+        if (safeText.length > 1000 || (safeText.isBlank() && mediaUri == null && linkedPostId.isNullOrBlank())) {
+            return Result.failure(IllegalArgumentException("Add text, a photo/video, or a linked FYNX video."))
+        }
+        val media = if (mediaUri != null) {
+            val mime = mediaMimeType(context, mediaUri)
+            val expected = mediaKind?.trim()?.lowercase()
+            if ((expected == "image" && !mime.startsWith("image/")) || (expected == "video" && !mime.startsWith("video/"))) {
+                return Result.failure(IllegalArgumentException("The selected file does not match the attachment type."))
+            }
+            if (expected != "image" && expected != "video") {
+                return Result.failure(IllegalArgumentException("Only photos and videos can be attached to comments."))
+            }
+            val uploaded = FynxProductionMessaging.uploadMedia(context, mediaUri, mime)
+            if (uploaded.isFailure) return Result.failure(uploaded.exceptionOrNull() ?: IllegalStateException("Comment media upload failed."))
+            uploaded.getOrThrow()
+        } else null
+        val linked = linkedPostId?.trim()?.takeIf { it.isNotBlank() }
+        if (linked != null && linked.toLongOrNull() == null) {
+            return Result.failure(IllegalArgumentException("The linked FYNX video reference is invalid."))
+        }
+        val parent = parentCommentId?.toLongOrNull()
+        if (!parentCommentId.isNullOrBlank() && parent == null) {
+            return Result.failure(IllegalArgumentException("invalid parent comment id"))
+        }
+        val body = JSONObject().apply {
+            put("text", safeText)
+            put("parentCommentId", parent ?: JSONObject.NULL)
+            put("mediaId", media?.id ?: JSONObject.NULL)
+            put("mediaType", media?.mimeType?.let { if (it.startsWith("video/")) "video" else "image" } ?: JSONObject.NULL)
+            put("linkedPostId", linked?.toLongOrNull() ?: JSONObject.NULL)
+        }
+        return FynxBackendClient.postJson(context, "/api/social/posts/$numericPost/comments/experience", body.toString())
+            .mapCatching { parseRemoteComment(JSONObject(it).getJSONObject("comment")) }
+    }
+
+    suspend fun linkedVideo(context: Context, postId: String, commentId: String): Result<LinkedVideoPreview> {
+        val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val comment = commentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid comment id"))
+        return FynxBackendClient.get(context, "/api/social/posts/$post/comments/$comment/linked-video").mapCatching { raw ->
+            val item = JSONObject(raw)
+            LinkedVideoPreview(item.optString("postId"), item.optString("text"), item.optString("authorUsername"),
+                item.optString("authorDisplayName"), item.optString("mediaId"), item.optString("mediaType"), item.optString("mediaUrl"))
+        }
+    }
+
+    suspend fun commentEngagement(context: Context, postId: String, commentIds: List<String>): Result<Map<String, CommentEngagementState>> {
+        val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val ids = commentIds.mapNotNull { it.toLongOrNull() }.distinct().take(100)
+        if (ids.isEmpty()) return Result.success(emptyMap())
+        val query = ids.joinToString(",")
+        return FynxBackendClient.get(context, "/api/social/posts/$post/comment-engagement?ids=$query").mapCatching { raw ->
+            val root = JSONObject(raw).optJSONObject("engagement") ?: JSONObject()
+            buildMap {
+                val keys = root.keys()
+                while (keys.hasNext()) {
+                    val id = keys.next()
+                    val item = root.optJSONObject(id) ?: JSONObject()
+                    put(id, CommentEngagementState(item.optInt("replyCount"), item.optInt("repostCount"),
+                        item.optInt("viewCount"), item.optInt("bookmarkCount"), item.optBoolean("reposted"), item.optBoolean("bookmarked")))
+                }
+            }
+        }
+    }
+
+    private suspend fun updateCommentCollection(context: Context, postId: String, commentId: String, action: String, enabled: Boolean): Result<Pair<Boolean, Int>> {
+        val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val comment = commentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid comment id"))
+        val path = "/api/social/posts/$post/comments/$comment/$action"
+        val result = if (enabled) FynxBackendClient.postJson(context, path, "{}") else FynxBackendClient.delete(context, path)
+        return result.mapCatching { raw -> val item = JSONObject(raw); item.optBoolean("enabled", enabled) to item.optInt("count") }
+    }
+
+    suspend fun setCommentRepost(context: Context, postId: String, commentId: String, enabled: Boolean): Result<Pair<Boolean, Int>> =
+        updateCommentCollection(context, postId, commentId, "repost", enabled)
+
+    suspend fun setCommentBookmark(context: Context, postId: String, commentId: String, enabled: Boolean): Result<Pair<Boolean, Int>> =
+        updateCommentCollection(context, postId, commentId, "bookmark", enabled)
+
+    suspend fun recordCommentView(context: Context, postId: String, commentId: String): Result<Int> {
+        val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val comment = commentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid comment id"))
+        return FynxBackendClient.postJson(context, "/api/social/posts/$post/comments/$comment/view", "{}")
+            .mapCatching { JSONObject(it).optInt("viewCount") }
+    }
+
     suspend fun addReply(context: Context, postId: String, parentCommentId: String, text: String): Result<RemoteComment> {
         val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
         val parent = parentCommentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid parent comment id"))
@@ -357,7 +455,7 @@ object FynxRemoteSocialClient {
             CommentReactionState(counts, root.optString("currentReaction").takeIf { it.isNotBlank() && it != "null" })
         }
     }
-    private fun parseRemoteComment(o: JSONObject) = RemoteComment(o.optString("id"), o.optString("text"), o.optDouble("timestamp").toLong(), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("parentCommentId").takeIf { it.isNotBlank() && it != "null" })
+    private fun parseRemoteComment(o: JSONObject) = RemoteComment(o.optString("id"), o.optString("text"), o.optDouble("timestamp").toLong(), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("parentCommentId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaUrl").takeIf { it.isNotBlank() && it != "null" }, o.optString("linkedPostId").takeIf { it.isNotBlank() && it != "null" })
     suspend fun likes(context: Context, id: String): Result<List<RemoteUser>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.get(context, "/api/social/posts/$numericId/likes").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("users") ?: JSONArray(); buildList { for (i in 0 until a.length()) { val o = a.getJSONObject(i); add(RemoteUser(o.optString("id"), o.optString("username"), o.optString("displayName"))) } } } }
     suspend fun follow(context: Context, username: String, following: Boolean): Result<Boolean> { val encoded = URLEncoder.encode(username.trim().removePrefix("@"), "UTF-8"); return if (following) FynxBackendClient.delete(context, "/api/social/follow/$encoded").map { false } else FynxBackendClient.postJson(context, "/api/social/follow/$encoded", "{}").map { true } }
     suspend fun deletePost(context: Context, id: String): Result<Unit> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.delete(context, "/api/social/posts/$numericId").map { Unit } }

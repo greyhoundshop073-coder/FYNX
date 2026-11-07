@@ -18,7 +18,7 @@ class FynxAiPcmAudioPlayerInstrumentationTest {
     fun pauseAndResumeContinueTheSamePcmQueueAndPlaybackHead() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val player = FynxAiPcmAudioPlayer(audioManager)
+        val player = FynxAiPcmAudioPlayer(audioManager, manageAudioFocus = false)
         try {
             val prepared = player.prepare()
             assertTrue("Android PCM playback should initialize: ${prepared.exceptionOrNull()?.message}", prepared.isSuccess)

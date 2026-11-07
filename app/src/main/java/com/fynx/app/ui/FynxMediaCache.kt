@@ -97,7 +97,7 @@ internal object FynxMediaCache {
     }
 
     private fun isSupportedMediaPath(path: String): Boolean =
-        path.startsWith("/api/media/") || path.startsWith("/api/social/media/") || path.startsWith("/api/social/music/media/")
+        path.startsWith("/api/media/") || path.startsWith("/api/social/media/") || path.startsWith("/api/social/comment-media/") || path.startsWith("/api/social/music/media/")
 
     private suspend fun download(context: Context, path: String, destination: File): File? {
         val rawFile = File(destination.parentFile, ".${destination.name}.raw")

@@ -1,10 +1,12 @@
 package com.fynx.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -13,6 +15,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
@@ -25,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.ApplicationInfo
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -82,6 +95,25 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var reactionStates by remember(post.id) { mutableStateOf<Map<String, FynxRemoteSocialClient.CommentReactionState>>(emptyMap()) }
     var reactionPending by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var commentEngagementStates by remember(post.id) { mutableStateOf<Map<String, FynxRemoteSocialClient.CommentEngagementState>>(emptyMap()) }
+    var engagementPending by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var viewedCommentIds by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedMediaUri by remember(post.id) { mutableStateOf<Uri?>(null) }
+    var selectedMediaKind by remember(post.id) { mutableStateOf<String?>(null) }
+    var linkedVideoPostId by remember(post.id) { mutableStateOf<String?>(null) }
+    var linkVideoDialogOpen by remember(post.id) { mutableStateOf(false) }
+    var linkVideoPostIdDraft by remember(post.id) { mutableStateOf("") }
+    var linkVideoError by remember(post.id) { mutableStateOf<String?>(null) }
+    var mediaPreview by remember(post.id) { mutableStateOf<Triple<String, String?, String>?>(null) }
+    var linkedVideoLoadingId by remember(post.id) { mutableStateOf<String?>(null) }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        selectedMediaUri = uri
+        selectedMediaKind = if (uri == null) null else "image"
+    }
+    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        selectedMediaUri = uri
+        selectedMediaKind = if (uri == null) null else "video"
+    }
     var commentSort by rememberSaveable(post.id) { mutableStateOf("Relevant") }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
@@ -118,7 +150,78 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         }
     }
 
+    fun loadCommentEngagement(items: List<FynxRemoteSocialClient.RemoteComment>) {
+        if (isLocalPreview) return
+        val ids = items.map { it.id }.distinct()
+        if (ids.isEmpty()) return
+        scope.launch {
+            FynxRemoteSocialClient.commentEngagement(context, post.id, ids).onSuccess { loaded ->
+                commentEngagementStates = commentEngagementStates + loaded
+            }
+        }
+    }
+    fun recordCommentView(comment: FynxRemoteSocialClient.RemoteComment) {
+        if (isLocalPreview || comment.id in viewedCommentIds) return
+        viewedCommentIds = viewedCommentIds + comment.id
+        scope.launch {
+            FynxRemoteSocialClient.recordCommentView(context, post.id, comment.id)
+                .onSuccess { count ->
+                    val previous = commentEngagementStates[comment.id] ?: FynxRemoteSocialClient.CommentEngagementState()
+                    commentEngagementStates = commentEngagementStates + (comment.id to previous.copy(viewCount = count))
+                }
+                .onFailure { viewedCommentIds = viewedCommentIds - comment.id }
+        }
+    }
+    fun toggleCommentRepost(comment: FynxRemoteSocialClient.RemoteComment) {
+        if (isLocalPreview || comment.id in engagementPending) return
+        val previous = commentEngagementStates[comment.id] ?: FynxRemoteSocialClient.CommentEngagementState()
+        val desired = !previous.reposted
+        commentEngagementStates = commentEngagementStates + (comment.id to previous.copy(reposted = desired, repostCount = (previous.repostCount + if (desired) 1 else -1).coerceAtLeast(0)))
+        engagementPending = engagementPending + comment.id
+        scope.launch {
+            FynxRemoteSocialClient.setCommentRepost(context, post.id, comment.id, desired)
+                .onSuccess { (enabled, count) ->
+                    val current = commentEngagementStates[comment.id] ?: previous
+                    commentEngagementStates = commentEngagementStates + (comment.id to current.copy(reposted = enabled, repostCount = count))
+                }
+                .onFailure { failure ->
+                    commentEngagementStates = commentEngagementStates + (comment.id to previous)
+                    error = failure.message ?: "Comment repost could not be updated."
+                }
+            engagementPending = engagementPending - comment.id
+        }
+    }
+    fun toggleCommentBookmark(comment: FynxRemoteSocialClient.RemoteComment) {
+        if (isLocalPreview || comment.id in engagementPending) return
+        val previous = commentEngagementStates[comment.id] ?: FynxRemoteSocialClient.CommentEngagementState()
+        val desired = !previous.bookmarked
+        commentEngagementStates = commentEngagementStates + (comment.id to previous.copy(bookmarked = desired, bookmarkCount = (previous.bookmarkCount + if (desired) 1 else -1).coerceAtLeast(0)))
+        engagementPending = engagementPending + comment.id
+        scope.launch {
+            FynxRemoteSocialClient.setCommentBookmark(context, post.id, comment.id, desired)
+                .onSuccess { (enabled, count) ->
+                    val current = commentEngagementStates[comment.id] ?: previous
+                    commentEngagementStates = commentEngagementStates + (comment.id to current.copy(bookmarked = enabled, bookmarkCount = count))
+                }
+                .onFailure { failure ->
+                    commentEngagementStates = commentEngagementStates + (comment.id to previous)
+                    error = failure.message ?: "Comment bookmark could not be updated."
+                }
+            engagementPending = engagementPending - comment.id
+        }
+    }
+    fun openLinkedVideo(comment: FynxRemoteSocialClient.RemoteComment) {
+        if (comment.linkedPostId.isNullOrBlank() || linkedVideoLoadingId != null) return
+        linkedVideoLoadingId = comment.id
+        scope.launch {
+            FynxRemoteSocialClient.linkedVideo(context, post.id, comment.id)
+                .onSuccess { video -> mediaPreview = Triple(video.mediaUrl, video.mediaType, "Part 2 video by ${video.authorDisplayName.ifBlank { video.authorUsername }}") }
+                .onFailure { failure -> error = failure.message ?: "The linked FYNX video is unavailable." }
+            linkedVideoLoadingId = null
+        }
+    }
     fun loadReactions(items: List<FynxRemoteSocialClient.RemoteComment>) {
+        loadCommentEngagement(items)
         val ids = items.map { it.id }.distinct()
         if (ids.isEmpty()) return
         scope.launch {
@@ -181,6 +284,13 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                 nestedReply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("THUMBS_UP" to 2), null),
                 thirdLevelReply.id to FynxRemoteSocialClient.CommentReactionState(mapOf("LAUGH" to 1), null)
             )
+            commentEngagementStates = mapOf(
+                first.id to FynxRemoteSocialClient.CommentEngagementState(replyCount = 1, repostCount = 3, viewCount = 56),
+                second.id to FynxRemoteSocialClient.CommentEngagementState(viewCount = 36),
+                reply.id to FynxRemoteSocialClient.CommentEngagementState(replyCount = 1, viewCount = 56),
+                nestedReply.id to FynxRemoteSocialClient.CommentEngagementState(replyCount = 1, viewCount = 36),
+                thirdLevelReply.id to FynxRemoteSocialClient.CommentEngagementState(viewCount = 24)
+            )
             commentCount = maxOf(post.commentCount, previewComments.size)
             onCommentCountChanged(commentCount)
             // Local preview authors intentionally use initials; avoid all profile/backend lookups.
@@ -233,9 +343,10 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         }
     }
     fun send() {
-        val value = text.trim(); if (value.isEmpty() || sending || loading || value.length > MAX_COMMENT_LENGTH) return
+        val value = text.trim(); val hasAttachment = selectedMediaUri != null || !linkedVideoPostId.isNullOrBlank(); if ((value.isEmpty() && !hasAttachment) || sending || loading || value.length > MAX_COMMENT_LENGTH) return
         val parentId = replyingToId
         if (isLocalPreview) {
+            if (hasAttachment) { error = "Media uploads and linked videos are disabled in the offline visual fixture."; return }
             val now = System.currentTimeMillis()
             val parentDepth = if (parentId == null || comments.any { it.id == parentId }) 0
                 else comments.asSequence()
@@ -263,11 +374,13 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         }
         sending = true; error = null; replyErrorId = null
         scope.launch {
-            val result = if (parentId != null) FynxRemoteSocialClient.addReply(context, post.id, parentId, value) else FynxRemoteSocialClient.addComment(context, post.id, value)
+            val result = if (selectedMediaUri != null || !linkedVideoPostId.isNullOrBlank()) {
+                FynxRemoteSocialClient.addCommentExperience(context, post.id, value, parentId, selectedMediaUri, selectedMediaKind, linkedVideoPostId)
+            } else if (parentId != null) FynxRemoteSocialClient.addReply(context, post.id, parentId, value) else FynxRemoteSocialClient.addComment(context, post.id, value)
             result.onSuccess { comment ->
                 comments = (comments + comment).distinctBy { it.id }; resolveCommenterPhotos(listOf(comment)); commentCount += 1; onCommentCountChanged(commentCount)
                 if (comment.parentCommentId != null) { val parent = comment.parentCommentId!!; expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id })) }
-                text = ""; aiCommentSuggestion = null; aiCommentError = null; replyingToId = null
+                text = ""; aiCommentSuggestion = null; aiCommentError = null; replyingToId = null; selectedMediaUri = null; selectedMediaKind = null; linkedVideoPostId = null
                 if (comment.parentCommentId == null) scope.launch { val topLevelCount = comments.count { it.parentCommentId == null }; listState.animateScrollToItem((topLevelCount - 1 + if (nextCursor != null) 1 else 0).coerceAtLeast(0)) }
             }.onFailure { failure -> if (parentId != null) replyErrorId = parentId; error = failure.message ?: if (parentId != null) "Unable to send reply." else "Unable to send comment." }
             sending = false
@@ -289,7 +402,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             replyLoadingId = null
         }
     }
-    LaunchedEffect(post.id) { comments = emptyList(); text = ""; aiCommentSuggestion = null; aiCommentError = null; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); resetPagingState(); loadComments() }
+    LaunchedEffect(post.id) { comments = emptyList(); text = ""; aiCommentSuggestion = null; aiCommentError = null; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); commentEngagementStates = emptyMap(); viewedCommentIds = emptySet(); resetPagingState(); loadComments() }
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         BackHandler(onBack = onClose)
@@ -346,16 +459,41 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                             Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge)
                                             Spacer(Modifier.height(3.dp))
                                             Text(comment.text, style = MaterialTheme.typography.bodyMedium)
-                                            HomeCommentReactionRow(reactionStates[comment.id], reactionPending.contains(comment.id)) { reaction -> reactToComment(comment, reaction) }
+                                            comment.mediaUrl?.let { mediaPath ->
+                                                Card(
+                                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clickable {
+                                                        mediaPreview = Triple(mediaPath, comment.mediaType, if (comment.mediaType == "video") "Video comment" else "Photo comment")
+                                                    },
+                                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f))
+                                                ) {
+                                                    Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Text(if (comment.mediaType == "video") "VIDEO COMMENT" else "PHOTO COMMENT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                                        RemoteSocialMedia(mediaPath, comment.mediaType, playbackActive = false)
+                                                    }
+                                                }
+                                            }
+                                            comment.linkedPostId?.let {
+                                                TextButton(onClick = { openLinkedVideo(comment) }, enabled = linkedVideoLoadingId != comment.id) {
+                                                    Icon(Icons.Default.VideoLibrary, contentDescription = null)
+                                                    Spacer(Modifier.width(6.dp))
+                                                    Text(if (linkedVideoLoadingId == comment.id) "Opening Part 2…" else "Watch linked FYNX video")
+                                                }
+                                            }
+                                            HomeCommentActionBar(
+                                                reaction = reactionStates[comment.id],
+                                                engagement = commentEngagementStates[comment.id],
+                                                pending = reactionPending.contains(comment.id) || engagementPending.contains(comment.id),
+                                                onExpandReplies = { toggleReplies(comment) },
+                                                onRepost = { toggleCommentRepost(comment) },
+                                                onReact = { reaction -> reactToComment(comment, reaction) },
+                                                onBookmark = { toggleCommentBookmark(comment) },
+                                                onShare = { shareComment(comment) }
+                                            )
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 TextButton(onClick = { if (!sending) replyingToId = comment.id }) { Text("Reply") }
-                                                TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending) {
-                                                    val loadedReplyCount = expandedReplies[comment.id]?.size
-                                                    Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "$loadedReplyCount replies" } else "Replies")
-                                                }
-                                                TextButton(onClick = { shareComment(comment) }) { Text("Share") }
                                             }
+                                            if (!isLocalPreview) LaunchedEffect(comment.id) { recordCommentView(comment) }
                                         }
                                     }
                                     flattenHomeReplies(comment.id, expandedReplies).forEach { visible ->
@@ -370,18 +508,43 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                                     Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium)
                                                     Spacer(Modifier.height(2.dp))
                                                     Text(reply.text, style = MaterialTheme.typography.bodyMedium)
-                                                    HomeCommentReactionRow(reactionStates[reply.id], reactionPending.contains(reply.id)) { reaction -> reactToComment(reply, reaction) }
+                                                    reply.mediaUrl?.let { mediaPath ->
+                                                        Card(
+                                                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clickable {
+                                                                mediaPreview = Triple(mediaPath, reply.mediaType, if (reply.mediaType == "video") "Video comment" else "Photo comment")
+                                                            },
+                                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f))
+                                                        ) {
+                                                            Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                Text(if (reply.mediaType == "video") "VIDEO COMMENT" else "PHOTO COMMENT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                                                RemoteSocialMedia(mediaPath, reply.mediaType, playbackActive = false)
+                                                            }
+                                                        }
+                                                    }
+                                                    reply.linkedPostId?.let {
+                                                        TextButton(onClick = { openLinkedVideo(reply) }, enabled = linkedVideoLoadingId != reply.id) {
+                                                            Icon(Icons.Default.VideoLibrary, contentDescription = null)
+                                                            Spacer(Modifier.width(6.dp))
+                                                            Text(if (linkedVideoLoadingId == reply.id) "Opening Part 2…" else "Watch linked FYNX video")
+                                                        }
+                                                    }
+                                                    HomeCommentActionBar(
+                                                        reaction = reactionStates[reply.id],
+                                                        engagement = commentEngagementStates[reply.id],
+                                                        pending = reactionPending.contains(reply.id) || engagementPending.contains(reply.id),
+                                                        onExpandReplies = { toggleReplies(reply) },
+                                                        onRepost = { toggleCommentRepost(reply) },
+                                                        onReact = { reaction -> reactToComment(reply, reaction) },
+                                                        onBookmark = { toggleCommentBookmark(reply) },
+                                                        onShare = { shareComment(reply) }
+                                                    )
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                         if (visible.depth < MAX_COMMENT_REPLY_DEPTH) {
                                                             TextButton(onClick = { if (!sending) replyingToId = reply.id }) { Text("Reply") }
-                                                            TextButton(onClick = { toggleReplies(reply) }, enabled = replyLoadingId == null && !sending) {
-                                                                val loadedReplyCount = expandedReplies[reply.id]?.size
-                                                                Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "${loadedReplyCount} replies" } else "Replies")
-                                                            }
                                                         }
-                                                        TextButton(onClick = { shareComment(reply) }) { Text("Share") }
                                                     }
+                                                    if (!isLocalPreview) LaunchedEffect(reply.id) { recordCommentView(reply) }
                                                 }
                                             }
                                             if (replyLoadingId == reply.id) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 2.dp))
@@ -460,6 +623,31 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                 }
                             }
                         }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { photoPicker.launch("image/*") }, enabled = !sending && !loading && !isLocalPreview) {
+                                Icon(Icons.Default.Image, contentDescription = "Attach photo", tint = MaterialTheme.colorScheme.primary)
+                            }
+                            IconButton(onClick = { videoPicker.launch("video/*") }, enabled = !sending && !loading && !isLocalPreview) {
+                                Icon(Icons.Default.VideoLibrary, contentDescription = "Attach video", tint = MaterialTheme.colorScheme.primary)
+                            }
+                            TextButton(onClick = { linkVideoPostIdDraft = ""; linkVideoError = null; linkVideoDialogOpen = true }, enabled = !sending && !loading && !isLocalPreview) {
+                                Icon(Icons.Default.Link, contentDescription = null)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Link Part 2")
+                            }
+                        }
+                        if (selectedMediaUri != null) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(if (selectedMediaKind == "video") "Video attached" else "Photo attached", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                TextButton(onClick = { selectedMediaUri = null; selectedMediaKind = null }) { Text("Remove") }
+                            }
+                        }
+                        if (!linkedVideoPostId.isNullOrBlank()) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("Part 2 video linked", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                TextButton(onClick = { linkedVideoPostId = null }) { Text("Remove") }
+                            }
+                        }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                             OutlinedTextField(
                                 value = text,
@@ -479,7 +667,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text, imeAction = ImeAction.Send),
                                 keyboardActions = KeyboardActions(onSend = { send() }),
                                 trailingIcon = {
-                                    IconButton(onClick = { send() }, enabled = text.trim().isNotEmpty() && !sending && !loading) {
+                                    IconButton(onClick = { send() }, enabled = (text.trim().isNotEmpty() || selectedMediaUri != null || !linkedVideoPostId.isNullOrBlank()) && !sending && !loading) {
                                         if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, if (replyingTo == null) "Send comment" else "Send reply")
                                     }
                                 }
@@ -491,6 +679,36 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             }
         }
     }
+    if (linkVideoDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { linkVideoDialogOpen = false },
+            title = { Text("Link a Part 2 video") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Paste the FYNX video post link or enter its post ID. FYNX checks that the video is visible to this audience.")
+                    OutlinedTextField(value = linkVideoPostIdDraft, onValueChange = { linkVideoPostIdDraft = it.take(500); linkVideoError = null },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("FYNX video link or post ID") }, isError = linkVideoError != null)
+                    linkVideoError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val digits = Regex("(\\d+)(?:[/?#].*)?$").find(linkVideoPostIdDraft.trim())?.groupValues?.get(1)
+                    if (digits.isNullOrBlank()) linkVideoError = "Enter a valid FYNX video link or numeric post ID."
+                    else { linkedVideoPostId = digits; linkVideoDialogOpen = false }
+                }) { Text("Attach video") }
+            },
+            dismissButton = { TextButton(onClick = { linkVideoDialogOpen = false }) { Text("Cancel") } }
+        )
+    }
+    mediaPreview?.let { (path, type, title) ->
+        AlertDialog(
+            onDismissRequest = { mediaPreview = null },
+            title = { Text(title) },
+            text = { Column { RemoteSocialMedia(path, type, playbackActive = true) } },
+            confirmButton = { TextButton(onClick = { mediaPreview = null }) { Text("Close") } }
+        )
+    }
 }
 
 private fun relative(timestamp: Long): String {
@@ -498,34 +716,62 @@ private fun relative(timestamp: Long): String {
     return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" }
 }
 @Composable
-private fun HomeCommentReactionRow(
-    state: FynxRemoteSocialClient.CommentReactionState?,
+private fun HomeCommentActionBar(
+    reaction: FynxRemoteSocialClient.CommentReactionState?,
+    engagement: FynxRemoteSocialClient.CommentEngagementState?,
     pending: Boolean,
-    onReact: (String) -> Unit
+    onExpandReplies: () -> Unit,
+    onRepost: () -> Unit,
+    onReact: (String) -> Unit,
+    onBookmark: () -> Unit,
+    onShare: () -> Unit
 ) {
-    val options = listOf(
-        Triple("LOVE", "❤️", Color(0xFFE53935)),
-        Triple("LAUGH", "😂", Color(0xFFFFA000)),
-        Triple("THUMBS_UP", "👍", Color(0xFF1976D2)),
-        Triple("WOW", "😮", Color(0xFF1976D2)),
-        Triple("SAD", "😢", Color(0xFF1976D2)),
-        Triple("FIRE", "🔥", Color(0xFFFF7043)),
-        Triple("LIKE", "👏", Color(0xFF1976D2))
+    var pickerOpen by remember { mutableStateOf(false) }
+    val totalReactions = reaction?.counts?.values?.sum() ?: 0
+    val activeEmoji = when (reaction?.currentReaction) {
+        "LOVE" -> "❤️"; "LAUGH" -> "😂"; "THUMBS_UP", "LIKE" -> "👍"; "WOW" -> "😮"; "SAD" -> "😢"; "FIRE" -> "🔥"; else -> null
+    }
+    val choices = listOf(
+        Triple("LOVE", "❤️", "Love"), Triple("LAUGH", "😂", "Funny"), Triple("THUMBS_UP", "👍", "Like"),
+        Triple("WOW", "😮", "Wow"), Triple("SAD", "😢", "Sad"), Triple("FIRE", "🔥", "Fire")
     )
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(0.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        options.forEach { (type, emoji, tint) ->
-            val count = state?.counts?.get(type) ?: 0
-            val selected = state?.currentReaction == type
-            TextButton(onClick = { onReact(type) }, enabled = !pending,
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
-                Text(if (count > 0) "$emoji $count" else emoji,
-                    color = if (selected) tint else MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onExpandReplies, enabled = !pending, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) {
+            Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Open replies", modifier = Modifier.size(18.dp))
+            if ((engagement?.replyCount ?: 0) > 0) Text(" ${engagement?.replyCount}", style = MaterialTheme.typography.labelSmall)
+        }
+        TextButton(onClick = onRepost, enabled = !pending, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) {
+            Icon(Icons.Default.Repeat, contentDescription = "Repost comment", modifier = Modifier.size(18.dp), tint = if (engagement?.reposted == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            if ((engagement?.repostCount ?: 0) > 0) Text(" ${engagement?.repostCount}", style = MaterialTheme.typography.labelSmall)
+        }
+        Box {
+            Row(
+                modifier = Modifier.combinedClickable(enabled = !pending, onClick = { onReact("LOVE") }, onLongClick = { pickerOpen = true })
+                    .padding(horizontal = 5.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (activeEmoji == null) Icon(Icons.Default.FavoriteBorder, contentDescription = "Like comment; hold for reactions", modifier = Modifier.size(19.dp))
+                else Text(activeEmoji, style = MaterialTheme.typography.titleSmall)
+                if (totalReactions > 0) Text(" $totalReactions", style = MaterialTheme.typography.labelSmall)
             }
+            DropdownMenu(expanded = pickerOpen, onDismissRequest = { pickerOpen = false }) {
+                choices.forEach { (type, emoji, label) ->
+                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Text(emoji) },
+                        onClick = { pickerOpen = false; onReact(type) }, enabled = !pending)
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp, vertical = 8.dp)) {
+            Icon(Icons.Default.BarChart, contentDescription = "Comment views", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if ((engagement?.viewCount ?: 0) > 0) Text(" ${engagement?.viewCount}", style = MaterialTheme.typography.labelSmall)
+        }
+        TextButton(onClick = onBookmark, enabled = !pending, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) {
+            Icon(if (engagement?.bookmarked == true) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                contentDescription = "Bookmark comment", modifier = Modifier.size(18.dp),
+                tint = if (engagement?.bookmarked == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = onShare, enabled = !pending, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) {
+            Icon(Icons.Default.Share, contentDescription = "Share comment", modifier = Modifier.size(18.dp))
         }
     }
 }
