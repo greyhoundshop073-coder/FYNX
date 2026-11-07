@@ -858,6 +858,7 @@ fun FynxAiAssistantPanel(
     FynxAiAssistantBackdrop(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .imePadding()
             .navigationBarsPadding()
     ) {
@@ -1457,7 +1458,7 @@ internal fun FynxAiFullScreenVoice(
         phase == "SPEAKING" -> "FYNX AI is speaking…"
         else -> "Listening…"
     }
-    Box(Modifier.fillMaxSize().background(Color.Black).imePadding().navigationBarsPadding()) {
+    Box(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().imePadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 18.dp),

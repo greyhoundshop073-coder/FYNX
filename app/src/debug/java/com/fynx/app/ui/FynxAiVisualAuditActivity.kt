@@ -90,6 +90,7 @@ private fun FynxAiResponseActionAudit(active: Boolean) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0E1118))
+            .statusBarsPadding()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 20.dp),
         contentAlignment = Alignment.Center
@@ -129,7 +130,7 @@ private fun FynxAiResponseActionAudit(active: Boolean) {
 private fun FynxAiChatScreenAudit() {
     var draft by remember { mutableStateOf("") }
     Column(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding().imePadding()
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding().imePadding()
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
