@@ -376,8 +376,8 @@ fun FynxAiAssistantPanel(
             return
         }
         readAloudPaused = true
-            readAloudEngine.sendEvent(JSONObject().put("type", "response.cancel").toString())
-            readAloudEngine.sendEvent(JSONObject().put("type", "output_audio_buffer.clear").toString())
+        readAloudEngine.sendEvent(JSONObject().put("type", "response.cancel").toString())
+        readAloudEngine.sendEvent(JSONObject().put("type", "output_audio_buffer.clear").toString())
     }
 
     fun resumeReadAloud() {
