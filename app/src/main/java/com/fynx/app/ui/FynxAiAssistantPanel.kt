@@ -6,7 +6,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.speech.tts.TextToSpeech
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloat
@@ -37,6 +36,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.ThumbDown
@@ -77,7 +78,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.UUID
-import java.util.Locale
 
 private fun friendlyFynxAiError(error: Throwable, fallback: String): String {
     val detail = error.message.orEmpty()
@@ -150,8 +150,13 @@ fun FynxAiAssistantPanel(
     var generationJob by remember { mutableStateOf<Job?>(null) }
     var voiceConnectionJob by remember { mutableStateOf<Job?>(null) }
     var followingLatest by remember { mutableStateOf(true) }
-    var ttsReady by remember { mutableStateOf(false) }
-    var speakingMessageId by remember { mutableStateOf<String?>(null) }
+    var readAloudMessageId by remember { mutableStateOf<String?>(null) }
+    var readAloudConnecting by remember { mutableStateOf(false) }
+    var readAloudPaused by remember { mutableStateOf(false) }
+    var readAloudSourceText by remember { mutableStateOf("") }
+    var readAloudRemainingText by remember { mutableStateOf("") }
+    var readAloudTranscript by remember { mutableStateOf("") }
+    var readAloudConnectionJob by remember { mutableStateOf<Job?>(null) }
     val messageFeedback = remember { mutableStateMapOf<String, Int>() }
 
     val scope = rememberCoroutineScope()
@@ -172,15 +177,7 @@ fun FynxAiAssistantPanel(
     }
     val listState = rememberLazyListState()
     val voiceEngine = remember { FynxAiWebRtcEngine(context) }
-    val textToSpeech = remember(context) {
-        TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
-    }
-    DisposableEffect(textToSpeech) {
-        onDispose {
-            textToSpeech.stop()
-            textToSpeech.shutdown()
-        }
-    }
+    val readAloudEngine = remember { FynxAiWebRtcEngine(context) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -273,22 +270,133 @@ fun FynxAiAssistantPanel(
         clipboard.setPrimaryClip(ClipData.newPlainText("FYNX Assistant", text))
     }
 
-    fun speakText(messageId: String, text: String) {
-        if (speakingMessageId == messageId) {
-            textToSpeech.stop()
-            speakingMessageId = null
+    fun stopReadAloud() {
+        readAloudConnectionJob?.cancel()
+        readAloudConnectionJob = null
+        if (readAloudMessageId != null) {
+            readAloudEngine.sendEvent("{\\"type\\":\\"response.cancel\\"}")
+            readAloudEngine.sendEvent("{\\"type\\":\\"output_audio_buffer.clear\\"}")
+        }
+        readAloudEngine.close()
+        readAloudMessageId = null
+        readAloudConnecting = false
+        readAloudPaused = false
+        readAloudSourceText = ""
+        readAloudRemainingText = ""
+        readAloudTranscript = ""
+    }
+
+    fun finishReadAloud(messageId: String) {
+        if (readAloudMessageId != messageId) return
+        readAloudConnectionJob = null
+        readAloudEngine.close()
+        readAloudMessageId = null
+        readAloudConnecting = false
+        readAloudPaused = false
+        readAloudSourceText = ""
+        readAloudRemainingText = ""
+        readAloudTranscript = ""
+    }
+
+    fun requestReadAloud(messageId: String, text: String) {
+        if (text.isBlank()) return
+        stopReadAloud()
+        readAloudMessageId = messageId
+        readAloudSourceText = text
+        readAloudRemainingText = text
+        readAloudTranscript = ""
+        readAloudPaused = false
+        readAloudConnecting = true
+        readAloudConnectionJob = scope.launch {
+            val connection = readAloudEngine.connect(
+                receiveOnly = true,
+                createInitialResponse = false,
+                onStateChanged = { state, error ->
+                    if (state == FynxAiWebRtcEngine.State.FAILED) {
+                        scope.launch {
+                            errorMessage = friendlyFynxAiError(
+                                IllegalStateException(error.orEmpty()),
+                                "FYNX could not start natural voice playback. Please try again."
+                            )
+                            finishReadAloud(messageId)
+                        }
+                    }
+                },
+                onEvent = { rawEvent ->
+                    scope.launch {
+                        if (readAloudMessageId != messageId) return@launch
+                        val event = runCatching { JSONObject(rawEvent) }.getOrNull() ?: return@launch
+                        when (event.optString("type")) {
+                            "response.created", "output_audio_buffer.started" -> {
+                                readAloudConnecting = false
+                            }
+                            "response.audio_transcript.delta", "response.output_audio_transcript.delta" -> {
+                                readAloudTranscript += event.optString("delta")
+                                readAloudConnecting = false
+                            }
+                            "output_audio_buffer.stopped" -> {
+                                if (!readAloudPaused) finishReadAloud(messageId)
+                            }
+                            "error" -> {
+                                val detail = event.optJSONObject("error")?.optString("message").orEmpty()
+                                errorMessage = friendlyFynxAiError(
+                                    IllegalStateException(detail),
+                                    "FYNX could not read this response aloud. Please try again."
+                                )
+                                finishReadAloud(messageId)
+                            }
+                        }
+                    }
+                }
+            )
+            if (connection.isFailure) {
+                errorMessage = friendlyFynxAiError(
+                    connection.exceptionOrNull() ?: IllegalStateException("Voice connection failed"),
+                    "FYNX could not start natural voice playback. Please try again."
+                )
+                finishReadAloud(messageId)
+                return@launch
+            }
+            val sent = readAloudEngine.sendEvent(FynxAiReadAloud.buildResponseEvent(text))
+            if (!sent) {
+                errorMessage = "FYNX voice playback could not start. Please try again."
+                finishReadAloud(messageId)
+                return@launch
+            }
+            readAloudConnectionJob = null
+        }
+    }
+
+    fun pauseReadAloud() {
+        val messageId = readAloudMessageId ?: return
+        if (readAloudPaused || readAloudConnecting) return
+        readAloudRemainingText = FynxAiReadAloud.remainingText(readAloudSourceText, readAloudTranscript)
+        if (readAloudRemainingText.isBlank()) {
+            finishReadAloud(messageId)
             return
         }
-        if (!ttsReady) {
-            statusMessage = "Speech is preparing. Please try again in a moment."
-            return
+        readAloudPaused = true
+        readAloudEngine.sendEvent("{\\"type\\":\\"response.cancel\\"}")
+        readAloudEngine.sendEvent("{\\"type\\":\\"output_audio_buffer.clear\\"}")
+    }
+
+    fun resumeReadAloud() {
+        if (!readAloudPaused || readAloudRemainingText.isBlank()) return
+        readAloudPaused = false
+        readAloudConnecting = true
+        val sent = readAloudEngine.sendEvent(FynxAiReadAloud.buildResponseEvent(readAloudRemainingText))
+        if (!sent) {
+            errorMessage = "FYNX could not resume voice playback. Tap Read aloud to start again."
+            finishReadAloud(readAloudMessageId ?: return)
         }
-        textToSpeech.language = Locale.getDefault()
-        speakingMessageId = messageId
-        val result = textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, messageId)
-        if (result == TextToSpeech.ERROR) {
-            speakingMessageId = null
-            errorMessage = "FYNX could not read this response aloud."
+    }
+
+    fun toggleReadAloud(messageId: String, text: String) {
+        when {
+            readAloudMessageId != messageId -> requestReadAloud(messageId, text)
+            readAloudPaused -> resumeReadAloud()
+            readAloudConnecting -> stopReadAloud()
+            else -> pauseReadAloud()
         }
     }
 
@@ -509,6 +617,7 @@ fun FynxAiAssistantPanel(
     DisposableEffect(Unit) {
         onDispose {
             generationJob?.cancel()
+            stopReadAloud()
             voiceEngine.close()
         }
     }
@@ -789,9 +898,12 @@ fun FynxAiAssistantPanel(
                             AiChatBubble(
                                 message = message,
                                 feedback = messageFeedback[message.id] ?: 0,
-                                speaking = speakingMessageId == message.id,
+                                speaking = readAloudMessageId == message.id && !readAloudPaused,
+                                paused = readAloudMessageId == message.id && readAloudPaused,
+                                connecting = readAloudMessageId == message.id && readAloudConnecting,
                                 onCopy = { copyText(message.text) },
-                                onSpeak = { speakText(message.id, message.text) },
+                                onSpeak = { toggleReadAloud(message.id, message.text) },
+                                onStopSpeaking = { if (readAloudMessageId == message.id) stopReadAloud() },
                                 onFeedback = { messageFeedback[message.id] = it },
                                 onShare = { shareText(message.text) }
                             )
@@ -1483,8 +1595,11 @@ private fun AiChatBubble(
     message: FynxAiUiMessage,
     feedback: Int,
     speaking: Boolean,
+    paused: Boolean,
+    connecting: Boolean,
     onCopy: () -> Unit,
     onSpeak: () -> Unit,
+    onStopSpeaking: () -> Unit,
     onFeedback: (Int) -> Unit,
     onShare: () -> Unit
 ) {
@@ -1570,18 +1685,34 @@ private fun AiChatBubble(
                                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy response", modifier = Modifier.size(18.dp))
                             }
                             IconButton(onClick = onSpeak, modifier = Modifier.size(36.dp)) {
-                                Icon(if (speaking) Icons.Default.Stop else Icons.Default.VolumeUp,
-                                    contentDescription = if (speaking) "Stop reading response" else "Read response aloud",
-                                    tint = if (speaking) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(19.dp))
+                                Icon(
+                                    when {
+                                        paused -> Icons.Default.PlayArrow
+                                        speaking && !connecting -> Icons.Default.Pause
+                                        else -> Icons.Default.VolumeUp
+                                    },
+                                    contentDescription = when {
+                                        paused -> "Resume reading response"
+                                        connecting -> "Cancel voice playback connection"
+                                        speaking -> "Pause reading response"
+                                        else -> "Read response aloud"
+                                    },
+                                    tint = if (speaking || paused || connecting) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                            if (speaking || paused || connecting) {
+                                IconButton(onClick = onStopSpeaking, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.Stop, contentDescription = "Stop reading response", tint = Color(0xFF007FFF), modifier = Modifier.size(18.dp))
+                                }
                             }
                             IconButton(onClick = { onFeedback(if (feedback == 1) 0 else 1) }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.ThumbUp, contentDescription = "Good response",
+                                Icon(Icons.Default.ThumbUp, contentDescription = if (feedback == 1) "Remove positive response rating" else "Rate response positively",
                                     tint = if (feedback == 1) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp))
                             }
                             IconButton(onClick = { onFeedback(if (feedback == -1) 0 else -1) }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.ThumbDown, contentDescription = "Poor response",
+                                Icon(Icons.Default.ThumbDown, contentDescription = if (feedback == -1) "Remove negative response rating" else "Rate response negatively",
                                     tint = if (feedback == -1) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp))
                             }
@@ -1589,6 +1720,17 @@ private fun AiChatBubble(
                         IconButton(onClick = onShare, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.Share, contentDescription = "Share response", modifier = Modifier.size(18.dp))
                         }
+                    }
+                    if (speaking || paused || connecting) {
+                        Text(
+                            when {
+                                paused -> "Paused · resume to continue reading"
+                                connecting -> "Connecting to FYNX natural voice…"
+                                else -> "FYNX is reading this response aloud"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

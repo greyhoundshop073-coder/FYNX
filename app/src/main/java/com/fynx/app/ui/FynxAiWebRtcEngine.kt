@@ -17,7 +17,9 @@ import org.webrtc.DataChannel
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.MediaStreamTrack
 import org.webrtc.RtpReceiver
+import org.webrtc.RtpTransceiver
 import org.webrtc.SessionDescription
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicInteger
@@ -48,7 +50,13 @@ class FynxAiWebRtcEngine(
     private var onEvent: ((String) -> Unit)? = null
     private var onToolResult: ((String, String) -> Unit)? = null
     init { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()); factory = PeerConnectionFactory.builder().createPeerConnectionFactory() }
-    suspend fun connect(onStateChanged: (State, String?) -> Unit = { _, _ -> }, onEvent: (String) -> Unit = {}, onToolResult: (String, String) -> Unit = { _, _ -> }): Result<Unit> {
+    suspend fun connect(
+        onStateChanged: (State, String?) -> Unit = { _, _ -> },
+        onEvent: (String) -> Unit = {},
+        onToolResult: (String, String) -> Unit = { _, _ -> },
+        receiveOnly: Boolean = false,
+        createInitialResponse: Boolean = true
+    ): Result<Unit> {
         return try {
             require(state != State.CONNECTING && state != State.CONNECTED) { "FYNX AI voice is already connected" }
             if (toolJob.isCancelled) {
@@ -65,10 +73,19 @@ class FynxAiWebRtcEngine(
             val connection = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), observer())
                 ?: error("Unable to create FYNX AI peer connection")
             peerConnection = connection
-            audioSource = factory.createAudioSource(MediaConstraints())
-            audioTrack = factory.createAudioTrack("fynx-ai-microphone", audioSource)
-            audioTrack?.setEnabled(true)
-            audioTrack?.let { connection.addTrack(it) }
+            if (receiveOnly) {
+                // A read-aloud session receives the approved FYNX voice but never opens
+                // the device microphone or requests microphone permission.
+                connection.addTransceiver(
+                    MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
+                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
+                )
+            } else {
+                audioSource = factory.createAudioSource(MediaConstraints())
+                audioTrack = factory.createAudioTrack("fynx-ai-microphone", audioSource)
+                audioTrack?.setEnabled(true)
+                audioTrack?.let { connection.addTrack(it) }
+            }
 
             dataChannelReady = CompletableDeferred()
             eventsChannel = connection.createDataChannel("oai-events", DataChannel.Init()).also {
@@ -91,7 +108,7 @@ class FynxAiWebRtcEngine(
 
             // Do not present the session as connected until the event channel is usable.
             dataChannelReady?.awaitWithTimeout()
-            if (!sendEvent("{\"type\":\"response.create\"}")) {
+            if (createInitialResponse && !sendEvent("{\"type\":\"response.create\"}")) {
                 error("FYNX AI voice event channel is unavailable")
             }
             setState(State.CONNECTED, null)
