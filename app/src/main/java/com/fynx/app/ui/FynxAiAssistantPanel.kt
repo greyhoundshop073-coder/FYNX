@@ -899,6 +899,7 @@ fun FynxAiAssistantPanel(
                                 message = message,
                                 feedback = messageFeedback[message.id] ?: 0,
                                 speaking = readAloudMessageId == message.id && !readAloudPaused,
+                                readAloudProgress = if (readAloudMessageId == message.id) readAloudTranscript.takeLast(140) else "",
                                 paused = readAloudMessageId == message.id && readAloudPaused,
                                 connecting = readAloudMessageId == message.id && readAloudConnecting,
                                 onCopy = { copyText(message.text) },
@@ -1204,7 +1205,10 @@ fun FynxAiAssistantPanel(
             error = errorMessage,
             input = input,
             onInputChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) },
-            onSend = { if (input.isNotBlank()) sendPrompt(input, true) },
+            hasPendingAttachment = pendingMediaId != null,
+            attachmentUploading = pendingMediaUploading,
+            onAttachImage = { imagePicker.launch("image/*") },
+            onSend = { if (input.isNotBlank() || pendingMediaId != null) sendPrompt(input, true) },
             onToggleMute = {
                 if (voiceConnected) {
                     voiceMuted = !voiceMuted
@@ -1316,7 +1320,10 @@ private fun FynxAiFullScreenVoice(
     phase: String,
     error: String?,
     input: String,
+    hasPendingAttachment: Boolean,
+    attachmentUploading: Boolean,
     onInputChange: (String) -> Unit,
+    onAttachImage: () -> Unit,
     onSend: () -> Unit,
     onToggleMute: () -> Unit,
     onClose: () -> Unit,
@@ -1412,8 +1419,27 @@ private fun FynxAiFullScreenVoice(
                     border = BorderStroke(1.dp, Color(0xFF454545))
                 ) {
                     Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Add, contentDescription = "Add attachment", tint = Color.White, modifier = Modifier.size(27.dp))
-                        Spacer(Modifier.width(10.dp))
+                        IconButton(
+                            onClick = onAttachImage,
+                            enabled = !attachmentUploading,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            if (attachmentUploading) {
+                                CircularProgressIndicator(
+                                    Modifier.size(20.dp),
+                                    color = Color(0xFF78A6FF),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    if (hasPendingAttachment) Icons.Default.Image else Icons.Default.Add,
+                                    contentDescription = if (hasPendingAttachment) "Image attached" else "Add image attachment",
+                                    tint = if (hasPendingAttachment) Color(0xFF78A6FF) else Color.White,
+                                    modifier = Modifier.size(27.dp)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(6.dp))
                         TextField(
                             value = input,
                             onValueChange = onInputChange,
@@ -1430,8 +1456,17 @@ private fun FynxAiFullScreenVoice(
                                 cursorColor = Color(0xFF007FFF)
                             )
                         )
-                        if (input.isNotBlank()) {
-                            IconButton(onClick = onSend) { Icon(Icons.Default.Send, contentDescription = "Send message", tint = Color.White) }
+                        if (input.isNotBlank() || hasPendingAttachment) {
+                            IconButton(
+                                onClick = onSend,
+                                enabled = !attachmentUploading
+                            ) {
+                                Icon(
+                                    Icons.Default.Send,
+                                    contentDescription = "Send message",
+                                    tint = if (attachmentUploading) Color(0xFF9CA3AF) else Color.White
+                                )
+                            }
                         }
                     }
                 }
@@ -1595,6 +1630,7 @@ private fun AiChatBubble(
     message: FynxAiUiMessage,
     feedback: Int,
     speaking: Boolean,
+    readAloudProgress: String,
     paused: Boolean,
     connecting: Boolean,
     onCopy: () -> Unit,
@@ -1726,7 +1762,9 @@ private fun AiChatBubble(
                             when {
                                 paused -> "Paused · resume to continue reading"
                                 connecting -> "Connecting to FYNX natural voice…"
-                                else -> "FYNX is reading this response aloud"
+                                else -> readAloudProgress.trim().takeIf { it.isNotBlank() }
+                                    ?.let { "Reading: " + it.takeLast(110) }
+                                    ?: "FYNX is reading this response aloud"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

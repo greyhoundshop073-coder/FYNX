@@ -50,7 +50,11 @@ internal object FynxAiReadAloud {
                     matchedEnd = maxOf(matchedEnd, sourceWords[start + window - 1].range.last + 1)
                 }
             }
-            if (matchedEnd >= 0) return source.substring(matchedEnd).trimStart()
+            if (matchedEnd >= 0) {
+                return source.substring(matchedEnd).trimStart { character ->
+                    character.isWhitespace() || character in ".,;:!?…—–-"
+                }
+            }
         }
         var commonPrefix = 0
         val limit = minOf(sourceWords.size, spokenWords.size)
@@ -58,6 +62,8 @@ internal object FynxAiReadAloud {
             sourceWords[commonPrefix].value.equals(spokenWords[commonPrefix], ignoreCase = true)
         ) commonPrefix++
         return if (commonPrefix == 0) source else
-            source.substring(sourceWords[commonPrefix - 1].range.last + 1).trimStart()
+            source.substring(sourceWords[commonPrefix - 1].range.last + 1).trimStart { character ->
+                character.isWhitespace() || character in ".,;:!?…—–-"
+            }
     }
 }

@@ -48,6 +48,14 @@ class FynxAiReadAloudTest {
     }
 
     @Test
+    fun ignoresPunctuationImmediatelyAfterTheLastSpokenWord() {
+        assertEquals(
+            "The remaining words.",
+            FynxAiReadAloud.remainingText("Hello, Ada. The remaining words.", "Hello, Ada.")
+        )
+    }
+
+    @Test
     fun returnsEmptyWhenTheTranscriptReachedTheEnd() {
         assertEquals("", FynxAiReadAloud.remainingText(
             "Thank you, Ada.", "Thank you, Ada."
