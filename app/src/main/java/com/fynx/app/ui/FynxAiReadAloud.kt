@@ -71,7 +71,21 @@ internal object FynxAiReadAloud {
             val rms = if (count == 0) 0.0 else sqrt(sumSquares / count)
             appended += (rms * 3.5).coerceIn(0.10, 1.0).toFloat()
         }
-        return (current + appended).takeLast(maxBars)
+        val combined = current + appended
+        if (combined.size <= maxBars) return combined
+        val compacted = ArrayList<Float>(maxBars)
+        for (bucket in 0 until maxBars) {
+            val start = (bucket.toLong() * combined.size / maxBars).toInt()
+            val end = (((bucket + 1L) * combined.size / maxBars).toInt()).coerceAtLeast(start + 1)
+            var sum = 0f
+            var count = 0
+            for (index in start until minOf(end, combined.size)) {
+                sum += combined[index]
+                count++
+            }
+            compacted += if (count == 0) 0.10f else (sum / count).coerceIn(0.10f, 1f)
+        }
+        return compacted
     }
 
     /** Duration represented by a PCM 24 kHz, signed 16-bit mono audio delta. */

@@ -65,6 +65,17 @@ class FynxAiReadAloudTest {
     }
 
     @Test
+    fun waveformCompactionPreservesEarlierAndLaterAudioSegments() {
+        val bytes = ByteBuffer.allocate(480 * 2).order(ByteOrder.LITTLE_ENDIAN)
+        repeat(480) { bytes.putShort(if (it < 240) 2_000.toShort() else 28_000.toShort()) }
+        val encoded = Base64.getEncoder().encodeToString(bytes.array())
+        val first = FynxAiReadAloud.appendPcmWaveform(emptyList(), encoded, maxBars = 2)
+        val combined = FynxAiReadAloud.appendPcmWaveform(first, encoded, maxBars = 2)
+        assertEquals(2, combined.size)
+        assertTrue(combined.any { it > first.maxOrNull()!! })
+    }
+
+    @Test
     fun formatsPlaybackTimeAsMinutesAndSeconds() {
         assertEquals("00:00", FynxAiReadAloud.formatPlaybackTime(0L))
         assertEquals("01:03", FynxAiReadAloud.formatPlaybackTime(63_999L))
