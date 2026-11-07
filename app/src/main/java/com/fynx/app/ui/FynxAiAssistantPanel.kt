@@ -126,6 +126,7 @@ fun FynxAiAssistantPanel(
     var voiceConnected by remember { mutableStateOf(false) }
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
+    var voicePhase by remember { mutableStateOf("LISTENING") }
     var showVoiceScreen by remember { mutableStateOf(false) }
     var showComposerTools by remember { mutableStateOf(false) }
     var showTranslationDialog by remember { mutableStateOf(false) }
@@ -274,6 +275,7 @@ fun FynxAiAssistantPanel(
         voiceConnected = false
         voiceConnecting = false
         voiceMuted = false
+        voicePhase = "LISTENING"
     }
 
     fun stopGeneration() {
@@ -412,10 +414,13 @@ fun FynxAiAssistantPanel(
                     onStateChanged = { state, error ->
                         voiceConnecting = state == FynxAiWebRtcEngine.State.CONNECTING
                         voiceConnected = state == FynxAiWebRtcEngine.State.CONNECTED
-                        if (state == FynxAiWebRtcEngine.State.CONNECTED) voiceMuted = false
+                        if (state == FynxAiWebRtcEngine.State.CONNECTED) { voiceMuted = false; voicePhase = "LISTENING" }
+                        if (state == FynxAiWebRtcEngine.State.CONNECTING) voicePhase = "CONNECTING"
+                        if (state == FynxAiWebRtcEngine.State.FAILED) voicePhase = "ERROR"
                         if (error != null) errorMessage = error
                     },
                     onEvent = { rawEvent ->
+                        voicePhase = realtimeVoicePhase(rawEvent, voicePhase)
                         parseRealtimeAssistantEvent(rawEvent)?.let { spoken ->
                             appendAssistantMessage(spoken)
                             val transcript = extractRealtimeUserTranscript(rawEvent)
@@ -1042,6 +1047,7 @@ fun FynxAiAssistantPanel(
             connecting = voiceConnecting,
             connected = voiceConnected,
             muted = voiceMuted,
+            phase = voicePhase,
             error = errorMessage,
             input = input,
             onInputChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) },
@@ -1049,6 +1055,7 @@ fun FynxAiAssistantPanel(
             onToggleMute = {
                 if (voiceConnected) {
                     voiceMuted = !voiceMuted
+                    voicePhase = if (voiceMuted) "MUTED" else "LISTENING"
                     voiceEngine.setMicrophoneEnabled(!voiceMuted)
                 }
             },
@@ -1153,6 +1160,7 @@ private fun FynxAiFullScreenVoice(
     connecting: Boolean,
     connected: Boolean,
     muted: Boolean,
+    phase: String,
     error: String?,
     input: String,
     onInputChange: (String) -> Unit,
@@ -1177,6 +1185,8 @@ private fun FynxAiFullScreenVoice(
         error != null -> "Connection issue"
         !connected -> "Ready to talk"
         muted -> "Microphone muted"
+        phase == "THINKING" -> "Thinking…"
+        phase == "SPEAKING" -> "FYNX AI is speaking…"
         else -> "Listening…"
     }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -1229,6 +1239,10 @@ private fun FynxAiFullScreenVoice(
                 if (error != null) {
                     Text(error, color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                } else if (connected && phase == "SPEAKING") {
+                    Text("You can interrupt me anytime.", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
+                } else if (connected && phase == "THINKING") {
+                    Text("Preparing a response…", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
                 } else if (connected && !muted) {
                     Text("Speak naturally. I'm listening.", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
                 }
@@ -1584,6 +1598,18 @@ private fun AnnotatedString.Builder.appendFynxInlineMarkdown(value: String, text
     }
     append(value.substring(cursor))
 }
+
+private fun realtimeVoicePhase(rawEvent: String, current: String): String = runCatching {
+    when (JSONObject(rawEvent).optString("type")) {
+        "input_audio_buffer.speech_started" -> "LISTENING"
+        "input_audio_buffer.speech_stopped" -> "THINKING"
+        "conversation.item.input_audio_transcription.completed" -> "THINKING"
+        "response.created" -> "THINKING"
+        "response.output_audio.delta", "response.audio.delta", "response.audio_transcript.delta", "response.output_audio_transcript.delta" -> "SPEAKING"
+        "response.audio.done", "response.output_audio.done", "response.done" -> "LISTENING"
+        else -> current
+    }
+}.getOrDefault(current)
 
 private fun extractRealtimeUserTranscript(rawEvent: String): String? = runCatching {
     val event = JSONObject(rawEvent)
