@@ -1936,6 +1936,79 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
     return x, int(height * 0.50), int(height * 0.70)
 
 
+def scroll_home_action_row_into_safe_viewport(xml_text: str, name: str, action_finder, *, max_swipes: int = 3) -> str:
+    """Scroll a Home post's action row above the floating bottom-nav hit area before tapping.
+
+    The floating Home toolbar can cover a post action row while UIAutomator still
+    reports the covered controls as visible. Use the existing non-clickable caption
+    gesture (never the media surface or an action button) and verify the target's
+    actual clickable bounds after each swipe.
+    """
+    size = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", size)
+    if not match:
+        FAILURES.append(f"{name}: could not read emulator dimensions before tapping the Home action row.")
+        return ""
+
+    width, height = map(int, match.groups())
+    # UIAutomator may omit the floating Compose navigation overlay entirely.
+    # Reserve its lower screen region rather than trusting a covered node's
+    # visible-to-user flag as proof that its center is actually tappable.
+    safe_bottom = int(height * 0.78)
+    current = xml_text
+    scrolled = False
+
+    for attempt in range(max_swipes + 1):
+        control = action_finder(current) if current else None
+        if control and 96 < control[2] < safe_bottom:
+            if scrolled:
+                report.append(f"- PASS: moved the {name} action row into the unobstructed Home touch area before tapping.")
+                (ROOT / f"authenticated-home-{name}-action-safe.xml").write_text(current + chr(10), encoding="utf-8")
+                screenshot(f"authenticated-home-{name}-action-safe.png")
+            return current
+
+        if attempt >= max_swipes:
+            break
+        if not current or not is_home_feed_runtime_surface(current):
+            break
+
+        x, start_y, end_y = _home_content_scroll_point(current, width, height, "up")
+        if start_y - end_y < 240:
+            break
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        scrolled = True
+        deadline = time.monotonic() + 5.0
+        candidate = ""
+        while time.monotonic() < deadline:
+            time.sleep(0.35)
+            candidate = dump_ui(f"authenticated-home-{name}-action-safe-probe-{attempt}.xml")
+            if candidate and is_home_feed_runtime_surface(candidate):
+                # Keep checking while the requested action remains behind the
+                # floating toolbar; stop as soon as the actual hit target is safe.
+                candidate_control = action_finder(candidate)
+                if candidate_control and 96 < candidate_control[2] < safe_bottom:
+                    current = candidate
+                    break
+                current = candidate
+            else:
+                candidate = ""
+        if not candidate:
+            break
+
+    control = action_finder(current) if current else None
+    if not control or not (96 < control[2] < safe_bottom):
+        screenshot(f"authenticated-home-{name}-action-unsafe.png")
+        FAILURES.append(
+            f"{name}: Home action row could not be scrolled above the floating bottom-navigation hit area; "
+            "refusing to tap an obscured control."
+        )
+        return ""
+    report.append(f"- PASS: moved the {name} action row into the unobstructed Home touch area before tapping.")
+    (ROOT / f"authenticated-home-{name}-action-safe.xml").write_text(current + chr(10), encoding="utf-8")
+    screenshot(f"authenticated-home-{name}-action-safe.png")
+    return current
+
+
 def _dismiss_home_media_viewer(xml_text: str, prefix: str, timeout: float = 12.0) -> str:
     """Use the viewer's own Close action and wait for the real Home destination."""
     close_control = find_control(xml_text, ["Close viewer"])
@@ -2356,7 +2429,10 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
         # the plain repost option is read-only here; quote composition is opened and
         # dismissed without submitting a post or writing to the backend.
         if HOME_FEED_FIXTURES_SEEDED and not repost_quote_captured:
-            repost_action = find_exact_home_action(current, "Repost")
+            current = scroll_home_action_row_into_safe_viewport(
+                current, "repost", lambda value: find_exact_home_action(value, "Repost")
+            )
+            repost_action = find_exact_home_action(current, "Repost") if current else None
             if repost_action:
                 _, repost_x, repost_y = repost_action
                 run("adb", "shell", "input", "tap", str(repost_x), str(repost_y))
@@ -2439,6 +2515,12 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
         # a real inline video control. Do not count an unrelated text-post comment.
         comment_control = find_home_video_post_comment_action(current) if video_control and duration_control and (require_real_media or HOME_FEED_FIXTURES_SEEDED) else None
         if comment_control and not comments_captured:
+            current = scroll_home_action_row_into_safe_viewport(
+                current, "comments", find_home_video_post_comment_action
+            )
+            comment_control = find_home_video_post_comment_action(current) if current else None
+            if not comment_control:
+                return current or home_xml
             comment_action_seen = True
             _, x, y = comment_control
             run("adb", "logcat", "-c")
@@ -2459,11 +2541,24 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
 
             if not conversation_xml:
                 screenshot("authenticated-home-comments-open-failed.png")
-                message = "The Home video Comment action opened, but no rendered conversation row was available; the isolated CI fixture is UI-only and never writes a comment to the backend."
+                comments_panel_opened = bool(
+                    find_control(candidate, ["Comments"])
+                    and find_control(candidate, ["Write a comment"])
+                ) if candidate else False
+                message = (
+                    "The Comments panel opened, but no rendered comment/reply row was available; "
+                    "the debug-local CI fixture never writes a comment to the backend."
+                    if comments_panel_opened else
+                    "The Home video Comment hit target did not open the Comments panel; "
+                    "the debug-local CI fixture never writes a comment to the backend; the verifier had first moved the action row above the floating navigation."
+                )
                 if require_real_media:
                     FAILURES.append(message)
                 else:
                     report.append("- NOTE: " + message)
+                (ROOT / "authenticated-home-comments-open-failed.xml").write_text(
+                    (candidate or "") + chr(10), encoding="utf-8"
+                )
                 return current
 
             if HOME_FEED_FIXTURES_SEEDED:
@@ -2674,7 +2769,7 @@ if HOME_FEED_VISUALS_ONLY:
     if not (ROOT / "authenticated-home-fullscreen-video.png").is_file():
         report.append("- LIMITATION: full-screen video interaction could not be demonstrated without an available Home video or successful local CI fixture.")
     if not (ROOT / "authenticated-home-comments.png").is_file():
-        report.append("- LIMITATION: comment loading/replies still require backend-owned conversation data; no synthetic comment was created.")
+        report.append("- LIMITATION: the local read-only comment thread was not captured; no backend comment or reply was created.")
 
     report += ["", "## Home Feed evidence files"]
     report += [
