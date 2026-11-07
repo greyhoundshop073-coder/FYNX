@@ -75,6 +75,7 @@ class FynxAiVisualAuditActivity : ComponentActivity() {
                             onSend = {},
                             onToggleMute = { muted = !muted },
                             onClose = { finish() },
+                            onRetry = {},
                             onMenu = { finish() }
                         )
                     }
@@ -90,6 +91,8 @@ private fun FynxAiResponseActionAudit(active: Boolean) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0E1118))
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 20.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -128,7 +131,7 @@ private fun FynxAiResponseActionAudit(active: Boolean) {
 private fun FynxAiChatScreenAudit() {
     var draft by remember { mutableStateOf("") }
     Column(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding().imePadding()
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -136,23 +139,28 @@ private fun FynxAiChatScreenAudit() {
         ) {
             Surface(
                 shape = androidx.compose.foundation.shape.CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer
+                color = Color(0xFF007FFF),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .22f))
             ) {
                 Icon(
                     Icons.Default.AutoAwesome,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = Color.White,
                     modifier = Modifier.padding(9.dp).size(22.dp)
                 )
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text("FYNX Assistant", style = MaterialTheme.typography.titleLarge)
+                Text("FYNX Assistant", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
                 Text("Ask · Create · Discover", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = Color(0xFFB8C5D6))
             }
-            IconButton(onClick = {}) { Icon(Icons.Default.Add, contentDescription = "Start new conversation") }
-            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, contentDescription = "Conversation history") }
+            IconButton(onClick = {}, modifier = Modifier.size(40.dp).background(Color(0xFF1C2434), androidx.compose.foundation.shape.CircleShape)) {
+                Icon(Icons.Default.Add, contentDescription = "Start new conversation", tint = Color.White)
+            }
+            IconButton(onClick = {}, modifier = Modifier.size(40.dp).background(Color(0xFF1C2434), androidx.compose.foundation.shape.CircleShape)) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Conversation history", tint = Color.White)
+            }
         }
         Column(
             modifier = Modifier.weight(1f).fillMaxWidth()

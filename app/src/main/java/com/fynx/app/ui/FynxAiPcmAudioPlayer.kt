@@ -23,8 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 internal class FynxAiPcmAudioPlayer(
     private val audioManager: AudioManager,
-    private val sampleRate: Int = FynxAiReadAloud.OUTPUT_SAMPLE_RATE,
-    private val manageAudioFocus: Boolean = true
+    private val sampleRate: Int = FynxAiReadAloud.OUTPUT_SAMPLE_RATE
 ) : AutoCloseable {
     companion object {
         private const val BYTES_PER_SAMPLE = 2
@@ -93,13 +92,9 @@ internal class FynxAiPcmAudioPlayer(
             "FYNX audio playback could not be initialized."
         }
         audioTrack = track
-        if (manageAudioFocus) {
-            requestAudioFocus(attributes)
-            check(failureMessage == null) { failureMessage ?: "FYNX could not get audio focus." }
-        } else {
-            // Silent instrumentation verifies the real PCM queue without emulator focus-service variability.
-            hasAudioFocus = true
-        }
+        // Audio focus is requested in play(), immediately before the first PCM is
+        // emitted. Preparing a remote Realtime session can take several seconds,
+        // and should not reserve the user's audio focus while it connects.
         scope.launch {
             try {
                 for (chunk in chunks) {
@@ -149,13 +144,20 @@ internal class FynxAiPcmAudioPlayer(
     }
 
     fun play() {
-        if (closed.get()) return
+        if (closed.get() || failureMessage != null) return
         userPaused = false
         if (hasAudioFocus) {
             runCatching { audioTrack?.play() }
                 .onFailure { failureMessage = it.message ?: "FYNX could not resume audio playback." }
         } else if (!focusRequested) {
+            // On Android 15+ this must happen while FYNX is topmost or while an
+            // eligible media foreground service is active. UI read-aloud is started
+            // from a visible assistant screen, so acquire focus at the user action.
             audioAttributes?.let(::requestAudioFocus)
+            if (hasAudioFocus && !userPaused && !closed.get()) {
+                runCatching { audioTrack?.play() }
+                    .onFailure { failureMessage = it.message ?: "FYNX could not start audio playback." }
+            }
         }
     }
 
