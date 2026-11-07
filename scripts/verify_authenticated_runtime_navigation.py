@@ -2633,8 +2633,19 @@ if not error:
 if HOME_FEED_VISUALS_ONLY:
     home_xml = dump_ui("authenticated-home-feed-final-probe.xml") or xml
     if home_xml and is_home_feed_runtime_surface(home_xml):
-        home_xml = restore_home_feed_top(home_xml)
-    home_xml = dump_ui("authenticated-home-feed-final.xml") or home_xml
+        restored_home_xml = restore_home_feed_top(home_xml)
+        # Keep the verified restored hierarchy. A second immediate UI dump can
+        # race Compose's auto-hide/semantics update and overwrite a good Home
+        # snapshot with a transient hierarchy that omits the bottom navigation.
+        if (restored_home_xml
+                and is_authenticated_home_surface(restored_home_xml)
+                and is_home_feed_navigation_visible(restored_home_xml)):
+            home_xml = restored_home_xml
+    final_probe_xml = dump_ui("authenticated-home-feed-final.xml")
+    if (final_probe_xml
+            and is_authenticated_home_surface(final_probe_xml)
+            and is_home_feed_navigation_visible(final_probe_xml)):
+        home_xml = final_probe_xml
     home_visible = bool(
         home_xml
         and is_authenticated_home_surface(home_xml)
