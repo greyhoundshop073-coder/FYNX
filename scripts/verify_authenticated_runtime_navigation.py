@@ -1466,6 +1466,37 @@ def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[st
     # A failed tap must remain failed; returning the previous screen caused false GREEN results.
     return tap_control(xml,labels,name,expected_labels)
 
+def capture_ai_component_preview(screen: str, image_name: str, hierarchy_name: str, expected: list[str]) -> tuple[bool, str]:
+    """Render a production FYNX AI Compose surface in a debug-only, data-free screenshot host."""
+    result = run(
+        "adb", "shell", "am", "start", "-W", "-n",
+        f"{PACKAGE}/.ui.FynxAiVisualAuditActivity",
+        "--es", "screen", screen
+    )
+    if result.returncode != 0:
+        return False, "Could not launch the debug-only FYNX AI visual audit surface: " + (result.stdout or "").strip()
+    deadline = time.monotonic() + 12.0
+    latest = ""
+    while time.monotonic() < deadline:
+        latest = dump_ui(hierarchy_name)
+        if latest and all(find_control(latest, [marker]) for marker in expected):
+            time.sleep(0.45)
+            screenshot(image_name)
+            image_path = ROOT / image_name
+            if not image_path.is_file() or image_path.stat().st_size < 28_000:
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.4)
+                return False, "Android exposed the " + screen + " accessibility controls, but the emulator screenshot was blank/undersized."
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.4)
+            return True, "Captured " + screen + " from the production Compose component."
+        time.sleep(0.35)
+    screenshot(image_name.replace(".png", "-incomplete.png"))
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    return False, "The " + screen + " visual surface did not expose all expected controls: " + ", ".join(
+        marker for marker in expected if not find_control(latest, [marker])
+    )
+
 report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
@@ -1500,38 +1531,6 @@ def secure_access_token_persisted()->bool|None:
         return False
     # Distinguish an unavailable adb/run-as/grep probe from a genuinely absent key.
     return None
-
-
-def capture_ai_component_preview(screen: str, image_name: str, hierarchy_name: str, expected: list[str]) -> tuple[bool, str]:
-    """Render a production FYNX AI Compose surface in a debug-only, data-free screenshot host."""
-    result = run(
-        "adb", "shell", "am", "start", "-W", "-n",
-        f"{PACKAGE}/.ui.FynxAiVisualAuditActivity",
-        "--es", "screen", screen
-    )
-    if result.returncode != 0:
-        return False, "Could not launch the debug-only FYNX AI visual audit surface: " + (result.stdout or "").strip()
-    deadline = time.monotonic() + 12.0
-    latest = ""
-    while time.monotonic() < deadline:
-        latest = dump_ui(hierarchy_name)
-        if latest and all(find_control(latest, [marker]) for marker in expected):
-            time.sleep(0.45)
-            screenshot(image_name)
-            image_path = ROOT / image_name
-            if not image_path.is_file() or image_path.stat().st_size < 28_000:
-                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-                time.sleep(0.4)
-                return False, "Android exposed the " + screen + " accessibility controls, but the emulator screenshot was blank/undersized."
-            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-            time.sleep(0.4)
-            return True, "Captured " + screen + " from the production Compose component."
-        time.sleep(0.35)
-    screenshot(image_name.replace(".png", "-incomplete.png"))
-    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-    return False, "The " + screen + " visual surface did not expose all expected controls: " + ", ".join(
-        marker for marker in expected if not find_control(latest, [marker])
-    )
 
 
 install=run("adb","install","-r","app/build/outputs/apk/debug/app-debug.apk")
