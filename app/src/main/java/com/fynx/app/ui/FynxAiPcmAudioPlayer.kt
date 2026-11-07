@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicLong
  */
 internal class FynxAiPcmAudioPlayer(
     private val audioManager: AudioManager,
-    private val sampleRate: Int = FynxAiReadAloud.OUTPUT_SAMPLE_RATE
+    private val sampleRate: Int = FynxAiReadAloud.OUTPUT_SAMPLE_RATE,
+    private val manageAudioFocus: Boolean = true
 ) : AutoCloseable {
     companion object {
         private const val BYTES_PER_SAMPLE = 2
@@ -92,8 +93,13 @@ internal class FynxAiPcmAudioPlayer(
             "FYNX audio playback could not be initialized."
         }
         audioTrack = track
-        requestAudioFocus(attributes)
-        check(failureMessage == null) { failureMessage ?: "FYNX could not get audio focus." }
+        if (manageAudioFocus) {
+            requestAudioFocus(attributes)
+            check(failureMessage == null) { failureMessage ?: "FYNX could not get audio focus." }
+        } else {
+            // Silent instrumentation verifies the real PCM queue without emulator focus-service variability.
+            hasAudioFocus = true
+        }
         scope.launch {
             try {
                 for (chunk in chunks) {

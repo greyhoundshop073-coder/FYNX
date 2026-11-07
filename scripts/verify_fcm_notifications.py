@@ -37,8 +37,8 @@ check("group message push hook", 'queueFynxNotification' in bootstrap and 'group
 check("friend request push hook", 'friend-request-' in bootstrap and 'FRIEND_REQUEST' in bootstrap)
 check("friend accepted push hook", 'friend-accepted-' in bootstrap and 'Friend request accepted' in bootstrap)
 check("private message push hook", ('message-${message.id}' in bootstrap or 'notificationId: "message-" + message.id' in bootstrap) and 'type: "MESSAGE"' in bootstrap)
-check("Home comment push hook", "type:'COMMENT'" in bootstrap and 'comment-${result.rows[0].id}' in bootstrap)
-check("Home comment is account scoped", 'postOwner.rows[0] && String(postOwner.rows[0].author_id) !== String(req.user.sub)' in bootstrap)
+check("Home comment push hook", "type:'COMMENT'" in bootstrap and "notificationId:'comment-'+r.rows[0].id" in bootstrap and "home comment notification failed" in bootstrap)
+check("Home comment is account scoped", "postOwner.rows[0]&&String(postOwner.rows[0].author_id)!==String(req.user.sub)" in bootstrap and "userId:postOwner.rows[0].author_id" in bootstrap)
 check("Home reply push hook", "type:'COMMENT'" in bootstrap and ('reply-${row.id}-${recipientId}' in bootstrap or "notificationId:'reply-' + row.id + '-' + recipientId" in bootstrap) and 'realtimeIsolationBootstrap.js' in bootstrap)
 # Reply notification code is injected into the runtime file by notificationBootstrap.js.
 # Verify the authoritative bootstrap patch rather than requiring generated runtime text
