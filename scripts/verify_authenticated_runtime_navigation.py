@@ -2018,11 +2018,63 @@ def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
         return False, "FYNX Assistant rendered, but the runtime navigator could not return to Home."
     if not menu_captured:
         return False, "FYNX Assistant rendered, but its real image-attachment menu did not expose Add an image."
-    return True, "Captured the actual FYNX Assistant dashboard, discovery cards, focused composer and image-attachment menu without sending a prompt."
+
+    voice_ok, voice_message = capture_ai_component_preview(
+        "voice",
+        "authenticated-ai-fullscreen-voice.png",
+        "authenticated-ai-fullscreen-voice.xml",
+        ["Return to AI chat", "Voice settings", "Listening…", "Ask FYNX AI", "Mute microphone", "End voice session"]
+    )
+    if not voice_ok:
+        return False, voice_message
+    actions_ok, actions_message = capture_ai_component_preview(
+        "actions",
+        "authenticated-ai-response-actions.png",
+        "authenticated-ai-response-actions.xml",
+        ["Copy response", "Read response aloud", "Rate response positively", "Rate response negatively", "Share response"]
+    )
+    if not actions_ok:
+        return False, actions_message
+    reading_ok, reading_message = capture_ai_component_preview(
+        "reading",
+        "authenticated-ai-read-aloud-active.png",
+        "authenticated-ai-read-aloud-active.xml",
+        ["Copy response", "Pause reading response", "Stop reading response", "Rate response positively", "Share response"]
+    )
+    if not reading_ok:
+        return False, reading_message
+    return True, "Captured the real FYNX Assistant dashboard, discovery cards, composer, attachment menu, full-screen voice layout, response action bar and active natural read-aloud state. The action-bar fixture is debug-only local text; no conversation or backend data was created."
+
+
+
+def capture_ai_component_preview(screen: str, image_name: str, hierarchy_name: str, expected: list[str]) -> tuple[bool, str]:
+    """Render a production FYNX AI Compose surface in a debug-only, data-free screenshot host."""
+    result = run(
+        "adb", "shell", "am", "start", "-n",
+        f"{PACKAGE}/.ui.FynxAiVisualAuditActivity",
+        "--es", "screen", screen
+    )
+    if result.returncode != 0:
+        return False, "Could not launch the debug-only FYNX AI visual audit surface: " + (result.stdout or "").strip()
+    deadline = time.monotonic() + 12.0
+    latest = ""
+    while time.monotonic() < deadline:
+        latest = dump_ui(hierarchy_name)
+        if latest and all(find_control(latest, [marker]) for marker in expected):
+            screenshot(image_name)
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.4)
+            return True, "Captured " + screen + " from the production Compose component."
+        time.sleep(0.35)
+    screenshot(image_name.replace(".png", "-incomplete.png"))
+    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+    return False, "The " + screen + " visual surface did not expose all expected controls: " + ", ".join(
+        marker for marker in expected if not find_control(latest, [marker])
+    )
 
 
 if AI_VISUALS_ONLY:
-    scope_line = "- Capture scope: actual FYNX Assistant dashboard, discovery cards, focused message composer and image-attachment menu; no prompt is submitted and no FYNX account data is fabricated."
+    scope_line = "- Capture scope: actual FYNX Assistant dashboard, discovery cards, composer, attachment menu, full-screen voice layout, response action bar and active read-aloud controls; no prompt is submitted and no saved conversation or account data is created."
     report.append(scope_line)
     if error:
         report += ["", "## FYNX Assistant screenshots", "- BLOCKED: Home was not reached: " + error, "", "## Result: BLOCKED"]
@@ -2032,7 +2084,7 @@ if AI_VISUALS_ONLY:
     captured, message = capture_ai_assistant_surface("ai-visual")
     if captured:
         report.append("- PASS: " + message)
-        report.append("- Screenshots: authenticated-ai-dashboard.png, authenticated-ai-discovery.png, authenticated-ai-composer.png and authenticated-ai-attachment-menu.png.")
+        report.append("- Screenshots: authenticated-ai-dashboard.png, authenticated-ai-discovery.png, authenticated-ai-composer.png, authenticated-ai-attachment-menu.png, authenticated-ai-fullscreen-voice.png, authenticated-ai-response-actions.png and authenticated-ai-read-aloud-active.png.")
         report.append("- Session: " + LOGIN_MODE + "; screenshots prove rendered UI/navigation only and do not certify live Gemini/backend replies.")
     else:
         report.append("- FAIL: " + message)

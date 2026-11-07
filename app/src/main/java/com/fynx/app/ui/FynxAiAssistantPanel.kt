@@ -1313,7 +1313,7 @@ fun FynxAiAssistantPanel(
 }
 
 @Composable
-private fun FynxAiFullScreenVoice(
+internal fun FynxAiFullScreenVoice(
     connecting: Boolean,
     connected: Boolean,
     muted: Boolean,
@@ -1626,7 +1626,7 @@ private fun VoiceListeningIndicator(muted: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AiChatBubble(
+internal fun AiChatBubble(
     message: FynxAiUiMessage,
     feedback: Int,
     speaking: Boolean,
