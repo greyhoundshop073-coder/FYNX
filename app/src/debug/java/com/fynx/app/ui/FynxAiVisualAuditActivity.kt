@@ -75,6 +75,7 @@ class FynxAiVisualAuditActivity : ComponentActivity() {
                             onSend = {},
                             onToggleMute = { muted = !muted },
                             onClose = { finish() },
+                            onRetry = {},
                             onMenu = { finish() }
                         )
                     }

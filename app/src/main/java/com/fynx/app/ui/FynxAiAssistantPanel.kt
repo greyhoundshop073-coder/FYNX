@@ -272,6 +272,7 @@ fun FynxAiAssistantPanel(
     fun copyText(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("FYNX Assistant", text))
+        statusMessage = "Copied response to clipboard."
     }
 
     fun stopReadAloud() {
@@ -1329,6 +1330,14 @@ fun FynxAiAssistantPanel(
                 showVoiceScreen = false
                 endVoiceSession()
             },
+            onRetry = {
+                errorMessage = null
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    connectVoice()
+                } else {
+                    requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            },
             onMenu = {
                 showVoiceScreen = false
                 endVoiceSession()
@@ -1436,6 +1445,7 @@ internal fun FynxAiFullScreenVoice(
     onSend: () -> Unit,
     onToggleMute: () -> Unit,
     onClose: () -> Unit,
+    onRetry: () -> Unit,
     onMenu: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
@@ -1520,6 +1530,9 @@ internal fun FynxAiFullScreenVoice(
                         if (error != null) {
                             Text(error, color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(horizontal = 28.dp))
+                            TextButton(onClick = onRetry, enabled = !connecting) {
+                                Text("Try again", color = Color(0xFF8CB9FF))
+                            }
                         } else if (connected && phase == "SPEAKING") {
                             Text("You can interrupt me anytime.", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
                         } else if (connected && phase == "THINKING") {
