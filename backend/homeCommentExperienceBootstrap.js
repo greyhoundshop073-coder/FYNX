@@ -133,7 +133,7 @@ export async function installHomeCommentExperience() {
       await ensureHomeCommentExperienceSchema();
       const mediaId=Number(req.params.id);
       if (!Number.isSafeInteger(mediaId)||mediaId<1) return res.status(400).json({error:'invalid media id'});
-      const result=await pool.query("SELECT mm.mime_type,mm.data,c.post_id FROM message_media mm JOIN social_post_comments c ON c.media_id=mm.id WHERE mm.id=$1 ORDER BY c.id DESC LIMIT 1",[mediaId]);
+      const result=await pool.query("SELECT mm.mime_type,mm.data,c.post_id FROM message_media mm JOIN social_post_comments c ON c.media_id=mm.id WHERE mm.id=$1 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$2)) ORDER BY c.id DESC LIMIT 1",[mediaId,req.user.sub]);
       if (!result.rows[0]||!(await visibleSocialPost(Number(result.rows[0].post_id),req.user.sub))) return res.status(404).json({error:'comment media not found'});
       res.set('Cache-Control','private,max-age=3600');
       res.type(result.rows[0].mime_type);

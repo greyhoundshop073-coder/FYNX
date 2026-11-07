@@ -130,15 +130,27 @@ require(realtime_bootstrap, "before === null ? [postId, req.user.sub, limit + 1]
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 for needle in ('remember(post.id)','rememberSaveable(post.id)','DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)','.imePadding()','KeyboardActions(onSend = { send() })','FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }','commentCount += 1','onCommentCountChanged(commentCount)'):
     require(comments_panel, needle, f"Home 4D edge-case safeguard {needle}")
-for needle in ('commentReactions(context, post.id, ids)', 'setCommentReaction(context, post.id, comment.id, nextReaction)', 'HomeCommentReactionRow(reactionStates[comment.id]', 'HomeCommentReactionRow(reactionStates[reply.id]', 'Triple("LOVE", "❤️", Color(0xFFE53935))', 'Triple("THUMBS_UP", "👍", Color(0xFF1976D2))', 'optimisticCounts.filterValues { it > 0 }'):
+for needle in ('commentReactions(context, post.id, ids)', 'setCommentReaction(context, post.id, comment.id, nextReaction)', 'HomeCommentActionBar(', 'onLongClick = { pickerOpen = true }', 'DropdownMenu(expanded = pickerOpen', 'Triple("LOVE", "❤️", "Love")', 'Triple("THUMBS_UP", "👍", "Like")', 'optimisticCounts.filterValues { it > 0 }'):
     require(comments_panel, needle, f"X-style comment reaction interaction {needle}")
+for needle in ('Icons.Default.ChatBubbleOutline', 'Icons.Default.Repeat', 'Icons.Default.BarChart', 'Icons.Default.BookmarkBorder', 'Icons.Default.Share'):
+    require(comments_panel, needle, f"comment action-bar icon {needle}")
 require(client, 'data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)', "typed comment reaction summary")
 require(client, '"/api/social/posts/$post/comment-reactions?ids=$query"', "batched comment reaction summary avoids per-row requests")
 require(client, '"/api/social/posts/$post/comments/$comment/reaction"', "comment reaction write endpoint")
-for needle in ('var commentSort by rememberSaveable(post.id)', 'FilterChip(selected = commentSort == "Relevant"', 'FilterChip(selected = commentSort == "Newest"', 'fun shareComment(comment:', 'Intent.createChooser(Intent(Intent.ACTION_SEND)', 'TextButton(onClick = { shareComment(comment) })', 'TextButton(onClick = { shareComment(reply) })'):
+for needle in ('var commentSort by rememberSaveable(post.id)', 'FilterChip(selected = commentSort == "Relevant"', 'FilterChip(selected = commentSort == "Newest"', 'fun shareComment(comment:', 'Intent.createChooser(Intent(Intent.ACTION_SEND)', 'onShare = { shareComment(comment) }', 'onShare = { shareComment(reply) }'):
     require(comments_panel, needle, f"X-style comment sorting/share action {needle}")
 require(reaction_bootstrap, "[commentId,postId,req.user.sub]", "comment reaction deletion applies the current user's block filter parameter")
 
+comment_experience_bootstrap = read("backend/homeCommentExperienceBootstrap.js")
+media_cache = read("app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt")
+for needle in ('addCommentExperience(', 'linkedVideo(', 'commentEngagement(', 'setCommentRepost(', 'setCommentBookmark(', 'recordCommentView('):
+    require(client, needle, f"comment media/engagement client API {needle}")
+for needle in ('photoPicker.launch("image/*")', 'videoPicker.launch("video/*")', 'Link Part 2', 'mediaPreview = Triple(video.mediaUrl, video.mediaType'):
+    require(comments_panel, needle, f"rich-media comment UI {needle}")
+for needle in ('fynxHomeCommentExperienceBatch', '/comments/experience', '/linked-video', '/api/social/comment-media/:id', '/comment-engagement', 'owner_id=$2', "p.media_type='video'", 'social_comment_views'):
+    require(comment_experience_bootstrap, needle, f"comment experience backend {needle}")
+require(realtime_bootstrap, "await installHomeCommentExperience();", "comment experience startup installation")
+require(media_cache, 'path.startsWith("/api/social/comment-media/")', "protected comment media cache path")
 require_normalized(comments_panel, 'Column(Modifier.fillMaxSize())', "comment sheet keeps a single stable layout owner")
 require_normalized(comments_panel, 'Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp)', "comment composer and AI draft preview stay in one IME-safe bottom container")
 if 'Column(Modifier.fillMaxSize().imePadding())' in comments_panel:

@@ -14,6 +14,7 @@ for (const token of [
   "/api/social/comment-media/:id",
   "/comment-engagement",
   "visibleSocialPost",
+  "NOT EXISTS (SELECT 1 FROM blocks",
   "owner_id=$2",
   "p.media_type='video'",
   "maximum reply depth is 5",
