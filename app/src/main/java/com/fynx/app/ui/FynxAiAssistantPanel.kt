@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.speech.tts.TextToSpeech
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloat
@@ -37,6 +38,10 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
@@ -72,6 +77,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.UUID
+import java.util.Locale
 
 private fun friendlyFynxAiError(error: Throwable, fallback: String): String {
     val detail = error.message.orEmpty()
@@ -144,6 +150,9 @@ fun FynxAiAssistantPanel(
     var generationJob by remember { mutableStateOf<Job?>(null) }
     var voiceConnectionJob by remember { mutableStateOf<Job?>(null) }
     var followingLatest by remember { mutableStateOf(true) }
+    var ttsReady by remember { mutableStateOf(false) }
+    var speakingMessageId by remember { mutableStateOf<String?>(null) }
+    val messageFeedback = remember { mutableStateMapOf<String, Int>() }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -163,6 +172,15 @@ fun FynxAiAssistantPanel(
     }
     val listState = rememberLazyListState()
     val voiceEngine = remember { FynxAiWebRtcEngine(context) }
+    val textToSpeech = remember(context) {
+        TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+    }
+    DisposableEffect(textToSpeech) {
+        onDispose {
+            textToSpeech.stop()
+            textToSpeech.shutdown()
+        }
+    }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -253,6 +271,25 @@ fun FynxAiAssistantPanel(
     fun copyText(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("FYNX Assistant", text))
+    }
+
+    fun speakText(messageId: String, text: String) {
+        if (speakingMessageId == messageId) {
+            textToSpeech.stop()
+            speakingMessageId = null
+            return
+        }
+        if (!ttsReady) {
+            statusMessage = "Speech is preparing. Please try again in a moment."
+            return
+        }
+        textToSpeech.language = Locale.getDefault()
+        speakingMessageId = messageId
+        val result = textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, messageId)
+        if (result == TextToSpeech.ERROR) {
+            speakingMessageId = null
+            errorMessage = "FYNX could not read this response aloud."
+        }
     }
 
     fun shareText(text: String) {
@@ -751,7 +788,11 @@ fun FynxAiAssistantPanel(
                         items(messages, key = { it.id }) { message ->
                             AiChatBubble(
                                 message = message,
+                                feedback = messageFeedback[message.id] ?: 0,
+                                speaking = speakingMessageId == message.id,
                                 onCopy = { copyText(message.text) },
+                                onSpeak = { speakText(message.id, message.text) },
+                                onFeedback = { messageFeedback[message.id] = it },
                                 onShare = { shareText(message.text) }
                             )
                         }
@@ -1440,7 +1481,11 @@ private fun VoiceListeningIndicator(muted: Boolean, onClick: () -> Unit) {
 @Composable
 private fun AiChatBubble(
     message: FynxAiUiMessage,
+    feedback: Int,
+    speaking: Boolean,
     onCopy: () -> Unit,
+    onSpeak: () -> Unit,
+    onFeedback: (Int) -> Unit,
     onShare: () -> Unit
 ) {
     Row(
@@ -1513,17 +1558,36 @@ private fun AiChatBubble(
                     )
                 }
 
-                if (!message.fromUser && message.text.isNotBlank()) {
+                if (!message.fromUser && message.text.isNotBlank() && !message.streaming) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .20f))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = onCopy, modifier = Modifier.size(34.dp)) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy response", modifier = Modifier.size(17.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = onCopy, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy response", modifier = Modifier.size(18.dp))
+                            }
+                            IconButton(onClick = onSpeak, modifier = Modifier.size(36.dp)) {
+                                Icon(if (speaking) Icons.Default.Stop else Icons.Default.VolumeUp,
+                                    contentDescription = if (speaking) "Stop reading response" else "Read response aloud",
+                                    tint = if (speaking) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(19.dp))
+                            }
+                            IconButton(onClick = { onFeedback(if (feedback == 1) 0 else 1) }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.ThumbUp, contentDescription = "Good response",
+                                    tint = if (feedback == 1) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp))
+                            }
+                            IconButton(onClick = { onFeedback(if (feedback == -1) 0 else -1) }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.ThumbDown, contentDescription = "Poor response",
+                                    tint = if (feedback == -1) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp))
+                            }
                         }
-                        IconButton(onClick = onShare, modifier = Modifier.size(34.dp)) {
-                            Icon(Icons.Default.Share, contentDescription = "Share response", modifier = Modifier.size(17.dp))
+                        IconButton(onClick = onShare, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Share, contentDescription = "Share response", modifier = Modifier.size(18.dp))
                         }
                     }
                 }
