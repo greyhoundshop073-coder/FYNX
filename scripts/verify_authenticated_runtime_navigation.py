@@ -2399,12 +2399,47 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
 
         discovery_control = find_control(current, ["Open Discovery video"])
         if discovery_control and not discovery_viewer_captured:
+            discovery_expected_markers = [
+                "Like video", "Open comments", "Share video",
+                "Unmute Discovery video", "Mute Discovery video",
+                "Pause Discovery video", "Play Discovery video",
+            ]
             viewer_xml = tap_control(
                 current,
                 ["Open Discovery video"],
                 "authenticated-home-discovery-video-open",
-                ["Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video"]
+                discovery_expected_markers
             )
+            if not viewer_xml:
+                # ADB UIAutomator can return one stale Home hierarchy while the
+                # Android VideoView transition is still composing. Recover only
+                # from a fresh hierarchy that proves the actual viewer, every
+                # action and the native video surface are all present together.
+                recovery_deadline = time.monotonic() + 12.0
+                while time.monotonic() < recovery_deadline:
+                    candidate = dump_ui("authenticated-discovery-video-transition-recovery.xml")
+                    candidate_nodes = nodes(candidate)
+                    has_native_video = any(
+                        node.attrib.get("class") == "android.widget.VideoView"
+                        for node in candidate_nodes
+                    )
+                    has_all_actions = (
+                        candidate
+                        and all(find_control(candidate, [marker]) for marker in discovery_expected_markers)
+                    )
+                    if has_native_video and has_all_actions:
+                        viewer_xml = candidate
+                        FAILURES[:] = [
+                            failure for failure in FAILURES
+                            if not failure.startswith(
+                                "authenticated-home-discovery-video-open: destination marker not found"
+                            )
+                        ]
+                        report.append(
+                            "- PASS: recovered the Discovery viewer from a fresh settled hierarchy after a transient stale UI dump; native video and all actions were verified together."
+                        )
+                        break
+                    time.sleep(0.5)
             if viewer_xml:
                 # Do not count the viewer as a playable video until the real
                 # VideoView has prepared and exposed its mute control.

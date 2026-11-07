@@ -156,6 +156,14 @@ checks = [
         and '"authenticated-discovery-video-viewer.png"' in navigation,
     ),
     (
+        "Discovery viewer recovery rejects stale Home dumps and requires native video plus every action",
+        "authenticated-discovery-video-transition-recovery.xml" in navigation
+        and "android.widget.VideoView" in navigation
+        and "has_native_video and has_all_actions" in navigation
+        and "discovery_expected_markers" in navigation
+        and "failure.startswith(" in navigation,
+    ),
+    (
         "Discovery remains a stable Home insertion whenever real trending videos are available",
         'listOf("discovery") + ordered.filterNot { it == "discovery" }' in home
         and '"home_discovery_empty_feed"' in home
