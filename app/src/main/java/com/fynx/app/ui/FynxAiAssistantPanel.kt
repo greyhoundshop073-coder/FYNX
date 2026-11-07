@@ -6,7 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.SystemClock
+import android.media.AudioManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloat
@@ -155,16 +155,12 @@ fun FynxAiAssistantPanel(
     var readAloudMessageId by remember { mutableStateOf<String?>(null) }
     var readAloudConnecting by remember { mutableStateOf(false) }
     var readAloudPaused by remember { mutableStateOf(false) }
-    var readAloudSourceText by remember { mutableStateOf("") }
-    var readAloudRemainingText by remember { mutableStateOf("") }
     var readAloudTranscript by remember { mutableStateOf("") }
     var readAloudConnectionJob by remember { mutableStateOf<Job?>(null) }
     var readAloudWaveform by remember { mutableStateOf<List<Float>>(emptyList()) }
     var readAloudDurationMs by remember { mutableLongStateOf(0L) }
     var readAloudElapsedMs by remember { mutableLongStateOf(0L) }
-    var readAloudElapsedBeforeSegment by remember { mutableLongStateOf(0L) }
-    var readAloudSegmentStartedAt by remember { mutableLongStateOf(0L) }
-    var readAloudTranscriptPrefix by remember { mutableStateOf("") }
+    var readAloudPcmPlayer by remember { mutableStateOf<FynxAiPcmAudioPlayer?>(null) }
     val messageFeedback = remember { mutableStateMapOf<String, Int>() }
 
     val scope = rememberCoroutineScope()
@@ -187,16 +183,26 @@ fun FynxAiAssistantPanel(
     val voiceEngine = remember { FynxAiWebRtcEngine(context) }
     val readAloudEngine = remember { FynxAiWebRtcEngine(context) }
 
-    LaunchedEffect(readAloudMessageId, readAloudPaused, readAloudConnecting, readAloudSegmentStartedAt) {
-        while (
-            readAloudMessageId != null &&
-            !readAloudPaused &&
-            !readAloudConnecting &&
-            readAloudSegmentStartedAt > 0L
-        ) {
-            readAloudElapsedMs = readAloudElapsedBeforeSegment +
-                (SystemClock.elapsedRealtime() - readAloudSegmentStartedAt).coerceAtLeast(0L)
-            delay(200)
+    LaunchedEffect(readAloudMessageId, readAloudPaused, readAloudConnecting, readAloudPcmPlayer) {
+        while (readAloudMessageId != null && !readAloudPaused && !readAloudConnecting) {
+            val player = readAloudPcmPlayer
+            if (player != null) {
+                player.errorMessage()?.let { failure ->
+                    errorMessage = friendlyFynxAiError(
+                        IllegalStateException(failure),
+                        "FYNX could not continue reading this response aloud. Please try again."
+                    )
+                    finishReadAloud(readAloudMessageId ?: return@LaunchedEffect)
+                    return@LaunchedEffect
+                }
+                readAloudElapsedMs = player.elapsedMillis()
+                readAloudDurationMs = player.durationMillis()
+                if (player.isPlaybackComplete()) {
+                    finishReadAloud(readAloudMessageId ?: return@LaunchedEffect)
+                    return@LaunchedEffect
+                }
+            }
+            delay(120)
         }
     }
 
@@ -298,54 +304,56 @@ fun FynxAiAssistantPanel(
             readAloudEngine.sendEvent(JSONObject().put("type", "response.cancel").toString())
             readAloudEngine.sendEvent(JSONObject().put("type", "output_audio_buffer.clear").toString())
         }
+        readAloudPcmPlayer?.close()
+        readAloudPcmPlayer = null
         readAloudEngine.close()
         readAloudMessageId = null
         readAloudConnecting = false
         readAloudPaused = false
-        readAloudSourceText = ""
-        readAloudRemainingText = ""
         readAloudTranscript = ""
-        readAloudTranscriptPrefix = ""
         readAloudWaveform = emptyList()
         readAloudDurationMs = 0L
         readAloudElapsedMs = 0L
-        readAloudElapsedBeforeSegment = 0L
-        readAloudSegmentStartedAt = 0L
     }
 
     fun finishReadAloud(messageId: String) {
         if (readAloudMessageId != messageId) return
         readAloudConnectionJob = null
+        readAloudPcmPlayer?.close()
+        readAloudPcmPlayer = null
         readAloudEngine.close()
         readAloudMessageId = null
         readAloudConnecting = false
         readAloudPaused = false
-        readAloudSourceText = ""
-        readAloudRemainingText = ""
         readAloudTranscript = ""
-        readAloudTranscriptPrefix = ""
         readAloudWaveform = emptyList()
         readAloudDurationMs = 0L
         readAloudElapsedMs = 0L
-        readAloudElapsedBeforeSegment = 0L
-        readAloudSegmentStartedAt = 0L
     }
 
     fun requestReadAloud(messageId: String, text: String) {
         if (text.isBlank()) return
         stopReadAloud()
         readAloudMessageId = messageId
-        readAloudSourceText = text
-        readAloudRemainingText = text
         readAloudTranscript = ""
-        readAloudTranscriptPrefix = ""
         readAloudWaveform = emptyList()
         readAloudDurationMs = 0L
         readAloudElapsedMs = 0L
-        readAloudElapsedBeforeSegment = 0L
-        readAloudSegmentStartedAt = 0L
         readAloudPaused = false
         readAloudConnecting = true
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val pcmPlayer = FynxAiPcmAudioPlayer(audioManager)
+        val prepared = pcmPlayer.prepare()
+        if (prepared.isFailure) {
+            errorMessage = friendlyFynxAiError(
+                prepared.exceptionOrNull() ?: IllegalStateException("Audio output unavailable"),
+                "FYNX could not prepare audio playback on this device."
+            )
+            pcmPlayer.close()
+            finishReadAloud(messageId)
+            return
+        }
+        readAloudPcmPlayer = pcmPlayer
         readAloudConnectionJob = scope.launch {
             val connection = readAloudEngine.connect(
                 receiveOnly = true,
@@ -368,31 +376,33 @@ fun FynxAiAssistantPanel(
                         when (event.optString("type")) {
                             "output_audio_buffer.started" -> {
                                 readAloudConnecting = false
-                                if (readAloudSegmentStartedAt == 0L) {
-                                    readAloudSegmentStartedAt = SystemClock.elapsedRealtime()
-                                }
+                                readAloudPcmPlayer?.play()
                             }
                             "response.output_audio.delta" -> {
                                 val audioDelta = event.optString("delta")
                                 if (audioDelta.isNotBlank()) {
                                     readAloudWaveform = FynxAiReadAloud.appendPcmWaveform(readAloudWaveform, audioDelta)
-                                    readAloudDurationMs += FynxAiReadAloud.pcmDurationMillis(audioDelta)
+                                    if (readAloudPcmPlayer?.enqueueBase64Delta(audioDelta) != true) {
+                                        errorMessage = "FYNX could not queue the natural voice audio. Please stop and try again."
+                                        stopReadAloud()
+                                        return@launch
+                                    }
+                                    readAloudPcmPlayer?.play()
+                                    readAloudDurationMs = readAloudPcmPlayer?.durationMillis() ?: 0L
+                                    readAloudConnecting = false
                                 }
                             }
                             "response.audio_transcript.delta", "response.output_audio_transcript.delta" -> {
                                 readAloudTranscript += event.optString("delta")
-                                readAloudConnecting = false
                             }
                             "response.output_audio_transcript.done" -> {
                                 val completeTranscript = event.optString("transcript")
-                                if (completeTranscript.isNotBlank()) {
-                                    readAloudTranscript = readAloudTranscriptPrefix + completeTranscript
-                                }
+                                if (completeTranscript.isNotBlank()) readAloudTranscript = completeTranscript
                             }
                             "response.done" -> {
                                 val response = event.optJSONObject("response")
                                 val responseStatus = response?.optString("status").orEmpty()
-                                if (!readAloudPaused && responseStatus in setOf("failed", "incomplete")) {
+                                if (responseStatus in setOf("failed", "incomplete")) {
                                     val detail = response?.optJSONObject("status_details")?.optString("reason").orEmpty()
                                     errorMessage = friendlyFynxAiError(
                                         IllegalStateException(detail),
@@ -402,7 +412,11 @@ fun FynxAiAssistantPanel(
                                 }
                             }
                             "output_audio_buffer.stopped" -> {
-                                if (!readAloudPaused) finishReadAloud(messageId)
+                                readAloudConnecting = false
+                                readAloudPcmPlayer?.markStreamCompleted()
+                                readAloudDurationMs = readAloudPcmPlayer?.durationMillis() ?: readAloudDurationMs
+                                readAloudElapsedMs = readAloudPcmPlayer?.elapsedMillis() ?: readAloudElapsedMs
+                                if (readAloudPcmPlayer?.isPlaybackComplete() == true) finishReadAloud(messageId)
                             }
                             "error" -> {
                                 val detail = event.optJSONObject("error")?.optString("message").orEmpty()
@@ -424,6 +438,9 @@ fun FynxAiAssistantPanel(
                 finishReadAloud(messageId)
                 return@launch
             }
+            // Route the same Realtime voice PCM through the controllable player; do not
+            // play the duplicate remote WebRTC track at the same time.
+            readAloudEngine.setRemoteAudioEnabled(false)
             val sent = readAloudEngine.sendEvent(FynxAiReadAloud.buildResponseEvent(text))
             if (!sent) {
                 errorMessage = "FYNX voice playback could not start. Please try again."
@@ -435,40 +452,23 @@ fun FynxAiAssistantPanel(
     }
 
     fun pauseReadAloud() {
-        val messageId = readAloudMessageId ?: return
-        if (readAloudPaused || readAloudConnecting) return
-        if (readAloudSegmentStartedAt > 0L) {
-            readAloudElapsedBeforeSegment +=
-                (SystemClock.elapsedRealtime() - readAloudSegmentStartedAt).coerceAtLeast(0L)
-            readAloudSegmentStartedAt = 0L
-            readAloudElapsedMs = readAloudElapsedBeforeSegment
-        }
+        if (readAloudMessageId == null || readAloudPaused || readAloudConnecting) return
+        readAloudPcmPlayer?.pause()
+        readAloudElapsedMs = readAloudPcmPlayer?.elapsedMillis() ?: readAloudElapsedMs
+        readAloudDurationMs = readAloudPcmPlayer?.durationMillis() ?: readAloudDurationMs
         readAloudPaused = true
-        readAloudEngine.sendEvent(JSONObject().put("type", "response.cancel").toString())
-        readAloudEngine.sendEvent(JSONObject().put("type", "output_audio_buffer.clear").toString())
     }
 
     fun resumeReadAloud() {
         if (!readAloudPaused) return
-        readAloudRemainingText = FynxAiReadAloud.remainingTextAtPlaybackPosition(
-            readAloudSourceText,
-            readAloudTranscript,
-            readAloudElapsedMs,
-            readAloudDurationMs
-        )
-        if (readAloudRemainingText.isBlank()) {
+        val player = readAloudPcmPlayer ?: return
+        if (player.errorMessage() != null) {
+            errorMessage = player.errorMessage()
             finishReadAloud(readAloudMessageId ?: return)
             return
         }
-        readAloudTranscriptPrefix = readAloudTranscript
         readAloudPaused = false
-        readAloudConnecting = true
-        readAloudSegmentStartedAt = 0L
-        val sent = readAloudEngine.sendEvent(FynxAiReadAloud.buildResponseEvent(readAloudRemainingText))
-        if (!sent) {
-            errorMessage = "FYNX could not resume voice playback. Tap Read aloud to start again."
-            finishReadAloud(readAloudMessageId ?: return)
-        }
+        player.play()
     }
 
     fun toggleReadAloud(messageId: String, text: String) {

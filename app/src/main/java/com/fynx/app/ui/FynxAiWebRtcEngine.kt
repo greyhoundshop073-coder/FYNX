@@ -38,6 +38,7 @@ class FynxAiWebRtcEngine(
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
     private var remoteAudioTrack: AudioTrack? = null
+    @Volatile private var remoteAudioEnabled: Boolean = true
     private var eventsChannel: DataChannel? = null
     private var localDescriptionReady: CompletableDeferred<String>? = null
     private var iceGatheringReady: CompletableDeferred<Unit>? = null
@@ -124,6 +125,10 @@ class FynxAiWebRtcEngine(
         }
     }
     fun setMicrophoneEnabled(enabled: Boolean) { audioTrack?.setEnabled(enabled) }
+    fun setRemoteAudioEnabled(enabled: Boolean) {
+        remoteAudioEnabled = enabled
+        remoteAudioTrack?.setEnabled(enabled)
+    }
     fun sendEvent(json: String): Boolean { val channel = eventsChannel ?: return false; if (channel.state() != DataChannel.State.OPEN) return false; return channel.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) }
     fun close() {
         localDescriptionReady?.cancel(); localDescriptionReady = null; iceGatheringReady?.cancel(); iceGatheringReady = null; eventsChannel?.dispose(); eventsChannel = null; remoteAudioTrack?.setEnabled(false); remoteAudioTrack = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; audioTrack?.dispose(); audioTrack = null; audioSource?.dispose(); audioSource = null; toolJob.cancel(); if (state != State.FAILED) setState(State.CLOSED, null)
@@ -186,7 +191,12 @@ class FynxAiWebRtcEngine(
         override fun onRemoveStream(stream: org.webrtc.MediaStream) = Unit
         override fun onDataChannel(channel: DataChannel) { if (eventsChannel == null) { eventsChannel = channel; channel.registerObserver(dataChannelObserver()) } }
         override fun onRenegotiationNeeded() = Unit
-        override fun onAddTrack(receiver: RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) { (receiver.track() as? AudioTrack)?.let { remoteAudioTrack = it; it.setEnabled(true) } }
+        override fun onAddTrack(receiver: RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) {
+            (receiver.track() as? AudioTrack)?.let { track ->
+                remoteAudioTrack = track
+                track.setEnabled(remoteAudioEnabled)
+            }
+        }
     }
     private fun setState(next: State, error: String?) { state = next; onStateChanged?.invoke(next, error) }
     private open class SdpObserverAdapter : org.webrtc.SdpObserver { override fun onCreateSuccess(description: SessionDescription) = Unit; override fun onSetSuccess() = Unit; override fun onCreateFailure(error: String) = Unit; override fun onSetFailure(error: String) = Unit }
