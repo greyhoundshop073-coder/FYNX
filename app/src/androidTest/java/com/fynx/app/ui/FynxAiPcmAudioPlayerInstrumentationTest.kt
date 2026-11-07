@@ -1,11 +1,13 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.os.SystemClock
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,7 +18,20 @@ import org.junit.runner.RunWith
 class FynxAiPcmAudioPlayerInstrumentationTest {
     @Test
     fun pauseAndResumeContinueTheSamePcmQueueAndPlaybackHead() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val device = UiDevice.getInstance(instrumentation)
+        // Android 15+ grants audio focus only to an eligible foreground app (or a
+        // foreground service). Launch the app's debug-only visual host so this test
+        // exercises the same foreground playback condition as a user tapping Speak.
+        context.startActivity(
+            Intent().setClassName(context.packageName, "com.fynx.app.ui.FynxAiVisualAuditActivity")
+                .putExtra("screen", "voice")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        )
+        device.waitForIdle()
+        SystemClock.sleep(250L)
+
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val player = FynxAiPcmAudioPlayer(audioManager)
         try {
@@ -57,6 +72,7 @@ class FynxAiPcmAudioPlayerInstrumentationTest {
             assertEquals(1_000L, player.durationMillis())
         } finally {
             player.close()
+            device.pressHome()
         }
     }
 }
