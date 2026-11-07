@@ -37,6 +37,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import android.content.Intent
 import android.net.Uri
 import android.content.pm.ApplicationInfo
@@ -782,7 +786,14 @@ private fun HomeCommentActionBar(
                                         }
                                         .padding(horizontal = 7.dp, vertical = 8.dp)
                                 ) {
-                                    Text(emoji, style = MaterialTheme.typography.titleLarge)
+                                    Text(
+                                        emoji,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        modifier = Modifier.semantics {
+                                            contentDescription = label
+                                            role = Role.Button
+                                        }
+                                    )
                                 }
                             }
                         }

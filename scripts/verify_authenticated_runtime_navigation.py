@@ -1646,6 +1646,7 @@ def has_visible_home_comment_row(xml_text: str) -> bool:
             r"(?:\d+\s+)?(?:replies|no replies)",
             " ".join(((node.attrib.get("text") or "") + " " + (node.attrib.get("content-desc") or "")).split()).casefold()
         )
+        or (node.attrib.get("content-desc") or "").strip().casefold() in {"open replies", "collapse replies"}
     ]
     if not reply_controls or not replies_controls:
         return False
@@ -1892,6 +1893,60 @@ def is_home_feed_runtime_surface(xml_text: str) -> bool:
         "FYNX Visual Fixture", "Public post", "Friends post",
         "Selected people post", "Only me post", "Comment",
     ))
+
+
+def restore_home_after_comment_probe_failure(name: str, fallback: str = "") -> str:
+    """Close a failed Comments probe before returning to the Home Feed capture flow."""
+    run("adb", "shell", "input", "keyevent", "4")
+    deadline = time.monotonic() + 18.0
+    latest = ""
+    attempt = 0
+    while time.monotonic() < deadline:
+        candidate = dump_ui(f"{name}-{attempt}.xml")
+        attempt += 1
+        if candidate:
+            latest = candidate
+            if is_home_feed_runtime_surface(candidate):
+                return candidate
+        time.sleep(0.4)
+    return latest or fallback
+
+
+def capture_nested_comment_reply_preview(initial_xml: str) -> tuple[set[str], str]:
+    """Scroll only the Comments list and accumulate proof of nested replies below the first viewport."""
+    markers = (
+        "Great portrait fit.",
+        "Agreed — the feed stays uncluttered.",
+        "And it opens the same clip.",
+    )
+    found = {marker for marker in markers if marker in initial_xml}
+    current = initial_xml
+    size = run("adb", "shell", "wm", "size").stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", size)
+    if not match:
+        return found, current
+    width, height = int(match.group(1)), int(match.group(2))
+    x = width // 2
+    start_y = int(height * 0.70)
+    end_y = int(height * 0.36)
+    for attempt in range(6):
+        if all(marker in found for marker in markers):
+            break
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
+        time.sleep(0.55)
+        candidate = dump_ui(f"authenticated-home-comments-nested-probe-{attempt}.xml")
+        if not candidate:
+            continue
+        if not find_control(candidate, ["Comments"]) or not find_control(candidate, ["Write a comment"]):
+            break
+        current = candidate
+        found.update(marker for marker in markers if marker in candidate)
+        if all(marker in found for marker in markers):
+            (ROOT / "authenticated-home-comments-nested-replies.xml").write_text(candidate + chr(10), encoding="utf-8")
+            screenshot("authenticated-home-comments-nested-replies.png")
+            break
+    return found, current
+
 
 
 def _home_content_scroll_point(xml_text: str, width: int, height: int, direction: str) -> tuple[int, int, int]:
@@ -2626,23 +2681,59 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                 (ROOT / "authenticated-home-comments-open-failed.xml").write_text(
                     (candidate or "") + chr(10), encoding="utf-8"
                 )
+                if comments_panel_opened:
+                    return restore_home_after_comment_probe_failure("authenticated-home-comments-failed-return", current)
                 return current
 
+            (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
+            screenshot("authenticated-home-comments.png")
+            comments_captured = True
+            report.append("- PASS: opened the video post's own Comments conversation and verified the comment thread, post context, reply actions and composer. No comment or reply was sent.")
+
             if HOME_FEED_FIXTURES_SEEDED:
+                reaction_target = find_control(conversation_xml, ["Like comment; hold for reactions"])
+                if reaction_target:
+                    _, reaction_x, reaction_y = reaction_target
+                    run("adb", "shell", "input", "swipe", str(reaction_x), str(reaction_y), str(reaction_x), str(reaction_y), "850")
+                    reaction_deadline = time.monotonic() + 4.0
+                    reaction_xml = ""
+                    reaction_labels = ("Love", "Funny", "Like", "Wow", "Sad", "Fire")
+                    while time.monotonic() < reaction_deadline:
+                        candidate = dump_ui("authenticated-home-comment-reaction-picker-probe.xml")
+                        if candidate and all(find_control(candidate, [label]) for label in reaction_labels):
+                            reaction_xml = candidate
+                            break
+                        time.sleep(0.25)
+                    if reaction_xml:
+                        (ROOT / "authenticated-home-comment-reaction-picker.xml").write_text(reaction_xml + chr(10), encoding="utf-8")
+                        screenshot("authenticated-home-comment-reaction-picker.png")
+                        report.append("- PASS: long-pressed Like and captured all six accessible comment reactions. No reaction was selected.")
+                    else:
+                        screenshot("authenticated-home-comment-reaction-picker-failed.png")
+                        FAILURES.append("The comment Like long-press did not expose all six accessible reaction choices.")
+                    dismiss_target = find_control(reaction_xml or conversation_xml, ["Great portrait fit."])
+                    if dismiss_target:
+                        _, dismiss_x, dismiss_y = dismiss_target
+                        run("adb", "shell", "input", "tap", str(dismiss_x), str(dismiss_y))
+                        time.sleep(0.3)
+                        dump_ui("authenticated-home-comments-after-reaction-dismiss.xml")
+                    else:
+                        run("adb", "shell", "input", "keyevent", "4")
+                else:
+                    FAILURES.append("The Comments runtime hierarchy did not expose a long-pressable Like action.")
+                    
                 nested_preview_markers = [
                     "Great portrait fit.",
                     "Agreed — the feed stays uncluttered.",
                     "And it opens the same clip.",
                 ]
-                missing_nested_markers = [marker for marker in nested_preview_markers if marker not in conversation_xml]
+                found_nested_markers, nested_xml = capture_nested_comment_reply_preview(conversation_xml)
+                missing_nested_markers = [marker for marker in nested_preview_markers if marker not in found_nested_markers]
                 if missing_nested_markers:
                     screenshot("authenticated-home-comments-thread-preview-incomplete.png")
-                    FAILURES.append("The offline Comments preview did not render every nested reply level: " + ", ".join(missing_nested_markers))
-                    return current
-            (ROOT / "authenticated-home-comments.xml").write_text(conversation_xml + "\n", encoding="utf-8")
-            screenshot("authenticated-home-comments.png")
-            comments_captured = True
-            report.append("- PASS: opened the video post's own Comments conversation and verified the comment thread, post context, reply actions and composer. No comment or reply was sent.")
+                    FAILURES.append("The offline Comments preview did not render every nested reply level after scrolling the conversation: " + ", ".join(missing_nested_markers))
+                else:
+                    report.append("- PASS: scrolled the Comments thread and verified the nested reply levels without sending a comment or reply.")
 
             run("adb", "shell", "input", "keyevent", "4")
             return_home_deadline = time.monotonic() + 15.0
