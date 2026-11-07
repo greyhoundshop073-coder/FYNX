@@ -66,13 +66,15 @@ class FynxAiReadAloudTest {
 
     @Test
     fun waveformCompactionPreservesEarlierAndLaterAudioSegments() {
-        val bytes = ByteBuffer.allocate(480 * 2).order(ByteOrder.LITTLE_ENDIAN)
-        repeat(480) { bytes.putShort(if (it < 240) 2_000.toShort() else 28_000.toShort()) }
-        val encoded = Base64.getEncoder().encodeToString(bytes.array())
-        val first = FynxAiReadAloud.appendPcmWaveform(emptyList(), encoded, maxBars = 2)
-        val combined = FynxAiReadAloud.appendPcmWaveform(first, encoded, maxBars = 2)
+        val silence = Base64.getEncoder().encodeToString(ByteArray(480 * 2))
+        val louderPcm = ByteBuffer.allocate(480 * 2).order(ByteOrder.LITTLE_ENDIAN)
+        repeat(480) { louderPcm.putShort(28_000.toShort()) }
+        val louder = Base64.getEncoder().encodeToString(louderPcm.array())
+        val first = FynxAiReadAloud.appendPcmWaveform(emptyList(), silence, maxBars = 2)
+        val combined = FynxAiReadAloud.appendPcmWaveform(first, louder, maxBars = 2)
         assertEquals(2, combined.size)
-        assertTrue(combined.any { it > first.maxOrNull()!! })
+        assertTrue("The earliest quiet audio segment must remain in the compacted waveform.", combined[0] < 0.2f)
+        assertTrue("The later louder audio segment must remain in the compacted waveform.", combined[1] > 0.8f)
     }
 
     @Test
