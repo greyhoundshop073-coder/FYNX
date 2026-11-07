@@ -1004,12 +1004,12 @@ fun FynxAiAssistantPanel(
                                         enabled = !creatingConversation && !pendingMediaUploading,
                                         onClick = {
                                             hasStartedInteraction = true
-                                            showVoiceScreen = true
                                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                                                 connectVoice()
                                             } else {
                                                 requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
                                             }
+                                            showVoiceScreen = true
                                         },
                                         modifier = Modifier
                                             .size(44.dp)
