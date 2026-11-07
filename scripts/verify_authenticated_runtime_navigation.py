@@ -2720,16 +2720,10 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                 else:
                     report.append("- PASS: scrolled the Comments thread and verified the nested reply levels without sending a comment or reply.")
 
-            run("adb", "shell", "input", "keyevent", "4")
-            return_home_deadline = time.monotonic() + 15.0
-            home_after_comments = ""
-            while time.monotonic() < return_home_deadline:
-                candidate = dump_ui("authenticated-home-after-comments.xml")
-                if candidate and is_home_feed_runtime_surface(candidate):
-                    home_after_comments = candidate
-                    break
-                time.sleep(0.5)
-            if not home_after_comments:
+            home_after_comments = restore_home_after_comment_probe_failure(
+                "authenticated-home-after-comments", current
+            )
+            if not home_after_comments or not is_home_feed_runtime_surface(home_after_comments):
                 FAILURES.append("Home Feed visual capture could not return safely from the Comments conversation.")
                 return dump_ui("authenticated-home-after-comments-timeout.xml") or current
             current = home_after_comments
