@@ -5,10 +5,12 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.util.Base64
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -32,6 +34,8 @@ internal class FynxAiPcmAudioPlayer(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val chunks = Channel<ByteArray>(Channel.UNLIMITED)
+    // PCM is not written until play() has acquired focus and started the AudioTrack.
+    private val playbackStarted = CompletableDeferred<Unit>()
     private val closed = AtomicBoolean(false)
     private val streamCompleted = AtomicBoolean(false)
     private val writerCompleted = AtomicBoolean(false)
@@ -49,10 +53,7 @@ internal class FynxAiPcmAudioPlayer(
         when (change) {
             AudioManager.AUDIOFOCUS_GAIN -> {
                 hasAudioFocus = true
-                if (!userPaused && !closed.get()) {
-                    runCatching { audioTrack?.play() }
-                        .onFailure { failureMessage = it.message ?: "FYNX could not resume audio output." }
-                }
+                startTrackIfAllowed()
             }
             AudioManager.AUDIOFOCUS_LOSS,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
@@ -97,8 +98,10 @@ internal class FynxAiPcmAudioPlayer(
         // and should not reserve the user's audio focus while it connects.
         scope.launch {
             try {
+                playbackStarted.await()
                 for (chunk in chunks) {
                     var offset = 0
+                    var consecutiveZeroWrites = 0
                     while (offset < chunk.size && isActive && !closed.get()) {
                         val written = track.write(
                             chunk,
@@ -106,9 +109,25 @@ internal class FynxAiPcmAudioPlayer(
                             chunk.size - offset,
                             AudioTrack.WRITE_BLOCKING
                         )
-                        if (written <= 0) {
-                            throw IllegalStateException("FYNX audio output stopped before the response finished.")
+                        if (written < 0) {
+                            throw IllegalStateException("FYNX audio output stopped before the response finished (AudioTrack.write returned $written).")
                         }
+                        if (written == 0) {
+                            // A paused track can temporarily accept no frames. Keep the
+                            // same queue and retry after resume instead of failing it.
+                            if (userPaused || !hasAudioFocus) {
+                                consecutiveZeroWrites = 0
+                                delay(25L)
+                                continue
+                            }
+                            consecutiveZeroWrites += 1
+                            if (consecutiveZeroWrites >= 100) {
+                                throw IllegalStateException("FYNX audio output is not accepting PCM frames.")
+                            }
+                            delay(10L)
+                            continue
+                        }
+                        consecutiveZeroWrites = 0
                         offset += written
                         writtenBytes.addAndGet(written.toLong())
                     }
@@ -146,19 +165,13 @@ internal class FynxAiPcmAudioPlayer(
     fun play() {
         if (closed.get() || failureMessage != null) return
         userPaused = false
-        if (hasAudioFocus) {
-            runCatching { audioTrack?.play() }
-                .onFailure { failureMessage = it.message ?: "FYNX could not resume audio playback." }
-        } else if (!focusRequested) {
+        if (!focusRequested && !hasAudioFocus) {
             // On Android 15+ this must happen while FYNX is topmost or while an
             // eligible media foreground service is active. UI read-aloud is started
             // from a visible assistant screen, so acquire focus at the user action.
             audioAttributes?.let(::requestAudioFocus)
-            if (hasAudioFocus && !userPaused && !closed.get()) {
-                runCatching { audioTrack?.play() }
-                    .onFailure { failureMessage = it.message ?: "FYNX could not start audio playback." }
-            }
         }
+        startTrackIfAllowed()
     }
 
     fun pause() {
@@ -202,6 +215,14 @@ internal class FynxAiPcmAudioPlayer(
             if (track?.state == AudioTrack.STATE_INITIALIZED) track.stop()
         }
         runCatching { track?.release() }
+    }
+
+    private fun startTrackIfAllowed() {
+        val track = audioTrack ?: return
+        if (!hasAudioFocus || userPaused || closed.get()) return
+        runCatching { track.play() }
+            .onSuccess { playbackStarted.complete(Unit) }
+            .onFailure { failureMessage = it.message ?: "FYNX could not start audio playback." }
     }
 
     private fun requestAudioFocus(attributes: AudioAttributes) {
