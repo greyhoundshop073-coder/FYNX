@@ -574,6 +574,38 @@ checks.append(
 )
 
 checks.append(
+    ("My Shop distinguishes gross product sales, delivery fees, seller commission and net seller earnings using authoritative totals",
+     all(fragment in seller_center for fragment in (
+         'grossSales = marketplaceRequiredBalance(row.opt("grossSales"))',
+         'deliveryFees = marketplaceRequiredBalance(row.opt("deliveryFees"))',
+         'marketplaceFees = marketplaceRequiredBalance(row.opt("marketplaceFees"))',
+         'netEarnings = marketplaceRequiredBalance(row.opt("netEarnings"))',
+         'productSubtotal = marketplaceRequiredBalance(row.opt("productSubtotal"))',
+         'deliveryFee = marketplaceRequiredBalance(row.opt("deliveryFee"))',
+         'MoneySummaryRow("Gross product sales", grossSales, currency)',
+         'MoneySummaryRow("Delivery fees", deliveryFees, currency)',
+         'MoneySummaryRow("FYNX commission", marketplaceFees, currency)',
+         'MoneySummaryRow("Net seller earnings", netEarnings, currency)',
+         'Net seller earnings include delivery fees and deduct the seller-side FYNX commission.',
+     ))
+     and all(fragment in settlement_routes for fragment in (
+         'COALESCE(o.product_subtotal, 0) AS product_subtotal',
+         'COALESCE(o.delivery_fee, 0) AS delivery_fee',
+         'AS gross_sales',
+         'AS delivery_fees',
+         'grossSales: Number(row.gross_sales || 0)',
+         'deliveryFees: Number(row.delivery_fees || 0)',
+         'marketplaceFees: Number(row.marketplace_fees || 0)',
+         'netEarnings: Number(row.net_earnings || 0)',
+         'productSubtotal: Number(row.product_subtotal || 0)',
+         'deliveryFee: Number(row.delivery_fee || 0)',
+     ))
+     and 'else reportableRows.sumOf { it.productSubtotal }' in seller_center
+     and 'else reportableRows.sumOf { it.deliveryFee }' in seller_center
+     and 'latest 100 settlements' in seller_center),
+)
+
+checks.append(
     ("My Shop disables payout setup until server confirms Registered Business and FYNX payout approval",
      "marketplacePayoutsEnabled" in seller_center
      and "payoutsEnabled" in seller_center
