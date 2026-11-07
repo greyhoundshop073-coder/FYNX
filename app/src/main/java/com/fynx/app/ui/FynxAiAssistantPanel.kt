@@ -1632,6 +1632,82 @@ private fun VoiceListeningIndicator(muted: Boolean, onClick: () -> Unit) {
     }
 }
 
+
+@Composable
+private fun ReadAloudPlayer(
+    paused: Boolean,
+    connecting: Boolean,
+    onPlayPause: () -> Unit,
+    onStop: () -> Unit
+) {
+    val transition = rememberInfiniteTransition(label = "fynxReadAloudWaveform")
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            IconButton(
+                onClick = onPlayPause,
+                enabled = !connecting,
+                modifier = Modifier.size(42.dp).background(Color.White, CircleShape)
+            ) {
+                Icon(
+                    if (paused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                    contentDescription = if (paused) "Resume read aloud" else "Pause read aloud",
+                    tint = Color(0xFF101010),
+                    modifier = Modifier.size(25.dp)
+                )
+            }
+            Text(
+                if (connecting) "…" else if (paused) "Paused" else "LIVE",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold
+            )
+            Row(
+                modifier = Modifier.weight(1f).height(42.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat( thirtyWaveBars ) { index ->
+                    val target = .18f + (((index * 17 + 11) % 23) / 28f)
+                    val animated by transition.animateFloat(
+                        initialValue = target * .55f,
+                        targetValue = target,
+                        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                            animation = androidx.compose.animation.core.tween(380 + (index % 7) * 95),
+                            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                        ),
+                        label = "readWave$index"
+                    )
+                    val height = if (paused) (target * 42f).dp else (animated * 42f).dp
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(height.coerceAtLeast(4.dp))
+                            .clip(RoundedCornerShape(50))
+                            .background(
+                                if (paused) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .48f)
+                                else Color(0xFF007FFF)
+                            )
+                    )
+                }
+            }
+            IconButton(onClick = onStop, modifier = Modifier.size(38.dp)) {
+                Icon(Icons.Default.Close, contentDescription = "Stop and close read aloud", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp))
+            }
+        }
+    }
+}
+
+private const val thirtyWaveBars = 30
+
 @Composable
 internal fun AiChatBubble(
     message: FynxAiUiMessage,
@@ -1716,6 +1792,17 @@ internal fun AiChatBubble(
                     )
                 }
 
+                if (!message.fromUser && message.text.isNotBlank() && !message.streaming &&
+                    (speaking || paused || connecting)
+                ) {
+                    ReadAloudPlayer(
+                        paused = paused || connecting,
+                        connecting = connecting,
+                        onPlayPause = onSpeak,
+                        onStop = onStopSpeaking
+                    )
+                }
+
                 if (!message.fromUser && message.text.isNotBlank() && !message.streaming) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .20f))
                     Row(
@@ -1744,11 +1831,6 @@ internal fun AiChatBubble(
                                     modifier = Modifier.size(19.dp)
                                 )
                             }
-                            if (speaking || paused || connecting) {
-                                IconButton(onClick = onStopSpeaking, modifier = Modifier.size(36.dp)) {
-                                    Icon(Icons.Default.Stop, contentDescription = "Stop reading response", tint = Color(0xFF007FFF), modifier = Modifier.size(18.dp))
-                                }
-                            }
                             IconButton(onClick = { onFeedback(if (feedback == 1) 0 else 1) }, modifier = Modifier.size(36.dp)) {
                                 Icon(Icons.Default.ThumbUp, contentDescription = if (feedback == 1) "Remove positive response rating" else "Rate response positively",
                                     tint = if (feedback == 1) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1763,19 +1845,6 @@ internal fun AiChatBubble(
                         IconButton(onClick = onShare, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.Share, contentDescription = "Share response", modifier = Modifier.size(18.dp))
                         }
-                    }
-                    if (speaking || paused || connecting) {
-                        Text(
-                            when {
-                                paused -> "Paused · resume to continue reading"
-                                connecting -> "Connecting to FYNX natural voice…"
-                                else -> readAloudProgress.trim().takeIf { it.isNotBlank() }
-                                    ?.let { "Reading: " + it.takeLast(110) }
-                                    ?: "FYNX is reading this response aloud"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }
