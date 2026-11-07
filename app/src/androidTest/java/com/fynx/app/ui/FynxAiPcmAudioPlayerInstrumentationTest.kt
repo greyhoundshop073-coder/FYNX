@@ -30,7 +30,11 @@ class FynxAiPcmAudioPlayerInstrumentationTest {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         )
         device.waitForIdle()
-        SystemClock.sleep(250L)
+        val foregroundDeadline = SystemClock.uptimeMillis() + 5_000L
+        while (device.currentPackageName != context.packageName && SystemClock.uptimeMillis() < foregroundDeadline) {
+            SystemClock.sleep(50L)
+        }
+        assertEquals("FYNX must be the foreground app before requesting Android 15 audio focus.", context.packageName, device.currentPackageName)
 
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val player = FynxAiPcmAudioPlayer(audioManager)
@@ -45,6 +49,10 @@ class FynxAiPcmAudioPlayerInstrumentationTest {
             assertEquals("The duration should be derived from queued PCM frames.", 1_000L, player.durationMillis())
 
             player.play()
+            assertTrue(
+                "Playback should acquire audio focus while FYNX is foregrounded: ${player.errorMessage()}",
+                player.errorMessage() == null
+            )
             val firstPlaybackDeadline = SystemClock.uptimeMillis() + 2_000L
             while (player.elapsedMillis() < 160L && SystemClock.uptimeMillis() < firstPlaybackDeadline) {
                 SystemClock.sleep(20L)

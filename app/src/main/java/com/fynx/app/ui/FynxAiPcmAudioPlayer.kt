@@ -92,8 +92,9 @@ internal class FynxAiPcmAudioPlayer(
             "FYNX audio playback could not be initialized."
         }
         audioTrack = track
-        requestAudioFocus(attributes)
-        check(failureMessage == null) { failureMessage ?: "FYNX could not get audio focus." }
+        // Audio focus is requested in play(), immediately before the first PCM is
+        // emitted. Preparing a remote Realtime session can take several seconds,
+        // and should not reserve the user's audio focus while it connects.
         scope.launch {
             try {
                 for (chunk in chunks) {
@@ -143,13 +144,20 @@ internal class FynxAiPcmAudioPlayer(
     }
 
     fun play() {
-        if (closed.get()) return
+        if (closed.get() || failureMessage != null) return
         userPaused = false
         if (hasAudioFocus) {
             runCatching { audioTrack?.play() }
                 .onFailure { failureMessage = it.message ?: "FYNX could not resume audio playback." }
         } else if (!focusRequested) {
+            // On Android 15+ this must happen while FYNX is topmost or while an
+            // eligible media foreground service is active. UI read-aloud is started
+            // from a visible assistant screen, so acquire focus at the user action.
             audioAttributes?.let(::requestAudioFocus)
+            if (hasAudioFocus && !userPaused && !closed.get()) {
+                runCatching { audioTrack?.play() }
+                    .onFailure { failureMessage = it.message ?: "FYNX could not start audio playback." }
+            }
         }
     }
 
