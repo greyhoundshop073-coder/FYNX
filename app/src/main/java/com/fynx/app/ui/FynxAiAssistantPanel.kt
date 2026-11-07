@@ -1208,7 +1208,14 @@ fun FynxAiAssistantPanel(
             hasPendingAttachment = pendingMediaId != null,
             attachmentUploading = pendingMediaUploading,
             onAttachImage = { imagePicker.launch("image/*") },
-            onSend = { if (input.isNotBlank() || pendingMediaId != null) sendPrompt(input, true) },
+            onSend = {
+                if (input.isNotBlank() || pendingMediaId != null) {
+                    val prompt = input
+                    showVoiceScreen = false
+                    endVoiceSession()
+                    sendPrompt(prompt, true)
+                }
+            },
             onToggleMute = {
                 if (voiceConnected) {
                     voiceMuted = !voiceMuted
