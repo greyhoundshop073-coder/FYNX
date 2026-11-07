@@ -183,6 +183,21 @@ fun FynxAiAssistantPanel(
     val voiceEngine = remember { FynxAiWebRtcEngine(context) }
     val readAloudEngine = remember { FynxAiWebRtcEngine(context) }
 
+    fun finishReadAloud(messageId: String) {
+        if (readAloudMessageId != messageId) return
+        readAloudConnectionJob = null
+        readAloudPcmPlayer?.close()
+        readAloudPcmPlayer = null
+        readAloudEngine.close()
+        readAloudMessageId = null
+        readAloudConnecting = false
+        readAloudPaused = false
+        readAloudTranscript = ""
+        readAloudWaveform = emptyList()
+        readAloudDurationMs = 0L
+        readAloudElapsedMs = 0L
+    }
+
     LaunchedEffect(readAloudMessageId, readAloudPaused, readAloudConnecting, readAloudPcmPlayer) {
         while (readAloudMessageId != null && !readAloudPaused && !readAloudConnecting) {
             val player = readAloudPcmPlayer
@@ -304,21 +319,6 @@ fun FynxAiAssistantPanel(
             readAloudEngine.sendEvent(JSONObject().put("type", "response.cancel").toString())
             readAloudEngine.sendEvent(JSONObject().put("type", "output_audio_buffer.clear").toString())
         }
-        readAloudPcmPlayer?.close()
-        readAloudPcmPlayer = null
-        readAloudEngine.close()
-        readAloudMessageId = null
-        readAloudConnecting = false
-        readAloudPaused = false
-        readAloudTranscript = ""
-        readAloudWaveform = emptyList()
-        readAloudDurationMs = 0L
-        readAloudElapsedMs = 0L
-    }
-
-    fun finishReadAloud(messageId: String) {
-        if (readAloudMessageId != messageId) return
-        readAloudConnectionJob = null
         readAloudPcmPlayer?.close()
         readAloudPcmPlayer = null
         readAloudEngine.close()
