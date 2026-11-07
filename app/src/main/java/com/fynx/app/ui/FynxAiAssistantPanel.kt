@@ -983,9 +983,17 @@ fun FynxAiAssistantPanel(
                                 input.trim().isNotEmpty() || pendingMediaId != null -> {
                                     IconButton(
                                         enabled = !pendingMediaUploading && !creatingConversation,
-                                        onClick = { sendPrompt(input, true) }
+                                        onClick = { sendPrompt(input, true) },
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF007FFF), CircleShape)
                                     ) {
-                                        Icon(Icons.Default.Send, contentDescription = "Send message")
+                                        Icon(
+                                            Icons.Default.Send,
+                                            contentDescription = "Send message",
+                                            tint = Color.White
+                                        )
                                     }
                                 }
                                 else -> {
@@ -998,9 +1006,17 @@ fun FynxAiAssistantPanel(
                                             } else {
                                                 requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
                                             }
-                                        }
+                                        },
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF007FFF), CircleShape)
                                     ) {
-                                        Icon(Icons.Default.Mic, contentDescription = "Speak to FYNX Assistant")
+                                        Icon(
+                                            Icons.Default.Mic,
+                                            contentDescription = "Start voice conversation with FYNX Assistant",
+                                            tint = Color.White
+                                        )
                                     }
                                 }
                             }
