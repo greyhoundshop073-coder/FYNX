@@ -888,7 +888,7 @@ fun FynxAiAssistantPanel(
                     Text(
                         "FYNX Assistant",
                         style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
@@ -898,7 +898,7 @@ fun FynxAiAssistantPanel(
                             else -> "Ask  ·  Create  ·  Discover"
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFB8C5D6)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 IconButton(
