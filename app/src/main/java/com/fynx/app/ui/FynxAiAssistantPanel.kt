@@ -1700,7 +1700,7 @@ private fun ReadAloudPlayer(
                 }
             }
             IconButton(onClick = onStop, modifier = Modifier.size(38.dp)) {
-                Icon(Icons.Default.Close, contentDescription = "Stop and close read aloud", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp))
+                Icon(Icons.Default.Close, contentDescription = "Stop reading response", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp))
             }
         }
     }
