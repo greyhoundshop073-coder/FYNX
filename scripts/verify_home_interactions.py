@@ -130,8 +130,9 @@ require(realtime_bootstrap, "before === null ? [postId, req.user.sub, limit + 1]
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 for needle in ('remember(post.id)','rememberSaveable(post.id)','DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)','.imePadding()','KeyboardActions(onSend = { send() })','FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }','commentCount += 1','onCommentCountChanged(commentCount)'):
     require(comments_panel, needle, f"Home 4D edge-case safeguard {needle}")
-for needle in ('commentReactions(context, post.id, ids)', 'setCommentReaction(context, post.id, comment.id, nextReaction)', 'HomeCommentActionBar(', 'onLongClick = { pickerOpen = true }', 'DropdownMenu(expanded = pickerOpen', 'Triple("LOVE", "❤️", "Love")', 'Triple("THUMBS_UP", "👍", "Like")', 'optimisticCounts.filterValues { it > 0 }'):
+for needle in ('commentReactions(context, post.id, ids)', 'setCommentReaction(context, post.id, comment.id, nextReaction)', 'HomeCommentActionBar(', 'onLongClick = { pickerOpen = true }', 'androidx.compose.ui.window.Popup(', 'Triple("LOVE", "❤️", "Love")', 'Triple("THUMBS_UP", "👍", "Like")', 'optimisticCounts.filterValues { it > 0 }'):
     require(comments_panel, needle, f"X-style comment reaction interaction {needle}")
+require(comments_panel, 'horizontalArrangement = Arrangement.spacedBy(2.dp)', "horizontal reaction tray keeps the six emoji choices in one compact row")
 for needle in ('Icons.Default.ChatBubbleOutline', 'Icons.Default.Repeat', 'Icons.Default.BarChart', 'Icons.Default.BookmarkBorder', 'Icons.Default.Share'):
     require(comments_panel, needle, f"comment action-bar icon {needle}")
 require(client, 'data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)', "typed comment reaction summary")
