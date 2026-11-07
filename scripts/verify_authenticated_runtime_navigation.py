@@ -1897,8 +1897,39 @@ def restore_home_after_comment_probe_failure(name: str, fallback: str = "") -> s
     return latest or fallback
 
 
+def find_comment_reply_toggle_for_author(xml_text: str, author_name: str):
+    """Find the Open replies control aligned with one named comment, not its parent comment."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    author_y = None
+    for node in root.iter("node"):
+        if (node.attrib.get("text") or "").strip().casefold() == author_name.casefold():
+            center = _center(node)
+            if center:
+                author_y = center[1]
+                break
+    if author_y is None:
+        return None
+    candidates = []
+    for node in root.iter("node"):
+        if (node.attrib.get("content-desc") or "").strip().casefold() != "open replies":
+            continue
+        center = _center(node)
+        if not center:
+            continue
+        distance = center[1] - author_y
+        if 0 < distance <= 260:
+            candidates.append((distance, center[0], center[1]))
+    if not candidates:
+        return None
+    _, x, y = min(candidates)
+    return x, y
+
+
 def capture_nested_comment_reply_preview(initial_xml: str) -> tuple[set[str], str]:
-    """Scroll only the Comments list and accumulate proof of nested replies below the first viewport."""
+    """Open Zara's nested reply branch, then scroll the Comments list to reveal Leo's reply."""
     markers = (
         "Great portrait fit.",
         "Agreed — the feed stays uncluttered.",
@@ -1906,15 +1937,50 @@ def capture_nested_comment_reply_preview(initial_xml: str) -> tuple[set[str], st
     )
     found = {marker for marker in markers if marker in initial_xml}
     current = initial_xml
+    if markers[2] not in current:
+        toggle = find_comment_reply_toggle_for_author(current, "Zara Bello")
+        if toggle:
+            x, y = toggle
+            run("adb", "shell", "input", "tap", str(x), str(y))
+            deadline = time.monotonic() + 6.0
+            while time.monotonic() < deadline:
+                candidate = dump_ui("authenticated-home-comments-zara-replies-open.xml")
+                if candidate and find_control(candidate, ["Comments"]) and find_control(candidate, ["Write a comment"]):
+                    current = candidate
+                    found.update(marker for marker in markers if marker in candidate)
+                    if markers[2] in found:
+                        (ROOT / "authenticated-home-comments-nested-replies.xml").write_text(candidate + chr(10), encoding="utf-8")
+                        screenshot("authenticated-home-comments-nested-replies.png")
+                        return found, current
+                time.sleep(0.3)
+
     size = run("adb", "shell", "wm", "size").stdout or ""
-    match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", size)
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
     if not match:
         return found, current
-    width, height = int(match.group(1)), int(match.group(2))
-    x = width // 2
-    start_y = int(height * 0.70)
-    end_y = int(height * 0.36)
-    for attempt in range(6):
+    width, height = map(int, match.groups())
+    try:
+        root = ET.fromstring(current)
+        scroll_bounds = []
+        for node in root.iter("node"):
+            if node.attrib.get("scrollable", "false").lower() != "true":
+                continue
+            bounds = node.attrib.get("bounds", "")
+            item = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+            if item:
+                left, top, right, bottom = map(int, item.groups())
+                scroll_bounds.append((right - left, bottom - top, left, top, right, bottom))
+    except ET.ParseError:
+        scroll_bounds = []
+    if scroll_bounds:
+        _, _, left, top, right, bottom = max(scroll_bounds, key=lambda item: item[1])
+        x = (left + right) // 2
+        start_y = min(bottom - 30, int(height * 0.72))
+        end_y = max(top + 30, int(height * 0.34))
+    else:
+        x, start_y, end_y = width // 2, int(height * 0.70), int(height * 0.36)
+    for attempt in range(8):
+        found.update(marker for marker in markers if marker in current)
         if all(marker in found for marker in markers):
             break
         run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
@@ -1926,10 +1992,9 @@ def capture_nested_comment_reply_preview(initial_xml: str) -> tuple[set[str], st
             break
         current = candidate
         found.update(marker for marker in markers if marker in candidate)
-        if all(marker in found for marker in markers):
-            (ROOT / "authenticated-home-comments-nested-replies.xml").write_text(candidate + chr(10), encoding="utf-8")
-            screenshot("authenticated-home-comments-nested-replies.png")
-            break
+    if markers[2] in found:
+        (ROOT / "authenticated-home-comments-nested-replies.xml").write_text(current + chr(10), encoding="utf-8")
+        screenshot("authenticated-home-comments-nested-replies.png")
     return found, current
 
 
@@ -2008,7 +2073,7 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
     return x, int(height * 0.50), int(height * 0.70)
 
 
-def scroll_home_action_row_into_safe_viewport(xml_text: str, name: str, action_finder, *, max_swipes: int = 3) -> str:
+def scroll_home_action_row_into_safe_viewport(xml_text: str, name: str, action_finder, *, max_swipes: int = 6) -> str:
     """Scroll a Home post's action row above the floating bottom-nav hit area before tapping.
 
     The floating Home toolbar can cover a post action row while UIAutomator still
@@ -2045,6 +2110,13 @@ def scroll_home_action_row_into_safe_viewport(xml_text: str, name: str, action_f
             break
 
         x, start_y, end_y = _home_content_scroll_point(current, width, height, "up")
+        # Short captions near the top of a tall fixture can yield a drag that is
+        # too small to move the feed. Fall back to the narrow left gutter, outside
+        # post cards and action targets, and scroll a measured 56% of the viewport.
+        if start_y - end_y < 240:
+            x = max(20, min(width - 20, int(width * 0.025)))
+            start_y = int(height * 0.82)
+            end_y = int(height * 0.26)
         if start_y - end_y < 240:
             break
         run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "650")
@@ -2439,47 +2511,60 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
 
         discovery_control = find_control(current, ["Open Discovery video"])
         if discovery_control and not discovery_viewer_captured:
-            discovery_expected_markers = [
-                "Like video", "Open comments", "Share video",
-                "Unmute Discovery video", "Mute Discovery video",
-                "Pause Discovery video", "Play Discovery video",
-            ]
-            viewer_xml = tap_control(
+            current = scroll_home_action_row_into_safe_viewport(
                 current,
-                ["Open Discovery video"],
-                "authenticated-home-discovery-video-open",
-                discovery_expected_markers
+                "discovery",
+                lambda value: find_control(value, ["Open Discovery video"]),
+                max_swipes=6
             )
-            if not viewer_xml:
-                # ADB UIAutomator can return one stale Home hierarchy while the
-                # Android VideoView transition is still composing. Recover only
-                # from a fresh hierarchy that proves the actual viewer, every
-                # action and the native video surface are all present together.
-                recovery_deadline = time.monotonic() + 12.0
-                while time.monotonic() < recovery_deadline:
-                    candidate = dump_ui("authenticated-discovery-video-transition-recovery.xml")
-                    candidate_nodes = nodes(candidate)
-                    has_native_video = any(
-                        node.attrib.get("class") == "android.widget.VideoView"
-                        for node in candidate_nodes
-                    )
-                    has_all_actions = (
-                        candidate
-                        and all(find_control(candidate, [marker]) for marker in discovery_expected_markers)
-                    )
-                    if has_native_video and has_all_actions:
-                        viewer_xml = candidate
-                        FAILURES[:] = [
-                            failure for failure in FAILURES
-                            if not failure.startswith(
-                                "authenticated-home-discovery-video-open: destination marker not found"
+            discovery_control = find_control(current, ["Open Discovery video"]) if current else None
+            viewer_xml = ""
+            latest_viewer_probe = ""
+            if discovery_control:
+                tap_result = tap_control(
+                    current,
+                    ["Open Discovery video"],
+                    "authenticated-home-discovery-video-open",
+                    expected_labels=None
+                )
+                if tap_result:
+                    settle_deadline = time.monotonic() + 25.0
+                    stable_viewer_dumps = 0
+                    while time.monotonic() < settle_deadline:
+                        candidate = dump_ui("authenticated-home-discovery-viewer-settle.xml")
+                        if candidate:
+                            latest_viewer_probe = candidate
+                            candidate_nodes = nodes(candidate)
+                            has_native_video = any(
+                                node.attrib.get("class") == "android.widget.VideoView"
+                                for node in candidate_nodes
                             )
-                        ]
-                        report.append(
-                            "- PASS: recovered the Discovery viewer from a fresh settled hierarchy after a transient stale UI dump; native video and all actions were verified together."
-                        )
-                        break
-                    time.sleep(0.5)
+                            discovery_expected_markers = [
+                                "Like video", "Unlike video", "Open comments", "Share video"
+                            ]
+                            has_all_actions = (
+                                all(find_control(candidate, [marker]) for marker in discovery_expected_markers)
+                                and find_control(candidate, ["Unmute Discovery video", "Mute Discovery video"])
+                                and find_control(candidate, ["Pause Discovery video", "Play Discovery video"])
+                            )
+                            if has_native_video and has_all_actions:
+                                stable_viewer_dumps += 1
+                                if stable_viewer_dumps >= 2:
+                                    viewer_xml = candidate
+                                    break
+                            else:
+                                stable_viewer_dumps = 0
+                        time.sleep(0.4)
+            if not viewer_xml:
+                screenshot("authenticated-home-discovery-video-open-failed.png")
+                if latest_viewer_probe:
+                    (ROOT / "authenticated-home-discovery-video-open-failed.xml").write_text(
+                        latest_viewer_probe + chr(10), encoding="utf-8"
+                    )
+                FAILURES.append(
+                    "Discovery video preview did not settle into a playable viewer with Like, Comments, Share, mute and playback controls; "
+                    "visible markers: " + visible_marker_summary(latest_viewer_probe or current)
+                )
             if viewer_xml:
                 # Do not count the viewer as a playable video until the real
                 # VideoView has prepared and exposed its mute control.
@@ -2536,9 +2621,7 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
         # the plain repost option is read-only here; quote composition is opened and
         # dismissed without submitting a post or writing to the backend.
         if HOME_FEED_FIXTURES_SEEDED and not repost_quote_captured:
-            current = scroll_home_action_row_into_safe_viewport(
-                current, "repost", lambda value: find_exact_home_action(value, "Repost")
-            )
+            current = scroll_home_action_row_into_safe_viewport(current, "repost", lambda value: find_exact_home_action(value, "Repost"), max_swipes=6)
             repost_action = find_exact_home_action(current, "Repost") if current else None
             if repost_action:
                 _, repost_x, repost_y = repost_action

@@ -196,11 +196,15 @@ private fun FynxDiscoveryPreviewCard(video: FynxDiscoveryClient.TrendingPost, on
         Modifier.width(180.dp).aspectRatio(9f / 16f)
             .clip(RoundedCornerShape(16.dp))
             .background(Brush.verticalGradient(listOf(Color(0xFF24364D), Color(0xFF111A29))))
-            .clickable(onClick = onOpen)
             .semantics(mergeDescendants = true) {
                 contentDescription = "Open Discovery video"
                 role = Role.Button
             }
+            .clickable(
+                role = Role.Button,
+                onClickLabel = "Open Discovery video",
+                onClick = onOpen
+            )
     ) {
         visual?.poster?.let { poster ->
             Image(

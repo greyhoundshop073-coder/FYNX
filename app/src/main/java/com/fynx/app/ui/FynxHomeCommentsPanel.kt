@@ -740,78 +740,102 @@ private fun HomeCommentActionBar(
         Triple("LOVE", "❤️", "Love"), Triple("LAUGH", "😂", "Funny"), Triple("THUMBS_UP", "👍", "Like"),
         Triple("WOW", "😮", "Wow"), Triple("SAD", "😢", "Sad"), Triple("FIRE", "🔥", "Fire")
     )
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = onExpandReplies, enabled = !pending, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) {
-            Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Open replies", modifier = Modifier.size(18.dp))
-            if ((engagement?.replyCount ?: 0) > 0) Text(" ${engagement?.replyCount}", style = MaterialTheme.typography.labelSmall)
-        }
-        TextButton(onClick = onRepost, enabled = !pending, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) {
-            Icon(Icons.Default.Repeat, contentDescription = "Repost comment", modifier = Modifier.size(18.dp), tint = if (engagement?.reposted == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            if ((engagement?.repostCount ?: 0) > 0) Text(" ${engagement?.repostCount}", style = MaterialTheme.typography.labelSmall)
-        }
-        Box {
-            Row(
-                modifier = Modifier.combinedClickable(enabled = !pending, onClick = { onReact("LOVE") }, onLongClick = { pickerOpen = true })
-                    .padding(horizontal = 5.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (activeEmoji == null) Icon(Icons.Default.FavoriteBorder, contentDescription = "Like comment; hold for reactions", modifier = Modifier.size(19.dp))
-                else Text(activeEmoji, style = MaterialTheme.typography.titleSmall)
-                if (totalReactions > 0) Text(" $totalReactions", style = MaterialTheme.typography.labelSmall)
-            }
-            if (pickerOpen) {
-                androidx.compose.ui.window.Popup(
-                    alignment = Alignment.TopCenter,
-                    onDismissRequest = { pickerOpen = false }
+    BackHandler(enabled = pickerOpen) { pickerOpen = false }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (pickerOpen) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 14.dp,
+                    tonalElevation = 5.dp
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        shadowElevation = 14.dp,
-                        tonalElevation = 5.dp,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            choices.forEach { (type, emoji, label) ->
-                                Box(
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .clickable(enabled = !pending) {
-                                            pickerOpen = false
-                                            onReact(type)
-                                        }
-                                        .padding(horizontal = 7.dp, vertical = 8.dp)
-                                ) {
-                                    Text(
-                                        emoji,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        modifier = Modifier.semantics {
-                                            contentDescription = label
-                                            role = Role.Button
-                                        }
-                                    )
-                                }
+                        choices.forEach { (type, emoji, label) ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .semantics(mergeDescendants = true) {
+                                        contentDescription = label
+                                        role = Role.Button
+                                    }
+                                    .clickable(
+                                        enabled = !pending,
+                                        role = Role.Button,
+                                        onClickLabel = label
+                                    ) {
+                                        pickerOpen = false
+                                        onReact(type)
+                                    }
+                                    .padding(horizontal = 7.dp, vertical = 8.dp)
+                            ) {
+                                Text(emoji, style = MaterialTheme.typography.titleLarge)
                             }
                         }
                     }
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp, vertical = 8.dp)) {
-            Icon(Icons.Default.BarChart, contentDescription = "Comment views", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            if ((engagement?.viewCount ?: 0) > 0) Text(" ${engagement?.viewCount}", style = MaterialTheme.typography.labelSmall)
-        }
-        TextButton(onClick = onBookmark, enabled = !pending, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) {
-            Icon(if (engagement?.bookmarked == true) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                contentDescription = "Bookmark comment", modifier = Modifier.size(18.dp),
-                tint = if (engagement?.bookmarked == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        TextButton(onClick = onShare, enabled = !pending, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) {
-            Icon(Icons.Default.Share, contentDescription = "Share comment", modifier = Modifier.size(18.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = { pickerOpen = false; onExpandReplies() },
+                enabled = !pending,
+                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+            ) {
+                Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Open replies", modifier = Modifier.size(18.dp))
+                if ((engagement?.replyCount ?: 0) > 0) Text(" " + (engagement?.replyCount ?: 0), style = MaterialTheme.typography.labelSmall)
+            }
+            TextButton(
+                onClick = { pickerOpen = false; onRepost() },
+                enabled = !pending,
+                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+            ) {
+                Icon(Icons.Default.Repeat, contentDescription = "Repost comment", modifier = Modifier.size(18.dp), tint = if (engagement?.reposted == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                if ((engagement?.repostCount ?: 0) > 0) Text(" " + (engagement?.repostCount ?: 0), style = MaterialTheme.typography.labelSmall)
+            }
+            Row(
+                modifier = Modifier.combinedClickable(
+                    enabled = !pending,
+                    onClick = { pickerOpen = false; onReact("LOVE") },
+                    onLongClick = { pickerOpen = !pickerOpen }
+                ).padding(horizontal = 5.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (activeEmoji == null) Icon(Icons.Default.FavoriteBorder, contentDescription = "Like comment; hold for reactions", modifier = Modifier.size(19.dp))
+                else Text(activeEmoji, style = MaterialTheme.typography.titleSmall)
+                if (totalReactions > 0) Text(" " + totalReactions, style = MaterialTheme.typography.labelSmall)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp, vertical = 8.dp)) {
+                Icon(Icons.Default.BarChart, contentDescription = "Comment views", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                if ((engagement?.viewCount ?: 0) > 0) Text(" " + (engagement?.viewCount ?: 0), style = MaterialTheme.typography.labelSmall)
+            }
+            TextButton(
+                onClick = { pickerOpen = false; onBookmark() },
+                enabled = !pending,
+                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+            ) {
+                Icon(
+                    if (engagement?.bookmarked == true) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    contentDescription = "Bookmark comment",
+                    modifier = Modifier.size(18.dp),
+                    tint = if (engagement?.bookmarked == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(
+                onClick = { pickerOpen = false; onShare() },
+                enabled = !pending,
+                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = "Share comment", modifier = Modifier.size(18.dp))
+            }
         }
     }
 }

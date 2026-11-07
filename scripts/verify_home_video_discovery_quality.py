@@ -156,12 +156,12 @@ checks = [
         and '"authenticated-discovery-video-viewer.png"' in navigation,
     ),
     (
-        "Discovery viewer recovery rejects stale Home dumps and requires native video plus every action",
-        "authenticated-discovery-video-transition-recovery.xml" in navigation
+        "Discovery viewer is accepted only after two stable snapshots prove the native player and all actions",
+        "authenticated-home-discovery-viewer-settle.xml" in navigation
         and "android.widget.VideoView" in navigation
         and "has_native_video and has_all_actions" in navigation
         and "discovery_expected_markers" in navigation
-        and "failure.startswith(" in navigation,
+        and "stable_viewer_dumps >= 2" in navigation,
     ),
     (
         "Discovery remains a stable Home insertion whenever real trending videos are available",
