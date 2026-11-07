@@ -183,29 +183,6 @@ fun FynxAiAssistantPanel(
     val voiceEngine = remember { FynxAiWebRtcEngine(context) }
     val readAloudEngine = remember { FynxAiWebRtcEngine(context) }
 
-    LaunchedEffect(readAloudMessageId, readAloudPaused, readAloudConnecting, readAloudPcmPlayer) {
-        while (readAloudMessageId != null && !readAloudPaused && !readAloudConnecting) {
-            val player = readAloudPcmPlayer
-            if (player != null) {
-                player.errorMessage()?.let { failure ->
-                    errorMessage = friendlyFynxAiError(
-                        IllegalStateException(failure),
-                        "FYNX could not continue reading this response aloud. Please try again."
-                    )
-                    finishReadAloud(readAloudMessageId ?: return@LaunchedEffect)
-                    return@LaunchedEffect
-                }
-                readAloudElapsedMs = player.elapsedMillis()
-                readAloudDurationMs = player.durationMillis()
-                if (player.isPlaybackComplete()) {
-                    finishReadAloud(readAloudMessageId ?: return@LaunchedEffect)
-                    return@LaunchedEffect
-                }
-            }
-            delay(120)
-        }
-    }
-
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             hasStartedInteraction = true
@@ -330,6 +307,30 @@ fun FynxAiAssistantPanel(
         readAloudDurationMs = 0L
         readAloudElapsedMs = 0L
     }
+
+    LaunchedEffect(readAloudMessageId, readAloudPaused, readAloudConnecting, readAloudPcmPlayer) {
+        while (readAloudMessageId != null && !readAloudPaused && !readAloudConnecting) {
+            val player = readAloudPcmPlayer
+            if (player != null) {
+                player.errorMessage()?.let { failure ->
+                    errorMessage = friendlyFynxAiError(
+                        IllegalStateException(failure),
+                        "FYNX could not continue reading this response aloud. Please try again."
+                    )
+                    finishReadAloud(readAloudMessageId ?: return@LaunchedEffect)
+                    return@LaunchedEffect
+                }
+                readAloudElapsedMs = player.elapsedMillis()
+                readAloudDurationMs = player.durationMillis()
+                if (player.isPlaybackComplete()) {
+                    finishReadAloud(readAloudMessageId ?: return@LaunchedEffect)
+                    return@LaunchedEffect
+                }
+            }
+            delay(120)
+        }
+    }
+
 
     fun requestReadAloud(messageId: String, text: String) {
         if (text.isBlank()) return
@@ -858,6 +859,7 @@ fun FynxAiAssistantPanel(
         modifier = Modifier
             .fillMaxSize()
             .imePadding()
+            .navigationBarsPadding()
     ) {
         Column(
             Modifier
@@ -870,19 +872,24 @@ fun FynxAiAssistantPanel(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f))
+                    color = Color(0xFF007FFF),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = .22f))
                 ) {
                     Icon(
                         Icons.Default.AutoAwesome,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = Color.White,
                         modifier = Modifier.padding(10.dp).size(22.dp)
                     )
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text("FYNX Assistant", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "FYNX Assistant",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
                     Text(
                         when {
                             voiceConnected -> "Voice session connected"
@@ -890,18 +897,23 @@ fun FynxAiAssistantPanel(
                             else -> "Ask  ·  Create  ·  Discover"
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color(0xFFB8C5D6)
                     )
                 }
-                IconButton(enabled = !creatingConversation, onClick = { startNewConversation() }) {
-                    Icon(Icons.Default.Add, contentDescription = "Start new conversation")
+                IconButton(
+                    enabled = !creatingConversation,
+                    onClick = { startNewConversation() },
+                    modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF1C2434))
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Start new conversation", tint = Color.White, modifier = Modifier.size(22.dp))
                 }
                 Box {
                     IconButton(
                         enabled = !creatingConversation,
-                        onClick = { showConversationHistory = !showConversationHistory }
+                        onClick = { showConversationHistory = !showConversationHistory },
+                        modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF1C2434))
                     ) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Conversation history")
+                        Icon(Icons.Default.MoreVert, contentDescription = "Conversation history", tint = Color.White, modifier = Modifier.size(22.dp))
                     }
                     DropdownMenu(
                         expanded = showConversationHistory,
@@ -1445,7 +1457,7 @@ internal fun FynxAiFullScreenVoice(
         phase == "SPEAKING" -> "FYNX AI is speaking…"
         else -> "Listening…"
     }
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(Color.Black).imePadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 18.dp),
@@ -1472,35 +1484,41 @@ internal fun FynxAiFullScreenVoice(
                     }
                 }
             }
-            Column(
-                Modifier.fillMaxWidth().weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentAlignment = Alignment.Center
             ) {
-                Box(Modifier.size(270.dp), contentAlignment = Alignment.Center) {
-                    Box(Modifier.size(270.dp).clip(CircleShape).background(Color(0xFF356FE8)))
-                    Box(Modifier.size(250.dp * pulse).clip(CircleShape).background(
-                        Brush.verticalGradient(listOf(Color(0xFF78A6FF), Color(0xFFB9CCFF), Color(0xFFEAF1FF), Color(0xFF9DB8F5)))
-                    ))
-                    Box(Modifier.size(250.dp).clip(CircleShape).background(
-                        Brush.radialGradient(listOf(Color.White.copy(alpha = .30f), Color.Transparent, Color(0xFF7399EF).copy(alpha = .10f)))
-                    ))
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("FYNX", color = Color(0xFF244FAD), fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                        Text("AI", color = Color(0xFF244FAD), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                val orbDiameter = minOf(240.dp, maxWidth * 0.70f, maxHeight * 0.44f)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    Box(Modifier.size(orbDiameter), contentAlignment = Alignment.Center) {
+                        Box(Modifier.fillMaxSize().clip(CircleShape).background(Color(0xFF356FE8)))
+                        Box(Modifier.size(orbDiameter * 0.92f * pulse).clip(CircleShape).background(
+                            Brush.verticalGradient(listOf(Color(0xFF78A6FF), Color(0xFFB9CCFF), Color(0xFFEAF1FF), Color(0xFF9DB8F5)))
+                        ))
+                        Box(Modifier.size(orbDiameter * 0.92f).clip(CircleShape).background(
+                            Brush.radialGradient(listOf(Color.White.copy(alpha = .30f), Color.Transparent, Color(0xFF7399EF).copy(alpha = .10f)))
+                        ))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("FYNX", color = Color(0xFF244FAD), fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                            Text("AI", color = Color(0xFF244FAD), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
-                }
-                Spacer(Modifier.height(28.dp))
-                Text(status, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                if (error != null) {
-                    Text(error, color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
-                } else if (connected && phase == "SPEAKING") {
-                    Text("You can interrupt me anytime.", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
-                } else if (connected && phase == "THINKING") {
-                    Text("Preparing a response…", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
-                } else if (connected && !muted) {
-                    Text("Speak naturally. I'm listening.", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(status, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                        if (error != null) {
+                            Text(error, color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(horizontal = 28.dp))
+                        } else if (connected && phase == "SPEAKING") {
+                            Text("You can interrupt me anytime.", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
+                        } else if (connected && phase == "THINKING") {
+                            Text("Preparing a response…", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
+                        } else if (connected && !muted) {
+                            Text("Speak naturally. I'm listening.", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             }
             Row(
@@ -1752,58 +1770,73 @@ private fun ReadAloudPlayer(
         border = BorderStroke(1.dp, Color(0xFF454545))
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 IconButton(
                     onClick = onPlayPause,
                     enabled = !connecting,
-                    modifier = Modifier.size(42.dp).background(Color.White, CircleShape)
+                    modifier = Modifier.size(48.dp).background(Color.White, CircleShape)
                 ) {
                     Icon(
                         if (paused || connecting) Icons.Default.PlayArrow else Icons.Default.Pause,
                         contentDescription = if (paused) "Resume read aloud" else "Pause read aloud",
                         tint = Color(0xFF101010),
-                        modifier = Modifier.size(25.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                 }
-                Text(
-                    FynxAiReadAloud.formatPlaybackTime(elapsedMs) + " / " +
-                        FynxAiReadAloud.formatPlaybackTime(safeDuration),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
-                Row(
-                    modifier = Modifier.weight(1f).height(40.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    visibleLevels.forEachIndexed { index, level ->
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height((5.dp + (level * 34f).dp).coerceAtMost(39.dp))
-                                .clip(RoundedCornerShape(50))
-                                .background(
-                                    if (index < (progress * thirtyWaveBars).toInt()) Color.White
-                                    else Color(0xFF858585)
-                                )
-                        )
-                    }
+                    Text(
+                        FynxAiReadAloud.formatPlaybackTime(elapsedMs) + " / " +
+                            FynxAiReadAloud.formatPlaybackTime(safeDuration),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                    Text(
+                        when {
+                            connecting -> "Connecting to FYNX natural voice…"
+                            paused -> "Paused · resume to continue"
+                            else -> "FYNX is reading this answer aloud"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFE0E0E0),
+                        maxLines = 1
+                    )
                 }
-                IconButton(onClick = onStop, modifier = Modifier.size(38.dp)) {
+                IconButton(onClick = onStop, modifier = Modifier.size(48.dp)) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Stop reading response",
                         tint = Color.White,
-                        modifier = Modifier.size(23.dp)
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                visibleLevels.forEachIndexed { index, level ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height((4.dp + (level * 29f).dp).coerceAtMost(33.dp))
+                            .clip(RoundedCornerShape(50))
+                            .background(
+                                if (index < (progress * thirtyWaveBars).toInt()) Color.White
+                                else Color(0xFF858585)
+                            )
                     )
                 }
             }
@@ -1812,15 +1845,6 @@ private fun ReadAloudPlayer(
                 modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50)),
                 color = Color(0xFF007FFF),
                 trackColor = Color(0xFF555555)
-            )
-            Text(
-                when {
-                    connecting -> "Connecting to FYNX natural voice…"
-                    paused -> "Paused · resume to continue reading"
-                    else -> "FYNX is reading this answer aloud"
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFFE0E0E0)
             )
         }
     }
@@ -1933,42 +1957,46 @@ internal fun AiChatBubble(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .20f))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = onCopy, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy response", modifier = Modifier.size(18.dp))
-                            }
-                            IconButton(onClick = onSpeak, modifier = Modifier.size(36.dp)) {
-                                Icon(
-                                    when {
-                                        paused -> Icons.Default.PlayArrow
-                                        speaking && !connecting -> Icons.Default.Pause
-                                        else -> Icons.Default.VolumeUp
-                                    },
-                                    contentDescription = when {
-                                        paused -> "Resume reading response"
-                                        connecting -> "Cancel voice playback connection"
-                                        speaking -> "Pause reading response"
-                                        else -> "Read response aloud"
-                                    },
-                                    tint = if (speaking || paused || connecting) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(19.dp)
-                                )
-                            }
-                            IconButton(onClick = { onFeedback(if (feedback == 1) 0 else 1) }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.ThumbUp, contentDescription = if (feedback == 1) "Remove positive response rating" else "Rate response positively",
-                                    tint = if (feedback == 1) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp))
-                            }
-                            IconButton(onClick = { onFeedback(if (feedback == -1) 0 else -1) }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.ThumbDown, contentDescription = if (feedback == -1) "Remove negative response rating" else "Rate response negatively",
-                                    tint = if (feedback == -1) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp))
-                            }
+                        IconButton(onClick = onCopy, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy response", modifier = Modifier.size(18.dp))
                         }
-                        IconButton(onClick = onShare, modifier = Modifier.size(36.dp)) {
+                        IconButton(onClick = onSpeak, modifier = Modifier.size(40.dp)) {
+                            Icon(
+                                when {
+                                    paused -> Icons.Default.PlayArrow
+                                    speaking && !connecting -> Icons.Default.Pause
+                                    else -> Icons.Default.VolumeUp
+                                },
+                                contentDescription = when {
+                                    paused -> "Resume reading response"
+                                    connecting -> "Cancel voice playback connection"
+                                    speaking -> "Pause reading response"
+                                    else -> "Read response aloud"
+                                },
+                                tint = if (speaking || paused || connecting) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                        IconButton(onClick = { onFeedback(if (feedback == 1) 0 else 1) }, modifier = Modifier.size(40.dp)) {
+                            Icon(
+                                Icons.Default.ThumbUp,
+                                contentDescription = if (feedback == 1) "Remove positive response rating" else "Rate response positively",
+                                tint = if (feedback == 1) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(onClick = { onFeedback(if (feedback == -1) 0 else -1) }, modifier = Modifier.size(40.dp)) {
+                            Icon(
+                                Icons.Default.ThumbDown,
+                                contentDescription = if (feedback == -1) "Remove negative response rating" else "Rate response negatively",
+                                tint = if (feedback == -1) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(onClick = onShare, modifier = Modifier.size(40.dp)) {
                             Icon(Icons.Default.Share, contentDescription = "Share response", modifier = Modifier.size(18.dp))
                         }
                     }
