@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
@@ -124,6 +126,7 @@ fun FynxAiAssistantPanel(
     var voiceConnected by remember { mutableStateOf(false) }
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
+    var showVoiceScreen by remember { mutableStateOf(false) }
     var showComposerTools by remember { mutableStateOf(false) }
     var showTranslationDialog by remember { mutableStateOf(false) }
     var translationSourceText by remember { mutableStateOf("") }
@@ -1001,6 +1004,7 @@ fun FynxAiAssistantPanel(
                                         enabled = !creatingConversation && !pendingMediaUploading,
                                         onClick = {
                                             hasStartedInteraction = true
+                                            showVoiceScreen = true
                                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                                                 connectVoice()
                                             } else {
@@ -1031,6 +1035,32 @@ fun FynxAiAssistantPanel(
                 )
             }
         }
+    }
+
+    if (showVoiceScreen) {
+        FynxAiFullScreenVoice(
+            connecting = voiceConnecting,
+            connected = voiceConnected,
+            muted = voiceMuted,
+            error = errorMessage,
+            input = input,
+            onInputChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) },
+            onSend = { if (input.isNotBlank()) sendPrompt(input, true) },
+            onToggleMute = {
+                if (voiceConnected) {
+                    voiceMuted = !voiceMuted
+                    voiceEngine.setMicrophoneEnabled(!voiceMuted)
+                }
+            },
+            onClose = {
+                showVoiceScreen = false
+                endVoiceSession()
+            },
+            onMenu = {
+                showVoiceScreen = false
+                endVoiceSession()
+            }
+        )
     }
 
     if (showTranslationDialog) {
@@ -1115,6 +1145,149 @@ fun FynxAiAssistantPanel(
                 TextButton(onClick = { conversationPendingDelete = null }) { Text("Keep conversation") }
             }
         )
+    }
+}
+
+@Composable
+private fun FynxAiFullScreenVoice(
+    connecting: Boolean,
+    connected: Boolean,
+    muted: Boolean,
+    error: String?,
+    input: String,
+    onInputChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onToggleMute: () -> Unit,
+    onClose: () -> Unit,
+    onMenu: () -> Unit
+) {
+    var showSettings by remember { mutableStateOf(false) }
+    val transition = rememberInfiniteTransition(label = "fynxVoiceOrb")
+    val pulse by transition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.04f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(1800),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "fynxVoiceOrbPulse"
+    )
+    val status = when {
+        connecting -> "Connecting…"
+        error != null -> "Connection issue"
+        !connected -> "Ready to talk"
+        muted -> "Microphone muted"
+        else -> "Listening…"
+    }
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 18.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(shape = CircleShape, color = Color(0xFF292929), modifier = Modifier.size(58.dp).clickable(onClick = onMenu)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Return to AI chat", tint = Color.White, modifier = Modifier.size(27.dp))
+                    }
+                }
+                Box {
+                    Surface(shape = CircleShape, color = Color(0xFF292929), modifier = Modifier.size(58.dp).clickable { showSettings = true }) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Tune, contentDescription = "Voice settings", tint = Color.White, modifier = Modifier.size(27.dp))
+                        }
+                    }
+                    DropdownMenu(expanded = showSettings, onDismissRequest = { showSettings = false }) {
+                        DropdownMenuItem(
+                            text = { Text(if (muted) "Unmute microphone" else "Mute microphone") },
+                            leadingIcon = { Icon(if (muted) Icons.Default.Mic else Icons.Default.MicOff, contentDescription = null) },
+                            onClick = { showSettings = false; onToggleMute() }
+                        )
+                    }
+                }
+            }
+            Column(
+                Modifier.fillMaxWidth().weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(Modifier.size(270.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(270.dp).clip(CircleShape).background(Color(0xFF356FE8)))
+                    Box(Modifier.size(250.dp * pulse).clip(CircleShape).background(
+                        Brush.verticalGradient(listOf(Color(0xFF78A6FF), Color(0xFFB9CCFF), Color(0xFFEAF1FF), Color(0xFF9DB8F5)))
+                    ))
+                    Box(Modifier.size(250.dp).clip(CircleShape).background(
+                        Brush.radialGradient(listOf(Color.White.copy(alpha = .30f), Color.Transparent, Color(0xFF7399EF).copy(alpha = .10f)))
+                    ))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("FYNX", color = Color(0xFF244FAD), fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                        Text("AI", color = Color(0xFF244FAD), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Spacer(Modifier.height(28.dp))
+                Text(status, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                if (error != null) {
+                    Text(error, color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                } else if (connected && !muted) {
+                    Text("Speak naturally. I'm listening.", color = Color(0xFFBDBDBD), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.weight(1f).heightIn(min = 58.dp),
+                    shape = RoundedCornerShape(32.dp),
+                    color = Color(0xFF303030),
+                    border = BorderStroke(1.dp, Color(0xFF454545))
+                ) {
+                    Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Add, contentDescription = "Add attachment", tint = Color.White, modifier = Modifier.size(27.dp))
+                        Spacer(Modifier.width(10.dp))
+                        TextField(
+                            value = input,
+                            onValueChange = onInputChange,
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Ask FYNX AI", color = Color(0xFFBDBDBD)) },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                cursorColor = Color(0xFF007FFF)
+                            )
+                        )
+                        if (input.isNotBlank()) {
+                            IconButton(onClick = onSend) { Icon(Icons.Default.Send, contentDescription = "Send message", tint = Color.White) }
+                        }
+                    }
+                }
+                Surface(
+                    modifier = Modifier.size(62.dp).clickable(enabled = connected, onClick = onToggleMute),
+                    shape = CircleShape,
+                    color = Color(0xFF292929)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(if (muted) Icons.Default.MicOff else Icons.Default.Mic, contentDescription = if (muted) "Unmute microphone" else "Mute microphone", tint = Color.White, modifier = Modifier.size(28.dp))
+                    }
+                }
+                Surface(
+                    modifier = Modifier.size(62.dp).clickable(onClick = onClose),
+                    shape = CircleShape,
+                    color = Color.White
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Close, contentDescription = "End voice session", tint = Color.Black, modifier = Modifier.size(34.dp))
+                    }
+                }
+            }
+        }
     }
 }
 
