@@ -61,6 +61,10 @@ jobs:
       - name: Verify provider-portable media storage adapters and cache
         working-directory: backend
         run: node test-media-storage.mjs && node verify-media-object-storage.mjs && node verify-media-payload-cache.mjs
+      - name: Verify provider-neutral SMTP email delivery adapter
+        run: |
+          node --check emailDelivery.js
+          node test-email-delivery.mjs
       - name: Check backend JavaScript
         run: |
           node --check server.js
