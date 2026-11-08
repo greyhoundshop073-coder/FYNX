@@ -1068,7 +1068,9 @@ fun FynxHomeSocialHubPanel(
                         Row(
                             Modifier.fillMaxWidth()
                                 .clickable(enabled = !posting) { showMorePostOptions = true }
-                                .semantics(mergeDescendants = true) { contentDescription = "More options" }
+                                // The visible Text below already supplies the label. Keep
+                                // the clickable Row semantics instead of replacing them
+                                // with a non-clickable merged description node.
                                 .padding(vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
