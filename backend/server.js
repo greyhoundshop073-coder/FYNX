@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
-import { mediaStorage } from "./mediaStorage.js";
+import { mediaStorage, redirectStoredMedia } from "./mediaStorage.js";
 import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
@@ -538,7 +538,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
         )`
       : "";
     let result = await pool.query(`
-      SELECT mm.mime_type
+      SELECT mm.mime_type, mm.storage_provider, mm.object_key
       FROM message_media mm
       WHERE mm.id = $1
         AND (
@@ -634,6 +634,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
           JOIN marketplace_orders o ON o.id = e.order_id
           WHERE mm.id = $1 AND (o.buyer_id = $2 OR o.seller_id = $2)
           LIMIT 1`, [mediaId, req.user.sub]);
+        privateEvidenceMedia = Boolean(result.rows[0]);
       } catch (marketplaceEvidenceError) {
         if (marketplaceEvidenceError.code !== "42P01") throw marketplaceEvidenceError;
       }
@@ -663,6 +664,9 @@ app.get("/api/media/:id", auth, async (req, res) => {
       }
     }
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
+    // Publicly shareable media stored in Neon/R2 is served through a short-lived
+    // signed URL. Order evidence remains proxied so its response can enforce no-store.
+    if (!privateEvidenceMedia && await redirectStoredMedia(res, result.rows[0], { cacheControl: "private, max-age=300" })) return;
     const payload = await getCachedMediaPayload(pool, mediaId);
     if (!payload) return res.status(404).json({ error: "media not found" });
     res.set("Cache-Control", privateEvidenceMedia ? "private, no-store" : "private, max-age=300");
