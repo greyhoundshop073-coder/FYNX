@@ -168,7 +168,9 @@ checks = [
         "authenticated-home-discovery-viewer-settle.xml" in navigation
         and "android.widget.VideoView" in navigation
         and "has_native_video and has_all_actions" in navigation
-        and "discovery_expected_markers" in navigation
+        and 'find_control(candidate, ["Like video", "Unlike video"])' in navigation
+        and 'find_control(candidate, ["Open comments"])' in navigation
+        and 'find_control(candidate, ["Share video"])' in navigation
         and "viewer_xml = candidate" in navigation
         and "Unverified Discovery viewer could not be dismissed back to Home." in navigation
         and "stable_viewer_dumps >= 2" not in navigation,
