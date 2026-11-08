@@ -46,7 +46,7 @@ checks = [
      and 'error = "Transcript ready. Caption timing is approximate; review it before sending."' not in camera),
     ("Runtime types and preserves a real manual video caption when speech recognition is unavailable",
      'find_control(caption_xml, ["Video captions"])' in runtime
-     and 'run("adb", "shell", "input", "text", "FYNXcap")' in runtime
+     and 'input_text_slowly("FYNXcap")' in runtime
      and "FYNXcap" in runtime
      and "manually entered video caption survives keyboard dismissal" in runtime),
     ("On-device captions transcode supported device audio formats to PCM16 WAV before speech recognition",
@@ -56,6 +56,18 @@ checks = [
      and "AudioFormat.ENCODING_PCM_16BIT" in video_effects
      and "This video's audio format is not supported." not in video_effects
      and audio_test.is_file),
+    ("Video captions field is brought into view when focused",
+     "BringIntoViewRequester" in camera
+     and "bringIntoViewRequester(videoCaptionBringIntoViewRequester)" in camera
+     and "videoCaptionBringIntoViewRequester.bringIntoView()" in camera),
+    ("IME Back is not intercepted and text editing has an explicit completion action",
+     "WindowInsets.ime.getBottom(LocalDensity.current)" in camera
+     and "BackHandler(enabled = recording == null && !cameraImeVisible)" in camera
+     and 'contentDescription = "Finish text editing"' in overlay
+     and '["Finish text editing"]' in runtime),
+    ("Camera timer cancellation exposes a dedicated accessible action",
+     'contentDescription = "Cancel camera capture timer"' in camera
+     and '["Cancel camera capture timer"]' in runtime),
     ("Camera runtime explicitly rejects the old unsupported-audio caption regression",
      "caption audio decoder still rejects the camera's recorded audio format" in runtime),
     ("Gallery runtime never taps stale camera coordinates after a timer failure",
@@ -434,7 +446,7 @@ checks.extend([
      and ".coerceIn(0f, (bitmap.height - layout.height)" not in overlay),
     ("Runtime exercises direct-on-media photo/video typing and video timing controls",
      "FYNXoverlaytest" in runtime
-     and 'run("adb", "shell", "input", "text", "FYNXvideo")' in runtime
+     and 'input_text_slowly("FYNXvideo")' in runtime
      and "FYNXvideo" in runtime
      and "FYNXdraftoverlay" in runtime
      and "camera-post-draft-edit-text-open" in runtime
