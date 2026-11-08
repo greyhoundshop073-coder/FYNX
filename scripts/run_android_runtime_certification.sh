@@ -14,7 +14,11 @@ adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
 if [ "${TEST_EXIT}" -eq 0 ]; then
-  if [ "${FYNX_AI_VISUALS_ONLY:-0}" = "1" ]; then
+  if [ "${FYNX_CAMERA_VISUALS_ONLY:-0}" = "1" ]; then
+    echo "::notice::Running the focused camera/photo/video/post-details runtime journey; no post or Status is sent."
+    FYNX_CAMERA_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    NAV_EXIT=$?
+  elif [ "${FYNX_AI_VISUALS_ONLY:-0}" = "1" ]; then
     # This assistant-dashboard visual audit is intentionally backend-independent:
     # open the real screen through the disposable debug UI entry and never submit
     # a prompt or claim that a Gemini/backend response was verified.
@@ -50,7 +54,7 @@ if [ "${TEST_EXIT}" -eq 0 ]; then
   fi
 
   # The focused AI or Marketplace visual passes deliberately exclude the separate Status workstream.
-  if [ "${FYNX_AI_VISUALS_ONLY:-0}" != "1" ] && [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" != "1" ]; then
+  if [ "${FYNX_CAMERA_VISUALS_ONLY:-0}" != "1" ] && [ "${FYNX_AI_VISUALS_ONLY:-0}" != "1" ] && [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" != "1" ]; then
     python3 scripts/verify_status_creator_runtime.py
     STATUS_EXIT=$?
     if [ "${STATUS_EXIT}" -ne 0 ]; then
@@ -61,7 +65,11 @@ if [ "${TEST_EXIT}" -eq 0 ]; then
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 else
   # A red instrumentation test must not suppress the requested real UI screenshot.
-  if [ "${FYNX_AI_VISUALS_ONLY:-0}" = "1" ]; then
+  if [ "${FYNX_CAMERA_VISUALS_ONLY:-0}" = "1" ]; then
+    FYNX_CAMERA_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    VISUAL_EXIT=$?
+    if [ "${VISUAL_EXIT}" -ne 0 ]; then echo "::warning::Camera visual capture did not complete (exit ${VISUAL_EXIT}); instrumentation remains ${TEST_EXIT}."; fi
+  elif [ "${FYNX_AI_VISUALS_ONLY:-0}" = "1" ]; then
     FYNX_AI_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
     VISUAL_EXIT=$?
     if [ "${VISUAL_EXIT}" -ne 0 ]; then
