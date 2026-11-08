@@ -370,6 +370,13 @@ def dismiss_ime_if_visible(name: str) -> str:
     return dump_ui(name)
 
 
+def input_text_slowly(value: str, delay_seconds: float = 0.10) -> None:
+    """Type through Android's input service with enough spacing for Compose state updates."""
+    for character in value:
+        run("adb", "shell", "input", "text", character)
+        time.sleep(delay_seconds)
+
+
 def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None, *, exact_only: bool = False, wait_attempts: int = 8, post_wait_attempts: int = 16)->str:
     # Retry the same real accessibility selector; never use guessed coordinates.
     # Individual camera controls may use shorter waits for transient overlay dismissal.
@@ -1982,8 +1989,9 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         report.append("- PASS manual Video captions field became visible inside the scrolled video-editor viewport")
         _, field_x, field_y = manual_caption_field
         run("adb", "shell", "input", "tap", str(field_x), str(field_y))
-        time.sleep(0.6)
-        run("adb", "shell", "input", "text", "FYNXcap")
+        time.sleep(1.0)
+        input_text_slowly("FYNXcap")
+        time.sleep(0.4)
         manual_keyboard_xml = ""
         caption_deadline = time.monotonic() + 6.0
         while time.monotonic() < caption_deadline:
@@ -2034,7 +2042,9 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             if video_text_field:
                 _, vx, vy = video_text_field
                 run("adb", "shell", "input", "tap", str(vx), str(vy))
-                run("adb", "shell", "input", "text", "FYNXvideo")
+                time.sleep(1.0)
+                input_text_slowly("FYNXvideo")
+                time.sleep(0.4)
                 typed_video = ""
                 overlay_deadline = time.monotonic() + 6.0
                 while time.monotonic() < overlay_deadline:
@@ -2045,11 +2055,11 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 screenshot(f"{prefix}-camera-video-text-overlay-typing.png")
                 if "FYNXvideo" in typed_video:
                     report.append("- PASS video text is typed directly over the clip")
-                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-                    time.sleep(0.5)
-                    after_video_keyboard = dump_ui(f"{prefix}-camera-video-text-keyboard-dismissed.xml") or typed_video
+                    # Use the editor's explicit Timing and Finish text editing actions.
+                    # Back can be consumed by the IME and leave the text layer focused;
+                    # tapping Done commits the overlay and reliably closes the keyboard.
                     timing_ready = camera_wait_for_control(
-                        after_video_keyboard, ["Timing"], enabled=True, timeout=12.0,
+                        typed_video, ["Timing"], enabled=True, timeout=12.0,
                         prefix=f"{prefix}-camera-video-text-timing-ready"
                     )
                     timing_dialog = tap_control(
@@ -2064,12 +2074,15 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                         )
                         if timing_closed:
                             after_timing = tap_control(
-                                timing_closed, ["Done"], f"{prefix}-camera-video-text-done",
+                                timing_closed, ["Finish text editing"], f"{prefix}-camera-video-text-done",
                                 ["Apply text / effects"]
                             )
                             if after_timing:
                                 editor = after_timing
-                                report.append("- PASS video overlay remains editable after Done and is ready for export")
+                                if "FYNXvideo" in after_timing:
+                                    report.append("- PASS video overlay remains visible after Finish text editing and is ready for export")
+                                else:
+                                    FAILURES.append(prefix + ": video overlay text disappeared after Finish text editing")
                             else:
                                 FAILURES.append(prefix + ": video text Done did not return to the editor export controls")
                         else:
