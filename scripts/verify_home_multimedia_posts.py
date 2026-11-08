@@ -15,6 +15,8 @@ checks = [
     ("publisher captures the authoritative post ID", "Result<String>" in client and 'optString("postId")' in client and "server did not return its post ID" in client),
     ("successful publish invalidates the account-scoped feed cache", "FEED_CACHE_KEY_PREFIX + accountKey" in refresh and "FEED_CACHE_TIME_KEY_PREFIX + accountKey" in refresh),
     ("successful publish requests an authoritative Home refresh", "FynxHomeLifecycleRefreshBus.request(context)" in client and "publishRefreshKey" in refresh),
+    ("two-item Home media grids allocate equal width to both cells", "Cell(visual[0], 0, Modifier.weight(1f))" in home and "Cell(visual[1], 1, Modifier.weight(1f))" in home),
+    ("three- and four-item Home media grids retain weighted columns", "Box(Modifier.weight(1f)) { Cell(visual[0], 0) }" in home and "Box(Modifier.weight(1f)) { Cell(visual[1], 1) }" in home),
     ("Home multi-media post is bounded to four assets", "private const val MAX_MEDIA = 4" in client),
     ("backend stores ordered post media separately", "CREATE TABLE IF NOT EXISTS social_post_media" in backend and "UNIQUE (post_id, position)" in backend),
     ("backend preserves first media for legacy feed clients", "INSERT INTO social_posts" in backend and "media_id,media_type" in backend and "mediaIds[0]" in backend),

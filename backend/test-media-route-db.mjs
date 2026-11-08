@@ -32,7 +32,7 @@ const db = new Client();
 await db.connect();
 try {
   await db.query([
-    "CREATE TEMP TABLE message_media (id BIGINT PRIMARY KEY, owner_id BIGINT NOT NULL, mime_type TEXT, data BYTEA)",
+    "CREATE TEMP TABLE message_media (id BIGINT PRIMARY KEY, owner_id BIGINT NOT NULL, mime_type TEXT, data BYTEA, storage_provider TEXT NOT NULL DEFAULT 'postgres', object_key TEXT)",
     "CREATE TEMP TABLE messages (media_id BIGINT, sender_id BIGINT, recipient_id BIGINT)",
     "CREATE TEMP TABLE marketplace_listings (id BIGINT PRIMARY KEY, seller_id BIGINT, active BOOLEAN, quantity INTEGER, currency TEXT, media_ids JSONB)",
     "CREATE TEMP TABLE blocks (blocker_id BIGINT, blocked_id BIGINT)",

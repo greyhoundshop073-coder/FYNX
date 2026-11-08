@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -57,6 +59,9 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     var preview by remember { mutableStateOf(false) }
     var publishing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var aiStatusBusy by remember { mutableStateOf(false) }
+    var aiStatusError by remember { mutableStateOf<String?>(null) }
+    var aiStatusSuggestion by remember { mutableStateOf<String?>(null) }
     var recording by remember { mutableStateOf(false) }
     var recordingStarted by remember { mutableLongStateOf(0L) }
     var elapsed by remember { mutableLongStateOf(0L) }
@@ -101,7 +106,71 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
                 when (type) {
                     FynxStatusType.TEXT -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         StatusTextCanvas(text, background, foreground, font, alignment, Modifier.fillMaxWidth().height(270.dp))
-                        OutlinedTextField(value = text, onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5, placeholder = { Text("Write your Status…") }, supportingText = { Text("${text.length}/$FYNX_STATUS_MAX_TEXT_LENGTH") }, shape = RoundedCornerShape(18.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Status text", style = MaterialTheme.typography.labelLarge)
+                            OutlinedButton(
+                                onClick = {
+                                    val requestedText = text.trim()
+                                    if (requestedText.isNotBlank()) {
+                                        aiStatusBusy = true
+                                        aiStatusError = null
+                                        aiStatusSuggestion = null
+                                        scope.launch {
+                                            AiAssistantClient.improveStatusText(context, requestedText)
+                                                .onSuccess { suggestion ->
+                                                    if (text.trim() == requestedText) aiStatusSuggestion = suggestion.trim().take(FYNX_STATUS_MAX_TEXT_LENGTH)
+                                                    else aiStatusError = "Your Status text changed while FYNX AI was preparing it. Please try again."
+                                                }
+                                                .onFailure { failure -> aiStatusError = failure.message?.takeIf { it.isNotBlank() } ?: "FYNX AI could not improve this Status. Please try again." }
+                                            aiStatusBusy = false
+                                        }
+                                    }
+                                },
+                                enabled = !publishing && !recording && !aiStatusBusy && text.isNotBlank()
+                            ) {
+                                if (aiStatusBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                else Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF007FFF), modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (aiStatusBusy) "Improving…" else "Improve with AI")
+                            }
+                        }
+                        aiStatusError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                        OutlinedTextField(
+                            value = text,
+                            onValueChange = { value ->
+                                if (value != text) {
+                                    aiStatusSuggestion = null
+                                    aiStatusError = null
+                                }
+                                text = value.take(FYNX_STATUS_MAX_TEXT_LENGTH)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                            maxLines = 5,
+                            placeholder = { Text("Write your Status…") },
+                            supportingText = { Text("${text.length}/$FYNX_STATUS_MAX_TEXT_LENGTH") },
+                            shape = RoundedCornerShape(18.dp)
+                        )
+                        aiStatusSuggestion?.takeIf { it.isNotBlank() }?.let { suggestion ->
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3FF))) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF007FFF), modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("FYNX AI suggestion", style = MaterialTheme.typography.titleSmall)
+                                    }
+                                    Text(suggestion, style = MaterialTheme.typography.bodyMedium)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = { aiStatusSuggestion = null }) { Text("Keep my text") }
+                                        Button(onClick = {
+                                            text = suggestion.take(FYNX_STATUS_MAX_TEXT_LENGTH)
+                                            aiStatusSuggestion = null
+                                            aiStatusError = null
+                                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007FFF))) { Text("Use text") }
+                                    }
+                                }
+                            }
+                        }
                         StatusSectionCard("Style", "Make the text feel like you") { StatusEditorSection("Background") { ColorChoices(STATUS_BACKGROUNDS, background) { background = it } }; StatusEditorSection("Text color") { ColorChoices(STATUS_FOREGROUNDS, foreground) { foreground = it } }; StatusEditorSection("Font") { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(FynxStatusTextFont.values().toList()) { option -> FilterChip(font == option, { font = option }, label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }) } } }; StatusEditorSection("Alignment") { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to "Left", 1 to "Center", 2 to "Right").forEach { (value, label) -> FilterChip(alignment == value, { alignment = value }, modifier = Modifier.weight(1f), label = { Text(label, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }) } } } }
                     }
                     FynxStatusType.PHOTO -> MediaPickerCard("Photo", mediaUri) { pickImage.launch(arrayOf("image/*")) }
