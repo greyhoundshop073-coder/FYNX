@@ -893,9 +893,12 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             wait_attempts=3
         )
     if short_timer_selected and find_control(short_timer_selected, ["Take photo"]):
+        # A three-second timer may finish before UIAutomator's first accessibility poll.
+        # Accept the live Cancel action or the completed photo editor, then require
+        # Retake/Next below so a real capture—not only a countdown—is still verified.
         countdown_capture_xml = tap_control(
             short_timer_selected, ["Take photo"], f"{prefix}-camera-timer-capture-start",
-            ["Cancel timer"], wait_attempts=8
+            ["Cancel timer", "Retake", "Next"], wait_attempts=8, post_wait_attempts=24
         )
         if countdown_capture_xml:
             timed_editor = camera_wait_for_control(

@@ -414,10 +414,13 @@ checks.extend([
      and "lineHeight = overlayTextLineHeight" in overlay
      and "lineHeight = 40.sp" not in overlay
      and "textSize = (bitmap.width * 0.055f * item.scale)" in overlay),
-    ("Video overlay timing uses the same source-of-truth interval in live preview and Media3 export",
+    ("Video overlay timing retains recorded duration when Android metadata omits it",
      "isFynxCameraTextOverlayVisibleAt" in overlay
      and "playbackPositionMs" in overlay and "playbackPositionMs = if (previewType" in camera
-     and "Show from" in overlay and "Show until" in overlay),
+     and "Show from" in overlay and "Show until" in overlay
+     and "resolveFynxCameraVideoDurationMs" in overlay
+     and "recordedVideoDurationFallbackMs" in camera
+     and "videoTextTimingFallsBackToRecordedDurationWhenMetadataIsMissing" in overlay_test),
     ("Retake explicitly releases and rebinds CameraX and gates the shutter on ready use cases",
      "Force a clean CameraX bind" in camera and "cameraReady = false" in camera
      and "galleryRebindRequest += 1" in camera

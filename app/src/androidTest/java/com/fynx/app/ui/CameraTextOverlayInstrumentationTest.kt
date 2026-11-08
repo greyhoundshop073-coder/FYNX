@@ -27,6 +27,14 @@ class CameraTextOverlayInstrumentationTest {
     }
 
     @Test
+    fun videoTextTimingFallsBackToRecordedDurationWhenMetadataIsMissing() {
+        assertEquals(3_400L, resolveFynxCameraVideoDurationMs(0L, 3_400L))
+        assertEquals(3_400L, resolveFynxCameraVideoDurationMs(-1L, 3_400L))
+        assertEquals(4_100L, resolveFynxCameraVideoDurationMs(4_100L, 3_400L))
+        assertEquals(0L, resolveFynxCameraVideoDurationMs(0L, 0L))
+    }
+
+    @Test
     fun videoOverlayCoordinatesPreserveTopCentreAndBottomMediaPositions() {
         val topLeft = cameraVideoTextOverlayBackgroundAnchor(
             FynxCameraTextOverlay(x = 0.04f, y = 0.06f)

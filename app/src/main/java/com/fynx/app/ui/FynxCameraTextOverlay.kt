@@ -159,6 +159,16 @@ internal fun decodeFynxCameraMediaDraftEdit(sourceUri: Uri, rawState: String): F
 
 internal data class FynxCameraMediaMetrics(val durationMs: Long, val aspectRatio: Float)
 
+/**
+ * Resolve video duration for editing controls. CameraX-recorded files can be playable before
+ * Android's metadata extractor reports a duration, so retain the measured recording interval
+ * instead of hiding video-text timing controls.
+ */
+internal fun resolveFynxCameraVideoDurationMs(
+    metadataDurationMs: Long,
+    recordedDurationFallbackMs: Long
+): Long = if (metadataDurationMs > 1L) metadataDurationMs else recordedDurationFallbackMs.coerceAtLeast(0L)
+
 /** Read intrinsic media geometry, including encoded video rotation, away from the UI thread. */
 internal fun readFynxCameraMediaMetrics(uri: Uri, mediaType: String): FynxCameraMediaMetrics {
     val fallback = FynxCameraMediaMetrics(0L, 9f / 16f)

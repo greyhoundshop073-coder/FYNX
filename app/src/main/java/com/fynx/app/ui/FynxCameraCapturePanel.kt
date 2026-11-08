@@ -592,6 +592,9 @@ fun FynxCameraCapturePanel(
     var cameraReady by remember { mutableStateOf(false) }
     var cameraTextOverlays by remember(initialMediaUri) { mutableStateOf(initialTextOverlays) }
     var cameraVideoDurationMs by remember { mutableLongStateOf(0L) }
+    // CameraX can finalize playable clips before Android's metadata extractor reports duration.
+    // Preserve the measured recording interval so the video-text Timing action stays available.
+    var recordedVideoDurationFallbackMs by remember { mutableLongStateOf(0L) }
     var cameraMediaAspectRatio by remember { mutableFloatStateOf(9f / 16f) }
     var selectedTextOverlayId by remember(initialMediaUri) { mutableStateOf(initialTextOverlays.lastOrNull()?.id) }
     var editingTextOverlayId by remember { mutableStateOf<String?>(null) }
@@ -659,7 +662,10 @@ fun FynxCameraCapturePanel(
         val type = pendingType
         if (uri != null && type != null) {
             val metrics = withContext(Dispatchers.IO) { readFynxCameraMediaMetrics(uri, type) }
-            cameraVideoDurationMs = metrics.durationMs
+            cameraVideoDurationMs = resolveFynxCameraVideoDurationMs(
+                metrics.durationMs,
+                recordedVideoDurationFallbackMs
+            )
             cameraMediaAspectRatio = metrics.aspectRatio
         }
     }
@@ -2121,12 +2127,15 @@ fun FynxCameraCapturePanel(
                             val file = File(context.cacheDir, "fynx_video_${System.currentTimeMillis()}.mp4")
                             val pending = capture.output.prepareRecording(context, FileOutputOptions.Builder(file).build())
                             val withAudio = if (hasAudio) pending.withAudioEnabled() else pending
+                            recordedVideoDurationFallbackMs = 0L
                             recordingStartedAt = System.currentTimeMillis()
                             activeRecordingFile = file
                             recordingNotice = null
                             recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
                                 if (event is VideoRecordEvent.Finalize) {
                                     if (!event.hasError() && file.exists() && file.length() > 0L) {
+                                        recordedVideoDurationFallbackMs =
+                                            (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(2L)
                                         pendingUri = Uri.fromFile(file)
                                         pendingOriginalUri = Uri.fromFile(file)
                                         pendingType = if (videoNoteMode) "video_note" else "video"
