@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [server, cache, social, marketplace, bootstrap, pkg] = await Promise.all([
+const [server, cache, social, marketplace, bootstrap, pkg, storage] = await Promise.all([
   read("./server.js"),
   read("./mediaPayloadCache.js"),
   read("./socialRoutes.js"),
   read("./marketplaceCompletion.js"),
   read("./socialMultiMediaBootstrap.js"),
-  read("./package.json")
+  read("./package.json"),
+  read("./mediaStorage.js")
 ]);
 
 function route(source, startMarker, endMarker) {
@@ -27,6 +28,8 @@ const upload = route(server, 'app.post("/api/media"', "\n\nconst statusSchema");
 assert.match(upload, /await mediaStorage\.putMediaObject/);
 assert.match(upload, /storage_provider,\s*object_key/);
 assert.match(upload, /await mediaStorage\.deleteMediaObject/);
+assert.match(upload, /stored\.storageProvider === "postgres" \? data : null/);
+assert.match(upload, /await mediaStorage\.deleteMediaObject\(stored\.objectKey, stored\.storageProvider\)/);
 assert.match(upload, /MAX_MEDIA_BYTES/);
 
 const primary = route(server, 'app.get("/api/media/:id"', "\nfunction messageProjection()");
@@ -37,8 +40,16 @@ assert.match(primary, /redirectStoredMedia/);
 assert.match(primary, /getCachedMediaPayload/);
 
 assert.match(cache, /SELECT mime_type, data, storage_provider, object_key FROM message_media/);
-assert.match(cache, /mediaStorage\.getMediaObjectBytes/);
-assert.match(cache, /storage_provider/);
+assert.match(cache, /storage = mediaStorage/);
+assert.match(cache, /storage\.getMediaObjectBytes/);
+assert.match(cache, /OBJECT_STORAGE_PROVIDERS/);
+assert.match(storage, /forcePathStyle: true/);
+assert.match(storage, /AWS_ENDPOINT_URL_S3/);
+assert.match(storage, /FYNX_MEDIA_STORAGE_BUCKET/);
+assert.match(storage, /FYNX media storage provider must be neon or r2 for object-backed media/);
+assert.match(storage, /storageProvider = provider/);
+const redirectHelper = storage.slice(storage.indexOf("export async function redirectStoredMedia"));
+assert.match(redirectHelper, /createDownloadUrl\([\s\S]*storageProvider/);
 
 assert.match(social, /import \{ redirectStoredMedia \} from "\.\/mediaStorage\.js";/);
 assert.match(social, /redirectStoredMedia/);
@@ -58,4 +69,4 @@ assert.match(pkg, /test-media-storage\.mjs/);
 assert.match(pkg, /verify-media-object-storage\.mjs/);
 
 console.log("FYNX MEDIA STORAGE INTEGRATION CONTRACT: GREEN");
-console.log("Existing media IDs, authorization-before-redirect, Postgres fallback and all server media surfaces: PASS");
+console.log("Existing media IDs, authorization-before-redirect, Neon/R2/PostgreSQL routing and all server media surfaces: PASS");

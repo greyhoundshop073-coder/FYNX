@@ -15,6 +15,8 @@ const [cacheSource, serverSource, marketplaceSource, socialSource, socialBootstr
 assert.match(cacheSource, /MAX_CACHE_BYTES\s*=\s*32\s*\*\s*1024\s*\*\s*1024/);
 assert.match(cacheSource, /MAX_CACHE_ITEM_BYTES\s*=\s*12\s*\*\s*1024\s*\*\s*1024/);
 assert.match(cacheSource, /pendingLoads/);
+assert.match(cacheSource, /storage = mediaStorage/);
+assert.match(cacheSource, /storage\.getMediaObjectBytes/);
 assert.match(cacheSource, /cacheBytes\s*\+\s*data\.length\s*>\s*MAX_CACHE_BYTES/);
 
 function route(source, startMarker, endMarker) {
@@ -71,6 +73,49 @@ assert.equal(first.data.toString(), "test-image-bytes");
 assert.equal(concurrent.data.toString(), "test-image-bytes");
 await getCachedMediaPayload(smallPool, "910000001");
 assert.equal(queryCount, 1);
+
+
+// Neon-backed rows store only a key in PostgreSQL; the injected provider returns the bytes.
+let neonObjectKeyRead = null;
+const neonPool = {
+  async query(_sql, params) {
+    assert.equal(params[0], "930000001");
+    return { rows: [{
+      mime_type: "image/webp",
+      data: null,
+      storage_provider: "neon",
+      object_key: "media/f35c2d80-4f45-4a33-b5b2-bb94928f9a11"
+    }] };
+  }
+};
+const neonPayload = await getCachedMediaPayload(neonPool, "930000001", {
+  async getMediaObjectBytes(objectKey, storageProvider) {
+    neonObjectKeyRead = objectKey + "|" + storageProvider;
+    return Buffer.from("neon-object-media-bytes");
+  }
+});
+assert.equal(neonObjectKeyRead, "media/f35c2d80-4f45-4a33-b5b2-bb94928f9a11|neon");
+assert.equal(neonPayload.mimeType, "image/webp");
+assert.equal(neonPayload.data.toString(), "neon-object-media-bytes");
+
+const r2Payload = await getCachedMediaPayload({
+  async query(_sql, params) {
+    assert.equal(params[0], "930000002");
+    return { rows: [{
+      mime_type: "image/webp",
+      data: null,
+      storage_provider: "r2",
+      object_key: "media/f35c2d80-4f45-4a33-b5b2-bb94928f9a11"
+    }] };
+  }
+}, "930000002", {
+  async getMediaObjectBytes(objectKey, storageProvider) {
+    assert.equal(storageProvider, "r2");
+    assert.equal(objectKey, "media/f35c2d80-4f45-4a33-b5b2-bb94928f9a11");
+    return Buffer.from("r2-object-media-bytes");
+  }
+});
+assert.equal(r2Payload.data.toString(), "r2-object-media-bytes");
 
 // The cache is bounded even as unique uploads are requested.
 const largePool = {

@@ -7,6 +7,7 @@ import { mediaStorage } from "./mediaStorage.js";
 const MAX_CACHE_BYTES = 32 * 1024 * 1024;
 const MAX_CACHE_ITEM_BYTES = 12 * 1024 * 1024;
 const CACHE_TTL_MS = 15 * 60 * 1000;
+const OBJECT_STORAGE_PROVIDERS = new Set(["neon", "r2"]);
 const entries = new Map();
 const pendingLoads = new Map();
 let cacheBytes = 0;
@@ -40,7 +41,7 @@ function cacheEntry(id, mimeType, data, now) {
   cacheBytes += data.length;
 }
 
-export async function getCachedMediaPayload(pool, mediaId) {
+export async function getCachedMediaPayload(pool, mediaId, storage = mediaStorage) {
   const id = String(mediaId ?? "").trim();
   if (!/^[1-9]\d{0,19}$/.test(id)) return null;
 
@@ -58,9 +59,9 @@ export async function getCachedMediaPayload(pool, mediaId) {
     const row = result.rows?.[0];
     if (!row || !row.mime_type) return null;
     const storageProvider = String(row.storage_provider || "postgres").toLowerCase();
-    if (storageProvider !== "postgres" && storageProvider !== "r2") return null;
-    const sourceData = storageProvider === "r2"
-      ? await mediaStorage.getMediaObjectBytes(row.object_key)
+    if (storageProvider !== "postgres" && !OBJECT_STORAGE_PROVIDERS.has(storageProvider)) return null;
+    const sourceData = OBJECT_STORAGE_PROVIDERS.has(storageProvider)
+      ? await storage.getMediaObjectBytes(row.object_key, storageProvider)
       : row.data;
     if (sourceData == null) return null;
     const data = Buffer.isBuffer(sourceData) ? Buffer.from(sourceData) : Buffer.from(sourceData);
