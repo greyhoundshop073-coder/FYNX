@@ -39,7 +39,7 @@ checks = [
  ("Home recovery preserves the authenticated app process instead of force-stopping it", "def restore_home_after_restart(name:str)->str:" in runtime and 'fynx://home' in runtime and 'run("adb","shell","am","force-stop",PACKAGE)' not in runtime.split("def restore_home_after_restart(name:str)->str:",1)[1].split("def capture_surface(",1)[0]),
  ("wallet UI hierarchy artifacts end with a real newline", "write_text(wallet_xml+chr(10)" in runtime and "(wallet_xml or \"\")+chr(10)" in runtime),
  ("visual-only navigation also captures Wallet read-only", 'capture_wallet_from_features("marketplace-visual-wallet")' in runtime and "no listing/order/payment mutations" in runtime),
- ("Wallet runtime gate checks visible balance buckets rather than below-fold explanatory copy", "def wallet_destination_ready(xml_text: str) -> bool:" in runtime and 'find_control(xml_text, ["Reserved"])' in runtime and 'find_control(xml_text, ["Withdrawal pending"])' in runtime and "wallet_shell_opened=wallet_destination_ready(wallet_xml)" in runtime and "wallet_opened=wallet_shell_opened and wallet_settled" in runtime),
+ ("Wallet runtime gate checks visible balance buckets rather than below-fold explanatory copy", "def wallet_destination_ready(xml_text: str) -> bool:" in runtime and 'find_control(xml_text, ["Reserved"])' in runtime and 'find_control(xml_text, ["Withdrawal pending"])' in runtime and "wallet_shell_opened=wallet_destination_ready_scrolling(wallet_xml," in runtime and "def wallet_destination_ready_scrolling(" in runtime and "wallet_opened=wallet_shell_opened and wallet_settled" in runtime),
  ("wallet branch receives full emulator and screenshot certification", workflow.count("refs/heads/feat/fynx-wallet-ux-hardening-20261031") == 4),
  ("Wallet capture correction receives full emulator and exact-commit APK certification only on its PR", workflow.count("github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101'") == 4 and workflow.count("refs/heads/fix/real-wallet-runtime-screen-capture-20261101") == 1),
  ("authenticated Wallet capture runs outside the feature-search helper and saves real PNGs", runtime.index("def open_features(") < runtime.index("\nfeatures=open_features()") and "capture_wallet_from_features(\"authenticated-runtime-wallet\")" in runtime and all(name in runtime for name in ["authenticated-wallet.png", "authenticated-wallet-add-money.png", "authenticated-wallet-bank-transfer.png", "authenticated-wallet-card.png", "authenticated-wallet-ussd.png", "authenticated-wallet-withdraw.png"]) and "missing_authenticated_surfaces" in runtime),
@@ -187,7 +187,7 @@ checks.extend([
  ("Marketplace -> Wallet runtime helper waits for settled Wallet buckets, saves the screenshot, and verifies Marketplace return",
   "tap_control(" in wallet_shortcut_helper
   and 'marketplace_xml, ["Wallet"]' in wallet_shortcut_helper
-  and "wallet_destination_ready(latest)" in wallet_shortcut_helper
+  and "wallet_destination_ready_scrolling(latest," in wallet_shortcut_helper
   and "authenticated-wallet-marketplace-shortcut.png" in wallet_shortcut_helper
   and 'find_control(back_xml, ["Search products, sellers or categories"])' in wallet_shortcut_helper),
  ("Marketplace -> Wallet screenshot is mandatory in authenticated runtime",
