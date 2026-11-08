@@ -54,6 +54,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -601,6 +604,7 @@ fun FynxCameraCapturePanel(
         mutableStateOf(runCatching { CameraVideoStyle.valueOf(initialVideoStyle) }.getOrDefault(CameraVideoStyle.NATURAL))
     }
     var videoCaptionText by remember(initialMediaUri, initialVideoCaptionText) { mutableStateOf(initialVideoCaptionText) }
+    val videoCaptionBringIntoViewRequester = remember { BringIntoViewRequester() }
     var applyingVideoEffects by remember { mutableStateOf(false) }
     var generatingCaptions by remember { mutableStateOf(false) }
     var trackedFaceBounds by remember { mutableStateOf<List<CameraFaceBounds>>(emptyList()) }
@@ -699,12 +703,14 @@ fun FynxCameraCapturePanel(
         showEffectTray = false
         showCaptureControls = true
     }
-    BackHandler {
-        if (recording == null) {
-            if (editingTextOverlayId != null) finishCameraTextEditing()
-            else if (timerCaptureJob?.isActive == true || timerCountingDown > 0) cancelCaptureTimer()
-            else onDismiss()
-        }
+    // Let Android's IME consume Back while a text field is focused. Once the
+    // keyboard is hidden, Back returns to the editor/camera state instead of
+    // stealing the IME dismissal and leaving the keyboard over the controls.
+    val cameraImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    BackHandler(enabled = recording == null && !cameraImeVisible) {
+        if (editingTextOverlayId != null) finishCameraTextEditing()
+        else if (timerCaptureJob?.isActive == true || timerCountingDown > 0) cancelCaptureTimer()
+        else onDismiss()
     }
     val galleryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -1514,7 +1520,17 @@ fun FynxCameraCapturePanel(
                         minLines = 2,
                         maxLines = 4,
                         enabled = !applyingVideoEffects,
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Video captions" }
+                        modifier = Modifier.fillMaxWidth()
+                            .bringIntoViewRequester(videoCaptionBringIntoViewRequester)
+                            .onFocusChanged { focus ->
+                                if (focus.isFocused) {
+                                    scope.launch {
+                                        delay(220L)
+                                        videoCaptionBringIntoViewRequester.bringIntoView()
+                                    }
+                                }
+                            }
+                            .semantics { contentDescription = "Video captions" }
                     )
                     OutlinedButton(onClick = ::generateCaptionsForVideo, enabled = !generatingCaptions && !applyingVideoEffects, modifier = Modifier.fillMaxWidth()) {
                         Text(if (generatingCaptions) "Generating captions…" else "✦ Generate on-device captions")
