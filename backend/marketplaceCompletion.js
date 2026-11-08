@@ -145,8 +145,10 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const mediaId = Number(req.params.id);
       if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: 'invalid media id' });
       const result = await pool.query(`
-        SELECT mm.mime_type, mm.storage_provider, mm.object_key,
-          (
+        SELECT mm.mime_type, mm.storage_provider, mm.object_key
+        FROM message_media mm
+        CROSS JOIN LATERAL (
+          SELECT (
             EXISTS (
               SELECT 1 FROM marketplace_orders mo
               WHERE (mo.buyer_id = $2 OR mo.seller_id = $2)
@@ -165,7 +167,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
                 AND (mo.buyer_id = $2 OR mo.seller_id = $2)
             )
           ) AS private_evidence_media
-        FROM message_media mm
+        ) evidence
         WHERE mm.id = $1
           AND (
             EXISTS (
