@@ -497,8 +497,7 @@ fun FynxAiAssistantPanel(
     fun endVoiceSession() {
         // Cancel the in-flight SDP/ICE handshake as well as releasing native WebRTC resources.
         voiceConnectionJob?.cancel()
-        voiceConnectionJob = null
-        voiceEngine.close()
+        voiceConnectionJob = null        voiceEngine.close()
         voiceConnected = false
         voiceConnecting = false
         voiceMuted = false
@@ -997,8 +996,7 @@ fun FynxAiAssistantPanel(
                         items(messages, key = { it.id }) { message ->
                             AiChatBubble(
                                 message = message,
-                                feedback = messageFeedback[message.id] ?: 0,
-                                speaking = readAloudMessageId == message.id && !readAloudPaused,
+                                feedback = messageFeedback[message.id] ?: 0,                                speaking = readAloudMessageId == message.id && !readAloudPaused,
                                 readAloudProgress = if (readAloudMessageId == message.id) readAloudTranscript.takeLast(140) else "",
                                 waveformLevels = if (readAloudMessageId == message.id) readAloudWaveform else emptyList(),
                                 elapsedMs = if (readAloudMessageId == message.id) readAloudElapsedMs else 0L,
@@ -1497,8 +1495,7 @@ internal fun FynxAiFullScreenVoice(
                     DropdownMenu(expanded = showSettings, onDismissRequest = { showSettings = false }) {
                         DropdownMenuItem(
                             text = { Text(if (muted) "Unmute microphone" else "Mute microphone") },
-                            leadingIcon = { Icon(if (muted) Icons.Default.Mic else Icons.Default.MicOff, contentDescription = null) },
-                            onClick = { showSettings = false; onToggleMute() }
+                            leadingIcon = { Icon(if (muted) Icons.Default.Mic else Icons.Default.MicOff, contentDescription = null) },                            onClick = { showSettings = false; onToggleMute() }
                         )
                     }
                 }
@@ -1792,24 +1789,24 @@ private fun ReadAloudPlayer(
         border = BorderStroke(1.dp, Color(0xFF454545))
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 IconButton(
                     onClick = onPlayPause,
                     enabled = !connecting,
-                    modifier = Modifier.size(48.dp).background(Color.White, CircleShape)
+                    modifier = Modifier.size(40.dp).background(Color.White, CircleShape)
                 ) {
                     Icon(
                         if (paused || connecting) Icons.Default.PlayArrow else Icons.Default.Pause,
                         contentDescription = if (paused) "Resume read aloud" else "Pause read aloud",
                         tint = Color(0xFF101010),
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 Column(
@@ -1835,12 +1832,12 @@ private fun ReadAloudPlayer(
                         maxLines = 1
                     )
                 }
-                IconButton(onClick = onStop, modifier = Modifier.size(48.dp)) {
+                IconButton(onClick = onStop, modifier = Modifier.size(40.dp)) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Stop reading response",
                         tint = Color.White,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(21.dp)
                     )
                 }
             }
@@ -1862,12 +1859,6 @@ private fun ReadAloudPlayer(
                     )
                 }
             }
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50)),
-                color = Color(0xFF007FFF),
-                trackColor = Color(0xFF555555)
-            )
         }
     }
 }
@@ -1997,8 +1988,7 @@ internal fun AiChatBubble(
                                     connecting -> "Cancel voice playback connection"
                                     speaking -> "Pause reading response"
                                     else -> "Read response aloud"
-                                },
-                                tint = if (speaking || paused || connecting) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                },                                tint = if (speaking || paused || connecting) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(19.dp)
                             )
                         }
