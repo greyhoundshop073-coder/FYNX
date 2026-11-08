@@ -1760,6 +1760,11 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     )
     if not composer:
         return camera_return_to_home(home_xml, prefix + "-video-composer-missing")
+    # More options is below the initial viewport. Scroll the real composer content
+    # until its row has visible bounds before trying to activate it.
+    composer = camera_scroll_until_control(
+        composer, ["More options"], f"{prefix}-video-composer-more-options", max_swipes=8
+    )
     options = tap_control(
         composer, ["More options"], f"{prefix}-video-composer-more-options", ["Take photo or video", "Add photo or video"]
     )
