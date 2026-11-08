@@ -43,14 +43,16 @@ checks = [
         "Status runtime certification runs even when Marketplace navigation fails after green instrumentation",
         'python3 scripts/verify_status_creator_runtime.py' in runner
         and 'STATUS_EXIT=$?' in runner
-        and 'if [ "$NAV_EXIT" -ne 0 ]; then' in runner
-        and 'if [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$STATUS_EXIT"; fi' in runner
-        and runner.index('if [ "$NAV_EXIT" -ne 0 ]; then') < runner.index('python3 scripts/verify_status_creator_runtime.py') < runner.index('else\n  # A red instrumentation test must not suppress Marketplace/My Shop screenshot evidence.'),
+        and 'if [ "${NAV_EXIT}" -ne 0 ]; then' in runner
+        and 'if [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="${STATUS_EXIT}"; fi' in runner
+        and 'if [ "${FYNX_AI_VISUALS_ONLY:-0}" != "1" ] && [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" != "1" ]; then' in runner
+        and runner.index('if [ "${NAV_EXIT}" -ne 0 ]; then') < runner.index('python3 scripts/verify_status_creator_runtime.py') < runner.index('else\n  # A red instrumentation test must not suppress the requested real UI screenshot.'),
     ),
     (
         "a red instrumentation run remains red even if the read-only Status check runs afterward",
-        'instrumentation result remains $TEST_EXIT' in runner
-        and runner.count('python3 scripts/verify_status_creator_runtime.py') >= 2,
+        'instrumentation result remains ${TEST_EXIT}' in runner
+        and runner.count('python3 scripts/verify_status_creator_runtime.py') >= 2
+        and 'if [ "${FYNX_AI_VISUALS_ONLY:-0}" != "1" ] && [ "${FYNX_MARKETPLACE_VISUALS_ONLY:-0}" != "1" ]; then' in runner,
     ),
     (
         "CI runs the Status runtime certification contract",

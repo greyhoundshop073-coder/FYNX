@@ -240,15 +240,97 @@ object FynxProductionMessaging {
         return asSequence().filter { it.senderUsername?.trim()?.removePrefix("@").orEmpty().lowercase() == currentUsername }.filter { it.text == text && it.replyToId == replyToId && it.mediaId == mediaId && it.mediaType == mediaType }.filter { it.timestamp == 0L || kotlin.math.abs(now - it.timestamp) <= 120_000L }.maxByOrNull { it.timestamp }
     }
 
-    suspend fun sendStructuredMessage(context: Context, recipientUsername: String, messageType: String, payload: Map<String, String>, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null, requestId: String = UUID.randomUUID().toString()): Result<RemoteMessage> {
+    suspend fun sendStructuredMessage(
+        context: Context,
+        recipientUsername: String,
+        messageType: String,
+        payload: Map<String, String>,
+        replyToId: String? = null,
+        mediaId: String? = null,
+        mediaType: String? = null,
+        allowOfflineQueue: Boolean = true,
+        requestId: String = UUID.randomUUID().toString()
+    ): Result<RemoteMessage> {
+        val normalizedRecipient = recipientUsername.trim().removePrefix("@").lowercase()
+        val currentUsername = (FynxAuthStore.load(context).username ?: "").trim().removePrefix("@").lowercase()
+        if (normalizedRecipient.isBlank()) return Result.failure(IllegalArgumentException("A recipient is required."))
+        if (currentUsername.isNotBlank() && normalizedRecipient == currentUsername) {
+            return Result.failure(IllegalArgumentException("You cannot send a message to your own account."))
+        }
+
+        val normalizedType = messageType.trim().lowercase()
         val allowed = setOf("location", "contact", "poll", "sticker", "gif")
-        if (messageType !in allowed) return Result.failure(IllegalArgumentException("Unsupported message type."))
+        if (normalizedType !in allowed) return Result.failure(IllegalArgumentException("Unsupported message type."))
         if (payload.isEmpty()) return Result.failure(IllegalArgumentException("Message details are required."))
-        val normalizedPayload = if (messageType == "poll") {
+
+        val normalizedMediaId = mediaId?.trim()?.takeIf { it.isNotBlank() }
+        val normalizedMediaType = mediaType?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+        if (normalizedMediaId == null && normalizedMediaType != null) {
+            return Result.failure(IllegalArgumentException("Message media is incomplete."))
+        }
+        if (normalizedMediaId != null && (normalizedMediaId.toLongOrNull() == null || normalizedMediaType !in VALID_MEDIA_TYPES)) {
+            return Result.failure(IllegalArgumentException("Message media is invalid."))
+        }
+        if (normalizedType in setOf("sticker", "gif") && normalizedMediaId == null) {
+            return Result.failure(IllegalArgumentException("Sticker and GIF messages require an uploaded media item."))
+        }
+
+        val normalizedPayload = if (normalizedType == "poll") {
             payload.mapValues { (key, value) -> if (key == "options") value.replace("\\u001F", "\u001F") else value }
         } else payload
-        val body = JSONObject().apply { put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase()); put("text", ""); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("messageType", messageType); put("messagePayload", JSONObject(normalizedPayload)); put("clientMessageId", requestId) }
-        return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
+        val body = JSONObject().apply {
+            put("recipientUsername", normalizedRecipient)
+            put("text", "")
+            put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL)
+            put("mediaId", normalizedMediaId?.toLongOrNull() ?: JSONObject.NULL)
+            put("mediaType", normalizedMediaType ?: JSONObject.NULL)
+            put("messageType", normalizedType)
+            put("messagePayload", JSONObject(normalizedPayload))
+            put("clientMessageId", requestId)
+        }
+        val result = FynxBackendClient.postJson(context, "/api/messages", body.toString())
+            .mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
+        if (result.isSuccess || !allowOfflineQueue || !isAmbiguousTransportFailure(result.exceptionOrNull())) return result
+
+        // Replaying this clientMessageId is idempotent on the backend.
+        val localId = "offline-${System.currentTimeMillis()}-${UUID.randomUUID()}"
+        val createdAt = System.currentTimeMillis()
+        val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
+        val item = FynxOfflineOutbox.Item(
+            id = localId,
+            requestId = requestId,
+            recipient = normalizedRecipient,
+            text = "",
+            replyToId = replyToId,
+            mediaId = normalizedMediaId,
+            mediaType = normalizedMediaType,
+            voiceDurationMs = 0L,
+            createdAt = createdAt,
+            messageType = normalizedType,
+            messagePayload = normalizedPayload
+        )
+        if (!FynxOfflineOutbox.enqueue(context, item)) return result
+
+        return Result.success(
+            RemoteMessage(
+                id = localId,
+                senderId = currentUserId,
+                senderUsername = currentUsername.ifBlank { null },
+                recipientId = "local-peer:${normalizedRecipient}",
+                recipientUsername = normalizedRecipient,
+                text = "",
+                timestamp = createdAt,
+                delivered = false,
+                read = false,
+                edited = false,
+                deleted = false,
+                replyToId = replyToId,
+                messageType = normalizedType,
+                messagePayload = normalizedPayload,
+                mediaId = normalizedMediaId,
+                mediaType = normalizedMediaType
+            )
+        )
     }
 
     suspend fun votePoll(context: Context, messageId: String, optionIndex: Int): Result<List<Pair<Int, Int>>> {
