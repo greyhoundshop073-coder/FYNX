@@ -792,7 +792,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
             "Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }) }
             "Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel() }
-            "AI" -> FynxAiAssistantPanel(onOpenDestination = { destination -> selected = destination }, initialMarketplaceListingId = marketplaceAiListingId)
+            "AI" -> FynxAiAssistantPanel(
+                onOpenDestination = { destination -> selected = destination },
+                initialMarketplaceListingId = marketplaceAiListingId,
+                currentUserDisplayName = myProfile.displayName.ifBlank {
+                    myProfile.username.ifBlank { authSession.username?.removePrefix("@").orEmpty() }
+                },
+                currentUsername = myProfile.username.ifBlank { authSession.username.orEmpty() },
+                currentUserPhotoUri = myPhoto
+            )
             "AI Creation" -> { selected = "AI" }
             "AI Photo Editor" -> { selected = "AI" }
             "Advertising" -> FynxAdvertisingCampaignPanel(currentUsername = authSession.username ?: "preview")

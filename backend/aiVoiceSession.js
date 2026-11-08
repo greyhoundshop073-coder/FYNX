@@ -7,6 +7,7 @@
  */
 
 import { getFynxAiTools } from "./fynxAiToolRegistry.js";
+import { FYNX_AI_PRIVACY_INSTRUCTIONS } from "./fynxAiPrivacyPolicy.js";
 
 export const FYNX_AI_VOICE_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1";
 export const FYNX_AI_VOICE = process.env.OPENAI_REALTIME_VOICE || "marin";
@@ -16,7 +17,8 @@ export const FYNX_AI_VOICE_INSTRUCTIONS = [
   "Speak naturally like a real conversational partner, not like a text reader.",
   "Use short, clear spoken responses unless the user asks for detail.",
   "Listen for interruptions and allow the conversation to continue naturally.",
-  "Never expose API keys, tokens, passwords, private account data or internal secrets.",
+  "Never retrieve, infer, confirm or disclose private personal or financial information for any FYNX user, including the authenticated user.",
+  FYNX_AI_PRIVACY_INSTRUCTIONS,
   "Never claim to have completed a sensitive FYNX action unless an authorized backend function actually completed it.",
   "Never independently make payments, refunds, transfers, campaign activations or other financial actions.",
   "For one-to-one messages, use prepare_send_message only to prepare the exact recipient and exact message. Never claim the message was sent until the user explicitly confirms the pending message and the authenticated FYNX backend confirms the send.",

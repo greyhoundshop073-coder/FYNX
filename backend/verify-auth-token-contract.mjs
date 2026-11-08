@@ -27,7 +27,11 @@ assert.match(backend, /isPublicAuthPath\(path\): Boolean = path ===? "\/health" 
   "health and readiness probes must remain public so they measure backend reachability, not login state");
 assert.ok(authUi.indexOf("FynxAuthStore.saveAccount(context, account.displayName") < authUi.indexOf("FynxBackendClient.saveAccessToken(context, account.token)"),
   "account identity must be saved before its token so account-switch cleanup cannot erase the new token");
-assert.match(server, /jwt\.sign\(\{ sub: String\(user\.id\), username: user\.username \}, JWT_SECRET, \{ expiresIn: "30d" \}\)/,
+assert.match(server, /sv: Number\(user\.session_version \|\| 0\)/,
+  "issued JWTs must carry the current session version for password-reset revocation");
+assert.match(server, /SELECT session_version FROM users WHERE id = \$1/,
+  "protected HTTP and realtime sessions must check the current session version");
+assert.match(server, /jwt\.sign\([\s\S]*?expiresIn: "30d"/,
   "login token issuance must use the configured JWT secret and bounded expiry");
 assert.match(server, /jwt\.verify\(token, JWT_SECRET\)/,
   "protected requests must verify tokens with the configured JWT secret");

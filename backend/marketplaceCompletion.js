@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { getCachedMediaPayload } from './mediaPayloadCache.js';
+import { redirectStoredMedia } from './mediaStorage.js';
 import { registerMarketplaceShippingTimeline } from './marketplaceShippingTimeline.js';
 import { isMarketplaceDestinationCovered } from './marketplaceShipping.js';
 
@@ -143,8 +145,29 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const mediaId = Number(req.params.id);
       if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: 'invalid media id' });
       const result = await pool.query(`
-        SELECT mm.mime_type, mm.data
+        SELECT mm.mime_type, mm.storage_provider, mm.object_key
         FROM message_media mm
+        CROSS JOIN LATERAL (
+          SELECT (
+            EXISTS (
+              SELECT 1 FROM marketplace_orders mo
+              WHERE (mo.buyer_id = $2 OR mo.seller_id = $2)
+                AND EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements_text(COALESCE(mo.product_snapshot->'mediaIds', '[]'::jsonb)) AS order_media_id
+                  WHERE order_media_id = CAST(mm.id AS TEXT)
+                )
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM marketplace_delivery_evidence mde
+              JOIN marketplace_orders mo ON mo.id = mde.order_id
+              WHERE mde.evidence_type = 'PHOTO_REFERENCE'
+                AND mde.value = CAST(mm.id AS TEXT)
+                AND (mo.buyer_id = $2 OR mo.seller_id = $2)
+            )
+          ) AS private_evidence_media
+        ) evidence
         WHERE mm.id = $1
           AND (
             EXISTS (
@@ -176,9 +199,13 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
           )
         LIMIT 1`, [mediaId, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: 'marketplace media not found' });
-      res.set('Cache-Control', 'private, max-age=3600');
-      res.type(result.rows[0].mime_type);
-      return res.send(result.rows[0].data);
+      const privateEvidenceMedia = result.rows[0].private_evidence_media === true;
+      if (!privateEvidenceMedia && await redirectStoredMedia(res, result.rows[0], { cacheControl: 'private, max-age=300' })) return;
+      const payload = await getCachedMediaPayload(pool, mediaId);
+      if (!payload) return res.status(404).json({ error: 'marketplace media not found' });
+      res.set('Cache-Control', privateEvidenceMedia ? 'private, no-store' : 'private, max-age=300');
+      res.type(payload.mimeType);
+      return res.send(payload.data);
     } catch (error) {
       console.error('marketplace media fetch', error);
       return res.status(500).json({ error: 'marketplace media fetch failed' });

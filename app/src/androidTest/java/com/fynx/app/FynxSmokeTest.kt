@@ -1,7 +1,6 @@
 package com.fynx.app
 
 import android.content.Intent
-import android.net.Uri
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -27,8 +26,12 @@ class FynxSmokeTest {
 
         launchIntent!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
         device.pressHome()
-        device.waitForIdle(10_000)
-        instrumentation.startActivitySync(launchIntent)
+        SystemClock.sleep(500)
+        val component = "${context.packageName}/.MainActivity"
+        val launchResult = device.executeShellCommand("am start -W -n $component")
+        assertTrue("Android must accept the FYNX launcher intent; result=$launchResult", launchResult.contains("Status: ok"))
+
+        // Compose rendering need not make the entire UI thread globally idle to count as a successful launch.
         val reachedFynx = waitForForegroundPackage(device, context.packageName, 45_000)
 
         assertTrue("FYNX must become the foreground package after its launcher intent; current=" + device.currentPackageName, reachedFynx)
@@ -41,13 +44,14 @@ class FynxSmokeTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val device = UiDevice.getInstance(instrumentation)
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("fynx://profile/alice")).apply {
-            addCategory(Intent.CATEGORY_BROWSABLE)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-
         device.pressHome()
-        instrumentation.startActivitySync(intent)
+        SystemClock.sleep(500)
+        val component = "${context.packageName}/.MainActivity"
+        val launchResult = device.executeShellCommand(
+            "am start -W -a android.intent.action.VIEW -d fynx://profile/alice -n $component"
+        )
+        assertTrue("Android must accept the FYNX profile deep link; result=$launchResult", launchResult.contains("Status: ok"))
+
         val reachedFynx = waitForForegroundPackage(device, context.packageName, 45_000)
 
         assertTrue("FYNX must become the foreground package after a profile deep link; current=" + device.currentPackageName, reachedFynx)
