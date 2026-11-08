@@ -399,6 +399,11 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             val latest = snapshot.maxByOrNull { it.timestamp }
             if (latest != null) {
                 val previewText = when {
+                    latest.messageType == "location" -> "Location"
+                    latest.messageType == "contact" -> "Shared contact"
+                    latest.messageType == "poll" -> "Poll: " + latest.messagePayload["question"].orEmpty()
+                    latest.messageType == "sticker" -> "Sticker"
+                    latest.messageType == "gif" -> "GIF"
                     latest.voiceUri != null -> "Voice message"
                     latest.attachmentUri != null && latest.text.isBlank() -> when (latest.attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "audio" -> "Voice message"; else -> "Photo" }
                     else -> latest.text
@@ -912,7 +917,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                 Icon(Icons.Default.Poll, "Poll", tint = MaterialTheme.colorScheme.primary)
                                                 Text(message.messagePayload["question"].orEmpty(), style = MaterialTheme.typography.titleSmall)
                                                 options.forEachIndexed { optionIndex, option ->
-                                                    OutlinedButton(onClick = {
+                                                    OutlinedButton(enabled = !message.id.startsWith("offline-"), onClick = {
                                                         conversationScope.launch {
                                                             FynxProductionMessaging.votePoll(context, message.id, optionIndex)
                                                                 .onSuccess { pollVoteNotice = "Vote recorded" }
@@ -921,6 +926,23 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                     }, modifier = Modifier.fillMaxWidth()) { Text(option) }
                                                 }
                                             }
+                                        }
+                                    } else if (message.mediaId != null && message.attachmentUri == null) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                (when (message.messageType) {
+                                                    "gif" -> "GIF"
+                                                    "sticker" -> "Sticker"
+                                                    else -> message.attachmentType?.replaceFirstChar { it.uppercase() } ?: "Attachment"
+                                                }) + if (message.id.startsWith("offline-")) " · waiting to send" else " · media unavailable",
+                                                modifier = Modifier.padding(12.dp),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                     } else if (message.attachmentUri != null) {
                                         if (message.attachmentType == "video_note") {

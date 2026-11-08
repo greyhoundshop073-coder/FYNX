@@ -40,6 +40,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
@@ -2326,6 +2327,16 @@ private fun MarketplacePaymentDialog(
 @Composable
 private fun MarketplaceSellDialog(context: android.content.Context, onPublished: (String) -> Unit, onCancel: () -> Unit) {
     var title by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var subcategory by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("NEW") }; var brand by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var size by remember { mutableStateOf("") }; var color by remember { mutableStateOf("") }; var material by remember { mutableStateOf("") }; var dimensions by remember { mutableStateOf("") }; var warranty by remember { mutableStateOf("") }; var vehicleYear by remember { mutableStateOf("") }; var mileage by remember { mutableStateOf("") }; var beautyDetails by remember { mutableStateOf("") }; var serviceDetails by remember { mutableStateOf("") }; var generalDetails by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
+    var listingCopyBusy by remember { mutableStateOf(false) }
+    var listingCopyError by remember { mutableStateOf<String?>(null) }
+    var listingCopySuggestion by remember { mutableStateOf<FynxMarketplaceAiListingCopySuggestion?>(null) }
+    var showListingCopyPreview by remember { mutableStateOf(false) }
+    var photoReviewBusy by remember { mutableStateOf(false) }
+    var photoReviewError by remember { mutableStateOf<String?>(null) }
+    var photoReviewResult by remember { mutableStateOf<FynxMarketplaceAiPhotoReview?>(null) }
+    var photoReviewPhotoUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var showPhotoReviewConsent by remember { mutableStateOf(false) }
+    var showPhotoReviewResults by remember { mutableStateOf(false) }
     var showEnhancementPicker by remember { mutableStateOf(false) }
     var showEnhancementPreview by remember { mutableStateOf(false) }
     var enhancementBusy by remember { mutableStateOf(false) }
@@ -2440,6 +2451,10 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         "Services" -> listOf("Service details" to serviceDetails)
         else -> listOf("Brand / maker" to brand, "Colour" to color, "Additional details" to generalDetails)
     }.filter { it.second.isNotBlank() }
+    val latestListingCopyInputs = rememberUpdatedState(
+        listOf(title, category, subcategory, condition, desc) + specifications.flatMap { listOf(it.first, it.second) }
+    )
+    val latestPhotoReviewSelection = rememberUpdatedState(media.filterNot { contextIsVideo(context, it) }.take(4).map { it.toString() })
     val allSpecifications = if (subcategory.isBlank()) specifications else listOf("Subcategory" to subcategory) + specifications
     val maximumSavedDescriptionLength = minOf(4_000, FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)
     val specificationSection = if (allSpecifications.isEmpty()) "" else buildString {
@@ -2456,10 +2471,10 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             append(specificationSection)
         }.trim().take(maximumSavedDescriptionLength)
     }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA)) { uris -> if (uris.isNotEmpty()) media = FynxMarketplaceSellerFlowSupport.normalizedMedia(context, media + uris) }
-    AlertDialog(onDismissRequest = { if (!busy && !enhancementBusy) { cleanupGeneratedPhotoFiles(); onCancel() } }, title = { Text("Sell on FYNX") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA)) { uris -> if (uris.isNotEmpty()) { media = FynxMarketplaceSellerFlowSupport.normalizedMedia(context, media + uris); photoReviewResult = null; showPhotoReviewResults = false } }
+    AlertDialog(onDismissRequest = { if (!busy && !enhancementBusy && !listingCopyBusy && !photoReviewBusy) { cleanupGeneratedPhotoFiles(); onCancel() } }, title = { Text("Sell on FYNX") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Add product media, then enter the key details.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text("Product media (${media.size}/${FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA})", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Collections, null); Spacer(Modifier.width(5.dp)); Text("Choose media") }; OutlinedButton(onClick = { showCamera = true }, enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera") } }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, enabled = !busy && !photoReviewBusy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Collections, null); Spacer(Modifier.width(5.dp)); Text("Choose media") }; OutlinedButton(onClick = { showCamera = true }, enabled = !busy && !photoReviewBusy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera") } }
         if (media.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
             items(media, key = { it.toString() }) { uri ->
                 Column(Modifier.width(78.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2473,6 +2488,8 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                         IconButton(
                             onClick = {
                                 media = media.filterNot { it == uri }
+                                photoReviewResult = null
+                                showPhotoReviewResults = false
                                 if (originalByEnhancedUri.containsKey(uri.toString())) {
                                     originalByEnhancedUri = originalByEnhancedUri - uri.toString()
                                     FynxMarketplacePhotoEnhancement.discard(uri)
@@ -2485,6 +2502,8 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
                     if (original != null) {
                         TextButton(
                             onClick = {
+                                photoReviewResult = null
+                                showPhotoReviewResults = false
                                 media = FynxMarketplaceSellerFlowSupport.normalizedMedia(
                                     context,
                                     media.map { if (it == uri) original else it }
@@ -2499,10 +2518,27 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             }
         }
         if (media.any { !contextIsVideo(context, it) }) {
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3FF)), border = BorderStroke(1.dp, Color(0xFFBDD8FF))) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("Photo quality check", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Color(0xFF0756A8))
+                    Text("Get simple tips on lighting, sharpness, framing and background before you publish.", style = MaterialTheme.typography.bodySmall)
+                    Button(
+                        onClick = { photoReviewPhotoUris = media.filterNot { contextIsVideo(context, it) }.take(4); photoReviewError = null; showPhotoReviewConsent = true },
+                        enabled = !busy && !photoReviewBusy && !enhancementBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDDEEFF), contentColor = Color(0xFF0756A8))
+                    ) { if (photoReviewBusy) CircularProgressIndicator(Modifier.size(18.dp), color = Color(0xFF0756A8)) else Text("Review photos with FYNX AI") }
+                    Text("Up to 4 still photos • One-time AI check • Original photos stay unchanged.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (media.count { !contextIsVideo(context, it) } > 4) Text("The first four selected photos will be checked. Other photos and videos stay unchanged.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    photoReviewError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        }
+        if (media.any { !contextIsVideo(context, it) }) {
             if (FynxMarketplacePhotoEnhancement.isSupportedOnCurrentAndroid()) {
                 OutlinedButton(
-                    onClick = { showEnhancementPicker = true; enhancementError = null },
-                    enabled = !busy && !enhancementBusy,
+                    onClick = { showEnhancementPicker = true; enhancementError = null; photoReviewResult = null; showPhotoReviewResults = false },
+                    enabled = !busy && !enhancementBusy && !photoReviewBusy,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Clean up photo background (optional)") }
                 Text(
@@ -2643,12 +2679,73 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             }
         }
         OutlinedTextField(desc.take(descriptionBodyLimit), { desc = it.take(descriptionBodyLimit) }, label = { Text("Product description") }, supportingText = { Text("Description and saved specifications share a 4,000-character limit. Up to $descriptionBodyLimit characters are available for this category.") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(
+                onClick = {
+                    val requestedInputSnapshot = latestListingCopyInputs.value
+                    val requestedTitle = title
+                    val requestedCategory = category
+                    val requestedSubcategory = subcategory
+                    val requestedCondition = condition
+                    val requestedDescription = desc
+                    val requestedSpecifications = specifications.toList()
+                    listingCopyBusy = true
+                    listingCopyError = null
+                    listingCopySuggestion = null
+                    scope.launch {
+                        FynxMarketplaceAiClient.generateListingCopy(
+                            context = context,
+                            title = requestedTitle,
+                            category = requestedCategory,
+                            subcategory = requestedSubcategory,
+                            condition = requestedCondition,
+                            description = requestedDescription,
+                            specifications = requestedSpecifications
+                        ).onSuccess { suggestion ->
+                            if (latestListingCopyInputs.value == requestedInputSnapshot) {
+                                listingCopySuggestion = suggestion
+                                showListingCopyPreview = true
+                            } else {
+                                listingCopyError = "Your product details changed while FYNX AI was preparing the draft. Please generate a fresh suggestion."
+                            }
+                        }.onFailure { failure ->
+                            listingCopyError = marketplaceSafeError(
+                                failure,
+                                "FYNX AI could not prepare a suggestion. Your current listing has not changed."
+                            )
+                        }
+                        listingCopyBusy = false
+                    }
+                },
+                enabled = !busy && !listingCopyBusy && title.trim().length >= 2,
+                modifier = Modifier.weight(1f)
+            ) {
+                if (listingCopyBusy) {
+                    CircularProgressIndicator(Modifier.size(18.dp))
+                } else {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Improve with FYNX AI")
+                }
+            }
+            Text(
+                "Draft only",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            "FYNX AI uses only the product details you entered here. It does not read your wallet, private chats or personal account records. Review every suggestion before using it.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        listingCopyError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         Text("4. Location and delivery", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(location, { location = it.take(160) }, label = { Text("Listing area") }, supportingText = { Text("Use a town, city, or state buyers recognise.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedButton(onClick = { useCurrentListingLocation() }, enabled = !busy && !locationLoading, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (locationLoading) "Finding your area..." else "Use my current area") }
         Text("FYNX uses a human-readable area for discovery; your exact GPS coordinates are not published with the listing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delivery, { delivery = it }); Text("Delivery") }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(pickup, { pickup = it }); Text("Pickup") }; error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { listingId -> cleanupGeneratedPhotoFiles(); onPublished(listingId) }.onFailure { error = marketplaceSafeError(it, "Listing could not be published."); busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = { cleanupGeneratedPhotoFiles(); onCancel() }, enabled = !busy && !enhancementBusy) { Text("Cancel") } })
+    } }, confirmButton = { Button(enabled = !busy && !listingCopyBusy && !photoReviewBusy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { listingId -> cleanupGeneratedPhotoFiles(); onPublished(listingId) }.onFailure { error = marketplaceSafeError(it, "Listing could not be published."); busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = { cleanupGeneratedPhotoFiles(); onCancel() }, enabled = !busy && !enhancementBusy && !listingCopyBusy && !photoReviewBusy) { Text("Cancel") } })
     if (showEnhancementPicker) {
         AlertDialog(
             onDismissRequest = { if (!enhancementBusy) showEnhancementPicker = false },
@@ -2767,7 +2864,106 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             dismissButton = { TextButton(onClick = { keepOriginalPhotoPreview() }) { Text("Keep Original") } }
         )
     }
-    if (showCamera) Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, _ -> media = FynxMarketplaceSellerFlowSupport.addMedia(context, media, uri); showCamera = false }, onDismiss = { showCamera = false }) } } }
+    if (showCamera) Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, _ -> media = FynxMarketplaceSellerFlowSupport.addMedia(context, media, uri); photoReviewResult = null; showPhotoReviewResults = false; showCamera = false }, onDismiss = { showCamera = false }) } } }
+    if (showPhotoReviewConsent) {
+        AlertDialog(
+            onDismissRequest = { if (!photoReviewBusy) showPhotoReviewConsent = false },
+            title = { Text("Review product photos with FYNX AI?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("The first " + photoReviewPhotoUris.size + " selected still photo(s) will be compressed on this device and sent to FYNX AI (Gemini) through your authenticated request for this one check.")
+                    Text("Only the selected image bytes are sent for this check. FYNX does not save them to your account, Marketplace media or listing, and the original photos are not changed.", style = MaterialTheme.typography.bodySmall)
+                    Text("For your privacy, do not continue with photos showing faces, identity documents, receipts, addresses, phone numbers, contact details or other private information.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                Button(enabled = !photoReviewBusy && photoReviewPhotoUris.isNotEmpty(), onClick = {
+                    val requestedPhotos = photoReviewPhotoUris.toList()
+                    val requestedKeys = requestedPhotos.map { it.toString() }
+                    showPhotoReviewConsent = false
+                    photoReviewBusy = true
+                    photoReviewError = null
+                    photoReviewResult = null
+                    scope.launch {
+                        FynxMarketplaceAiPhotoReviewClient.review(context, requestedPhotos)
+                            .onSuccess { review ->
+                                if (latestPhotoReviewSelection.value == requestedKeys) {
+                                    photoReviewResult = review
+                                    showPhotoReviewResults = true
+                                } else photoReviewError = "Your selected photos changed during the review. Run the check again for the current photos."
+                            }.onFailure { failure ->
+                                photoReviewError = marketplaceSafeError(failure, "FYNX AI could not review these photos. Your listing has not changed.")
+                            }
+                        photoReviewBusy = false
+                    }
+                }) { Text("Review photos") }
+            },
+            dismissButton = { TextButton(onClick = { showPhotoReviewConsent = false }, enabled = !photoReviewBusy) { Text("Cancel") } }
+        )
+    }
+    if (showPhotoReviewResults && photoReviewResult != null) {
+        val review = photoReviewResult!!
+        AlertDialog(
+            onDismissRequest = { showPhotoReviewResults = false },
+            title = { Text("Photo check results") },
+            text = {
+                Column(Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (review.overallStatus == "READY") Text("No obvious photo-quality issues were detected.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF008000))
+                    else Text("A few photo improvements may help buyers see your item more clearly.", style = MaterialTheme.typography.bodyMedium)
+                    review.photos.forEach { photo ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Photo " + photo.index, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                if (photo.status == "READY") Text("No obvious quality issue detected.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF008000))
+                                else photo.issues.forEach { issue ->
+                                    Text(FynxMarketplaceAiPhotoReviewClient.issueTitle(issue), style = MaterialTheme.typography.labelLarge)
+                                    Text(FynxMarketplaceAiPhotoReviewClient.issueAdvice(issue), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                    Text("This is guidance, not a guarantee. Your original photos remain unchanged. Check every image yourself before publishing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = { Button(onClick = { showPhotoReviewResults = false }) { Text("Done") } },
+            dismissButton = { TextButton(onClick = { showPhotoReviewResults = false }) { Text("Close") } }
+        )
+    }
+    if (showListingCopyPreview && listingCopySuggestion != null) {
+        val suggestion = listingCopySuggestion!!
+        AlertDialog(
+            onDismissRequest = { showListingCopyPreview = false },
+            title = { Text("Review your AI listing draft") },
+            text = {
+                Column(
+                    Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Suggested product name", style = MaterialTheme.typography.labelLarge)
+                    Text(suggestion.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Suggested description", style = MaterialTheme.typography.labelLarge)
+                    Text(suggestion.description, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "AI can make mistakes. Check the name, condition and every claim. Nothing is published until you use the suggestion and then press Publish.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    title = suggestion.title.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH)
+                    desc = suggestion.description.take(descriptionBodyLimit)
+                    listingCopySuggestion = null
+                    showListingCopyPreview = false
+                    listingCopyError = null
+                }) { Text("Use suggestion") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showListingCopyPreview = false }) { Text("Keep editing") }
+            }
+        )
+    }
 }
 
 private fun contextIsVideo(context: android.content.Context, uri: Uri): Boolean { val mime = context.contentResolver.getType(uri).orEmpty().lowercase(); return mime.startsWith("video/") || uri.toString().lowercase().let { it.endsWith(".mp4") || it.endsWith(".webm") || it.endsWith(".3gp") || it.endsWith(".mkv") } }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
@@ -326,6 +327,11 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
     var bio by remember(profile) { mutableStateOf(profile.bio) }
     var country by remember(profile) { mutableStateOf(profile.country) }
     var about by remember(profile, description) { mutableStateOf(description) }
+    val context = LocalContext.current
+    val aiWritingScope = rememberCoroutineScope()
+    var bioAiBusy by remember(profile) { mutableStateOf(false) }
+    var bioAiError by remember(profile) { mutableStateOf<String?>(null) }
+    var bioAiSuggestion by remember(profile) { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) onPhotoChanged(uri.toString()) }
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { TextButton(enabled = !syncing, onClick = onCancel) { Text("Cancel") }; Text("Edit profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); TextButton(enabled = !syncing, onClick = { onSave(profile.copy(displayName = displayName.trim().ifBlank { profile.displayName }, username = username.trim().removePrefix("@").replace(" ", "").ifBlank { profile.username }, bio = bio.trim(), country = country.trim()), about.trim(), photoUri) }) { Text(if (syncing) "Saving…" else "Save") } }
@@ -335,7 +341,69 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { OutlinedButton(enabled = !syncing, onClick = { picker.launch("image/*") }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.AddAPhoto, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (photoUri == null) "Add photo" else "Change photo") }; if (photoUri != null) { Spacer(Modifier.width(6.dp)); TextButton(enabled = !syncing, onClick = { onPhotoChanged(null) }) { Text("Remove") } } }
         OutlinedTextField(displayName, { displayName = it }, Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true, shape = RoundedCornerShape(14.dp))
         OutlinedTextField(username.removePrefix("@"), { username = it.removePrefix("@").replace(" ", "") }, Modifier.fillMaxWidth(), label = { Text("Username") }, prefix = { Text("@") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-        OutlinedTextField(bio, { bio = it }, Modifier.fillMaxWidth(), label = { Text("Bio") }, minLines = 3, shape = RoundedCornerShape(14.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Profile bio", style = MaterialTheme.typography.labelLarge)
+            OutlinedButton(
+                onClick = {
+                    val requestedBio = bio.trim()
+                    if (requestedBio.isNotBlank()) {
+                        bioAiBusy = true
+                        bioAiError = null
+                        bioAiSuggestion = null
+                        aiWritingScope.launch {
+                            AiAssistantClient.improveProfileBio(context, requestedBio)
+                                .onSuccess { suggestion ->
+                                    if (bio.trim() == requestedBio) bioAiSuggestion = suggestion.trim().take(1000)
+                                    else bioAiError = "Your bio changed while FYNX AI was preparing it. Please try again."
+                                }
+                                .onFailure { failure -> bioAiError = failure.message?.takeIf { it.isNotBlank() } ?: "FYNX AI could not improve this bio. Please try again." }
+                            bioAiBusy = false
+                        }
+                    }
+                },
+                enabled = !syncing && !bioAiBusy && bio.isNotBlank()
+            ) {
+                if (bioAiBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF007FFF), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (bioAiBusy) "Improving…" else "Improve with AI")
+            }
+        }
+        bioAiError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        OutlinedTextField(
+            value = bio,
+            onValueChange = { value ->
+                if (value != bio) {
+                    bioAiSuggestion = null
+                    bioAiError = null
+                }
+                bio = value
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Bio") },
+            minLines = 3,
+            shape = RoundedCornerShape(14.dp)
+        )
+        bioAiSuggestion?.takeIf { it.isNotBlank() }?.let { suggestion ->
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3FF))) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF007FFF), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("FYNX AI suggestion", style = MaterialTheme.typography.titleSmall)
+                    }
+                    Text(suggestion, style = MaterialTheme.typography.bodyMedium)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { bioAiSuggestion = null }) { Text("Keep my bio") }
+                        Button(onClick = {
+                            bio = suggestion.take(1000)
+                            bioAiSuggestion = null
+                            bioAiError = null
+                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007FFF))) { Text("Use bio") }
+                    }
+                }
+            }
+        }
         Text("Bio suggestions", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Text("Tap a suggestion to use it, then edit it to sound like you.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val bioSuggestions = listOf(
@@ -346,7 +414,7 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
         )
         bioSuggestions.forEach { suggestion ->
             Surface(
-                modifier = Modifier.fillMaxWidth().clickable { bio = suggestion },
+                modifier = Modifier.fillMaxWidth().clickable { bio = suggestion; bioAiSuggestion = null; bioAiError = null },
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))

@@ -20,7 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-enum class FynxAuthPage { WELCOME, REGISTER, VERIFY, LOGIN }
+enum class FynxAuthPage { WELCOME, REGISTER, VERIFY, LOGIN, EMAIL_VERIFY, PASSWORD_RESET }
 
 @Composable
 fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
@@ -30,6 +30,14 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var displayName by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var verificationCode by remember { mutableStateOf("") }
+    var pendingRegistration by remember { mutableStateOf<FynxRemoteAuthClient.ResultData?>(null) }
+    var resetEmail by remember { mutableStateOf("") }
+    var resetCode by remember { mutableStateOf("") }
+    var resetPassword by remember { mutableStateOf("") }
+    var resetPasswordConfirmation by remember { mutableStateOf("") }
+    var resetCodeRequested by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
     val localDebugLoginAvailable = localDebugAccountForLogin(context, username) != null
     var confirmPassword by remember { mutableStateOf("") }
@@ -104,11 +112,17 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                     Modifier.fillMaxWidth().padding(22.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (page == FynxAuthPage.REGISTER || page == FynxAuthPage.VERIFY) {
+                    if (page == FynxAuthPage.REGISTER || page == FynxAuthPage.VERIFY ||
+                        page == FynxAuthPage.EMAIL_VERIFY || page == FynxAuthPage.PASSWORD_RESET) {
                         Text("FYNX", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            if (page == FynxAuthPage.REGISTER) "Create your FYNX account" else "Finish your account setup",
+                            when (page) {
+                                FynxAuthPage.REGISTER -> "Create your FYNX account"
+                                FynxAuthPage.VERIFY -> "Finish your account setup"
+                                FynxAuthPage.EMAIL_VERIFY -> "Verify your email address"
+                                else -> "Recover your FYNX account"
+                            },
                             color = Color.White.copy(alpha = .72f)
                         )
                         Spacer(Modifier.height(20.dp))
@@ -138,6 +152,8 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(10.dp))
                             FynxAuthField(phone, { phone = it.filter { c -> c.isDigit() || c == '+' } }, "Phone number", keyboardType = KeyboardType.Phone)
                             Spacer(Modifier.height(10.dp))
+                            FynxAuthField(email, { email = it.trim() }, "Email address", keyboardType = KeyboardType.Email)
+                            Spacer(Modifier.height(10.dp))
                             FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
                             Spacer(Modifier.height(10.dp))
                             FynxAuthField(confirmPassword, { confirmPassword = it }, "Confirm password", keyboardType = KeyboardType.Password, password = true)
@@ -148,6 +164,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                     displayName.trim().length < 2 -> "Enter your name."
                                     username.length < 3 -> "Username must be at least 3 characters."
                                     phone.count { it.isDigit() } < 7 -> "Enter a valid phone number."
+                                    !email.trim().matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) -> "Enter a valid email address."
                                     password.length < 8 -> "Password must be at least 8 characters."
                                     password != confirmPassword -> "Passwords do not match."
                                     else -> null
@@ -157,14 +174,25 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             TextButton(onClick = { error = null; page = FynxAuthPage.WELCOME }, enabled = !busy) { Text("Back") }
                         }
                         FynxAuthPage.VERIFY -> {
-                            Text("Your account will be created securely on the FYNX server. Phone/SMS verification is not being faked here; it will be connected before public launch.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
+                            Text("Your account will be created securely on the FYNX server. We will send a code to your email address so you can verify ownership and use account recovery. Phone/SMS verification is not being faked here.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
                                 busy = true
                                 error = null
-                                scope.launch { finish(FynxRemoteAuthClient.register(context, displayName.trim(), username.trim(), phone.trim(), password)) }
-                            }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy) { Text(if (busy) "Creating account…" else "Create and enter FYNX") }
+                                scope.launch {
+                                    val result = FynxRemoteAuthClient.register(context, displayName.trim(), username.trim(), phone.trim(), password, email.trim())
+                                    result.onSuccess { account ->
+                                        pendingRegistration = account
+                                        verificationCode = ""
+                                        page = FynxAuthPage.EMAIL_VERIFY
+                                        busy = false
+                                        error = if (account.emailVerificationSent) null else "Your account was created, but FYNX could not send the verification email. Check the email service configuration or request another code."
+                                    }.onFailure { failure ->
+                                        finish(Result.failure(failure))
+                                    }
+                                }
+                            }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy) { Text(if (busy) "Creating account…" else "Create and verify email") }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy) { Text("Back") }
                         }
                         FynxAuthPage.LOGIN -> {
@@ -211,7 +239,169 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
+                            TextButton(onClick = { error = null; resetEmail = ""; resetCode = ""; resetCodeRequested = false; page = FynxAuthPage.PASSWORD_RESET }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF9BCFFF))) { Text("Forgot password?") }
+                            TextButton(onClick = { error = null; pendingRegistration = null; verificationCode = ""; page = FynxAuthPage.EMAIL_VERIFY }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Verify email address") }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
+                        }
+                        FynxAuthPage.EMAIL_VERIFY -> {
+                            val accountEmail = pendingRegistration?.email?.takeIf { it.isNotBlank() } ?: email
+                            Text(
+                                if (pendingRegistration != null) "Enter the 6-digit code sent to $accountEmail. The code expires in 15 minutes."
+                                else "Enter your email address and the 6-digit code sent by FYNX. You can request a fresh code here.",
+                                color = Color.White.copy(alpha = .72f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            if (pendingRegistration == null) {
+                                Spacer(Modifier.height(12.dp))
+                                FynxAuthField(email, { email = it.trim() }, "Email address", keyboardType = KeyboardType.Email)
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            FynxAuthField(verificationCode, { verificationCode = it.filter(Char::isDigit).take(6) }, "6-digit verification code", keyboardType = KeyboardType.Number)
+                            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                            Spacer(Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    val targetEmail = pendingRegistration?.email?.takeIf { it.isNotBlank() } ?: email.trim()
+                                    if (targetEmail.isBlank() || verificationCode.length != 6) {
+                                        error = "Enter your email address and the 6-digit code."
+                                    } else {
+                                        busy = true
+                                        error = null
+                                        scope.launch {
+                                            FynxRemoteAuthClient.verifyEmail(context, targetEmail, verificationCode)
+                                                .onSuccess {
+                                                    val account = pendingRegistration
+                                                    if (account != null) {
+                                                        finish(Result.success(account))
+                                                    } else {
+                                                        busy = false
+                                                        page = FynxAuthPage.LOGIN
+                                                        error = "Email verified. Sign in with your FYNX username and password."
+                                                    }
+                                                }
+                                                .onFailure { failure ->
+                                                    busy = false
+                                                    error = failure.message?.substringAfter(": ") ?: "The verification code is invalid or expired."
+                                                }
+                                        }
+                                    }
+                                },
+                                Modifier.fillMaxWidth().height(50.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                enabled = !busy
+                            ) { Text(if (busy) "Verifying…" else "Verify email") }
+                            TextButton(
+                                onClick = {
+                                    val targetEmail = pendingRegistration?.email?.takeIf { it.isNotBlank() } ?: email.trim()
+                                    if (!targetEmail.contains("@")) {
+                                        error = "Enter your email address first."
+                                    } else {
+                                        busy = true
+                                        error = null
+                                        scope.launch {
+                                            FynxRemoteAuthClient.requestEmailVerification(context, targetEmail)
+                                                .onSuccess { deliveryConfigured ->
+                                                    busy = false
+                                                    error = if (deliveryConfigured) {
+                                                        "If this address has an unverified FYNX account, a fresh code has been sent. Wait one minute before requesting another."
+                                                    } else {
+                                                        "FYNX email delivery is not configured yet. Email verification cannot be sent until the SMTP service is configured."
+                                                    }
+                                                }
+                                                .onFailure { failure ->
+                                                    busy = false
+                                                    error = failure.message?.substringAfter(": ") ?: "FYNX could not request another code."
+                                                }
+                                        }
+                                    }
+                                },
+                                enabled = !busy
+                            ) { Text("Resend verification code") }
+                            TextButton(onClick = { pendingRegistration = null; page = FynxAuthPage.LOGIN; error = null }, enabled = !busy) { Text("Back to sign in") }
+                        }
+                        FynxAuthPage.PASSWORD_RESET -> {
+                            Text(
+                                if (resetCodeRequested) "Enter the code sent to your verified email address and choose a new password."
+                                else "Enter the email address verified on your FYNX account. We will send a one-time reset code if it matches a verified account.",
+                                color = Color.White.copy(alpha = .72f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            FynxAuthField(resetEmail, { resetEmail = it.trim() }, "Verified email address", keyboardType = KeyboardType.Email)
+                            if (resetCodeRequested) {
+                                Spacer(Modifier.height(10.dp))
+                                FynxAuthField(resetCode, { resetCode = it.filter(Char::isDigit).take(6) }, "6-digit reset code", keyboardType = KeyboardType.Number)
+                                Spacer(Modifier.height(10.dp))
+                                FynxAuthField(resetPassword, { resetPassword = it }, "New password", keyboardType = KeyboardType.Password, password = true)
+                                Spacer(Modifier.height(10.dp))
+                                FynxAuthField(resetPasswordConfirmation, { resetPasswordConfirmation = it }, "Confirm new password", keyboardType = KeyboardType.Password, password = true)
+                            }
+                            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                            Spacer(Modifier.height(14.dp))
+                            Button(
+                                onClick = {
+                                    if (!resetCodeRequested) {
+                                        if (!resetEmail.contains("@")) {
+                                            error = "Enter a valid email address."
+                                        } else {
+                                            busy = true
+                                            error = null
+                                            scope.launch {
+                                                FynxRemoteAuthClient.requestPasswordReset(context, resetEmail.trim())
+                                                    .onSuccess { deliveryConfigured ->
+                                                        busy = false
+                                                        if (deliveryConfigured) {
+                                                            resetCodeRequested = true
+                                                            error = "If this email belongs to a verified FYNX account, a reset code has been sent. Check your inbox and spam folder."
+                                                        } else {
+                                                            error = "FYNX email delivery is not configured yet. Password recovery is unavailable until the SMTP service is configured."
+                                                        }
+                                                    }
+                                                    .onFailure { failure ->
+                                                        busy = false
+                                                        error = failure.message?.substringAfter(": ") ?: "FYNX could not request a reset code."
+                                                    }
+                                            }
+                                        }
+                                    } else if (resetCode.length != 6 || resetPassword.length < 8 || resetPassword != resetPasswordConfirmation) {
+                                        error = when {
+                                            resetCode.length != 6 -> "Enter the 6-digit reset code."
+                                            resetPassword.length < 8 -> "Your new password must be at least 8 characters."
+                                            else -> "Your new passwords do not match."
+                                        }
+                                    } else {
+                                        busy = true
+                                        error = null
+                                        scope.launch {
+                                            FynxRemoteAuthClient.confirmPasswordReset(context, resetEmail.trim(), resetCode, resetPassword)
+                                                .onSuccess {
+                                                    busy = false
+                                                    resetCodeRequested = false
+                                                    resetCode = ""
+                                                    resetPassword = ""
+                                                    resetPasswordConfirmation = ""
+                                                    password = ""
+                                                    page = FynxAuthPage.LOGIN
+                                                    error = "Password updated. Sign in with your new password."
+                                                }
+                                                .onFailure { failure ->
+                                                    busy = false
+                                                    error = failure.message?.substringAfter(": ") ?: "FYNX could not reset the password."
+                                                }
+                                        }
+                                    }
+                                },
+                                Modifier.fillMaxWidth().height(50.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                enabled = !busy
+                            ) {
+                                Text(when {
+                                    busy -> if (resetCodeRequested) "Updating…" else "Sending…"
+                                    resetCodeRequested -> "Reset password"
+                                    else -> "Send reset code"
+                                })
+                            }
+                            TextButton(onClick = { page = FynxAuthPage.LOGIN; error = null }, enabled = !busy) { Text("Back to sign in") }
                         }
                     }
                 }
