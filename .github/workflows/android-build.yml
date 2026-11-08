@@ -95,10 +95,6 @@ jobs:
         run: |
           gcloud auth list --filter=status:ACTIVE --format="value(account)"
           gcloud config get-value project
-      - name: Verify Google Cloud authentication
-        run: |
-          gcloud auth list --filter=status:ACTIVE --format="value(account)"
-          gcloud config get-value project
       - name: Verify FYNX network transport architecture
         run: |
           echo "Running FYNX network certification on ${GITHUB_SHA}"
