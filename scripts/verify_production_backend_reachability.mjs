@@ -1,7 +1,6 @@
 const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\/$/, "");
-// Render cold starts can legitimately take longer than the previous 45s request
-// budget. Keep the certification strict (health + database readiness are still
-// required) while allowing enough time for the production service to wake up.
+// Allow enough time for a managed backend to respond, while keeping
+// health and database readiness mandatory for a successful reachability check.
 const TIMEOUT_MS = 120_000;
 const RETRIES = 3;
 const RETRY_DELAY_MS = 10_000;
