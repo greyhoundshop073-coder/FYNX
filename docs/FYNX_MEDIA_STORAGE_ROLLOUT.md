@@ -70,9 +70,11 @@ R2 should only be activated after the account's billing and free allowance are c
 8. Add automated migration thresholds only after measuring storage use, operation volume, failure rates and actual provider costs. Thresholds should alert and prepare a migration; paid provisioning and production cutover must remain approval-gated.
 9. Repeat the complete read/write/privacy/recovery checks on the intended production environment before switching it.
 
-## Comment attachments: remaining integration
+## Comment attachments: implementation on the Home integration branch
 
-The generic media adapter and media table can store image, video and audio objects, but the current social comment endpoints still accept text only. Comment attachment support is therefore **not complete**. It requires a coordinated backend and canonical Android integration: comment media references and ownership checks in PostgreSQL, protected comment-media retrieval that enforces post visibility and block rules, and the Home comment composer/display flow. Do not claim photo/video comments are backed by object storage until those routes, Android flows and regression tests are implemented.
+The coordinated comment-media implementation is now present on the existing Home integration PR #450 (`feat/home-feed-professional-feed-conversations-20261103`), which targets the canonical Android integration branch. The Android composer selects photos or videos, uploads them through the existing authenticated `/api/media` contract, and attaches the returned media ID and type to the comment. The backend verifies media ownership and MIME type, stores the media reference on the comment, and protects `/api/social/comment-media/:id` with the caller's post-visibility and block checks before reading bytes through the provider-aware payload cache. Comment and reply cards render attached media, and linked Part 2 videos are checked for visibility.
+
+The adapter and cache are shared with this PR and use the same per-row storage provider (`postgres`, `neon` or `r2`). PR #450's exact-head Backend CI has passed; its Android instrumentation and screenshot stage is still running, so the full Home runtime experience is not yet certified. Until PR #450 is merged into the canonical integration branch, these comment changes are not part of the canonical Android branch. Do not describe them as deployed or live.
 
 ## Safety boundaries
 
