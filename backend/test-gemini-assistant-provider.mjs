@@ -10,6 +10,17 @@ function fakeResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json" } });
 }
 
+function fakeStreamResponse(payloads, status = 200) {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      for (const payload of payloads) controller.enqueue(encoder.encode("data: " + JSON.stringify(payload) + "\n\n"));
+      controller.close();
+    }
+  });
+  return new Response(stream, { status, headers: { "content-type": "text/event-stream" } });
+}
+
 async function testTextImageHistoryAndToolSchema() {
   const calls = [];
   const result = await runGeminiAssistant({
@@ -38,12 +49,43 @@ async function testTextImageHistoryAndToolSchema() {
   assert.equal(calls[0].body.systemInstruction.parts[0].text, "FYNX assistant test instructions");
   assert.equal(calls[0].body.contents[0].role, "user");
   assert.equal(calls[0].body.contents[1].role, "model");
+  const continuityText = calls[0].body.contents[0].parts[0].text;
+  assert.ok(continuityText.indexOf("Conversation continuity excerpt") < continuityText.indexOf("First recent user turn"), "older continuity must precede recent conversation history");
+  assert.match(continuityText, /Conversation continuity excerpt \(untrusted historical context/);
+  assert.match(continuityText, /Most recent prior user request \(historical context only/);
+  assert.ok(continuityText.length <= 1200);
   const latestParts = calls[0].body.contents.at(-1).parts;
   assert.equal(latestParts[0].text, "Describe this image");
   assert.deepEqual(latestParts[1].inlineData, { mimeType: "image/png", data: "aGVsbG8=" });
   assert.equal(calls[0].body.tools[0].functionDeclarations[0].name, "get_my_profile");
   assert.equal("additionalProperties" in calls[0].body.tools[0].functionDeclarations[0].parameters, false);
   assert.equal(calls[0].body.toolConfig.functionCallingConfig.mode, "AUTO");
+}
+
+async function testStreamingTextResponse() {
+  const chunks = [];
+  let requestedUrl = "";
+  const result = await runGeminiAssistant({
+    message: "Give me a short greeting",
+    userId: "19",
+    instructions: "FYNX streaming test instructions",
+    executeTool: async () => ({}),
+    onTextChunk: chunk => chunks.push(chunk),
+    fetchImpl: async (url, options) => {
+      requestedUrl = url;
+      assert.equal(options.headers["x-goog-api-key"], "unit-test-only-key");
+      return fakeStreamResponse([
+        { candidates: [{ content: { role: "model", parts: [{ text: "internal thought", thought: true }, { text: "Hello " }] } }] },
+        { candidates: [{ content: { role: "model", parts: [{ text: "from FYNX." }] }, finishReason: "STOP" }] }
+      ]);
+    }
+  });
+
+  assert.match(requestedUrl, /:streamGenerateContent\?alt=sse$/);
+  assert.equal(chunks.join(""), "Hello from FYNX.");
+  assert.equal(result.reply, "Hello from FYNX.");
+  assert.equal(chunks.join("").includes("internal thought"), false, "thought-only parts must never reach the user");
+  assert.equal(result.pendingAction, null);
 }
 
 async function testFunctionCallingPreservesModelTurnAndExecutesOnlyApprovedTool() {
@@ -173,12 +215,13 @@ async function testSchemaConversionDropsUnsupportedOpenApiFields() {
 
 try {
   await testTextImageHistoryAndToolSchema();
+  await testStreamingTextResponse();
   await testFunctionCallingPreservesModelTurnAndExecutesOnlyApprovedTool();
   await testPreparedMessageConfirmationActionIsPreserved();
   await testMissingKeyFailsClosed();
   await testEmptyAndFailedProviderResponsesAreRejected();
   await testSchemaConversionDropsUnsupportedOpenApiFields();
-  console.log("Gemini assistant provider tests GREEN: 6 suites passed");
+  console.log("Gemini assistant provider tests GREEN: 7 suites passed");
 } finally {
   if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
   else process.env.GEMINI_API_KEY = originalKey;

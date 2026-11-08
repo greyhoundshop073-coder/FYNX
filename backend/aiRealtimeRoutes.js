@@ -20,7 +20,11 @@ function authenticate(req, res) {
   }
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    return payload?.sub ? String(payload.sub) : null;
+    if (!payload?.sub) {
+      res.status(401).json({ error: "authenticated user is required" });
+      return null;
+    }
+    return String(payload.sub);
   } catch {
     res.status(401).json({ error: "invalid or expired token" });
     return null;

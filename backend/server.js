@@ -5,6 +5,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
+import { mediaStorage, redirectStoredMedia } from "./mediaStorage.js";
+import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
@@ -13,6 +15,8 @@ import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
+import { createEmailDelivery } from "./emailDelivery.js";
+import { createEmailAuthController } from "./emailAuthRoutes.js";
 
 const { Pool } = pg;
 const app = express();
@@ -41,6 +45,7 @@ app.use("/api/assistant", rateLimit("assistant", RATE_LIMITS.assistant));
 app.use("/api/media", rateLimit("media", RATE_LIMITS.media));
 app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));
 
+const emailDelivery = createEmailDelivery();
 const PORT = Number(process.env.PORT || 10000);
 const JWT_SECRET = process.env.JWT_SECRET || "";
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -58,6 +63,7 @@ const pool = DATABASE_URL ? new Pool({
   query_timeout: 20_000,
   keepAlive: true
 }) : null;
+const emailAuth = createEmailAuthController({ pool, emailDelivery, tokenSecret: process.env.JWT_SECRET || "", bcrypt });
 const clientsByUserId = new Map();
 const activeCalls = new Map();
 
@@ -111,6 +117,18 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_code_hash TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_attempts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_last_sent_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_code_hash TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_attempts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_last_sent_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique ON users (LOWER(email)) WHERE email IS NOT NULL;
     UPDATE users SET verified = FALSE;
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -145,6 +163,12 @@ async function initDatabase() {
       byte_size INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE message_media ALTER COLUMN data DROP NOT NULL;
+    ALTER TABLE message_media ADD COLUMN IF NOT EXISTS storage_provider TEXT NOT NULL DEFAULT 'postgres';
+    ALTER TABLE message_media ADD COLUMN IF NOT EXISTS object_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS message_media_object_key_unique
+      ON message_media(storage_provider, object_key) WHERE object_key IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS message_media_storage_provider_idx ON message_media(storage_provider, created_at DESC);
     CREATE INDEX IF NOT EXISTS message_media_owner_idx ON message_media (owner_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_recipient_idx ON messages (recipient_id, created_at DESC);
@@ -184,9 +208,13 @@ async function initDatabase() {
 function requireConfig(name, value) { if (!value) throw new Error(`${name} is not configured.`); }
 function issueToken(user) {
   requireConfig("JWT_SECRET", JWT_SECRET);
-  return jwt.sign({ sub: String(user.id), username: user.username }, JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign(
+    { sub: String(user.id), username: user.username, sv: Number(user.session_version || 0) },
+    JWT_SECRET,
+    { expiresIn: "30d" }
+  );
 }
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const header = req.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!JWT_SECRET) {
@@ -197,10 +225,26 @@ function auth(req, res, next) {
     console.warn("[fynx-auth] rejected request: bearer token missing", { method: req.method, path: req.path });
     return res.status(401).json({ error: "authentication required" });
   }
-  try { req.user = jwt.verify(token, JWT_SECRET); return next(); } catch (error) {
+  let claims;
+  try {
+    claims = jwt.verify(token, JWT_SECRET);
+  } catch (error) {
     const reason = error?.name === "TokenExpiredError" ? "expired" : error?.name === "JsonWebTokenError" ? "invalid" : "verification_failed";
     console.warn("[fynx-auth] rejected request: bearer token rejected", { method: req.method, path: req.path, reason });
     return res.status(401).json({ error: reason === "expired" ? "token expired" : "invalid or expired token" });
+  }
+  try {
+    if (!pool) return res.status(503).json({ error: "authentication temporarily unavailable" });
+    const current = await pool.query("SELECT session_version FROM users WHERE id = $1", [claims.sub]);
+    const currentVersion = current.rows?.[0] ? Number(current.rows[0].session_version || 0) : -1;
+    if (currentVersion < 0 || currentVersion !== Number(claims.sv || 0)) {
+      console.warn("[fynx-auth] rejected request: session version no longer current", { method: req.method, path: req.path });
+      return res.status(401).json({ error: "session expired; sign in again" });
+    }
+    req.user = claims;
+    return next();
+  } catch {
+    return res.status(503).json({ error: "authentication temporarily unavailable" });
   }
 }
 async function findUserByUsername(username) {
@@ -298,15 +342,25 @@ app.post("/api/auth/register", async (req, res) => {
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const displayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim().slice(0, 80) : "";
     const phone = typeof req.body?.phone === "string" ? req.body.phone.trim().slice(0, 30) : "";
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     if (!/^[a-z0-9_]{3,32}$/.test(username)) return res.status(400).json({ error: "username must be 3-32 characters using letters, numbers, or underscore" });
     if (password.length < 8 || password.length > 128) return res.status(400).json({ error: "password must be 8-128 characters" });
     if (displayName.length < 2) return res.status(400).json({ error: "display name is required" });
+    if (email && !emailAuth.isValidEmail(email)) return res.status(400).json({ error: "enter a valid email address" });
     const passwordHash = await bcrypt.hash(password, 12);
-    const result = await pool.query("INSERT INTO users (username, password_hash, display_name, phone) VALUES ($1, $2, $3, $4) RETURNING id, username, display_name, phone, created_at", [username, passwordHash, displayName, phone]);
+    const result = await pool.query(
+      "INSERT INTO users (username, password_hash, display_name, phone, email) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, display_name, phone, email, email_verified_at, session_version, created_at",
+      [username, passwordHash, displayName, phone, email || null]
+    );
     const user = result.rows[0];
-    return res.status(201).json({ user, accessToken: issueToken(user) });
+    const emailVerificationSent = email ? await emailAuth.sendVerificationForUser(user) : false;
+    return res.status(201).json({
+      user: { id: user.id, username: user.username, display_name: user.display_name, phone: user.phone, email: user.email, email_verified_at: user.email_verified_at, created_at: user.created_at },
+      accessToken: issueToken(user),
+      emailVerificationSent
+    });
   } catch (error) {
-    if (error?.code === "23505") return res.status(409).json({ error: "username already exists" });
+    if (error?.code === "23505") return res.status(409).json({ error: "username or email already exists" });
     console.error("register", error); return res.status(500).json({ error: "registration failed" });
   }
 });
@@ -317,10 +371,10 @@ app.post("/api/auth/login", async (req, res) => {
     const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (password.length > 128) return res.status(400).json({ error: "invalid username or password" });
-    const result = await pool.query("SELECT id, username, password_hash, display_name, phone, created_at FROM users WHERE username = $1", [username]);
+    const result = await pool.query("SELECT id, username, password_hash, display_name, phone, email, email_verified_at, session_version, created_at FROM users WHERE username = $1", [username]);
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash))) return res.status(401).json({ error: "invalid username or password" });
-    return res.json({ user: { id: user.id, username: user.username, display_name: user.display_name, phone: user.phone, created_at: user.created_at }, accessToken: issueToken(user) });
+    return res.json({ user: { id: user.id, username: user.username, display_name: user.display_name, phone: user.phone, email: user.email, email_verified_at: user.email_verified_at, created_at: user.created_at }, accessToken: issueToken(user) });
   } catch (error) { console.error("login", error); return res.status(500).json({ error: "login failed" }); }
 });
 
@@ -406,9 +460,20 @@ app.post("/api/media", auth, async (req, res) => {
     if (!encoded || encoded.length > Math.ceil(MAX_MEDIA_BYTES * 1.38)) return res.status(413).json({ error: "media is too large" });
     const data = Buffer.from(encoded, "base64");
     if (!data.length || data.length > MAX_MEDIA_BYTES) return res.status(413).json({ error: "media is too large" });
-    const result = await pool.query("INSERT INTO message_media (owner_id, mime_type, data, byte_size) VALUES ($1, $2, $3, $4) RETURNING id, mime_type, byte_size", [req.user.sub, mimeType, data, data.length]);
+    const stored = await mediaStorage.putMediaObject({ data, mimeType });
+    let result;
+    try {
+      result = await pool.query("INSERT INTO message_media (owner_id, mime_type, data, byte_size, storage_provider, object_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, mime_type, byte_size", [req.user.sub, mimeType, stored.storageProvider === "postgres" ? data : null, data.length, stored.storageProvider, stored.objectKey]);
+    } catch (databaseError) {
+      if (stored.objectKey) await mediaStorage.deleteMediaObject(stored.objectKey).catch((cleanupError) => console.error("media object rollback cleanup", cleanupError));
+      throw databaseError;
+    }
     return res.status(201).json({ media: { id: String(result.rows[0].id), mimeType: result.rows[0].mime_type, byteSize: result.rows[0].byte_size } });
-  } catch (error) { console.error("media upload", error); return res.status(500).json({ error: "media upload failed" }); }
+  } catch (error) {
+    console.error("media upload", error);
+    if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599) return res.status(error.statusCode).json({ error: error.publicMessage || "media storage is unavailable" });
+    return res.status(500).json({ error: "media upload failed" });
+  }
 });
 
 const statusSchema = async () => {
@@ -519,7 +584,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
         )`
       : "";
     let result = await pool.query(`
-      SELECT mm.mime_type, mm.data
+      SELECT mm.mime_type, mm.storage_provider, mm.object_key
       FROM message_media mm
       WHERE mm.id = $1
         AND (
@@ -608,13 +673,14 @@ app.get("/api/media/:id", auth, async (req, res) => {
       // Handover photos are separate from message/profile/status media. Only the
       // buyer or seller on the order that references the photo may retrieve it.
       try {
-        result = await pool.query(`SELECT mm.mime_type, mm.data
+        result = await pool.query(`SELECT mm.mime_type
           FROM message_media mm
           JOIN marketplace_delivery_evidence e
             ON e.evidence_type = 'PHOTO_REFERENCE' AND e.value = CAST(mm.id AS TEXT)
           JOIN marketplace_orders o ON o.id = e.order_id
           WHERE mm.id = $1 AND (o.buyer_id = $2 OR o.seller_id = $2)
           LIMIT 1`, [mediaId, req.user.sub]);
+        privateEvidenceMedia = Boolean(result.rows[0]);
       } catch (marketplaceEvidenceError) {
         if (marketplaceEvidenceError.code !== "42P01") throw marketplaceEvidenceError;
       }
@@ -625,7 +691,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
       try {
         const evidenceTable = await pool.query("SELECT to_regclass('public.marketplace_order_evidence') AS table_name");
         if (evidenceTable.rows[0]?.table_name) {
-          result = await pool.query(`SELECT mm.mime_type, mm.data
+          result = await pool.query(`SELECT mm.mime_type
             FROM message_media mm
             WHERE mm.id = $1
               AND EXISTS (
@@ -644,9 +710,14 @@ app.get("/api/media/:id", auth, async (req, res) => {
       }
     }
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
-    res.set("Cache-Control", privateEvidenceMedia ? "private, no-store" : "private, max-age=3600");
-    res.type(result.rows[0].mime_type);
-    return res.send(result.rows[0].data);
+    // Publicly shareable media stored in Neon/R2 is served through a short-lived
+    // signed URL. Order evidence remains proxied so its response can enforce no-store.
+    if (!privateEvidenceMedia && await redirectStoredMedia(res, result.rows[0], { cacheControl: "private, max-age=300" })) return;
+    const payload = await getCachedMediaPayload(pool, mediaId);
+    if (!payload) return res.status(404).json({ error: "media not found" });
+    res.set("Cache-Control", privateEvidenceMedia ? "private, no-store" : "private, max-age=300");
+    res.type(payload.mimeType);
+    return res.send(payload.data);
   } catch (error) { console.error("media fetch", error); return res.status(500).json({ error: "media fetch failed" }); }
 });
 
@@ -738,8 +809,9 @@ app.post("/api/messages", auth, async (req, res) => {
     const clientMessageId = typeof req.body?.clientMessageId === 'string' ? req.body.clientMessageId.trim().toLowerCase() : null;
     if (clientMessageId != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(clientMessageId)) return res.status(400).json({ error: "invalid client message id" });
     if (!/^(text|location|contact|poll|sticker|gif)$/.test(messageType)) return res.status(400).json({ error: 'invalid message type' });
-    if (messageType !== 'text' && !messagePayload) return res.status(400).json({ error: 'message payload is required' });
-    if (!recipientUsername || text.length > 4000 || (!text && !Number.isInteger(mediaId))) return res.status(400).json({ error: "valid recipientUsername and message content are required" });
+    if (messageType !== 'text' && (!messagePayload || Object.keys(messagePayload).length === 0)) return res.status(400).json({ error: 'message payload is required' });
+    if (!recipientUsername || text.length > 4000 || (messageType === 'text' && !text && !Number.isInteger(mediaId))) return res.status(400).json({ error: "valid recipientUsername and message content are required" });
+    if ((messageType === 'sticker' || messageType === 'gif') && !Number.isInteger(mediaId)) return res.status(400).json({ error: "sticker and GIF messages require uploaded media" });
     if (mediaId != null && (!Number.isInteger(mediaId) || mediaId < 1)) return res.status(400).json({ error: "invalid media id" });
     if (mediaId != null && (!mediaType || !/^(image|video|video_note|audio|document)$/.test(mediaType))) return res.status(400).json({ error: "invalid media type" });
     if (!Number.isFinite(voiceDurationMs) || voiceDurationMs < 0 || voiceDurationMs > 120000) return res.status(400).json({ error: "invalid voice duration" });
@@ -901,12 +973,17 @@ app.delete("/api/messages/:id", auth, async (req, res) => {
   } catch (error) { console.error("message delete", error); return res.status(500).json({ error: "message delete failed" }); }
 });
 
-wss.on("connection", (socket, req) => {
+wss.on("connection", async (socket, req) => {
   try {
     const url = new URL(req.url || "/realtime", `http://${req.headers.host || "localhost"}`);
     const token = url.searchParams.get("token") || "";
     if (!token || !JWT_SECRET) return socket.close(1008, "authentication required");
+    if (!pool) return socket.close(1008, "authentication required");
     const user = jwt.verify(token, JWT_SECRET);
+    const activeSession = await pool.query("SELECT session_version FROM users WHERE id = $1", [user.sub]);
+    if (!activeSession.rows?.[0] || Number(activeSession.rows[0].session_version || 0) !== Number(user.sv || 0)) {
+      return socket.close(1008, "session expired");
+    }
     const userId = String(user.sub);
     if (!clientsByUserId.has(userId)) clientsByUserId.set(userId, new Set());
     clientsByUserId.get(userId).add(socket);
@@ -963,6 +1040,7 @@ wss.on("connection", (socket, req) => {
   } catch { socket.close(1008, "invalid token"); }
 });
 
+emailAuth.registerRoutes(app, auth);
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
@@ -976,7 +1054,7 @@ await initDatabase();
 
 const shutdown = async (signal) => {
   console.log(`[fynx-shutdown] ${signal}`);
-  server.close(async () => { if (pool) await pool.end().catch(() => {}); process.exit(0); });
+  server.close(async () => { emailDelivery.close(); if (pool) await pool.end().catch(() => {}); process.exit(0); });
   setTimeout(() => process.exit(1), 10_000).unref();
 };
 process.once("SIGTERM", () => shutdown("SIGTERM"));

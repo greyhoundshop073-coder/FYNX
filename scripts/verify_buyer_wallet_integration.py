@@ -14,7 +14,7 @@ actions = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt")
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
 transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text()
-ast.parse(runtime)
+runtime_ast = ast.parse(runtime)
 status_runtime = (ROOT / "scripts/verify_status_creator_runtime.py").read_text()
 ast.parse(status_runtime)
 admin_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt").read_text()
@@ -113,7 +113,19 @@ checks = [
  ("owner/admin control center shows separate Marketplace commission totals", '"FYNX Business Revenue"' in admin_panel and '"Marketplace commission ledger"' in admin_panel and 'it.source == "MARKETPLACE_FEE"' in admin_panel),
  ("company commission is explicitly separate from personal wallet balances", "tracked separately from customer wallet balances and seller payouts" in admin_panel)
 ]
-runtime_token_probe = runtime.split("def secure_access_token_persisted()->bool|None:", 1)[1].split(chr(10)+chr(10)+"install=", 1)[0]
+runtime_token_function = next(
+    (
+        node for node in runtime_ast.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "secure_access_token_persisted"
+    ),
+    None,
+)
+if runtime_token_function is None:
+    raise SystemExit("Wallet runtime verifier could not locate secure_access_token_persisted() in the navigation script.")
+runtime_token_probe = "\n".join(
+    runtime.splitlines()[runtime_token_function.lineno - 1:runtime_token_function.end_lineno]
+)
 runtime_home_recovery = runtime.split("def restore_home_after_restart(name:str)->str:", 1)[1].split(chr(10)+"def capture_surface(", 1)[0]
 runtime_surface_gate = runtime.split("expected_authenticated_surfaces = [", 1)[1].split("]", 1)[0]
 checks.extend([

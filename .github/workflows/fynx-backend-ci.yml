@@ -58,9 +58,19 @@ jobs:
           cache-dependency-path: backend/package.json
       - name: Install backend dependencies
         run: npm install --no-audit --no-fund
+      - name: Verify provider-portable media storage adapters and cache
+        working-directory: backend
+        run: node test-media-storage.mjs && node verify-media-object-storage.mjs && node verify-media-payload-cache.mjs
+      - name: Verify email delivery and account recovery
+        run: |
+          node --check emailDelivery.js
+          node test-email-delivery.mjs
+          node --check emailAuthRoutes.js
+          node test-email-auth.mjs
       - name: Check backend JavaScript
         run: |
           node --check server.js
+          node --check emailAuthRoutes.js
           node --check socialRoutes.js
           node --check verify-marketplace-price-watch.mjs
           node --check profileRoutes.js
@@ -128,6 +138,16 @@ jobs:
         run: |
           node --check assistantJsonBodyParser.js
           node test-assistant-json-body-parser.mjs
+          node --check aiConversationContext.js
+          node test-ai-conversation-context.mjs
+          node --check fynxAiPrivacyPolicy.js
+          node test-fynx-ai-privacy-policy.mjs
+          node --check fynxAiToolRegistry.js
+          node --check fynxAiWritingSupport.js
+          node test-fynx-ai-writing-copy.mjs
+          node test-marketplace-ai-listing-copy.mjs
+          node test-marketplace-ai-photo-review.mjs
+          node --check aiConversationRoutes.js
           node --check geminiAssistantProvider.js
           node test-gemini-assistant-provider.mjs
       - name: Run FYNX AI security and extension contracts
@@ -168,6 +188,10 @@ jobs:
         run: node verify-notification-bootstrap-idempotency.mjs
       - name: Verify Home post reaction SQL contract
         run: node verify-social-post-reaction-bootstrap.mjs
+      - name: Verify Home comment media, linked videos and engagement backend
+        run: node verify-home-comment-experience-bootstrap.mjs
+      - name: Verify Home feed repost timeline and visibility in PostgreSQL
+        run: node test-home-feed-repost-query.mjs
 
       - name: Run Chat end-to-end integration gate
         working-directory: .

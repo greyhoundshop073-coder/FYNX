@@ -6,8 +6,22 @@ import sys
 runner = Path("scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 navigation = Path("scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
+wallet_source = Path("app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text(encoding="utf-8")
+emulator_storage = Path("scripts/configure_android_emulator_storage.sh").read_text(encoding="utf-8")
 
 checks = [
+    (
+        "Marketplace seller-flow capture dismisses only a confirmed visible Android keyboard before scrolling",
+        "def dismiss_ime_if_visible(name: str) -> str:" in navigation
+        and 'dumpsys", "input_method"' in navigation
+        and 'KEYCODE_BACK' in navigation
+        and 'dismiss_ime_if_visible("marketplace-visual-keyboard-dismissed.xml")' in navigation,
+    ),
+    (
+        "Wallet bank-transfer capture recognizes the current account sign-in safety gate without claiming account issuance",
+        '["Connect your FYNX account", "Your dedicated FYNX funding account", "Dedicated account not ready"]' in navigation
+        and "No account request has been sent." in wallet_source,
+    ),
     (
         "normal authenticated Marketplace journey captures private My Shop overview and all seller sections",
         '# Continue in the same real, server-authenticated session into the private' in navigation
@@ -21,12 +35,18 @@ checks = [
     ),
     (
         "Android CI attempts focused Marketplace/My Shop capture after instrumentation failure",
-        'FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
-        and 'else\n  # A red instrumentation test must not suppress Marketplace/My Shop screenshot evidence.' in runner,
+        'if [ "${FYNX_AI_VISUALS_ONLY:-0}" = "1" ]; then' in runner
+        and 'FYNX_AI_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
+        and 'FYNX_LOCAL_VISUALS_ONLY=1 FYNX_MARKETPLACE_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
+        and 'Preserve the existing Marketplace/My Shop visual fallback for its workstream.' in runner
+        and 'exit "$TEST_EXIT"' in runner,
     ),
     (
         "visual capture failure cannot turn a red instrumentation run green",
-        'if [ "$VISUAL_EXIT" -ne 0 ]; then' in runner and 'exit "$TEST_EXIT"' in runner,
+        'if [ "${VISUAL_EXIT}" -ne 0 ]; then' in runner
+        and 'visual capture did not complete' in runner
+        and 'the instrumentation result remains ${TEST_EXIT}' in runner
+        and 'exit "$TEST_EXIT"' in runner,
     ),
     (
         "green instrumentation selects authenticated navigation only when backend health is ready",
@@ -99,8 +119,15 @@ checks = [
         and "no visible real listing card" in navigation,
     ),
     (
-        "product-publishing form is captured without submitting a listing",
+        "product-publishing capture uses exact Sell matching and scrolls inside the real content viewport",
         '["Sell", "Sell something", "Start selling", "Sell your first product"]' in navigation
+        and 'def find_control(xml_text:str, labels:list[str], *, exact_only: bool = False):' in navigation
+        and 'candidates = exact if exact_only else (exact or partial)' in navigation
+        and 'find_control(marketplace_xml, sell_labels, exact_only=True)' in navigation
+        and '["Product name", "Choose media", "Product media"], exact_only=True' in navigation
+        and 'def swipe_vertical_scroll_container(' in navigation
+        and 'swipe_vertical_scroll_container(\n                marketplace_xml, "marketplace-publish-cta-scroll-"' in navigation
+        and 'node.attrib.get("scrollable", "false").lower() != "true"' in navigation
         and "without submitting or creating a listing" in navigation,
     ),
     (
@@ -126,8 +153,17 @@ checks = [
     ),
     (
         "Android emulator userdata is capped to fit the hosted runner AVD storage",
-        "profile: pixel_7_pro" in workflow
-        and "disk-size: 4G" in workflow
+        "profile: pixel_2" in workflow
+        and "disk-size: 2G" in workflow
+        and "pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh" in workflow
+        and "sed -i" in emulator_storage
+        and "disk.dataPartition.size" in emulator_storage
+        and "partition_entries" in emulator_storage
+        and '!= "1"' in emulator_storage
+        and "partition_value" in emulator_storage
+        and '!= "2G"' in emulator_storage
+        and "available_mb" in emulator_storage
+        and "-lt 2500" in emulator_storage
         and "emulator-boot-timeout" not in workflow.split("uses: reactivecircus/android-emulator-runner@", 1)[1].split("script: bash scripts/run_android_runtime_certification.sh", 1)[0],
     ),
 ]

@@ -43,7 +43,10 @@ for label, path, needles in checks:
 comments = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
 if "Column(Modifier.fillMaxSize().imePadding())" in comments:
     failures.append("Home comments: parent still owns IME padding; composer positioning can drift")
-elif "Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp)" in comments:
+elif any(container in comments for container in (
+    "Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp)",
+    "Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp)"
+)):
     print("PASS: Home comments composer owns navigation + IME insets directly")
 else:
     failures.append("Home comments: expected direct navigation + IME composer inset handling is missing")

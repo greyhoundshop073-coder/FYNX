@@ -9,6 +9,45 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
+internal data class FynxChatOutboxReconciliation(
+    val messages: List<ChatMessage>,
+    val remainingAliases: Map<String, String>
+)
+
+/**
+ * Reconciles late Compose snapshots with messages already acknowledged by the
+ * server. The ID alias prevents stale local pending rows from being restored.
+ */
+internal fun reconcilePendingOutboxMessages(
+    snapshot: List<ChatMessage>,
+    previous: List<ChatMessage>,
+    aliases: Map<String, String>
+): FynxChatOutboxReconciliation {
+    if (aliases.isEmpty()) return FynxChatOutboxReconciliation(snapshot, emptyMap())
+
+    val previousById = previous.associateBy { it.id }
+    val snapshotIds = snapshot.mapTo(mutableSetOf()) { it.id }
+    val reconciled = snapshot.map { message ->
+        val remoteId = aliases[message.id]
+        remoteId?.let(previousById::get) ?: message
+    }.toMutableList()
+
+    aliases.forEach { (localId, remoteId) ->
+        val authoritative = previousById[remoteId] ?: return@forEach
+        if (localId !in snapshotIds && remoteId !in snapshotIds) {
+            reconciled += authoritative
+        }
+    }
+
+    val remainingAliases = aliases.filter { (localId, remoteId) ->
+        localId in snapshotIds || remoteId !in snapshotIds
+    }
+    return FynxChatOutboxReconciliation(
+        messages = reconciled.distinctBy { it.id }.sortedBy { it.timestamp },
+        remainingAliases = remainingAliases
+    )
+}
+
 /**
  * Local chat persistence foundation.
  * Data is isolated per signed-in account so multiple FYNX users sharing a device
@@ -21,13 +60,16 @@ object FynxChatStore {
 
     private const val PREFS = "fynx_chat_store"
     private const val SYNC_INITIALIZED_SUFFIX = "_sync_initialized"
+    private const val OUTBOX_REPLACEMENTS_SUFFIX = "_outbox_replacements"
 
+    @Synchronized
     fun load(context: Context, chatKey: String, fallback: ChatMessage? = null): List<ChatMessage> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(key(context, chatKey), null) ?: return fallback?.let { listOf(it) } ?: emptyList()
         return parseMessages(raw, fallback)
     }
 
+    @Synchronized
     fun save(context: Context, chatKey: String, messages: List<ChatMessage>) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val storageKey = key(context, chatKey)
@@ -39,12 +81,17 @@ object FynxChatStore {
         // data later, but persistence must keep the last known good history.
         if (syncInitialized && previous.isNotEmpty() && messages.isEmpty()) return
 
+        val aliases = loadOutboxReplacements(prefs, context, chatKey)
+        val reconciliation = reconcilePendingOutboxMessages(messages, previous, aliases)
+        val persistedMessages = reconciliation.messages
+        saveOutboxReplacements(prefs, context, chatKey, reconciliation.remainingAliases)
+
         // ConversationPanel keeps local state responsive while production edit/delete
         // operations are sent to the server. The server remains the source of truth.
         if (syncInitialized && previous.isNotEmpty()) {
             val previousById = previous.associateBy { it.id }
-            val currentById = messages.associateBy { it.id }
-            val edited = messages.filter { current ->
+            val currentById = persistedMessages.associateBy { it.id }
+            val edited = persistedMessages.filter { current ->
                 val old = previousById[current.id]
                 current.id.toLongOrNull() != null && current.fromMe && current.edited &&
                     old != null && old.text != current.text && current.text.isNotBlank()
@@ -65,7 +112,7 @@ object FynxChatStore {
         }
 
         val array = JSONArray()
-        messages.forEach { message ->
+        persistedMessages.forEach { message ->
             array.put(
                 JSONObject().apply {
                     put("text", message.text)
@@ -93,11 +140,22 @@ object FynxChatStore {
             .apply()
     }
 
-    /** Replace a local pending/outbox message with the authoritative server message. */
+    /** Replace or insert a pending/outbox message with the authoritative server message. */
+    @Synchronized
     fun replaceMessage(context: Context, chatKey: String, localId: String, replacement: ChatMessage) {
         val current = load(context, chatKey)
-        if (current.none { it.id == localId }) return
-        save(context, chatKey, current.map { if (it.id == localId) replacement else it })
+        val reconciled = if (current.any { it.id == localId }) {
+            current.map { if (it.id == localId) replacement else it }
+        } else {
+            current.filterNot { it.id == replacement.id } + replacement
+        }
+        save(context, chatKey, reconciled)
+
+        // Keep a local-ID -> server-ID alias so a late Compose snapshot cannot
+        // overwrite the successful server replacement with the pending local item.
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val aliases = loadOutboxReplacements(prefs, context, chatKey) + (localId to replacement.id)
+        saveOutboxReplacements(prefs, context, chatKey, aliases)
     }
 
     private suspend fun retryServerOperation(operation: suspend () -> Result<*>) {
@@ -220,6 +278,44 @@ object FynxChatStore {
 
     private fun syncKey(context: Context, chatKey: String): String =
         key(context, chatKey) + SYNC_INITIALIZED_SUFFIX
+
+    private fun outboxReplacementKey(context: Context, chatKey: String): String =
+        key(context, chatKey) + OUTBOX_REPLACEMENTS_SUFFIX
+
+    private fun loadOutboxReplacements(
+        prefs: android.content.SharedPreferences,
+        context: Context,
+        chatKey: String
+    ): Map<String, String> {
+        val raw = prefs.getString(outboxReplacementKey(context, chatKey), null) ?: return emptyMap()
+        return runCatching {
+            val json = JSONObject(raw)
+            val keys = json.keys()
+            buildMap {
+                while (keys.hasNext()) {
+                    val localId = keys.next()
+                    val remoteId = json.optString(localId).trim()
+                    if (localId.isNotBlank() && remoteId.isNotBlank() && remoteId != "null") {
+                        put(localId, remoteId)
+                    }
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun saveOutboxReplacements(
+        prefs: android.content.SharedPreferences,
+        context: Context,
+        chatKey: String,
+        aliases: Map<String, String>
+    ) {
+        val editor = prefs.edit()
+        if (aliases.isEmpty()) {
+            editor.remove(outboxReplacementKey(context, chatKey)).apply()
+        } else {
+            editor.putString(outboxReplacementKey(context, chatKey), JSONObject(aliases).toString()).apply()
+        }
+    }
 
     private fun safeKey(value: String): String = value.replace(Regex("[^A-Za-z0-9_@.-]"), "_")
 }

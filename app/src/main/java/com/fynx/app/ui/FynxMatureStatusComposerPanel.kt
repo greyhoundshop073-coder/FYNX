@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CameraAlt
@@ -157,6 +158,10 @@ fun FynxMatureStatusComposerPanel(
     }
     var publishing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var aiStatusBusy by remember { mutableStateOf(false) }
+    var aiStatusError by remember { mutableStateOf<String?>(null) }
+    var aiStatusSuggestion by remember { mutableStateOf<String?>(null) }
+    var aiStatusSource by remember { mutableStateOf<String?>(null) }
     var recording by remember { mutableStateOf(false) }
     var recordingStarted by remember { mutableLongStateOf(0L) }
     var elapsed by remember { mutableLongStateOf(0L) }
@@ -244,9 +249,9 @@ fun FynxMatureStatusComposerPanel(
         }
     }
 
-    fun clearDraft() { if (publishing || recording) return; mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; showMediaTools = false; error = null }
+    fun clearDraft() { if (publishing || recording || aiStatusBusy) return; mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; showMediaTools = false; error = null; aiStatusError = null; aiStatusSuggestion = null; aiStatusSource = null }
     fun publish() {
-        if (publishing || recording) return
+        if (publishing || recording || aiStatusBusy) return
         if (type == FynxStatusType.TEXT && text.isBlank()) { error = "Write something first."; return }
         if (type == FynxStatusType.MUSIC && selectedMusic == null) { error = "Choose a published FYNX music track first."; return }
         if (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri == null) { error = "Add your media first."; return }
@@ -281,7 +286,10 @@ fun FynxMatureStatusComposerPanel(
                 BoxWithConstraints(Modifier.fillMaxSize().imePadding().background(Color(background)), contentAlignment = Alignment.Center) {
                     OutlinedTextField(
                         value = text,
-                        onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
+                        onValueChange = { value ->
+                            if (value != text) { aiStatusSuggestion = null; aiStatusSource = null; aiStatusError = null }
+                            text = value.take(FYNX_STATUS_MAX_TEXT_LENGTH)
+                        },
                         placeholder = { Text("Type a Status...", color = Color(foreground).copy(alpha = .6f), textAlign = editorTextAlign, modifier = Modifier.fillMaxWidth()) },
                         textStyle = LocalTextStyle.current.copy(
                             color = Color(foreground),
@@ -342,8 +350,42 @@ fun FynxMatureStatusComposerPanel(
                         Text(displayName, color = Color.White, style = MaterialTheme.typography.titleLarge, maxLines = 1)
                     }
                 }
+                if (type != FynxStatusType.MUSIC) {
+                    IconButton(
+                        onClick = {
+                            val requestedText = text.trim()
+                            if (requestedText.isNotBlank()) {
+                                aiStatusBusy = true
+                                aiStatusError = null
+                                aiStatusSuggestion = null
+                                aiStatusSource = null
+                                scope.launch {
+                                    AiAssistantClient.improveStatusText(context, requestedText)
+                                        .onSuccess { suggestion ->
+                                            if (text.trim() == requestedText && type != FynxStatusType.MUSIC) {
+                                                aiStatusSource = requestedText
+                                                aiStatusSuggestion = suggestion.trim().take(FYNX_STATUS_MAX_TEXT_LENGTH)
+                                            } else {
+                                                aiStatusError = "Your Status text changed while FYNX AI was preparing it. Please try again."
+                                            }
+                                        }
+                                        .onFailure { failure ->
+                                            aiStatusError = failure.message?.takeIf { it.isNotBlank() }
+                                                ?: "FYNX AI could not improve this Status. Please try again."
+                                        }
+                                    aiStatusBusy = false
+                                }
+                            }
+                        },
+                        enabled = !publishing && !recording && !aiStatusBusy && text.isNotBlank(),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        if (aiStatusBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                        else Icon(Icons.Default.AutoAwesome, contentDescription = "Improve Status text with FYNX AI", tint = Color.White)
+                    }
+                }
                 Box {
-                    IconButton(onClick = { showTools = !showTools; showColors = false; showMediaTools = false }, enabled = !recording && !publishing) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }
+                    IconButton(onClick = { showTools = !showTools; showColors = false; showMediaTools = false }, enabled = !recording && !publishing && !aiStatusBusy) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }
                     DropdownMenu(expanded = showTools, onDismissRequest = { showTools = false }) {
                         if (type == FynxStatusType.TEXT) DropdownMenuItem(text = { Text("Text style") }, onClick = { showColors = true; showTools = false; showMediaTools = false })
                         DropdownMenuItem(text = { Text("Clear draft") }, onClick = ::clearDraft)
@@ -568,10 +610,14 @@ fun FynxMatureStatusComposerPanel(
                             }
                         }
                     }
+                    aiStatusError?.let { Text(it, color = Color.White, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 14.dp)) }
                     if (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri != null) {
                         OutlinedTextField(
                             value = text,
-                            onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
+                            onValueChange = { value ->
+                                if (value != text) { aiStatusSuggestion = null; aiStatusSource = null; aiStatusError = null }
+                                text = value.take(FYNX_STATUS_MAX_TEXT_LENGTH)
+                            },
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                             singleLine = true,
                             placeholder = { Text("Add a caption…", color = Color.White.copy(alpha = .72f)) },
@@ -594,11 +640,11 @@ fun FynxMatureStatusComposerPanel(
                             horizontalArrangement = Arrangement.spacedBy(18.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp)
                         ) {
-                            item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO || type == FynxStatusType.VIDEO, !recording && !publishing) { pickMedia.launch(arrayOf("image/*", "video/*")) } }
-                            item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.MusicNote, if (selectedMusic == null) "Add music" else "Change music", selectedMusic != null, !publishing && !recording) { onChooseMusic(); showColors = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; mediaUri = null; elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false } }
+                            item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing && !aiStatusBusy) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO || type == FynxStatusType.VIDEO, !recording && !publishing && !aiStatusBusy) { pickMedia.launch(arrayOf("image/*", "video/*")) } }
+                            item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing && !aiStatusBusy) { cameraOpen = true; showColors = false; showTools = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.MusicNote, if (selectedMusic == null) "Add music" else "Change music", selectedMusic != null, !publishing && !recording && !aiStatusBusy) { onChooseMusic(); showColors = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording && !aiStatusBusy) { type = FynxStatusType.VOICE; showColors = false; error = null; mediaUri = null; elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false } }
                         }
                     }
                     // Media tools are revealed from the photo/add control in the action row.
@@ -703,7 +749,7 @@ fun FynxMatureStatusComposerPanel(
                         } else {
                             Button(
                                 onClick = ::publish,
-                                enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type == FynxStatusType.MUSIC && selectedMusic != null) || (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri != null)),
+                                enabled = !publishing && !recording && !aiStatusBusy && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type == FynxStatusType.MUSIC && selectedMusic != null) || (type !in setOf(FynxStatusType.TEXT, FynxStatusType.MUSIC) && mediaUri != null)),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
                                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 9.dp)
                             ) {
@@ -743,6 +789,47 @@ fun FynxMatureStatusComposerPanel(
                 }
             }
         }
+    }
+    if (aiStatusSuggestion != null) {
+        val suggestion = aiStatusSuggestion.orEmpty()
+        AlertDialog(
+            onDismissRequest = {
+                aiStatusSuggestion = null
+                aiStatusSource = null
+            },
+            title = { Text("Review your AI Status draft") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(suggestion, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Review the wording before using it. FYNX AI will not publish or send your Status.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (aiStatusSource != null && text.trim() == aiStatusSource) {
+                            text = suggestion.take(FYNX_STATUS_MAX_TEXT_LENGTH)
+                            aiStatusError = null
+                        } else {
+                            aiStatusError = "Your Status text has changed. Generate a fresh suggestion before applying it."
+                        }
+                        aiStatusSuggestion = null
+                        aiStatusSource = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007FFF))
+                ) { Text("Use suggestion") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    aiStatusSuggestion = null
+                    aiStatusSource = null
+                }) { Text("Keep my draft") }
+            }
+        )
     }
 }
 @Composable
