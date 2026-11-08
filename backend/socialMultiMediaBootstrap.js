@@ -74,7 +74,7 @@ export async function installSocialMultiMedia() {
       const mediaId = Number(req.params.id);
       if (!Number.isInteger(mediaId) || mediaId < 1) return next();
       const result = await pool.query(
-        \`SELECT mm.mime_type
+        \`SELECT mm.mime_type, mm.storage_provider, mm.object_key
            FROM message_media mm
            JOIN social_post_media spm ON spm.media_id = mm.id
            JOIN social_posts p ON p.id = spm.post_id
@@ -103,6 +103,7 @@ export async function installSocialMultiMedia() {
         [mediaId, req.user.sub]
       );
       if (!result.rows[0]) return next();
+      if (await redirectStoredMedia(res, result.rows[0], { cacheControl: 'private, max-age=300' })) return;
       const payload = await getCachedMediaPayload(pool, mediaId);
       if (!payload) return next();
       res.set('Cache-Control', 'private, max-age=300');
