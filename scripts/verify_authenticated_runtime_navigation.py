@@ -2528,8 +2528,8 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                     expected_labels=None
                 )
                 if tap_result:
+                    latest_viewer_probe = tap_result
                     settle_deadline = time.monotonic() + 25.0
-                    stable_viewer_dumps = 0
                     while time.monotonic() < settle_deadline:
                         candidate = dump_ui("authenticated-home-discovery-viewer-settle.xml")
                         if candidate:
@@ -2548,12 +2548,11 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                                 and find_control(candidate, ["Pause Discovery video", "Play Discovery video"])
                             )
                             if has_native_video and has_all_actions:
-                                stable_viewer_dumps += 1
-                                if stable_viewer_dumps >= 2:
-                                    viewer_xml = candidate
-                                    break
-                            else:
-                                stable_viewer_dumps = 0
+                                # VideoView and these controls are only exposed after
+                                # onPrepared; a second identical UIAutomator dump is
+                                # not required and can time out on a busy emulator.
+                                viewer_xml = candidate
+                                break
                         time.sleep(0.4)
             if not viewer_xml:
                 screenshot("authenticated-home-discovery-video-open-failed.png")
@@ -2616,6 +2615,27 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                     FAILURES.append("Discovery video viewer did not return to the Home feed safely.")
                     return dump_ui("authenticated-discovery-return-home-timeout.xml") or viewer_xml
                 current = discovery_home
+            elif latest_viewer_probe and (
+                find_control(latest_viewer_probe, ["Close Discovery"])
+                or any(node.attrib.get("class") == "android.widget.VideoView" for node in nodes(latest_viewer_probe))
+            ):
+                # Even a viewer that fails readiness must be dismissed. Leaving
+                # it open hides the Home navigation and corrupts every later
+                # cross-destination check in this runtime journey.
+                run("adb", "shell", "input", "keyevent", "4")
+                return_deadline = time.monotonic() + 15.0
+                discovery_home = ""
+                while time.monotonic() < return_deadline:
+                    candidate = dump_ui("authenticated-discovery-return-home-after-readiness-failure.xml")
+                    if candidate and is_home_feed_runtime_surface(candidate):
+                        discovery_home = candidate
+                        break
+                    time.sleep(0.5)
+                if discovery_home:
+                    current = discovery_home
+                else:
+                    FAILURES.append("Unverified Discovery viewer could not be dismissed back to Home.")
+                    return dump_ui("authenticated-discovery-return-home-after-readiness-failure-timeout.xml") or latest_viewer_probe
 
         # Exercise both X-style repost choices on a disposable local fixture. Opening
         # the plain repost option is read-only here; quote composition is opened and

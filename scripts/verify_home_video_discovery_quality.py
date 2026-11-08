@@ -72,6 +72,12 @@ checks = [
         and '"authenticated-home-fullscreen-video.png"' in navigation,
     ),
     (
+        "Discovery fullscreen VideoView opens private cached files with a file URI",
+        "setVideoURI(Uri.fromFile(file!!))" in discovery
+        and "setVideoPath(file!!.absolutePath)" not in discovery
+        and "import android.net.Uri" in discovery,
+    ),
+    (
         "Discovery cards use poster artwork and do not autoplay every preview player",
         "FynxDiscoveryPreviewCard" in discovery
         and "visual?.poster" in discovery
@@ -156,12 +162,14 @@ checks = [
         and '"authenticated-discovery-video-viewer.png"' in navigation,
     ),
     (
-        "Discovery viewer is accepted only after two stable snapshots prove the native player and all actions",
+        "Discovery viewer requires a prepared native player and all visible actions, then always restores Home",
         "authenticated-home-discovery-viewer-settle.xml" in navigation
         and "android.widget.VideoView" in navigation
         and "has_native_video and has_all_actions" in navigation
         and "discovery_expected_markers" in navigation
-        and "stable_viewer_dumps >= 2" in navigation,
+        and "viewer_xml = candidate" in navigation
+        and "Unverified Discovery viewer could not be dismissed back to Home." in navigation
+        and "stable_viewer_dumps >= 2" not in navigation,
     ),
     (
         "Discovery remains a stable Home insertion whenever real trending videos are available",

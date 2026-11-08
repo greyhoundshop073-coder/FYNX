@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.view.ViewGroup
@@ -568,7 +569,7 @@ private fun FynxDiscoveryFullscreenVideo(video: FynxDiscoveryClient.TrendingPost
                         VideoView(ctx).apply {
                             viewState.value = this
                             layoutParams = ViewGroup.LayoutParams(-1, -1)
-                            setVideoPath(file!!.absolutePath)
+                            setVideoURI(Uri.fromFile(file!!))
                             setOnPreparedListener { player ->
                                 playerState.value = player
                                 player.isLooping = true
