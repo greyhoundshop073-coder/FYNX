@@ -46,6 +46,9 @@ assert.match(social, /import \{ redirectStoredMedia \} from "\.\/mediaStorage\.j
 assert.match(social, /redirectStoredMedia/);
 assert.match(social, /SELECT mm\.mime_type,mm\.storage_provider,mm\.object_key/);
 assert.doesNotMatch(social, /SELECT mm\.mime_type,mm\.data/);
+assert.match(social, /SELECT mm\.id AS media_id,mm\.mime_type,mm\.storage_provider,mm\.object_key[\s\S]*WHERE c\.id=\$1 AND c\.active=TRUE/);
+assert.match(social, /getCachedMediaPayload\(pool, result\.rows\[0\]\.media_id\)/);
+assert.doesNotMatch(social, /getCachedMediaPayload\(pool, catalogueId\)/);
 assert.match(social, /getCachedMediaPayload/);
 
 assert.match(marketplace, /import \{ redirectStoredMedia \} from '\.\/mediaStorage\.js';/);
