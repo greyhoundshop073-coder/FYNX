@@ -619,62 +619,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                    Surface(
-                        modifier = Modifier
-                            .widthIn(max = 560.dp)
-                            .fillMaxWidth()
-                            .height(64.dp)
-                            .shadow(8.dp, RoundedCornerShape(32.dp)),
-                        shape = RoundedCornerShape(32.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                        tonalElevation = 0.dp
-                    ) {
-                        NavigationBar(
-                            modifier = Modifier.fillMaxSize(),
-                            containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            tonalElevation = 0.dp,
-                            windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
-                        ) {
-                            mainNav.forEach { item ->
-                                NavigationBarItem(
-                                    modifier = Modifier.height(64.dp).semantics(mergeDescendants = true) {
-                                        contentDescription = item.label
-                                    },
-                                    selected = selected == item.key,
-                                    onClick = { notificationPreferencesOnly = false; selected = item.key },
-                                    icon = {
-                                        Icon(
-                                            item.icon,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            fynxBottomNavLabel(
-                                                item.label,
-                                                androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp,
-                                                LocalDensity.current.fontScale
-                                            ),
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
-                                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)
-                                        )
-                                    },
-                                    alwaysShowLabel = true,
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                )
-                            }
-                        }
-                    }
+                    FynxGlassBottomBar(
+                        items = mainNav.map { FynxBottomBarItem(it.key, it.label, it.icon) },
+                        selectedKey = selected,
+                        onSelect = { key -> notificationPreferencesOnly = false; selected = key },
+                        modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()
+                    )
                     }
                 }
             }
