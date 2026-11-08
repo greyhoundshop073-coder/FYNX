@@ -15,6 +15,7 @@ outbox = read("app/src/main/java/com/fynx/app/ui/FynxOfflineOutbox.kt")
 sync = read("app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt")
 store = read("app/src/main/java/com/fynx/app/ui/FynxChatStore.kt")
 conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
+store_tests = read("app/src/test/java/com/fynx/app/ui/FynxChatOutboxReconciliationTest.kt")
 backend = read("backend/server.js")
 
 structured_start = production.find("suspend fun sendStructuredMessage(")
@@ -39,6 +40,9 @@ checks = [
     ("sync never recursively queues failed retries", "allowOfflineQueue = false" in sync),
     ("successful sync replaces pending local message before removing queue item", sync.index("FynxChatStore.replaceMessage") < sync.index("FynxOfflineOutbox.remove(context, item.id)")),
     ("chat history persists structured payloads", 'put("messageType", message.messageType)' in store and 'put("messagePayload", JSONObject(message.messagePayload))' in store),
+    ("acknowledgement inserts authoritative messages when the pending UI row is missing", "current.filterNot { it.id == replacement.id } + replacement" in store),
+    ("late snapshots are reconciled with the acknowledged server ID", "reconcilePendingOutboxMessages(messages, previous, aliases)" in store and "OUTBOX_REPLACEMENTS_SUFFIX" in store),
+    ("stale-snapshot reconciliation has unit tests", all(name in store_tests for name in ["replacesPendingSnapshotWithAuthoritativeServerMessage", "preservesServerMessageWhenOlderSnapshotHasNotSeenPendingItemYet", "clearsAliasOnceUiSnapshotContainsServerMessage"])),
     ("backend permits location/contact/poll payloads without uploaded media", "messageType === 'text' && !text && !Number.isInteger(mediaId)" in backend),
     ("backend still requires uploaded media for sticker and GIF", "messageType === 'sticker' || messageType === 'gif'" in backend and "sticker and GIF messages require uploaded media" in backend),
     ("backend idempotency is enforced by client message ID", "client_message_id TEXT" in backend and "ON CONFLICT (sender_id, client_message_id)" in backend),
