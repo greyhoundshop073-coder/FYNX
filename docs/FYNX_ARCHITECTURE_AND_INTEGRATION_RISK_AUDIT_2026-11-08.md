@@ -20,7 +20,7 @@ This audit did not modify Android application source code, backend code, login, 
 | Android CI workflow | `.github/workflows/android-build.yml` is 350 lines and includes many product-specific verification scripts. | Existing contract checks are valuable; retain them while improving grouping and diagnostics. |
 | Duplicate workflow step | The workflow contains two consecutive steps both named “Verify Google Cloud authentication” with identical commands. | Confirmed redundant step. Remove only after a workflow change is reviewed and the remaining authentication gate is verified. |
 | Documentation triggers | The workflow path filters include `docs/**` for push and pull-request events. | Documentation-only commits can trigger the full Android workflow. Separate documentation validation from Android build/runtime jobs without losing coverage. |
-| Chat offline-send backlog | GitHub issue #47 states that `FynxOfflineOutbox`, `FynxOfflineSync`, and `AppConnectionManager` already exist, while `ConversationPanel.submitComposer` calls `FynxProductionMessaging.sendText` directly. | Concrete reliability task. Trace current code and contracts before changing; preserve optimistic/pending UI, local history, retry semantics and exactly-once/duplicate-send protections. |
+| Chat offline-send backlog | GitHub issue #47 describes the composer as bypassing the outbox. Current canonical source shows ordinary text and ordinary media messages call `FynxProductionMessaging.sendText`, whose default `allowOfflineQueue = true` enqueues ambiguous transport failures in the account-scoped outbox with a stable request ID. `FynxOfflineSync` drains with queueing disabled and replaces the pending local message after acceptance. However, the composer’s structured-message branch calls `sendStructuredMessage`, which posts directly and has no corresponding offline queue/reconciliation path. | The issue is partly stale, not a reason to duplicate the existing queue. The remaining confirmed source-level gap is structured messages (location/contact/poll/sticker/GIF) and their attached media path. Test the existing ordinary-message flow, then design a compatible structured-message outbox with idempotency, local pending rendering, persistence and retry semantics before changing it. |
 | Email launch backlog | GitHub issue #131 records email delivery as incomplete and calls for test-environment delivery and recovery/rate-limit/expiry tests. | Launch blocker until the required email flows are defined and real delivery is verified. A visible UI alone is not evidence of delivery. |
 
 ## Verification limitations
@@ -42,15 +42,16 @@ This audit did not modify Android application source code, backend code, login, 
 
 **Exit evidence:** exact branch SHA; PR dependency/overlap map; actual ruleset/check names; reproducible APK provenance.
 
-### P1 — Fix the concrete Chat offline-send gap
+### P1 — Complete the remaining structured-message offline path
 
-1. Trace `ConversationPanel.submitComposer`, `FynxOfflineOutbox`, `FynxOfflineSync`, `AppConnectionManager`, local message persistence and realtime/HTTP acknowledgements.
-2. Define message identity and state transitions for queued, sending, sent, failed and retrying.
-3. Ensure reconnect/retry cannot duplicate a message and that pending messages remain visible across app restart.
-4. Add tests for offline send, reconnect flush, repeated retry, process restart, server acknowledgement and permanent failure.
-5. Run existing Chat/Groups parity and messaging regression checks on the final integration SHA.
+1. Preserve the existing ordinary text/media implementation: `sendText` already queues ambiguous transport failures by default, uses an account-scoped durable outbox and stable request ID, and `FynxOfflineSync` retries without recursively queueing.
+2. Add focused verification for ordinary text/media: outbox persistence, stable idempotency key, reconnect drain, local pending-message replacement, account isolation and duplicate retry reconciliation.
+3. Trace `sendStructuredMessage` and all callers (location, contact, poll, sticker and GIF). Its current implementation posts directly and has no offline queue/reconciliation counterpart.
+4. Design a structured outbox item that preserves message type, payload, reply ID, media ID/type and stable request ID; ensure the backend idempotency contract supports these structured requests before implementing.
+5. Render and persist a pending local structured message, reconcile it on reconnect, and remove it only after server acceptance or authoritative history reconciliation.
+6. Add tests for each structured type, upload-success/send-failure, reconnect flush, process restart, duplicate retry, account switch and permanent failure. Run Chat/Groups parity and messaging regression checks on the final integration SHA.
 
-**Guardrail:** do not replace the messaging architecture or change login/backend configuration as part of this task.
+**Guardrail:** do not rebuild or replace the existing ordinary-message queue, and do not change login/backend configuration as part of this task.
 
 ### P1 — Audit and gradually reduce navigation coupling
 
