@@ -27,7 +27,7 @@ Set these variables only in the intended backend service environment; never comm
 - `FYNX_NEON_S3_SECRET_ACCESS_KEY` (Neon S3 secret)
 - `FYNX_NEON_STORAGE_BUCKET` (private bucket name)
 
-Create a Neon credential with only the required `storage:read` and `storage:write` scopes. Keep the bucket private. Store the secret in the backend's secret environment, never in Android or source control.
+The Neon credential inventory already shows a default object-storage credential with `storage:read` and `storage:write` scopes anchored on the production parent branch. Neon documents that branch credentials are inherited by descendants. Do not rotate that shared credential. Before activation, confirm the exact Railway database branch and provision a dedicated testing credential if the existing secret is not available to the backend owner. Keep the bucket private. Store credentials only in the backend's secret environment, never in Android or source control. The current Railway testing service does not yet list any `FYNX_NEON_*` variables.
 
 ## Optional later provider: Cloudflare R2
 
