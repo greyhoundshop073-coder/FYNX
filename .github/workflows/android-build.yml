@@ -292,6 +292,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
+          emulator-options: -no-window -no-audio -no-boot-anim -camera-back environment -camera-front none
           target: google_apis
           arch: x86_64
           profile: pixel_7_pro # [home-cert]

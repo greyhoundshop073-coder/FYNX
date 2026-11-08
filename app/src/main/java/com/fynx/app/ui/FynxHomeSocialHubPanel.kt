@@ -127,6 +127,9 @@ fun FynxHomeSocialHubPanel(
     var notice by remember { mutableStateOf<String?>(null) }
     var posting by remember { mutableStateOf(false) }
     var showComposerPreview by remember { mutableStateOf(false) }
+    var aiCaptionBusy by remember { mutableStateOf(false) }
+    var aiCaptionError by remember { mutableStateOf<String?>(null) }
+    var aiCaptionSuggestion by remember { mutableStateOf<String?>(null) }
     var showDraftsDialog by remember { mutableStateOf(false) }
     var savedPostDrafts by remember { mutableStateOf<List<FynxLocalPostDraft>>(emptyList()) }
     var editingDraftId by remember { mutableStateOf<String?>(null) }
@@ -178,6 +181,8 @@ fun FynxHomeSocialHubPanel(
                 capturedTypes = emptyList()
                 selectedVisualIndex = 0
                 text = ""
+                aiCaptionSuggestion = null
+                aiCaptionError = null
                 textBackground = null
                 postLocation = null
                 selectedCatalogueMusic = null
@@ -459,6 +464,8 @@ fun FynxHomeSocialHubPanel(
             cameraEditingMediaUri = null
             selectedVisualIndex = 0
             text = ""
+                aiCaptionSuggestion = null
+                aiCaptionError = null
             textBackground = null
             postLocation = null
             selectedCatalogueMusic = null
@@ -484,6 +491,8 @@ fun FynxHomeSocialHubPanel(
         cameraEditingMediaUri = null
         selectedVisualIndex = 0
         text = ""
+                aiCaptionSuggestion = null
+                aiCaptionError = null
         textBackground = null
         postLocation = null
         selectedCatalogueMusic = null
@@ -626,6 +635,8 @@ fun FynxHomeSocialHubPanel(
                     cameraEditingMediaUri = null
                     selectedVisualIndex = 0
                     text = ""
+                aiCaptionSuggestion = null
+                aiCaptionError = null
                     textBackground = null
                     postLocation = null
                     selectedCatalogueMusic = null
@@ -651,6 +662,8 @@ fun FynxHomeSocialHubPanel(
                     cameraEditingMediaUri = null
                     selectedVisualIndex = 0
                     text = ""
+                aiCaptionSuggestion = null
+                aiCaptionError = null
                     textBackground = null
                     postLocation = null
                     selectedCatalogueMusic = null
@@ -704,12 +717,62 @@ fun FynxHomeSocialHubPanel(
                         )
                         Row(
                             Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Post caption", style = MaterialTheme.typography.labelLarge)
+                            val canImproveCaption = !posting && postingAllowed &&
+                                !aiCaptionBusy && text.isNotBlank() &&
+                                networkLevel != FynxNetworkQuality.Level.OFFLINE
+                            Surface(
+                                modifier = Modifier.clickable(enabled = canImproveCaption) {
+                                    val requestedCaption = text.trim()
+                                    if (requestedCaption.isNotBlank()) {
+                                        aiCaptionBusy = true
+                                        aiCaptionError = null
+                                        aiCaptionSuggestion = null
+                                        scope.launch {
+                                            AiAssistantClient.improvePostCaption(context, requestedCaption)
+                                                .onSuccess { suggestion ->
+                                                    if (text.trim() == requestedCaption) {
+                                                        aiCaptionSuggestion = suggestion.trim().take(4000)
+                                                    } else {
+                                                        aiCaptionError = "Your caption changed while FYNX AI was preparing it. Please try again."
+                                                    }
+                                                }
+                                                .onFailure { failure ->
+                                                    aiCaptionError = failure.message?.takeIf { it.isNotBlank() }
+                                                        ?: "FYNX AI could not improve this caption. Please try again."
+                                                }
+                                            aiCaptionBusy = false
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(50),
+                                color = if (canImproveCaption) Color(0xFFEAF3FF) else MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Row(
+                                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (aiCaptionBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    else Icon(Icons.Default.AutoAwesome, null, tint = if (canImproveCaption) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                    Text(if (aiCaptionBusy) "Improving…" else "Improve with AI", style = MaterialTheme.typography.labelLarge, color = if (canImproveCaption) Color(0xFF0069D9) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        aiCaptionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+
+                        Row(
+                            Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.Top
                         ) {
                         BasicTextField(
                             value = text,
                             onValueChange = { value ->
+                                if (value != text) { aiCaptionSuggestion = null; aiCaptionError = null }
                                 text = value.take(4000)
                                 if (text.isBlank()) textBackground = null
                             },
@@ -797,6 +860,22 @@ fun FynxHomeSocialHubPanel(
                                 }
                             }
                         }
+                        }
+                        aiCaptionSuggestion?.takeIf { it.isNotBlank() }?.let { suggestion ->
+                            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3FF))) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF007FFF), modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("FYNX AI suggestion", style = MaterialTheme.typography.titleSmall, color = Color(0xFF1C2434))
+                                    }
+                                    Text(suggestion, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF1C2434))
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                        TextButton(onClick = { aiCaptionSuggestion = null }) { Text("Keep my caption") }
+                                        Button(onClick = { text = suggestion.take(4000); aiCaptionSuggestion = null; aiCaptionError = null }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007FFF))) { Text("Use caption") }
+                                    }
+                                }
+                            }
                         }
                         selectedComposerVisual?.let { media ->
                             TextButton(

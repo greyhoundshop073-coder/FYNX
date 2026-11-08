@@ -455,7 +455,7 @@ def control_is_enabled(xml_text: str, labels: list[str]) -> bool:
     except ET.ParseError:
         return False
     node = _find_control_node(root, [label.lower() for label in labels])
-    return bool(node) and node.attrib.get("enabled", "true").lower() != "false"
+    return node is not None and node.attrib.get("enabled", "true").lower() != "false"
 
 def camera_wait_for_control(
     initial_xml: str, labels: list[str], *, enabled: bool | None = None,
