@@ -12,7 +12,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -421,12 +423,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(
                             mediaId = remoteMyPhotoId,
                             contentDescription = myProfile.displayName,
-                            modifier = Modifier.size(38.dp),
+                            modifier = Modifier.size(38.dp).border(1.5.dp, FynxDesign.AzureBlue.copy(alpha = 0.90f), CircleShape),
                             ownerUsername = myProfile.username,
                             allowImagePreview = false
                         )
-                        else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
-                        else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
+                        else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp).border(1.5.dp, FynxDesign.AzureBlue.copy(alpha = 0.90f), CircleShape))
+                        else FynxAvatar(myProfile.displayName, Modifier.size(38.dp).border(1.5.dp, FynxDesign.AzureBlue.copy(alpha = 0.90f), CircleShape))
                     }
                     // The avatar and overflow menu are fixed-width siblings. Keep the
                     // brand label in the remaining space; nesting another weighted Row
@@ -458,7 +460,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (appConnectionState == FynxAppConnectionManager.State.CONNECTED) {
-                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleLarge.copy(letterSpacing = 1.sp))
                             Spacer(Modifier.width(4.dp))
                             Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
                         } else {
@@ -473,37 +475,53 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                     connectingDotCount = connectingDotCount % 3 + 1
                                 }
                             }
-                            Text(
-                                if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
-                                    "Waiting for network..."
+                            val connectionStatusText = if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
+                                "Waiting for network..."
+                            } else {
+                                "Connecting" + ".".repeat(connectingDotCount)
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                            ) {
+                                if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 360) {
+                                    // The header row has no room for the words on very narrow phones, so show a
+                                    // small spinner and keep the full status as its accessibility name.
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                                            .size(18.dp)
+                                            .semantics { contentDescription = connectionStatusText },
+                                        strokeWidth = 2.dp
+                                    )
                                 } else {
-                                    "Connecting" + ".".repeat(connectingDotCount)
-                                },
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleLarge
-                            )
+                                    Text(
+                                        connectionStatusText,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { selected = "Search" },
-                            modifier = Modifier.size(48.dp).semantics(mergeDescendants = true) {
-                                contentDescription = "Search FYNX"
-                            }
-                        ) {
-                            Icon(Icons.Default.Search, contentDescription = null)
+                        FynxGlassIconButton(onClick = { selected = "Search" }, contentDescription = "Search FYNX") {
+                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(22.dp))
                         }
-                        IconButton(
-                            onClick = { homeCameraRequest++ },
-                            modifier = Modifier.size(48.dp).semantics(mergeDescendants = true) {
-                                contentDescription = "Open FYNX camera"
-                            }
-                        ) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = null)
+                        FynxGlassIconButton(onClick = { homeCameraRequest++ }, contentDescription = "Open FYNX camera") {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(22.dp))
                         }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-                            IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
+                            FynxGlassIconButton(
+                                onClick = { notificationPreferencesOnly = false; selected = "Notifications" },
+                                contentDescription = "Notifications"
+                            ) {
+                                Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(22.dp))
+                            }
                         }
                     }
                 }
@@ -514,11 +532,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Spacer(Modifier.size(48.dp))
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    Box(Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterStart) {
+                        FynxLargeHeaderTitle("Friends")
                     }
-                    Spacer(Modifier.size(48.dp))
                 }
             } else if (selected in mainNav.map { it.key }) {
                 Row(
@@ -536,21 +552,16 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Spacer(Modifier.size(48.dp))
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
+                    Box(Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterStart) {
+                        FynxLargeHeaderTitle(
                             when (selected) {
                                 "Chats" -> "Chats"
                                 "Marketplace" -> "Marketplace"
                                 "Features" -> "More"
                                 else -> selected
-                            },
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
+                            }
                         )
                     }
-                    Spacer(Modifier.size(48.dp))
                 }
             } else {
                 Row(
@@ -559,20 +570,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
+                    FynxGlassIconButton(
                         onClick = {
                             backNavigationRequested = true
                             selected = fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)
                             if (notificationPreferencesOnly) notificationPreferencesOnly = false
                         },
-                        modifier = Modifier.semantics {
-                            contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"
-                        }
+                        contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text(
@@ -593,9 +599,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                 "Admin" -> "Admin Control Center"
                                 else -> selected
                             },
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                     Spacer(Modifier.size(48.dp))
