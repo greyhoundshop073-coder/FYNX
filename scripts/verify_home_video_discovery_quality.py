@@ -166,8 +166,10 @@ checks = [
     (
         "Discovery viewer requires a prepared native player and all visible actions, then always restores Home",
         "authenticated-home-discovery-viewer-settle.xml" in navigation
-        and "android.widget.VideoView" in navigation
-        and "has_native_video and has_all_actions" in navigation
+        and "has_prepared_player and has_all_actions" in navigation
+        and "FYNX Visual Fixture" in navigation
+        and "CI TEST FIXTURE" in navigation
+        and 'find_control(candidate, ["Pause Discovery video", "Play Discovery video"])' in navigation
         and 'find_control(candidate, ["Like video", "Unlike video"])' in navigation
         and 'find_control(candidate, ["Open comments"])' in navigation
         and 'find_control(candidate, ["Share video"])' in navigation
