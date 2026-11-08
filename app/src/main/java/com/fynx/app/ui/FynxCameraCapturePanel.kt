@@ -1747,6 +1747,7 @@ fun FynxCameraCapturePanel(
                     Button(
                         onClick = ::cancelCaptureTimer,
                         modifier = Modifier.fillMaxWidth()
+                            .semantics { contentDescription = "Cancel camera capture timer" }
                     ) {
                         Text("Cancel timer")
                     }
