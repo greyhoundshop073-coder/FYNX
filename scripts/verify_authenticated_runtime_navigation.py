@@ -2615,10 +2615,14 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                         candidate = dump_ui("authenticated-home-discovery-viewer-settle.xml")
                         if candidate:
                             latest_viewer_probe = candidate
-                            candidate_nodes = nodes(candidate)
-                            has_native_video = any(
-                                node.attrib.get("class") == "android.widget.VideoView"
-                                for node in candidate_nodes
+                            # The native VideoView is rendered in a Surface-backed AndroidView
+                            # and may not be exposed as an accessibility node on every emulator.
+                            # Require the prepared player's real playback/mute actions and the
+                            # disposable local-fixture watermark instead of relying on its class node.
+                            has_prepared_player = (
+                                find_control(candidate, ["Pause Discovery video", "Play Discovery video"])
+                                and find_control(candidate, ["Unmute Discovery video", "Mute Discovery video"])
+                                and ("FYNX Visual Fixture" in candidate or "CI TEST FIXTURE" in candidate)
                             )
                             # Like/Unlike is one toggle, so exactly one label is visible
                             # at a time. Treat those labels as alternatives, while still
@@ -2632,10 +2636,10 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                                 and find_control(candidate, ["Unmute Discovery video", "Mute Discovery video"])
                                 and find_control(candidate, ["Pause Discovery video", "Play Discovery video"])
                             )
-                            if has_native_video and has_all_actions:
-                                # VideoView and these controls are only exposed after
-                                # onPrepared; a second identical UIAutomator dump is
-                                # not required and can time out on a busy emulator.
+                            if has_prepared_player and has_all_actions:
+                                # Playback/mute controls and the fixture watermark are only
+                                # shown after the native player is prepared. A second identical
+                                # UIAutomator dump is not required on a busy emulator.
                                 viewer_xml = candidate
                                 break
                         time.sleep(0.4)
@@ -2650,8 +2654,8 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                     "visible markers: " + visible_marker_summary(latest_viewer_probe or current)
                 )
             if viewer_xml:
-                # Do not count the viewer as a playable video until the real
-                # VideoView has prepared and exposed its mute control.
+                # Do not count the viewer as playable until the native player exposes
+                # its playback/mute controls and the local fixture watermark.
                 viewer_xml = camera_wait_for_control(
                     viewer_xml,
                     ["Unmute Discovery video", "Mute Discovery video"],
