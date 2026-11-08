@@ -197,7 +197,11 @@ checks = [
         "Home action-row geometry parser reads emulator dimensions before safe taps",
         "def scroll_home_action_row_into_safe_viewport(" in navigation
         and r're.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)' in navigation
-        and "safe_bottom = int(height * 0.78)" in navigation
+        and "safe_limits = [int(height * 0.85)]" in navigation
+        and "viewport_bottoms.append(bottom)" in navigation
+        and "min(viewport_bottoms) - 8" in navigation
+        and "safe_limits.append(int(height * 0.78))" in navigation
+        and "nav_tops.append(top)" in navigation
         and "refusing to tap an obscured control" in navigation,
     ),
     (
