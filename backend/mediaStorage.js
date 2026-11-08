@@ -11,7 +11,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const MAX_MEDIA_OBJECT_BYTES = 12 * 1024 * 1024;
 const DEFAULT_DOWNLOAD_URL_TTL_SECONDS = 120;
 const MAX_DOWNLOAD_URL_TTL_SECONDS = 300;
-const MEDIA_OBJECT_KEY_PATTERN = /^media\\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MEDIA_OBJECT_KEY_PATTERN = /^media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OBJECT_PROVIDERS = new Set(["neon", "r2"]);
 
 export class MediaStorageConfigurationError extends Error {
@@ -67,7 +67,7 @@ function readProviderConfig(provider, env) {
     } catch {}
     return {
       provider, endpoint, region, accessKeyId, secretAccessKey, bucket,
-      configured: endpointValid && /^[a-z]{2}-[a-z]+-\\d$/.test(region) &&
+      configured: endpointValid && /^[a-z]{2}-[a-z]+-\d$/.test(region) &&
         accessKeyId.startsWith("nak_") && secretAccessKey.startsWith("nsk_") && validBucket(bucket),
       forcePathStyle: true
     };
@@ -166,7 +166,7 @@ export function createMediaStorage({
       const bytes = toBuffer(data);
       if (!bytes.length || bytes.length > MAX_MEDIA_OBJECT_BYTES) throw new Error("Media must be between 1 byte and 12 MB.");
       const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
-      if (!/^(image|video|audio)\\//.test(normalizedMimeType)) throw new Error("Unsupported media type.");
+      if (!/^(image|video|audio)\//.test(normalizedMimeType)) throw new Error("Unsupported media type.");
       const objectKey = "media/" + idFactory();
       await getClient(provider).send(new PutObjectCommand({
         Bucket: config.bucket, Key: objectKey, Body: bytes, ContentLength: bytes.length,
