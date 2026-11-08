@@ -2931,6 +2931,32 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
         previous_xml, current = current, next_xml
 
     if HOME_FEED_FIXTURES_SEEDED:
+        # The feed sweep can encounter the portrait fixture while it is clipped
+        # by an adjacent post or the floating navigation. That partial rectangle
+        # is intentionally rejected by visible_home_video_preview_ratios().
+        # Reuse independently captured, fully visible Home-feed hierarchies
+        # (for example, while bringing a post's action row into the safe viewport)
+        # before deciding that the source ratio was not rendered correctly.
+        home_snapshot_patterns = (
+            "authenticated-home-feed-*.xml",
+            "authenticated-home-repost-action-safe*.xml",
+        )
+        home_snapshots = sorted({
+            snapshot
+            for pattern in home_snapshot_patterns
+            for snapshot in ROOT.glob(pattern)
+        })
+        for snapshot_path in home_snapshots:
+            try:
+                snapshot_xml = snapshot_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            if "CI TEST FIXTURE —" not in snapshot_xml or "Video preview" not in snapshot_xml:
+                continue
+            for ratio in visible_home_video_preview_ratios(snapshot_xml):
+                if not any(abs(existing - ratio) < 0.025 for existing in captured_video_preview_ratios):
+                    captured_video_preview_ratios.append(ratio)
+
         expected_ratios = {"portrait 9:16": 9 / 16, "landscape 16:9": 16 / 9, "square 1:1": 1.0}
         ratio_matches = {
             label: min((abs(value - expected) for value in captured_video_preview_ratios), default=999.0) <= 0.035
