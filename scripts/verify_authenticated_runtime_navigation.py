@@ -171,6 +171,8 @@ def _center(node):
         left_top,right_bottom=bounds.split("][",1)
         left,top=map(int,left_top.strip("[]").split(","))
         right,bottom=map(int,right_bottom.strip("[]").split(","))
+        if right <= left or bottom <= top:
+            return None
         return (left+right)//2,(top+bottom)//2
     except (ValueError,IndexError):
         return None
@@ -550,8 +552,18 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     if not composer_xml:
         return home_xml
 
+    # "More options" sits below the first viewport in the New post scroll area.
+    # Scroll the actual accessible container until the row has real, non-zero bounds;
+    # never tap a clipped Compose semantics node at (0, 0).
+    options_view_xml = composer_xml
+    for scroll_index in range(5):
+        if find_control(options_view_xml, ["More options"]):
+            break
+        options_view_xml = swipe_vertical_scroll_container(
+            options_view_xml, f"{prefix}-composer-more-options-scroll-{scroll_index}"
+        ) or options_view_xml
     options_xml = tap_control(
-        composer_xml, ["More options"], f"{prefix}-composer-more-options",
+        options_view_xml, ["More options"], f"{prefix}-composer-more-options",
         ["Take photo or video", "Add photo or video"]
     )
     camera_xml = tap_control_permission_aware(
