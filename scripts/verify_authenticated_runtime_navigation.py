@@ -370,7 +370,7 @@ def dismiss_ime_if_visible(name: str) -> str:
     return dump_ui(name)
 
 
-def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None, *, exact_only: bool = False, wait_attempts: int = 8)->str:
+def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None, *, exact_only: bool = False, wait_attempts: int = 8, post_wait_attempts: int = 16)->str:
     # Retry the same real accessibility selector; never use guessed coordinates.
     # Individual camera controls may use shorter waits for transient overlay dismissal.
     control=find_control(xml_text,labels,exact_only=exact_only)
@@ -389,7 +389,7 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
     run("adb","logcat","-c")
     run("adb","shell","input","tap",str(x),str(y))
     next_xml=""
-    for _ in range(16):
+    for _ in range(max(1, post_wait_attempts)):
         time.sleep(.5)
         next_xml=dump_ui(f"authenticated-{name}.xml")
         permission=find_control(next_xml,["While using the app","Only this time"])
@@ -845,9 +845,12 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 report.append("- PASS Cancel timer is exposed as a clickable accessibility action")
             else:
                 FAILURES.append(prefix + ": Cancel timer is visible but not exposed as a clickable accessibility action")
+            # Do not let a failed cancel selector sit through the 30-second
+            # countdown. A short post-tap window distinguishes a real state change
+            # from a timer that is still running.
             cancelled_xml = tap_control(
                 countdown_xml, ["Cancel timer"], f"{prefix}-camera-timer-cancel",
-                ["Take photo"], wait_attempts=8
+                ["Take photo"], wait_attempts=2, post_wait_attempts=4
             )
             if cancelled_xml:
                 time.sleep(3.4)
