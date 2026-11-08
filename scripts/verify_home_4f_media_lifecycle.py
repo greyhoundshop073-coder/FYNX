@@ -25,17 +25,27 @@ required_home = {
     "FynxMediaCache.getOrDownload": "real media cache/download path",
     "MediaMetadataRetriever": "video metadata handling",
     "FilledIconButton": "FYNX video play/pause control",
-    "Fullscreen": "FYNX video fullscreen control",
-    '"Open video full screen"': "FYNX video fullscreen accessibility action",
-    "FynxFeedTextureVideo": "scroll-safe Home feed video surface",
+    'onClickLabel = "Play video full screen"': "tap-anywhere full-screen preview action",
+    "fullScreenControls = true": "full-screen playback controls, timeline and progress UI",
+    '"Pause full-screen video"': "accessible full-screen playback control",
+    '"Unmute full-screen video"': "accessible full-screen mute control",
+    "FynxFeedTextureVideo": "focused inline and full-screen Home video player",
+    "previewHeight = minOf(340.dp, maxWidth / previewAspectRatio)": "height-bounded, source-ratio Home video preview",
+    "previewWidth = previewHeight * previewAspectRatio": "matching source-ratio Home video preview width",
+    '"Play video full screen"': "tap-to-open full-screen video preview action",
     "TextureView": "regular View-backed feed video surface",
     "prepareAsync()": "asynchronous feed video preparation",
-    "DisposableEffect(file)": "video lifecycle cleanup",
+    "DisposableEffect(surface)": "full-screen video surface lifecycle cleanup",
     "DisposableEffect(player)": "audio lifecycle cleanup",
     "player.release()": "audio resource release",
     "FynxRemoteProfileAvatar": "real author identity media",
     "MaterialTheme.colorScheme": "theme-aware Home presentation",
     '"Loading Home feed"': "accessible Home loading state for runtime certification",
+    '"Video duration $durationLabel"': "measured real Home video duration accessibility label",
+    '"${formatHomeVideoDuration(playbackPositionMs)} / $durationLabel"': "live elapsed and total video time readout",
+    "durationMs = videoDurationMs": "real media metadata duration passed into the feed player",
+    "playbackPositionMs.toFloat() / durationMs.toFloat()": "live Home video progress calculation",
+    "formatHomeVideoDuration(durationMs: Long)": "consistent mm:ss and hh:mm:ss duration formatting",
     'label = "Share"': "share accessibility action",
     'label = "Comment"': "comment accessibility action",
     'label = "Like"': "like accessibility action",
@@ -132,12 +142,13 @@ if missing_viewer:
 required_media_recovery = [
     'var mediaLoading by remember(path)',
     'val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE',
-    'FynxRemoteSocialClient.cachedFeedPage(context)',
+    'FynxRemoteSocialClient.cachedFeedPage(context, mode = feedMode)',
     'You\'re offline. Connect to a network to load your feed.',
     'var mediaFailed by remember(path)',
     'var reloadNonce by remember(path)',
     'Text("Retry media")',
     'if (fullscreen && file != null)',
+    'playbackActive = true',
     'playbackActive = playbackActive && !fullscreen',
     'Pause full-screen video',
     'Unmute full-screen video',
@@ -155,5 +166,26 @@ required_runtime_capture = [
 missing_runtime_capture = [token for token in required_runtime_capture if token not in runtime_navigation]
 if missing_runtime_capture:
     raise SystemExit("HOME 4F RUNTIME RED: stable Home capture gate missing " + ", ".join(missing_runtime_capture))
+
+required_video_runtime_capture = [
+    '"authenticated-home-fullscreen-video.png"',
+    "def _home_content_scroll_point(",
+    "def _dismiss_home_media_viewer(",
+    "def find_home_video_post_comment_action(",
+    "next_xml = scroll_home_feed_page(page, current)",
+    'find_control(current, ["Video duration"])',
+    "find_home_video_post_comment_action(current)",
+    "if _home_header_is_restored(latest):",
+]
+missing_video_runtime_capture = [
+    token for token in required_video_runtime_capture if token not in runtime_navigation
+]
+if missing_video_runtime_capture:
+    raise SystemExit(
+        "HOME 4F VIDEO RUNTIME RED: safe video scan, duration proof, or post-scoped comments missing "
+        + ", ".join(missing_video_runtime_capture)
+    )
+if 'input", "swipe", "720", "520", "720", "2600"' in runtime_navigation:
+    raise SystemExit("HOME 4F VIDEO RUNTIME RED: unsafe fixed Home swipe can activate post media instead of scrolling")
 
 print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")

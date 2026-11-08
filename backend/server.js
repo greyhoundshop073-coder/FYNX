@@ -5,6 +5,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
+import { mediaStorage, redirectStoredMedia } from "./mediaStorage.js";
+import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
@@ -145,6 +147,12 @@ async function initDatabase() {
       byte_size INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE message_media ALTER COLUMN data DROP NOT NULL;
+    ALTER TABLE message_media ADD COLUMN IF NOT EXISTS storage_provider TEXT NOT NULL DEFAULT 'postgres';
+    ALTER TABLE message_media ADD COLUMN IF NOT EXISTS object_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS message_media_object_key_unique
+      ON message_media(storage_provider, object_key) WHERE object_key IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS message_media_storage_provider_idx ON message_media(storage_provider, created_at DESC);
     CREATE INDEX IF NOT EXISTS message_media_owner_idx ON message_media (owner_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_recipient_idx ON messages (recipient_id, created_at DESC);
@@ -406,9 +414,20 @@ app.post("/api/media", auth, async (req, res) => {
     if (!encoded || encoded.length > Math.ceil(MAX_MEDIA_BYTES * 1.38)) return res.status(413).json({ error: "media is too large" });
     const data = Buffer.from(encoded, "base64");
     if (!data.length || data.length > MAX_MEDIA_BYTES) return res.status(413).json({ error: "media is too large" });
-    const result = await pool.query("INSERT INTO message_media (owner_id, mime_type, data, byte_size) VALUES ($1, $2, $3, $4) RETURNING id, mime_type, byte_size", [req.user.sub, mimeType, data, data.length]);
+    const stored = await mediaStorage.putMediaObject({ data, mimeType });
+    let result;
+    try {
+      result = await pool.query("INSERT INTO message_media (owner_id, mime_type, data, byte_size, storage_provider, object_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, mime_type, byte_size", [req.user.sub, mimeType, stored.storageProvider === "postgres" ? data : null, data.length, stored.storageProvider, stored.objectKey]);
+    } catch (databaseError) {
+      if (stored.objectKey) await mediaStorage.deleteMediaObject(stored.objectKey).catch((cleanupError) => console.error("media object rollback cleanup", cleanupError));
+      throw databaseError;
+    }
     return res.status(201).json({ media: { id: String(result.rows[0].id), mimeType: result.rows[0].mime_type, byteSize: result.rows[0].byte_size } });
-  } catch (error) { console.error("media upload", error); return res.status(500).json({ error: "media upload failed" }); }
+  } catch (error) {
+    console.error("media upload", error);
+    if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599) return res.status(error.statusCode).json({ error: error.publicMessage || "media storage is unavailable" });
+    return res.status(500).json({ error: "media upload failed" });
+  }
 });
 
 const statusSchema = async () => {
@@ -519,7 +538,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
         )`
       : "";
     let result = await pool.query(`
-      SELECT mm.mime_type, mm.data
+      SELECT mm.mime_type, mm.storage_provider, mm.object_key
       FROM message_media mm
       WHERE mm.id = $1
         AND (
@@ -608,13 +627,14 @@ app.get("/api/media/:id", auth, async (req, res) => {
       // Handover photos are separate from message/profile/status media. Only the
       // buyer or seller on the order that references the photo may retrieve it.
       try {
-        result = await pool.query(`SELECT mm.mime_type, mm.data
+        result = await pool.query(`SELECT mm.mime_type
           FROM message_media mm
           JOIN marketplace_delivery_evidence e
             ON e.evidence_type = 'PHOTO_REFERENCE' AND e.value = CAST(mm.id AS TEXT)
           JOIN marketplace_orders o ON o.id = e.order_id
           WHERE mm.id = $1 AND (o.buyer_id = $2 OR o.seller_id = $2)
           LIMIT 1`, [mediaId, req.user.sub]);
+        privateEvidenceMedia = Boolean(result.rows[0]);
       } catch (marketplaceEvidenceError) {
         if (marketplaceEvidenceError.code !== "42P01") throw marketplaceEvidenceError;
       }
@@ -625,7 +645,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
       try {
         const evidenceTable = await pool.query("SELECT to_regclass('public.marketplace_order_evidence') AS table_name");
         if (evidenceTable.rows[0]?.table_name) {
-          result = await pool.query(`SELECT mm.mime_type, mm.data
+          result = await pool.query(`SELECT mm.mime_type
             FROM message_media mm
             WHERE mm.id = $1
               AND EXISTS (
@@ -644,9 +664,14 @@ app.get("/api/media/:id", auth, async (req, res) => {
       }
     }
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
-    res.set("Cache-Control", privateEvidenceMedia ? "private, no-store" : "private, max-age=3600");
-    res.type(result.rows[0].mime_type);
-    return res.send(result.rows[0].data);
+    // Publicly shareable media stored in Neon/R2 is served through a short-lived
+    // signed URL. Order evidence remains proxied so its response can enforce no-store.
+    if (!privateEvidenceMedia && await redirectStoredMedia(res, result.rows[0], { cacheControl: "private, max-age=300" })) return;
+    const payload = await getCachedMediaPayload(pool, mediaId);
+    if (!payload) return res.status(404).json({ error: "media not found" });
+    res.set("Cache-Control", privateEvidenceMedia ? "private, no-store" : "private, max-age=300");
+    res.type(payload.mimeType);
+    return res.send(payload.data);
   } catch (error) { console.error("media fetch", error); return res.status(500).json({ error: "media fetch failed" }); }
 });
 

@@ -1,4 +1,6 @@
 import { Buffer } from "node:buffer";
+import { getCachedMediaPayload } from "./mediaPayloadCache.js";
+import { redirectStoredMedia } from "./mediaStorage.js";
 import { queueFynxNotification } from "./notificationPush.js";
 import { ensureMarketplaceShopProfileSchema } from "./marketplaceShopProfiles.js";
 
@@ -457,6 +459,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_duration_ms BIGINT;
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS feeling_activity_type TEXT;
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS feeling_activity TEXT;
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS quoted_post_id BIGINT REFERENCES social_posts(id) ON DELETE SET NULL;
       ALTER TABLE social_posts ADD CONSTRAINT social_posts_visibility_check CHECK (visibility IN ('PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'));
       CREATE TABLE IF NOT EXISTS social_post_audience (post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(post_id,user_id));
       CREATE INDEX IF NOT EXISTS social_post_audience_user_idx ON social_post_audience(user_id, created_at DESC);
@@ -592,11 +595,36 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
 
   const visibleSocialPost = async (id,userId) => { const r=await pool.query(`SELECT 1 FROM social_posts p WHERE p.id=$1 AND (p.author_id=$2 OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$2) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2))`,[id,userId]); return Boolean(r.rowCount); };
 
+  let socialFeedRepostSchemaPromise;
+  const ensureSocialFeedRepostSchema = async () => {
+    if (!socialFeedRepostSchemaPromise) {
+      socialFeedRepostSchemaPromise = pool.query(`
+        CREATE TABLE IF NOT EXISTS social_post_reposts (
+          post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
+          user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (post_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS social_post_reposts_post_idx ON social_post_reposts(post_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS social_post_reposts_user_idx ON social_post_reposts(user_id, created_at DESC);
+      `).catch((error) => {
+        socialFeedRepostSchemaPromise = undefined;
+        throw error;
+      });
+    }
+    return socialFeedRepostSchemaPromise;
+  };
+
   app.get('/api/social/feed',auth,async(req,res)=>{
     try {
       await ensureSocialSchema();
+      await ensureSocialFeedRepostSchema();
       const limit = Math.min(Math.max(Number(req.query?.limit) || 20, 1), 50);
       const offset = Math.min(Math.max(Number(req.query?.offset) || 0, 0), 1000000);
+      const feedMode = req.query?.mode === "following" ? "following" : "for_you";
+      const modeFilter = feedMode === "following"
+        ? "AND (p.author_id=$1 OR EXISTS (SELECT 1 FROM social_follows sfm WHERE sfm.follower_id=$1 AND sfm.followed_id=p.author_id) OR repost.user_id IS NOT NULL)"
+        : "";
       const rawCursor = typeof req.query?.before === 'string' ? req.query.before.trim().slice(0, 512) : '';
       let cursorCreatedAt = null;
       let cursorId = null;
@@ -614,18 +642,103 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       let pagination = '';
       if (cursorCreatedAt != null) {
         params.push(cursorCreatedAt, cursorId);
-        pagination = ' AND (p.created_at, p.id) < ($3::timestamptz, $4::bigint)';
+        pagination = ' AND (COALESCE(repost.created_at,p.created_at), p.id) < ($3::timestamptz, $4::bigint)';
       } else {
         params.push(offset);
         pagination = ' AND TRUE';
       }
-      const r = await pool.query(`SELECT p.id,p.author_id,u.username author_username,u.display_name author_display_name,p.text,p.visibility,p.media_id,p.media_type,p.text_background,p.text_background_color,p.text_foreground_color,p.location,p.music_media_id,p.music_title,p.music_artist,p.music_duration_ms,p.feeling_activity_type,p.feeling_activity,p.created_at::text cursor_created_at,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp,(SELECT COUNT(*) FROM social_post_likes l WHERE l.post_id=p.id) like_count,(SELECT COUNT(*) FROM social_post_comments c WHERE c.post_id=p.id) comment_count,EXISTS(SELECT 1 FROM social_post_likes l WHERE l.post_id=p.id AND l.user_id=$1) liked_by_current_user,EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=$1 AND f.followed_id=p.author_id) followed_by_current_user FROM social_posts p JOIN users u ON u.id=p.author_id WHERE (p.author_id=$1 OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$1) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$1))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))${pagination} ORDER BY p.created_at DESC,p.id DESC LIMIT $2${rawCursor ? '' : ' OFFSET $3'}`, rawCursor ? params : [req.user.sub, limit + 1, offset]);
+      const r = await pool.query(`
+        SELECT
+          p.id, p.author_id, u.username author_username, u.display_name author_display_name,
+          p.text, p.visibility, p.media_id, p.media_type, p.text_background,
+          p.text_background_color, p.text_foreground_color, p.location,
+          p.music_media_id, p.music_title, p.music_artist, p.music_duration_ms,
+          p.feeling_activity_type, p.feeling_activity, p.quoted_post_id,
+          qp.id quoted_original_id, qu.username quoted_author_username,
+          qu.display_name quoted_author_display_name, qp.text quoted_text,
+          qp.media_id quoted_media_id, qp.media_type quoted_media_type,
+          COALESCE(repost.created_at,p.created_at)::text cursor_created_at,
+          EXTRACT(EPOCH FROM COALESCE(repost.created_at,p.created_at))*1000 timestamp,
+          (SELECT COUNT(*) FROM social_post_likes l WHERE l.post_id=p.id) like_count,
+          (SELECT COUNT(*) FROM social_post_comments c WHERE c.post_id=p.id) comment_count,
+          EXISTS(SELECT 1 FROM social_post_likes l WHERE l.post_id=p.id AND l.user_id=$1) liked_by_current_user,
+          EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=$1 AND f.followed_id=p.author_id) followed_by_current_user,
+          repost.username reposted_by_username, repost.display_name reposted_by_display_name, repost.user_id reposted_by_user_id
+        FROM social_posts p
+        JOIN users u ON u.id=p.author_id
+        LEFT JOIN LATERAL (
+          SELECT ru.username, ru.display_name, sr.created_at, sr.user_id
+          FROM social_post_reposts sr
+          JOIN users ru ON ru.id=sr.user_id
+          WHERE sr.post_id=p.id
+            AND (
+              sr.user_id=$1
+              OR EXISTS (
+                SELECT 1 FROM social_follows sf
+                WHERE sf.follower_id=$1 AND sf.followed_id=sr.user_id
+              )
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM blocks rb
+              WHERE (rb.blocker_id=$1 AND rb.blocked_id=sr.user_id)
+                 OR (rb.blocker_id=sr.user_id AND rb.blocked_id=$1)
+            )
+          ORDER BY sr.created_at DESC, sr.user_id DESC
+          LIMIT 1
+        ) repost ON TRUE
+        LEFT JOIN social_posts qp
+          ON qp.id=p.quoted_post_id
+         AND (
+           qp.author_id=$1
+           OR qp.visibility='PUBLIC'
+           OR (qp.visibility='FRIENDS_ONLY' AND EXISTS (
+             SELECT 1 FROM friendships qf
+             WHERE ((qf.user_id=qp.author_id AND qf.friend_id=$1)
+                 OR (qf.user_id=$1 AND qf.friend_id=qp.author_id))
+               AND qf.status='accepted'
+           ))
+           OR (qp.visibility='SELECTED_PEOPLE' AND EXISTS (
+             SELECT 1 FROM social_post_audience qa
+             WHERE qa.post_id=qp.id AND qa.user_id=$1
+           ))
+         )
+         AND NOT EXISTS(
+           SELECT 1 FROM blocks qb
+           WHERE (qb.blocker_id=$1 AND qb.blocked_id=qp.author_id)
+              OR (qb.blocker_id=qp.author_id AND qb.blocked_id=$1)
+         )
+        LEFT JOIN users qu ON qu.id=qp.author_id
+        WHERE (
+          p.author_id=$1
+          OR p.visibility='PUBLIC'
+          OR (p.visibility='ONLY_ME' AND p.author_id=$1)
+          OR (p.visibility='FRIENDS_ONLY' AND EXISTS (
+            SELECT 1 FROM friendships f
+            WHERE ((f.user_id=p.author_id AND f.friend_id=$1)
+                OR (f.user_id=$1 AND f.friend_id=p.author_id))
+              AND f.status='accepted'
+          ))
+          OR (p.visibility='SELECTED_PEOPLE' AND EXISTS (
+            SELECT 1 FROM social_post_audience a
+            WHERE a.post_id=p.id AND a.user_id=$1
+          ))
+        )
+        AND NOT EXISTS(
+          SELECT 1 FROM blocks b
+          WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id)
+             OR (b.blocker_id=p.author_id AND b.blocked_id=$1)
+        )
+        ${modeFilter}
+        ${pagination}
+        ORDER BY COALESCE(repost.created_at,p.created_at) DESC, p.id DESC
+        LIMIT $2${rawCursor ? '' : ' OFFSET $3'}
+      `, rawCursor ? params : [req.user.sub, limit + 1, offset]);
       const hasMore = r.rows.length > limit;
       const rows = hasMore ? r.rows.slice(0, limit) : r.rows;
       const last = rows[rows.length - 1];
       const nextCursor = hasMore && last ? Buffer.from(JSON.stringify({ createdAt: last.cursor_created_at, id: Number(last.id) })).toString('base64url') : null;
       res.set('Cache-Control', 'private, no-store');
-      res.json({ posts: rows.map(x=>({id:String(x.id),authorId:String(x.author_id),authorUsername:x.author_username,authorDisplayName:x.author_display_name,text:x.text,visibility:x.visibility,mediaId:x.media_id==null?null:String(x.media_id),mediaType:x.media_type||null,mediaUrl:x.media_id==null?null:`/api/social/media/${x.media_id}`,textBackground:x.text_background||null,textBackgroundColor:x.text_background_color==null?null:Number(x.text_background_color),textForegroundColor:x.text_foreground_color==null?null:Number(x.text_foreground_color),location:x.location||null,musicMediaId:x.music_media_id==null?null:String(x.music_media_id),musicTitle:x.music_title||null,musicArtist:x.music_artist||null,musicDurationMs:x.music_duration_ms==null?0:Number(x.music_duration_ms),feelingActivityType:x.feeling_activity_type||null,feelingActivity:x.feeling_activity||null,timestamp:Number(x.timestamp),likeCount:Number(x.like_count),commentCount:Number(x.comment_count),likedByCurrentUser:Boolean(x.liked_by_current_user),followedByCurrentUser:Boolean(x.followed_by_current_user)})), hasMore, nextCursor });
+      res.json({ posts: rows.map(x=>({id:String(x.id),authorId:String(x.author_id),authorUsername:x.author_username,authorDisplayName:x.author_display_name,text:x.text,visibility:x.visibility,mediaId:x.media_id==null?null:String(x.media_id),mediaType:x.media_type||null,mediaUrl:x.media_id==null?null:`/api/social/media/${x.media_id}`,textBackground:x.text_background||null,textBackgroundColor:x.text_background_color==null?null:Number(x.text_background_color),textForegroundColor:x.text_foreground_color==null?null:Number(x.text_foreground_color),location:x.location||null,musicMediaId:x.music_media_id==null?null:String(x.music_media_id),musicTitle:x.music_title||null,musicArtist:x.music_artist||null,musicDurationMs:x.music_duration_ms==null?0:Number(x.music_duration_ms),feelingActivityType:x.feeling_activity_type||null,feelingActivity:x.feeling_activity||null,quotedPostId:x.quoted_post_id==null?null:String(x.quoted_post_id),quotedOriginal:x.quoted_original_id==null?null:{id:String(x.quoted_original_id),authorUsername:x.quoted_author_username,authorDisplayName:x.quoted_author_display_name,text:x.quoted_text||'',mediaId:x.quoted_media_id==null?null:String(x.quoted_media_id),mediaType:x.quoted_media_type||null,mediaUrl:x.quoted_media_id==null?null:`/api/social/media/${x.quoted_media_id}`},timestamp:Number(x.timestamp),likeCount:Number(x.like_count),commentCount:Number(x.comment_count),likedByCurrentUser:Boolean(x.liked_by_current_user),followedByCurrentUser:Boolean(x.followed_by_current_user),repostedByUsername:x.reposted_by_username||null,repostedByDisplayName:x.reposted_by_display_name||null})), hasMore, nextCursor });
     } catch(e) { console.error('social feed',e); res.status(500).json({error:'social feed failed'}); }
   });
   // FYNX Music Library management is restricted to the existing OWNER/ADMIN role system.
@@ -767,7 +880,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const mediaId = Number(req.params.id);
       if (!Number.isSafeInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: 'invalid music media' });
       const result = await pool.query(
-        `SELECT mm.mime_type,mm.data
+        `SELECT mm.mime_type,mm.storage_provider,mm.object_key
            FROM fynx_music_catalogue c
            JOIN message_media mm ON mm.id=c.media_id
           WHERE c.media_id=$1 AND c.active=TRUE`,
@@ -776,9 +889,12 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (!result.rows[0] || !String(result.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
         return res.status(404).json({ error: 'music track not found' });
       }
-      res.set('Cache-Control', 'private, max-age=3600');
-      res.type(result.rows[0].mime_type);
-      return res.send(result.rows[0].data);
+      if (await redirectStoredMedia(res, result.rows[0], { cacheControl: 'private, max-age=300' })) return;
+      const payload = await getCachedMediaPayload(pool, mediaId);
+      if (!payload) return res.status(404).json({ error: 'music track not found' });
+      res.set('Cache-Control', 'private, max-age=300');
+      res.type(payload.mimeType);
+      return res.send(payload.data);
     } catch (error) {
       console.error('music catalogue media by id', error);
       return res.status(500).json({ error: 'music preview failed' });
@@ -791,7 +907,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const catalogueId = Number(req.params.id);
       if (!Number.isSafeInteger(catalogueId) || catalogueId < 1) return res.status(400).json({ error: 'invalid music track' });
       const result = await pool.query(
-        `SELECT mm.mime_type,mm.data
+        `SELECT mm.id AS media_id,mm.mime_type,mm.storage_provider,mm.object_key
            FROM fynx_music_catalogue c
            JOIN message_media mm ON mm.id=c.media_id
           WHERE c.id=$1 AND c.active=TRUE`,
@@ -800,9 +916,12 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (!result.rows[0] || !String(result.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
         return res.status(404).json({ error: 'music track not found' });
       }
-      res.set('Cache-Control', 'private, max-age=3600');
-      res.type(result.rows[0].mime_type);
-      return res.send(result.rows[0].data);
+      if (await redirectStoredMedia(res, result.rows[0], { cacheControl: 'private, max-age=300' })) return;
+      const payload = await getCachedMediaPayload(pool, result.rows[0].media_id);
+      if (!payload) return res.status(404).json({ error: 'music track not found' });
+      res.set('Cache-Control', 'private, max-age=300');
+      res.type(payload.mimeType);
+      return res.send(payload.data);
     } catch (error) {
       console.error('music catalogue media', error);
       return res.status(500).json({ error: 'music preview failed' });
@@ -820,6 +939,6 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.post('/api/social/posts/:id/comments',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,1000):'';if(!text)return res.status(400).json({error:'comment text is required'});if(!(await visibleSocialPost(id,req.user.sub)))return res.status(404).json({error:'post not found'});const r=await pool.query('INSERT INTO social_post_comments(post_id,author_id,text) VALUES($1,$2,$3) RETURNING id,EXTRACT(EPOCH FROM created_at)*1000 timestamp',[id,req.user.sub,text]);const u=await pool.query('SELECT username,display_name FROM users WHERE id=$1',[req.user.sub]);res.status(201).json({comment:{id:String(r.rows[0].id),text,timestamp:Number(r.rows[0].timestamp),authorId:String(req.user.sub),authorUsername:u.rows[0]?.username||'',authorDisplayName:u.rows[0]?.display_name||''}})}catch(e){res.status(500).json({error:'comment failed'})}});
   app.post('/api/social/follow/:username',auth,async(req,res)=>{try{await ensureSocialSchema();const u=await findUserByUsername(req.params.username.trim().toLowerCase().replace(/^@+/,''));if(!u)return res.status(404).json({error:'user not found'});if(String(u.id)===String(req.user.sub))return res.status(400).json({error:'cannot follow yourself'});const b=await pool.query('SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)',[req.user.sub,u.id]);if(b.rowCount)return res.status(403).json({error:'follow unavailable'});const inserted=await pool.query('INSERT INTO social_follows(follower_id,followed_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING follower_id,followed_id',[req.user.sub,u.id]);if(inserted.rowCount){const follower=await pool.query('SELECT username FROM users WHERE id=$1 LIMIT 1',[req.user.sub]);const sourceUsername=follower.rows[0]?.username||null;await queueFynxNotification(pool,{userId:u.id,type:'FOLLOW',title:`@${sourceUsername||'A FYNX user'} followed you`,message:'You have a new follower.',targetId:String(req.user.sub),sourceUsername,route:`fynx://profile/${encodeURIComponent(sourceUsername||'')}`,notificationId:`follow-${req.user.sub}-${u.id}`});}res.set('Cache-Control','no-store');res.status(201).json({following:true})}catch(e){res.status(500).json({error:'follow failed'})}});
   app.delete('/api/social/follow/:username',auth,async(req,res)=>{try{await ensureSocialSchema();const u=await findUserByUsername(req.params.username.trim().toLowerCase().replace(/^@+/,''));if(!u)return res.status(404).json({error:'user not found'});await pool.query('DELETE FROM social_follows WHERE follower_id=$1 AND followed_id=$2',[req.user.sub,u.id]);res.json({following:false})}catch(e){res.status(500).json({error:'unfollow failed'})}});
-  app.get('/api/social/media/:id',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);const r=await pool.query(`SELECT mm.mime_type,mm.data FROM message_media mm JOIN social_posts p ON p.media_id=mm.id WHERE mm.id=$1 AND (p.author_id=$2 OR p.media_id=$1 AND p.visibility='PUBLIC' OR p.music_media_id=$1 AND p.visibility='PUBLIC' OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$2) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2)) LIMIT 1`,[id,req.user.sub]);if(!r.rows[0])return res.status(404).json({error:'media not found'});res.set('Cache-Control','private,max-age=3600');res.type(r.rows[0].mime_type);res.send(r.rows[0].data)}catch(e){res.status(500).json({error:'social media fetch failed'})}});
+  app.get('/api/social/media/:id',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'invalid media id'});const r=await pool.query(`SELECT mm.mime_type,mm.storage_provider,mm.object_key FROM message_media mm JOIN social_posts p ON p.media_id=mm.id WHERE mm.id=$1 AND (p.author_id=$2 OR p.media_id=$1 AND p.visibility='PUBLIC' OR p.music_media_id=$1 AND p.visibility='PUBLIC' OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$2) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2)) LIMIT 1`,[id,req.user.sub]);if(!r.rows[0])return res.status(404).json({error:'media not found'});if(await redirectStoredMedia(res,r.rows[0],{cacheControl:'private, max-age=300'}))return;const payload=await getCachedMediaPayload(pool,id);if(!payload)return res.status(404).json({error:'media not found'});res.set('Cache-Control','private,max-age=300');res.type(payload.mimeType);return res.send(payload.data)}catch(e){res.status(500).json({error:'social media fetch failed'})}});
 
 }

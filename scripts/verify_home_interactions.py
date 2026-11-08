@@ -27,6 +27,7 @@ ai_panel = read("app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt")
 ai_client = read("app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt")
 ai_conversation_client = read("app/src/main/java/com/fynx/app/ui/FynxAiConversationClient.kt")
 comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
+reaction_bootstrap = read("backend/homeCommentReactionBootstrap.js")
 client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 saved_panel = read("app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt")
 privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
@@ -45,12 +46,29 @@ for needle in ('Icons.Default.Favorite','Icons.Default.ChatBubbleOutline','Icons
     require(home, needle, f"Home reliability surface {needle}")
 for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNextCursor','discoveryFeed(context, 3, offset)','discoveryOffset','discoveryHasMore','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','lastVisibleIndex >= totalItems - 6','!loadingMore && !discoveryLoadingMore && !feedRequestInFlight','if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)'):
     require(home, needle, f"feed recovery/pagination {needle}")
-for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFeed(context)','if (safeOffset == 0 && remote.isFailure)'):
+for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context, normalizedMode)','readStaleCachedFeed(context, normalizedMode)','if (safeOffset == 0 && remote.isFailure)'):
     require(client, needle, f"offline feed recovery {needle}")
 for needle in ('onCommentCountChanged','expandedReplies','parentCommentId','nextCursor'):
     require(comments_panel, needle, f"comment/reply lifecycle {needle}")
-for needle in ('post.mediaUrl?.let','RemoteSocialMedia','VideoView','rememberLazyListState','focusedVideoPostId','playbackActive','setVolume','VolumeOff','VolumeUp','FilledIconButton','Fullscreen','"Open video full screen"'):
-    require(home, needle, f"post media behavior {needle}")
+for needle in (
+    'post.mediaUrl?.let',
+    'RemoteSocialMedia',
+    'rememberLazyListState',
+    'focusedVideoPostId',
+    'playbackActive',
+    'setVolume',
+    'VolumeOff',
+    'VolumeUp',
+    'FilledIconButton',
+    'FynxFeedTextureVideo(',
+    'previewHeight = minOf(340.dp, maxWidth / previewAspectRatio)',
+    'previewWidth = previewHeight * previewAspectRatio',
+    'fullScreenControls = false',
+    'fullScreenControls = true',
+    'onClickLabel = "Play video full screen"',
+    'Video preview. Tap to play full screen'
+):
+    require(home, needle, f"source-sized inline/fullscreen video behavior {needle}")
 if 'MediaController' in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy Android MediaController must not compete with FYNX feed controls")
 require_normalized(home, 'LazyColumn( state = feedListState, modifier = modifier.fillMaxSize().background(Brush.verticalGradient(', "single feed state owns vertical scrolling with the reflective viewport background")
@@ -112,6 +130,28 @@ require(realtime_bootstrap, "before === null ? [postId, req.user.sub, limit + 1]
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 for needle in ('remember(post.id)','rememberSaveable(post.id)','DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)','.imePadding()','KeyboardActions(onSend = { send() })','FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }','commentCount += 1','onCommentCountChanged(commentCount)'):
     require(comments_panel, needle, f"Home 4D edge-case safeguard {needle}")
+for needle in ('commentReactions(context, post.id, ids)', 'setCommentReaction(context, post.id, comment.id, nextReaction)', 'HomeCommentActionBar(', 'onLongClick = { pickerOpen = !pickerOpen }', 'BackHandler(enabled = pickerOpen)', 'if (pickerOpen) {', 'semantics(mergeDescendants = true)', 'Triple("LOVE", "❤️", "Love")', 'Triple("THUMBS_UP", "👍", "Like")', 'optimisticCounts.filterValues { it > 0 }'):
+    require(comments_panel, needle, f"X-style comment reaction interaction {needle}")
+require(comments_panel, 'horizontalArrangement = Arrangement.spacedBy(2.dp)', "horizontal reaction tray keeps the six emoji choices in one compact row")
+for needle in ('Icons.Default.ChatBubbleOutline', 'Icons.Default.Repeat', 'Icons.Default.BarChart', 'Icons.Default.BookmarkBorder', 'Icons.Default.Share'):
+    require(comments_panel, needle, f"comment action-bar icon {needle}")
+require(client, 'data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)', "typed comment reaction summary")
+require(client, '"/api/social/posts/$post/comment-reactions?ids=$query"', "batched comment reaction summary avoids per-row requests")
+require(client, '"/api/social/posts/$post/comments/$comment/reaction"', "comment reaction write endpoint")
+for needle in ('var commentSort by rememberSaveable(post.id)', 'FilterChip(selected = commentSort == "Relevant"', 'FilterChip(selected = commentSort == "Newest"', 'fun shareComment(comment:', 'Intent.createChooser(Intent(Intent.ACTION_SEND)', 'onShare = { shareComment(comment) }', 'onShare = { shareComment(reply) }'):
+    require(comments_panel, needle, f"X-style comment sorting/share action {needle}")
+require(reaction_bootstrap, "[commentId,postId,req.user.sub]", "comment reaction deletion applies the current user's block filter parameter")
+
+comment_experience_bootstrap = read("backend/homeCommentExperienceBootstrap.js")
+media_cache = read("app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt")
+for needle in ('addCommentExperience(', 'linkedVideo(', 'commentEngagement(', 'setCommentRepost(', 'setCommentBookmark(', 'recordCommentView('):
+    require(client, needle, f"comment media/engagement client API {needle}")
+for needle in ('photoPicker.launch("image/*")', 'videoPicker.launch("video/*")', 'Link Part 2', 'mediaPreview = Triple(video.mediaUrl, video.mediaType'):
+    require(comments_panel, needle, f"rich-media comment UI {needle}")
+for needle in ('fynxHomeCommentExperienceBatch', '/comments/experience', '/linked-video', '/api/social/comment-media/:id', '/comment-engagement', 'owner_id=$2', "p.media_type='video'", 'social_comment_views'):
+    require(comment_experience_bootstrap, needle, f"comment experience backend {needle}")
+require(realtime_bootstrap, "await installHomeCommentExperience();", "comment experience startup installation")
+require(media_cache, 'path.startsWith("/api/social/comment-media/")', "protected comment media cache path")
 require_normalized(comments_panel, 'Column(Modifier.fillMaxSize())', "comment sheet keeps a single stable layout owner")
 require_normalized(comments_panel, 'Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp)', "comment composer and AI draft preview stay in one IME-safe bottom container")
 if 'Column(Modifier.fillMaxSize().imePadding())' in comments_panel:
@@ -150,7 +190,7 @@ else:
 require(home, 'networkReady: Boolean? = null', "Home feed receives the authoritative app connection state")
 require(home, 'val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE', "Home feed uses device transport state rather than backend health as its offline gate")
 require(home, 'Backend health is not the same as device connectivity', "Home feed still requests data when backend health probe fails")
-require(home, 'FynxRemoteSocialClient.cachedFeedPage(context)', "Home feed restores the account-scoped cached snapshot while offline")
+require(home, 'FynxRemoteSocialClient.cachedFeedPage(context, mode = feedMode)', "Home feed restores the selected account-scoped timeline cache while offline")
 require(home, 'if (networkReady == true) reload()', "Home feed automatically revalidates when the app connection returns")
 require(home, 'You\'re offline. Connect to a network to load your feed.', "Home feed shows a settled offline state instead of a permanent spinner")
 require(home, 'LaunchedEffect(publishRefreshKey) {\n        val network = FynxNetworkQuality.current(context)', "Home secondary refresh observes network quality")

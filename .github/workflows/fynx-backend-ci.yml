@@ -58,6 +58,9 @@ jobs:
           cache-dependency-path: backend/package.json
       - name: Install backend dependencies
         run: npm install --no-audit --no-fund
+      - name: Verify provider-portable media storage adapters and cache
+        working-directory: backend
+        run: node test-media-storage.mjs && node verify-media-object-storage.mjs && node verify-media-payload-cache.mjs
       - name: Check backend JavaScript
         run: |
           node --check server.js
@@ -178,6 +181,10 @@ jobs:
         run: node verify-notification-bootstrap-idempotency.mjs
       - name: Verify Home post reaction SQL contract
         run: node verify-social-post-reaction-bootstrap.mjs
+      - name: Verify Home comment media, linked videos and engagement backend
+        run: node verify-home-comment-experience-bootstrap.mjs
+      - name: Verify Home feed repost timeline and visibility in PostgreSQL
+        run: node test-home-feed-repost-query.mjs
 
       - name: Run Chat end-to-end integration gate
         working-directory: .
