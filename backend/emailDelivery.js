@@ -19,6 +19,13 @@ function isEmailAddress(value) {
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+function isEmailSender(value) {
+  if (typeof value !== "string" || value.length > 320) return false;
+  const candidate = value.trim();
+  const bracketed = candidate.match(/^.*<([^<>]+)>$/);
+  return isEmailAddress(bracketed ? bracketed[1].trim() : candidate);
+}
+
 /**
  * Creates a fail-closed SMTP adapter.
  *
@@ -48,7 +55,7 @@ export function createEmailDelivery({
     port <= 65535 &&
     username &&
     password &&
-    isEmailAddress(from)
+    isEmailSender(from)
   );
 
   const transport = configured
