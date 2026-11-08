@@ -2620,16 +2620,15 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                                 node.attrib.get("class") == "android.widget.VideoView"
                                 for node in candidate_nodes
                             )
-                            discovery_expected_markers = [
-                                "Like video", "Unlike video", "Open comments", "Share video"
-                            ]
-                            # Use the same bounds-aware control resolver used by the
-                            # later action audit. UIAutomator may expose a Compose label
-                            # on a clickable wrapper/descendant; the strict raw-label
-                            # helper can miss a control that is demonstrably present
-                            # and tappable in the captured viewer hierarchy.
+                            # Like/Unlike is one toggle, so exactly one label is visible
+                            # at a time. Treat those labels as alternatives, while still
+                            # requiring the independent Comments and Share actions.
+                            # Use the bounds-aware resolver because Compose may expose a
+                            # merged label on a clickable wrapper/descendant.
                             has_all_actions = (
-                                all(find_control(candidate, [marker]) for marker in discovery_expected_markers)
+                                find_control(candidate, ["Like video", "Unlike video"])
+                                and find_control(candidate, ["Open comments"])
+                                and find_control(candidate, ["Share video"])
                                 and find_control(candidate, ["Unmute Discovery video", "Mute Discovery video"])
                                 and find_control(candidate, ["Pause Discovery video", "Play Discovery video"])
                             )
