@@ -54,10 +54,12 @@ function validBucket(value) {
 
 function readProviderConfig(provider, env) {
   if (provider === "neon") {
-    const endpoint = String(env.FYNX_NEON_S3_ENDPOINT || "").trim();
-    const region = String(env.FYNX_NEON_S3_REGION || "").trim();
-    const accessKeyId = String(env.FYNX_NEON_S3_ACCESS_KEY_ID || "").trim();
-    const secretAccessKey = String(env.FYNX_NEON_S3_SECRET_ACCESS_KEY || "").trim();
+    // Prefer FYNX-scoped values, but accept Neon's AWS-standard S3 variables too.
+    // This keeps the adapter compatible with Neon env-pull and other S3-compatible hosts.
+    const endpoint = String(env.FYNX_NEON_S3_ENDPOINT || env.AWS_ENDPOINT_URL_S3 || "").trim();
+    const region = String(env.FYNX_NEON_S3_REGION || env.AWS_REGION || "").trim();
+    const accessKeyId = String(env.FYNX_NEON_S3_ACCESS_KEY_ID || env.AWS_ACCESS_KEY_ID || "").trim();
+    const secretAccessKey = String(env.FYNX_NEON_S3_SECRET_ACCESS_KEY || env.AWS_SECRET_ACCESS_KEY || "").trim();
     const bucket = String(env.FYNX_NEON_STORAGE_BUCKET || "").trim();
     let endpointValid = false;
     try {
