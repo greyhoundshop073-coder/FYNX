@@ -64,6 +64,30 @@ assert.equal(calls.at(-1).input.Bucket, "fynx-media");
 const downloaded = await storage.getMediaObjectBytes("media/" + UUID, "neon");
 assert.equal(downloaded.toString(), "FYNX-media-bytes");
 
+const standardEnvStorage = createMediaStorage({
+  env: {
+    FYNX_MEDIA_STORAGE_PROVIDER: "neon",
+    AWS_ENDPOINT_URL_S3: common.FYNX_NEON_S3_ENDPOINT,
+    AWS_REGION: common.FYNX_NEON_S3_REGION,
+    AWS_ACCESS_KEY_ID: common.FYNX_NEON_S3_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: common.FYNX_NEON_S3_SECRET_ACCESS_KEY,
+    FYNX_NEON_STORAGE_BUCKET: "fynx-media-standard-env"
+  },
+  clientFactory(options) { optionsSeen.push(options); return fakeClient; },
+  idFactory: () => UUID
+});
+assert.equal(standardEnvStorage.isConfigured, true);
+await standardEnvStorage.putMediaObject({ data: Buffer.from("standard-env-media"), mimeType: "image/jpeg" });
+assert.deepEqual(optionsSeen[1], {
+  region: "us-east-2",
+  endpoint: common.FYNX_NEON_S3_ENDPOINT,
+  credentials: {
+    accessKeyId: common.FYNX_NEON_S3_ACCESS_KEY_ID,
+    secretAccessKey: common.FYNX_NEON_S3_SECRET_ACCESS_KEY
+  },
+  forcePathStyle: true
+});
+
 // Dual-read support is required during a provider migration: Neon can serve new writes
 // while rows that still point at R2 remain readable until their verified migration.
 const r2Url = await storage.createDownloadUrl("media/" + UUID, "r2");
