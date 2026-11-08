@@ -2,36 +2,59 @@
 
 ## Architecture
 
-PostgreSQL remains the source of truth for FYNX users, media IDs, ownership, social visibility, Marketplace references and order evidence. Uploaded media bytes can be stored in a private Cloudflare R2 Standard bucket. Each message_media row keeps its existing ID and MIME/size metadata and records either:
+PostgreSQL remains the source of truth for FYNX users, media IDs, ownership, social visibility, Marketplace references and order evidence. Media bytes are stored separately when an object provider is deliberately enabled.
 
-- storage_provider = 'postgres': legacy data BYTEA remains the source.
-- storage_provider = 'r2': object_key points to the private R2 object and data is NULL.
+Each `message_media` row keeps its existing ID, MIME type and byte size and records one of:
 
-The API checks the same FYNX authorization rules before it issues a short-lived (120-second) signed GET URL. PostgreSQL media remains readable through the existing bounded cache. Old media IDs and client routes do not change.
+- `storage_provider = 'postgres'`: legacy `data BYTEA` is the source.
+- `storage_provider = 'neon'`: `object_key` points to a private Neon Object Storage object.
+- `storage_provider = 'r2'`: `object_key` points to a private Cloudflare R2 object.
 
-## Safe activation
+The default remains `postgres`. The API performs its existing FYNX authorization query before issuing a short-lived signed GET URL. Legacy PostgreSQL rows remain readable. The adapter can read Neon and R2 rows side-by-side, which is required for safe provider migration and rollback.
 
-The code defaults to PostgreSQL. Do not enable R2 until a private Standard bucket and a bucket-scoped S3 token have been created in the intended Cloudflare account.
+## First provider: Neon Object Storage
 
-Set these variables only in the Railway service environment; never commit credentials:
+The existing Neon project `patient-lab-43403708` is in `aws-us-east-2`, and the Neon API currently reports Object Storage enabled on `fynx-testing`, `live-recovery-20261101` and `production`. At the time of this investigation, none of those branches had a bucket. No bucket or credential has been created by this code change.
 
-- FYNX_MEDIA_STORAGE_PROVIDER=r2
-- FYNX_R2_ACCOUNT_ID
-- FYNX_R2_ACCESS_KEY_ID
-- FYNX_R2_SECRET_ACCESS_KEY
-- FYNX_R2_BUCKET
+Neon requires path-style S3 addressing. The adapter sets `forcePathStyle: true` and uses branch-specific endpoint, region and credentials. Neon credentials are branch-scoped, so the credential and endpoint must belong to the exact branch used by the backend service (or an ancestor branch in that branch's lineage).
 
-The R2 token should have object read/write/delete permission only for the FYNX media bucket. Keep the bucket private. The app does not need a public r2.dev URL or a public bucket.
+Set these variables only in the intended backend service environment; never commit credentials:
 
-Before activation, check Cloudflare's R2 subscription/checkout requirements and the account's current billing settings. The R2 free monthly allowance is not a promise that account activation has no billing step; usage above the free allowance is billed.
+- `FYNX_MEDIA_STORAGE_PROVIDER=neon`
+- `FYNX_NEON_S3_ENDPOINT` (branch-specific HTTPS S3 endpoint)
+- `FYNX_NEON_S3_REGION` (for example, `us-east-2`)
+- `FYNX_NEON_S3_ACCESS_KEY_ID` (Neon credential token ID)
+- `FYNX_NEON_S3_SECRET_ACCESS_KEY` (Neon S3 secret)
+- `FYNX_NEON_STORAGE_BUCKET` (private bucket name)
 
-## Rollout stages
+Create a Neon credential with only the required `storage:read` and `storage:write` scopes. Keep the bucket private. Store the secret in the backend's secret environment, never in Android or source control.
 
-1. Merge and deploy the adapter with FYNX_MEDIA_STORAGE_PROVIDER=postgres. This is a no-op for storage until configuration is deliberately enabled.
-2. Configure and smoke-test a private R2 bucket on the isolated Railway testing service. Verify one image, one video and one audio upload/read, signed URL expiry, privacy denials, and rollback cleanup.
-3. Enable R2 for new uploads on testing. Existing PostgreSQL records remain available through the postgres provider and keep the same media IDs.
-4. Migrate legacy files in small, resumable batches only after the live DATABASE_URL target is verified. Copy and checksum an object before updating its row; never delete the original BYTEA during the first migration.
-5. Repeat the complete read/write/privacy checks on the intended production environment before switching it.
-6. Consider direct-to-R2 signed PUT uploads as a later client upgrade. This foundation preserves the current base64 upload contract so existing app builds continue to work.
+## Optional later provider: Cloudflare R2
 
-No bucket is provisioned, no credentials are added, no existing media bytes are migrated or deleted, and no live provider switch is performed by this code change.
+R2 remains available as a later provider. The adapter retains the existing R2 environment contract:
+
+- `FYNX_MEDIA_STORAGE_PROVIDER=r2`
+- `FYNX_R2_ACCOUNT_ID`
+- `FYNX_R2_ACCESS_KEY_ID`
+- `FYNX_R2_SECRET_ACCESS_KEY`
+- `FYNX_R2_BUCKET`
+
+The provider abstraction keeps storage operations portable. R2 should only be activated after the account's billing and free allowance are checked.
+
+## Safe activation and migration
+
+1. Keep `FYNX_MEDIA_STORAGE_PROVIDER=postgres` until a private bucket, branch-scoped credential and isolated backend configuration have been verified.
+2. Configure the isolated testing backend only after confirming its exact Neon branch. Smoke-test image, video and audio uploads, reads, signed URL expiry, privacy denials and cleanup.
+3. Enable object storage for new testing uploads. Existing PostgreSQL rows retain their media IDs and continue to work.
+4. Migrate legacy files in small resumable batches only after verifying the exact database target. Copy and checksum an object before updating its row. Keep the original BYTEA until the new object has been read back and verified.
+5. Keep both provider credentials available during any provider transition. The reader uses each row's recorded provider, so a partially migrated dataset remains readable.
+6. Add automated migration thresholds only after measuring storage use, operation volume, failure rates and actual provider costs. Thresholds should alert and prepare a migration; paid provisioning and production cutover must remain approval-gated.
+7. Repeat the complete read/write/privacy/recovery checks on the intended production environment before switching it.
+
+## Safety boundaries
+
+- No bucket is provisioned, no credential is issued, no backend environment variable is changed and no deployment is triggered by this code change.
+- No existing media bytes are copied, changed or deleted.
+- Existing Android base64 upload contracts and media IDs remain unchanged.
+- Direct signed client uploads, resumable legacy migration, image variants, video transcoding and CDN delivery are separate later phases.
+- Never delete a source object or BYTEA payload until checksums, read-back, permissions and rollback have been verified.
