@@ -1585,7 +1585,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     FAILURES.append(prefix + ": Add link row did not open its URL dialog")
 
                 details_xml = camera_scroll_until_control(
-                    details_xml, ["More options"], f"{prefix}-camera-post-more-options-reveal"
+                    details_xml, ["More options"], f"{prefix}-camera-post-more-options-row"
                 )
                 more_options_xml = tap_control(
                     details_xml, ["More options"], f"{prefix}-camera-post-more-options-open",
