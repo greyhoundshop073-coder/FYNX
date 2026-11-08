@@ -21,9 +21,10 @@ The default remains `postgres`. The API performs its existing FYNX authorization
 
 ### Account inspection snapshot (2026-11-08)
 
-- Railway project `FYNX-Isolated-Testing` contains `fynx-backend-testing` in its `testing` environment. The service's latest recorded deployment is `FAILED` and the service is currently offline. The failure log reports `secret FYNX not found` during image build. This is a Railway build-configuration/secret issue, not a media-adapter test failure. Resolve it in Railway's service/build configuration without inventing or committing a secret value.
-- The inspected Railway service currently lists `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, Paystack and wallet settings, but no `FYNX_NEON_*` storage settings.
-- The existing Render `FYNX-AI-Backend` service is still listed on its Free plan and is not marked suspended by the account API. It remains a fallback only; account listing does not prove that it is healthy or configured for a production cutover.
+- One Railway `FYNX-Isolated-Testing` project contains `fynx-backend-testing` in its `testing` environment. Its latest recorded deployment is `FAILED` and the service is currently offline. The failure log reports `secret FYNX not found` during image build. This is a Railway build-configuration/secret issue, not a media-adapter test failure. Resolve it in Railway's service/build configuration without inventing or committing a secret value.
+- A second Railway project has the same display name but contains no services. It is an empty duplicate project shell, not a second active FYNX API. Leave it untouched until the owner decides whether to remove it.
+- The inspected Railway backend service currently lists `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, Paystack and wallet settings, but no `FYNX_NEON_*` storage settings.
+- The existing Render `FYNX-AI-Backend` service is listed on its Free plan, is not marked suspended, and its latest listed deployment is `live` (2026-11-01). It remains the fallback only; a listed live deployment does not prove its health endpoint, database connection, or full FYNX flows are ready for a cutover.
 - The inspected Neon branches report Object Storage enabled, but no bucket is provisioned on those branches. No bucket, credential, secret, environment variable, data migration or deployment was created by this PR.
 
 ## First object-storage provider: Neon Object Storage
