@@ -640,6 +640,7 @@ fun FynxCameraCapturePanel(
         val source = initialMediaUri ?: return@LaunchedEffect
         isPreparingInitialMedia = true
         initialMediaLoadFailed = false
+        recordedVideoDurationFallbackMs = 0L
         val result = withContext(Dispatchers.IO) {
             runCatching { copyCameraGalleryMediaToCache(context, source) }
         }
@@ -733,6 +734,7 @@ fun FynxCameraCapturePanel(
                     runCatching { copyCameraGalleryMediaToCache(context, selectedUri) }
                 }
                 result.onSuccess { (working, original, selectedType) ->
+                    recordedVideoDurationFallbackMs = 0L
                     pendingUri = Uri.fromFile(working)
                     pendingOriginalUri = Uri.fromFile(original)
                     pendingType = if (selectedType == "video" && videoNoteMode) "video_note" else selectedType
@@ -881,6 +883,7 @@ fun FynxCameraCapturePanel(
     }
     fun retake() {
         // Force a clean CameraX bind instead of depending on a PreviewView detach/attach race.
+        recordedVideoDurationFallbackMs = 0L
         cameraReady = false
         cameraProvider?.unbindAll()
         imageCapture = null

@@ -421,6 +421,10 @@ checks.extend([
      and "resolveFynxCameraVideoDurationMs" in overlay
      and "recordedVideoDurationFallbackMs" in camera
      and "videoTextTimingFallsBackToRecordedDurationWhenMetadataIsMissing" in overlay_test),
+    ("Video recording duration fallback resets on a different media item, Gallery selection and Retake",
+     "recordedVideoDurationFallbackMs = 0L" in camera
+     and "recordedVideoDurationFallbackMs = 0L" in camera.split("fun retake()", 1)[1].split("fun rotatePhoto()", 1)[0]
+     and "recordedVideoDurationFallbackMs = 0L" in camera.split("result.onSuccess { (working, original, selectedType) ->", 1)[1].split("}.onFailure", 1)[0]),
     ("Retake explicitly releases and rebinds CameraX and gates the shutter on ready use cases",
      "Force a clean CameraX bind" in camera and "cameraReady = false" in camera
      and "galleryRebindRequest += 1" in camera
