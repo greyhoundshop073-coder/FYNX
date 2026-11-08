@@ -763,8 +763,9 @@ app.post("/api/messages", auth, async (req, res) => {
     const clientMessageId = typeof req.body?.clientMessageId === 'string' ? req.body.clientMessageId.trim().toLowerCase() : null;
     if (clientMessageId != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(clientMessageId)) return res.status(400).json({ error: "invalid client message id" });
     if (!/^(text|location|contact|poll|sticker|gif)$/.test(messageType)) return res.status(400).json({ error: 'invalid message type' });
-    if (messageType !== 'text' && !messagePayload) return res.status(400).json({ error: 'message payload is required' });
-    if (!recipientUsername || text.length > 4000 || (!text && !Number.isInteger(mediaId))) return res.status(400).json({ error: "valid recipientUsername and message content are required" });
+    if (messageType !== 'text' && (!messagePayload || Object.keys(messagePayload).length === 0)) return res.status(400).json({ error: 'message payload is required' });
+    if (!recipientUsername || text.length > 4000 || (messageType === 'text' && !text && !Number.isInteger(mediaId))) return res.status(400).json({ error: "valid recipientUsername and message content are required" });
+    if ((messageType === 'sticker' || messageType === 'gif') && !Number.isInteger(mediaId)) return res.status(400).json({ error: "sticker and GIF messages require uploaded media" });
     if (mediaId != null && (!Number.isInteger(mediaId) || mediaId < 1)) return res.status(400).json({ error: "invalid media id" });
     if (mediaId != null && (!mediaType || !/^(image|video|video_note|audio|document)$/.test(mediaType))) return res.status(400).json({ error: "invalid media type" });
     if (!Number.isFinite(voiceDurationMs) || voiceDurationMs < 0 || voiceDurationMs > 120000) return res.status(400).json({ error: "invalid voice duration" });
