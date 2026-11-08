@@ -2623,10 +2623,15 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                             discovery_expected_markers = [
                                 "Like video", "Unlike video", "Open comments", "Share video"
                             ]
+                            # Use the same bounds-aware control resolver used by the
+                            # later action audit. UIAutomator may expose a Compose label
+                            # on a clickable wrapper/descendant; the strict raw-label
+                            # helper can miss a control that is demonstrably present
+                            # and tappable in the captured viewer hierarchy.
                             has_all_actions = (
-                                all(has_accessibility_label(candidate, [marker]) for marker in discovery_expected_markers)
-                                and has_accessibility_label(candidate, ["Unmute Discovery video", "Mute Discovery video"])
-                                and has_accessibility_label(candidate, ["Pause Discovery video", "Play Discovery video"])
+                                all(find_control(candidate, [marker]) for marker in discovery_expected_markers)
+                                and find_control(candidate, ["Unmute Discovery video", "Mute Discovery video"])
+                                and find_control(candidate, ["Pause Discovery video", "Play Discovery video"])
                             )
                             if has_native_video and has_all_actions:
                                 # VideoView and these controls are only exposed after
