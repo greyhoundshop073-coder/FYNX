@@ -5,14 +5,29 @@ import org.json.JSONObject
 
 /** Connects the existing FYNX auth surface to the real server identity system. */
 object FynxRemoteAuthClient {
-    data class ResultData(val username: String, val displayName: String, val phone: String, val token: String)
+    data class ResultData(
+        val username: String,
+        val displayName: String,
+        val phone: String,
+        val token: String,
+        val email: String = "",
+        val emailVerificationSent: Boolean = false
+    )
 
-    suspend fun register(context: Context, displayName: String, username: String, phone: String, password: String): Result<ResultData> =
+    suspend fun register(
+        context: Context,
+        displayName: String,
+        username: String,
+        phone: String,
+        password: String,
+        email: String = ""
+    ): Result<ResultData> =
         call(context, "/api/auth/register", JSONObject().apply {
             put("displayName", displayName)
             put("username", username)
             put("phone", phone)
             put("password", password)
+            if (email.isNotBlank()) put("email", email.trim())
         })
 
     suspend fun login(context: Context, username: String, password: String): Result<ResultData> =
@@ -20,6 +35,44 @@ object FynxRemoteAuthClient {
             put("username", username)
             put("password", password)
         })
+
+    suspend fun requestEmailVerification(context: Context, email: String): Result<Boolean> =
+        FynxBackendClient.postJson(
+            context,
+            "/api/auth/email/verification/resend",
+            JSONObject().put("email", email.trim()).toString()
+        ).mapCatching { raw -> JSONObject(raw).optBoolean("deliveryConfigured", false) }
+
+    suspend fun verifyEmail(context: Context, email: String, code: String): Result<Unit> =
+        FynxBackendClient.postJson(
+            context,
+            "/api/auth/email/verify",
+            JSONObject().put("email", email.trim()).put("code", code.trim()).toString()
+        ).mapCatching { raw ->
+            require(JSONObject(raw).optBoolean("emailVerified")) { "FYNX email verification was not confirmed." }
+            Unit
+        }
+
+    suspend fun requestPasswordReset(context: Context, email: String): Result<Boolean> =
+        FynxBackendClient.postJson(
+            context,
+            "/api/auth/password-reset/request",
+            JSONObject().put("email", email.trim()).toString()
+        ).mapCatching { raw -> JSONObject(raw).optBoolean("deliveryConfigured", false) }
+
+    suspend fun confirmPasswordReset(
+        context: Context,
+        email: String,
+        code: String,
+        newPassword: String
+    ): Result<Unit> =
+        FynxBackendClient.postJson(
+            context,
+            "/api/auth/password-reset/confirm",
+            JSONObject().put("email", email.trim())
+                .put("code", code.trim())
+                .put("newPassword", newPassword).toString()
+        ).mapCatching { Unit }
 
     /**
      * Connects the account already saved on this device without signing the user
@@ -62,7 +115,9 @@ object FynxRemoteAuthClient {
                 username = user.getString("username"),
                 displayName = user.optString("display_name"),
                 phone = user.optString("phone"),
-                token = token
+                token = token,
+                email = user.optString("email"),
+                emailVerificationSent = json.optBoolean("emailVerificationSent", false)
             )
         }
 }

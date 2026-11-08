@@ -977,7 +977,8 @@ wss.on("connection", async (socket, req) => {
   try {
     const url = new URL(req.url || "/realtime", `http://${req.headers.host || "localhost"}`);
     const token = url.searchParams.get("token") || "";
-    if (!token || !JWT_SECRET || !pool) return socket.close(1008, "authentication required");
+    if (!token || !JWT_SECRET) return socket.close(1008, "authentication required");
+    if (!pool) return socket.close(1008, "authentication required");
     const user = jwt.verify(token, JWT_SECRET);
     const activeSession = await pool.query("SELECT session_version FROM users WHERE id = $1", [user.sub]);
     if (!activeSession.rows?.[0] || Number(activeSession.rows[0].session_version || 0) !== Number(user.sv || 0)) {

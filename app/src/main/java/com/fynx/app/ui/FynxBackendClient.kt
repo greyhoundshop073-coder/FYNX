@@ -173,7 +173,15 @@ object FynxBackendClient {
     }
 
     private suspend fun awaitValidatedNetwork(context: Context) { if (hasNetwork(context)) return; var waited = 0L; while (waited < NETWORK_VALIDATION_WAIT_MS) { delay(NETWORK_VALIDATION_POLL_MS); waited += NETWORK_VALIDATION_POLL_MS; if (hasNetwork(context)) return }; throw FynxNetworkUnavailableException() }
-    private fun isPublicAuthPath(path: String): Boolean = path == "/health" || path == "/ready" || path == "/api/auth/login" || path == "/api/auth/register"
+    private fun isPublicAuthPath(path: String): Boolean =
+        path == "/health" ||
+            path == "/ready" ||
+            path == "/api/auth/login" ||
+            path == "/api/auth/register" ||
+            path == "/api/auth/email/verify" ||
+            path == "/api/auth/email/verification/resend" ||
+            path == "/api/auth/password-reset/request" ||
+            path == "/api/auth/password-reset/confirm"
     private suspend fun executeStreamingRequest(
         context: Context,
         root: String,
