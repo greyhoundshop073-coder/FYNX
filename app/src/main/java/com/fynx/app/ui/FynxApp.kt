@@ -475,23 +475,36 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                     connectingDotCount = connectingDotCount % 3 + 1
                                 }
                             }
+                            val connectionStatusText = if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
+                                "Waiting for network..."
+                            } else {
+                                "Connecting" + ".".repeat(connectingDotCount)
+                            }
                             Surface(
                                 shape = RoundedCornerShape(50),
                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
                             ) {
-                                Text(
-                                    if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
-                                        "Waiting for network..."
-                                    } else {
-                                        "Connecting" + ".".repeat(connectingDotCount)
-                                    },
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
+                                if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 360) {
+                                    // The header row has no room for the words on very narrow phones, so show a
+                                    // small spinner and keep the full status as its accessibility name.
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                                            .size(18.dp)
+                                            .semantics { contentDescription = connectionStatusText },
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(
+                                        connectionStatusText,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }
