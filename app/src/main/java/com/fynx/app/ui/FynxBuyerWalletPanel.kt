@@ -39,6 +39,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -291,6 +292,11 @@ fun FynxBuyerWalletPanel() {
     }
 
     if (activeAction != "HOME") {
+        val goBackInWallet = {
+            activeAction = if (activeAction == "TRANSFER" || activeAction == "CARD" || activeAction == "USSD") "ADD" else "HOME"
+            refreshVersion += 1
+        }
+        BackHandler(onBack = goBackInWallet)
         FynxWalletActionPanel(
             screen = activeAction,
             testMode = wallet?.testMode == true,
@@ -301,10 +307,7 @@ fun FynxBuyerWalletPanel() {
             canFundByBankTransfer = wallet?.canFundByBankTransfer == true,
             canFundByCard = wallet?.canFundByCard == true,
             canFundByUssd = wallet?.canFundByUssd == true,
-            onBack = {
-                activeAction = if (activeAction == "TRANSFER" || activeAction == "CARD" || activeAction == "USSD") "ADD" else "HOME"
-                refreshVersion += 1
-            },
+            onBack = goBackInWallet,
             onNavigate = { activeAction = it },
             onFundingVerified = { refreshVersion += 1 }
         )
@@ -312,7 +315,7 @@ fun FynxBuyerWalletPanel() {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -386,6 +389,7 @@ fun FynxBuyerWalletPanel() {
                             enabled = true,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = Color.White,
@@ -393,14 +397,15 @@ fun FynxBuyerWalletPanel() {
                             )
                         ) {
                             Icon(Icons.Default.ArrowDownward, contentDescription = null)
-                            Spacer(Modifier.size(6.dp))
-                            Text("Add money", fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.size(4.dp))
+                            Text("Add money", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                         }
                         OutlinedButton(
                             onClick = { activeAction = "WITHDRAW" },
                             enabled = true,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = Color.White,
@@ -408,8 +413,8 @@ fun FynxBuyerWalletPanel() {
                             )
                         ) {
                             Icon(Icons.Default.ArrowUpward, contentDescription = null)
-                            Spacer(Modifier.size(6.dp))
-                            Text("Withdraw", fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.size(4.dp))
+                            Text("Withdraw", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                         }
                     }
                 }

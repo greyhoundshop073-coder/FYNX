@@ -13,6 +13,18 @@ adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.tx
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
+# Optional display for the screenshots only, applied after instrumentation so those tests keep their baseline.
+case "${FYNX_DISPLAY_PROFILE:-default}" in
+  small_phone) adb shell wm size 720x1280; adb shell wm density 360 ;;
+  tablet) adb shell wm size 1600x2560; adb shell wm density 320 ;;
+  large_font) adb shell settings put system font_scale 1.5 ;;
+  landscape) adb shell settings put system accelerometer_rotation 0; adb shell settings put system user_rotation 1 ;;
+esac
+echo "display_profile=${FYNX_DISPLAY_PROFILE:-default}" > fynx-runtime-screenshots/display-profile.txt
+adb shell wm size >> fynx-runtime-screenshots/display-profile.txt 2>&1
+adb shell wm density >> fynx-runtime-screenshots/display-profile.txt 2>&1
+adb shell settings get system font_scale >> fynx-runtime-screenshots/display-profile.txt 2>&1
+
 if [ "${FYNX_HOME_FEED_VISUALS_ONLY:-0}" = "1" ]; then
   # Home Feed screenshot certification is independent of Railway. Use server
   # credentials only when the test backend is actually healthy; otherwise use
