@@ -150,6 +150,8 @@ async function initDatabase() {
     ALTER TABLE message_media ALTER COLUMN data DROP NOT NULL;
     ALTER TABLE message_media ADD COLUMN IF NOT EXISTS storage_provider TEXT NOT NULL DEFAULT 'postgres';
     ALTER TABLE message_media ADD COLUMN IF NOT EXISTS object_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS message_media_object_key_unique
+      ON message_media(storage_provider, object_key) WHERE object_key IS NOT NULL;
     CREATE INDEX IF NOT EXISTS message_media_storage_provider_idx ON message_media(storage_provider, created_at DESC);
     CREATE INDEX IF NOT EXISTS message_media_owner_idx ON message_media (owner_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
