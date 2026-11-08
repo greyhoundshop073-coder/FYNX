@@ -425,7 +425,7 @@ internal fun CameraTextOverlayTools(
                     Button(
                         onClick = onDone,
                         enabled = selected != null || overlayCount == 0,
-                        modifier = Modifier.heightIn(min = 32.dp),
+                        modifier = Modifier.heightIn(min = 32.dp).semantics { contentDescription = "Finish text editing" },
                         contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp)
                     ) { Text("Done", style = MaterialTheme.typography.labelSmall) }
                 }
@@ -553,7 +553,11 @@ internal fun CameraTextOverlayTools(
                     if (selected != null) OutlinedButton(onClick = onDelete) { Text("Delete") }
                 }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = onDone, enabled = selected != null || overlayCount == 0) { Text("Done") }
+                Button(
+                    onClick = onDone,
+                    enabled = selected != null || overlayCount == 0,
+                    modifier = Modifier.semantics { contentDescription = "Finish text editing" }
+                ) { Text("Done") }
             }
         }
     }
