@@ -907,7 +907,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const catalogueId = Number(req.params.id);
       if (!Number.isSafeInteger(catalogueId) || catalogueId < 1) return res.status(400).json({ error: 'invalid music track' });
       const result = await pool.query(
-        `SELECT mm.mime_type,mm.storage_provider,mm.object_key
+        `SELECT mm.id AS media_id,mm.mime_type,mm.storage_provider,mm.object_key
            FROM fynx_music_catalogue c
            JOIN message_media mm ON mm.id=c.media_id
           WHERE c.id=$1 AND c.active=TRUE`,
@@ -917,7 +917,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
         return res.status(404).json({ error: 'music track not found' });
       }
       if (await redirectStoredMedia(res, result.rows[0], { cacheControl: 'private, max-age=300' })) return;
-      const payload = await getCachedMediaPayload(pool, catalogueId);
+      const payload = await getCachedMediaPayload(pool, result.rows[0].media_id);
       if (!payload) return res.status(404).json({ error: 'music track not found' });
       res.set('Cache-Control', 'private, max-age=300');
       res.type(payload.mimeType);
