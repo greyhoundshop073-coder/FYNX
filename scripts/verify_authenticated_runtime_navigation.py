@@ -245,6 +245,19 @@ def _find_control_node(root, wanted:list[str], *, exact_only: bool = False):
             return node
     return candidates[0]
 
+def has_accessibility_label(xml_text: str, labels: list[str]) -> bool:
+    """Read exact visible text/content descriptions without promoting Compose click targets."""
+    wanted = {label.strip().casefold() for label in labels}
+    return any(
+        node.attrib.get("visible-to-user", "true").lower() != "false"
+        and (
+            (node.attrib.get("content-desc") or "").strip().casefold() in wanted
+            or (node.attrib.get("text") or "").strip().casefold() in wanted
+        )
+        for node in nodes(xml_text)
+    )
+
+
 def find_control(xml_text:str, labels:list[str], *, exact_only: bool = False):
     if not xml_text: return None
     wanted=[x.lower() for x in labels]
@@ -2569,9 +2582,9 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                                 "Like video", "Unlike video", "Open comments", "Share video"
                             ]
                             has_all_actions = (
-                                all(find_control(candidate, [marker]) for marker in discovery_expected_markers)
-                                and find_control(candidate, ["Unmute Discovery video", "Mute Discovery video"])
-                                and find_control(candidate, ["Pause Discovery video", "Play Discovery video"])
+                                all(has_accessibility_label(candidate, [marker]) for marker in discovery_expected_markers)
+                                and has_accessibility_label(candidate, ["Unmute Discovery video", "Mute Discovery video"])
+                                and has_accessibility_label(candidate, ["Pause Discovery video", "Play Discovery video"])
                             )
                             if has_native_video and has_all_actions:
                                 # VideoView and these controls are only exposed after
