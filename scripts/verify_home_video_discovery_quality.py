@@ -158,7 +158,9 @@ checks = [
     (
         "runtime certification opens a real Discovery clip and verifies the action rail",
         '"Open Discovery video"' in navigation
-        and '"Like video", "Unlike video", "Open comments", "Share video"' in navigation
+        and 'find_control(candidate, ["Like video", "Unlike video"])' in navigation
+        and 'find_control(candidate, ["Open comments"])' in navigation
+        and 'find_control(candidate, ["Share video"])' in navigation
         and '"authenticated-discovery-video-viewer.png"' in navigation,
     ),
     (
