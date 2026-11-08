@@ -94,7 +94,7 @@ const r2Url = await storage.createDownloadUrl("media/" + UUID, "r2");
 assert.equal(r2Url, "https://signed.example/fynx-media");
 await storage.getMediaObjectBytes("media/" + UUID, "r2");
 await storage.deleteMediaObject("media/" + UUID, "r2");
-assert.deepEqual(optionsSeen[1], {
+assert.deepEqual(optionsSeen[2], {
   region: "auto",
   endpoint: "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com",
   credentials: { accessKeyId: common.FYNX_R2_ACCESS_KEY_ID, secretAccessKey: common.FYNX_R2_SECRET_ACCESS_KEY }
@@ -112,8 +112,8 @@ assert.deepEqual(
 );
 assert.equal(calls.at(-1).constructor.name, "PutObjectCommand");
 assert.equal(calls.at(-1).input.Bucket, "fynx-r2-media");
-assert.equal(optionsSeen[2].region, "auto");
-assert.equal(optionsSeen[2].forcePathStyle, undefined);
+assert.equal(optionsSeen[3].region, "auto");
+assert.equal(optionsSeen[3].forcePathStyle, undefined);
 
 await assert.rejects(storage.createDownloadUrl("../private-file"), /Invalid FYNX media object key/);
 await assert.rejects(storage.createDownloadUrl("media/" + UUID, "neon", 301), /expiry must be between 30 and 300 seconds/);
