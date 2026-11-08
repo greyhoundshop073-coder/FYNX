@@ -856,7 +856,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             # countdown. A short post-tap window distinguishes a real state change
             # from a timer that is still running.
             cancelled_xml = tap_control(
-                countdown_xml, ["Cancel timer"], f"{prefix}-camera-timer-cancel",
+                countdown_xml, ["Cancel camera capture timer"], f"{prefix}-camera-timer-cancel",
                 ["Take photo"], wait_attempts=2, post_wait_attempts=4
             )
             if cancelled_xml:
