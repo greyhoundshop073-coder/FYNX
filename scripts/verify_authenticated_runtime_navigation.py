@@ -126,12 +126,35 @@ def screenshot(name:str):
         subprocess.run(["adb","exec-out","screencap","-p"],stdout=out,stderr=subprocess.STDOUT,check=False)
 
 def dump_ui(name:str)->str:
-    dump=run("adb","shell","uiautomator","dump","/sdcard/fynx-authenticated.xml")
-    if dump.returncode != 0: return ""
-    raw=subprocess.run(["adb","exec-out","cat","/sdcard/fynx-authenticated.xml"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=False).stdout
+    """Read the live accessibility tree with bounded retries for transient emulator/Binder failures."""
+    dump = None
+    for attempt in range(3):
+        dump = run("adb", "shell", "uiautomator", "dump", "/sdcard/fynx-authenticated.xml", timeout=45)
+        if dump.returncode == 0:
+            break
+        if attempt < 2:
+            time.sleep(0.4 * (attempt + 1))
+    if dump is None or dump.returncode != 0:
+        return ""
+    raw = b""
+    for attempt in range(2):
+        try:
+            raw = subprocess.run(
+                ["adb", "exec-out", "cat", "/sdcard/fynx-authenticated.xml"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=20,
+                check=False
+            ).stdout
+        except subprocess.TimeoutExpired:
+            raw = b""
+        if raw.startswith(b"<?xml"):
+            break
+        if attempt == 0:
+            time.sleep(0.25)
     if raw.startswith(b"<?xml"):
         (ROOT/name).write_bytes(raw)
-        return raw.decode("utf-8","replace")
+        return raw.decode("utf-8", "replace")
     return ""
 
 def nodes(xml_text:str):
