@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
 import { mediaStorage } from "./mediaStorage.js";
+import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
@@ -535,7 +536,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
         )`
       : "";
     let result = await pool.query(`
-      SELECT mm.mime_type, mm.data
+      SELECT mm.mime_type
       FROM message_media mm
       WHERE mm.id = $1
         AND (
@@ -624,7 +625,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
       // Handover photos are separate from message/profile/status media. Only the
       // buyer or seller on the order that references the photo may retrieve it.
       try {
-        result = await pool.query(`SELECT mm.mime_type, mm.data
+        result = await pool.query(`SELECT mm.mime_type
           FROM message_media mm
           JOIN marketplace_delivery_evidence e
             ON e.evidence_type = 'PHOTO_REFERENCE' AND e.value = CAST(mm.id AS TEXT)
@@ -641,7 +642,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
       try {
         const evidenceTable = await pool.query("SELECT to_regclass('public.marketplace_order_evidence') AS table_name");
         if (evidenceTable.rows[0]?.table_name) {
-          result = await pool.query(`SELECT mm.mime_type, mm.data
+          result = await pool.query(`SELECT mm.mime_type
             FROM message_media mm
             WHERE mm.id = $1
               AND EXISTS (
@@ -660,9 +661,11 @@ app.get("/api/media/:id", auth, async (req, res) => {
       }
     }
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
-    res.set("Cache-Control", privateEvidenceMedia ? "private, no-store" : "private, max-age=3600");
-    res.type(result.rows[0].mime_type);
-    return res.send(result.rows[0].data);
+    const payload = await getCachedMediaPayload(pool, mediaId);
+    if (!payload) return res.status(404).json({ error: "media not found" });
+    res.set("Cache-Control", privateEvidenceMedia ? "private, no-store" : "private, max-age=300");
+    res.type(payload.mimeType);
+    return res.send(payload.data);
   } catch (error) { console.error("media fetch", error); return res.status(500).json({ error: "media fetch failed" }); }
 });
 
