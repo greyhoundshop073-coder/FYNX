@@ -2112,25 +2112,43 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
     return x, int(height * 0.50), int(height * 0.70)
 
 
+def emulator_dimensions(xml_text: str = "") -> tuple[int, int] | None:
+    """Read the emulator size, falling back to the live hierarchy after transient adb failures."""
+    size = run("adb", "shell", "wm", "size", timeout=8).stdout or ""
+    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
+    if match:
+        return tuple(map(int, match.groups()))
+    if xml_text:
+        try:
+            root = ET.fromstring(xml_text)
+            bounds = root.find(".//node")
+            raw = bounds.attrib.get("bounds", "") if bounds is not None else ""
+            fallback = re.fullmatch(r"\[0,0\]\[(\d+),(\d+)\]", raw)
+            if fallback:
+                return tuple(map(int, fallback.groups()))
+        except ET.ParseError:
+            pass
+    return None
+
+
 def scroll_home_action_row_into_safe_viewport(xml_text: str, name: str, action_finder, *, max_swipes: int = 6) -> str:
     """Scroll a Home post's action row above the floating bottom-nav hit area before tapping.
 
     The floating Home toolbar can cover a post action row while UIAutomator still
     reports the covered controls as visible. Use the existing non-clickable caption
     gesture (never the media surface or an action button) and verify the target's
-    actual clickable bounds after each swipe.
+    actual tap point remains above the measured floating navigation overlay.
     """
-    size = run("adb", "shell", "wm", "size").stdout or ""
-    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
-    if not match:
-        FAILURES.append(f"{name}: could not read emulator dimensions before tapping the Home action row.")
+    dimensions = emulator_dimensions(xml_text)
+    if not dimensions:
+        FAILURES.append(f"{name}: could not read emulator dimensions from adb or the live UI hierarchy.")
         return ""
 
-    width, height = map(int, match.groups())
-    # UIAutomator may omit the floating Compose navigation overlay entirely.
-    # Reserve its lower screen region rather than trusting a covered node's
-    # visible-to-user flag as proof that its center is actually tappable.
-    safe_bottom = int(height * 0.78)
+    width, height = dimensions
+    # The floating toolbar begins at about 87% of this Pixel viewport. Keep a
+    # 2% clearance, but allow the card centre to be tapped when its lower edge
+    # alone extends behind the overlay.
+    safe_bottom = int(height * 0.85)
     current = xml_text
     scrolled = False
 
@@ -2213,12 +2231,11 @@ def _dismiss_home_media_viewer(xml_text: str, prefix: str, timeout: float = 12.0
 
 def scroll_home_feed_page(index: int, home_xml: str) -> str:
     """Scroll from a safe text region; dismiss an accidentally opened viewer before retrying."""
-    size = run("adb", "shell", "wm", "size").stdout or ""
-    match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size)
-    if not match:
-        FAILURES.append("Home feed scan could not read emulator dimensions; refusing an unverified swipe.")
+    dimensions = emulator_dimensions(home_xml)
+    if not dimensions:
+        FAILURES.append("Home feed scan could not read emulator dimensions from adb or the live UI hierarchy; refusing an unverified swipe.")
         return ""
-    width, height = (int(match.group(1)), int(match.group(2)))
+    width, height = dimensions
     current = home_xml
     fixture_scan = HOME_FEED_FIXTURES_SEEDED and "CI TEST FIXTURE" in current
     max_attempts = 5 if fixture_scan else 2
