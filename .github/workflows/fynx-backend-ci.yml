@@ -58,6 +58,9 @@ jobs:
           cache-dependency-path: backend/package.json
       - name: Install backend dependencies
         run: npm install --no-audit --no-fund
+      - name: Verify provider-portable media storage adapters and cache
+        working-directory: backend
+        run: node test-media-storage.mjs && node verify-media-object-storage.mjs && node verify-media-payload-cache.mjs
       - name: Check backend JavaScript
         run: |
           node --check server.js
