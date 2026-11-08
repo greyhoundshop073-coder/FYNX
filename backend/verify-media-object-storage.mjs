@@ -26,7 +26,7 @@ assert.match(server, /message_media_object_key_unique/);
 const upload = route(server, 'app.post("/api/media"', "\n\nconst statusSchema");
 assert.match(upload, /await mediaStorage\.putMediaObject/);
 assert.match(upload, /storage_provider,\s*object_key/);
-assert.match(upload, /await mediaStorage\.deleteMediaObject/);
+assert.match(upload, /await mediaStorage\.deleteMediaObject/);\nassert.match(upload, /stored\\.storageProvider === "postgres" \\? data : null/);
 assert.match(upload, /MAX_MEDIA_BYTES/);
 
 const primary = route(server, 'app.get("/api/media/:id"', "\nfunction messageProjection()");
@@ -37,7 +37,7 @@ assert.match(primary, /redirectStoredMedia/);
 assert.match(primary, /getCachedMediaPayload/);
 
 assert.match(cache, /SELECT mime_type, data, storage_provider, object_key FROM message_media/);
-assert.match(cache, /mediaStorage\.getMediaObjectBytes/);
+assert.match(cache, /mediaStorage\\.getMediaObjectBytes\\(row\\.object_key, storageProvider\\)/);\nassert.match(cache, /storageProvider !== "neon"/);
 assert.match(cache, /storage_provider/);
 
 assert.match(social, /import \{ redirectStoredMedia \} from "\.\/mediaStorage\.js";/);
@@ -53,7 +53,7 @@ assert.ok(marketplaceRoute.indexOf("if (!result.rows[0])") < marketplaceRoute.in
 assert.match(marketplaceRoute, /getCachedMediaPayload/);
 
 assert.match(bootstrap, /redirectStoredMedia/);
-assert.match(bootstrap, /mm\.storage_provider, mm\.object_key/);
+assert.match(bootstrap, /mm\.storage_provider, mm\.object_key/);\nconst storage = await read("./mediaStorage.js");\nassert.match(storage, /FYNX_NEON_S3_ENDPOINT/);\nassert.match(storage, /forcePathStyle: true/);\nassert.match(storage, /sourceProvider/);
 assert.match(pkg, /test-media-storage\.mjs/);
 assert.match(pkg, /verify-media-object-storage\.mjs/);
 
