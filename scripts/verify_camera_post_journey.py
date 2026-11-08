@@ -10,6 +10,7 @@ refresh = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt").read
 backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+storage = (ROOT / "scripts/configure_android_emulator_storage.sh").read_text(encoding="utf-8")
 status_hub = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt").read_text(encoding="utf-8")
 status_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt").read_text(encoding="utf-8")
 video_effects = (ROOT / "app/src/main/java/com/fynx/app/ui/CameraVideoEffects.kt").read_text(encoding="utf-8")
@@ -198,10 +199,11 @@ checks = [
      and "def verify_camera_system_bar_contrast(" in runtime
      and "mean_luminance > 52" in runtime
      and 'verify_camera_system_bar_contrast(f"{prefix}-camera-live-preview.png"' in runtime),
-    ("API 35 emulator launches with the documented environment camera source",
+    ("API 35 emulator launches with the documented environment camera source and bounded AVD storage",
      "-camera-back environment -camera-front none" in workflow
-     and "pre-emulator-launch-script:" not in workflow
-     and "avd_config" not in workflow),
+     and "pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh" in workflow
+     and "disk.dataPartition.size=2G" in storage
+     and "hw.ramSize=2048" in storage),
     ("Home camera opens the real camera panel", "showCamera = true" in home and "FynxCameraCapturePanel(" in home),
     ("Runtime UI hierarchies preserve XML terminators for live/photo/video editor captures",
      runtime.count("write_text(camera_xml + chr(10)") >= 1
