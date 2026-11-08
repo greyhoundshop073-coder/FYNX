@@ -1725,14 +1725,12 @@ fun FynxCameraCapturePanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge)
+                    // Keep the native Button click semantics intact. The extra outer
+                    // mergeDescendants semantics wrapper hid the click action from
+                    // UIAutomator and assistive technology on API 35.
                     Button(
                         onClick = ::cancelCaptureTimer,
-                        // Merge the label into the Button's own clickable semantics node.
-                        // A separate non-clickable description node caused automated taps
-                        // and assistive-technology activation to miss the countdown cancel.
-                        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
-                            contentDescription = "Cancel timer"
-                        }
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Cancel timer")
                     }
