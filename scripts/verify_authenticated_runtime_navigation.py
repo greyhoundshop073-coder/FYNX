@@ -370,10 +370,11 @@ def dismiss_ime_if_visible(name: str) -> str:
     return dump_ui(name)
 
 
-def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None, *, exact_only: bool = False)->str:
+def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None, *, exact_only: bool = False, wait_attempts: int = 8)->str:
     # Retry the same real accessibility selector; never use guessed coordinates.
+    # Individual camera controls may use shorter waits for transient overlay dismissal.
     control=find_control(xml_text,labels,exact_only=exact_only)
-    for _ in range(8):
+    for _ in range(max(0, wait_attempts)):
         if control:
             break
         time.sleep(.5)
