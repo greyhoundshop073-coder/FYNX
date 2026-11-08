@@ -2145,10 +2145,35 @@ def scroll_home_action_row_into_safe_viewport(xml_text: str, name: str, action_f
         return ""
 
     width, height = dimensions
-    # The floating toolbar begins at about 87% of this Pixel viewport. Keep a
-    # 2% clearance, but allow the card centre to be tapped when its lower edge
-    # alone extends behind the overlay.
-    safe_bottom = int(height * 0.85)
+    # Use the actual LazyColumn viewport, not just the physical screen. A card
+    # can be above the floating toolbar yet still be clipped by the feed viewport.
+    # The Home nav overlay is an additional independent obstruction.
+    try:
+        hierarchy = ET.fromstring(xml_text)
+    except ET.ParseError:
+        hierarchy = None
+    viewport_bottoms = []
+    nav_tops = []
+    if hierarchy is not None:
+        for node in hierarchy.iter("node"):
+            bounds = node.attrib.get("bounds", "")
+            parsed = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+            if not parsed:
+                continue
+            left, top, right, bottom = map(int, parsed.groups())
+            description = (node.attrib.get("content-desc") or "").strip().casefold()
+            if node.attrib.get("scrollable", "false").lower() == "true" and right - left >= width * 0.70:
+                viewport_bottoms.append(bottom)
+            if description == "home" and top >= int(height * 0.70):
+                nav_tops.append(top)
+    safe_limits = [int(height * 0.85)]
+    if viewport_bottoms:
+        safe_limits.append(min(viewport_bottoms) - 8)
+    else:
+        safe_limits.append(int(height * 0.78))
+    if nav_tops:
+        safe_limits.append(min(nav_tops) - 8)
+    safe_bottom = min(safe_limits)
     current = xml_text
     scrolled = False
 
