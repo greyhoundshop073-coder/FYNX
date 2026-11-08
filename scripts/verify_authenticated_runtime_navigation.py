@@ -128,12 +128,15 @@ def screenshot(name:str):
 def dump_ui(name:str)->str:
     """Read the live accessibility tree with bounded retries for transient emulator/Binder failures."""
     dump = None
-    for attempt in range(3):
-        dump = run("adb", "shell", "uiautomator", "dump", "/sdcard/fynx-authenticated.xml", timeout=45)
+    # UIAutomator can stall for a long time on the emulator when Compose is
+    # animating or Binder is under pressure. Keep each probe bounded so one
+    # inaccessible hierarchy cannot multiply into minutes across feed scans.
+    for attempt in range(2):
+        dump = run("adb", "shell", "uiautomator", "dump", "/sdcard/fynx-authenticated.xml", timeout=12)
         if dump.returncode == 0:
             break
-        if attempt < 2:
-            time.sleep(0.4 * (attempt + 1))
+        if attempt == 0:
+            time.sleep(0.5)
     if dump is None or dump.returncode != 0:
         return ""
     raw = b""
