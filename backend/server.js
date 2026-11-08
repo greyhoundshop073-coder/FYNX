@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
+import { mediaStorage } from "./mediaStorage.js";
 import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
@@ -145,6 +146,10 @@ async function initDatabase() {
       byte_size INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE message_media ALTER COLUMN data DROP NOT NULL;
+    ALTER TABLE message_media ADD COLUMN IF NOT EXISTS storage_provider TEXT NOT NULL DEFAULT 'postgres';
+    ALTER TABLE message_media ADD COLUMN IF NOT EXISTS object_key TEXT;
+    CREATE INDEX IF NOT EXISTS message_media_storage_provider_idx ON message_media(storage_provider, created_at DESC);
     CREATE INDEX IF NOT EXISTS message_media_owner_idx ON message_media (owner_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_recipient_idx ON messages (recipient_id, created_at DESC);
@@ -406,9 +411,20 @@ app.post("/api/media", auth, async (req, res) => {
     if (!encoded || encoded.length > Math.ceil(MAX_MEDIA_BYTES * 1.38)) return res.status(413).json({ error: "media is too large" });
     const data = Buffer.from(encoded, "base64");
     if (!data.length || data.length > MAX_MEDIA_BYTES) return res.status(413).json({ error: "media is too large" });
-    const result = await pool.query("INSERT INTO message_media (owner_id, mime_type, data, byte_size) VALUES ($1, $2, $3, $4) RETURNING id, mime_type, byte_size", [req.user.sub, mimeType, data, data.length]);
+    const stored = await mediaStorage.putMediaObject({ data, mimeType });
+    let result;
+    try {
+      result = await pool.query("INSERT INTO message_media (owner_id, mime_type, data, byte_size, storage_provider, object_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, mime_type, byte_size", [req.user.sub, mimeType, stored.storageProvider === "postgres" ? data : null, data.length, stored.storageProvider, stored.objectKey]);
+    } catch (databaseError) {
+      if (stored.objectKey) await mediaStorage.deleteMediaObject(stored.objectKey).catch((cleanupError) => console.error("media object rollback cleanup", cleanupError));
+      throw databaseError;
+    }
     return res.status(201).json({ media: { id: String(result.rows[0].id), mimeType: result.rows[0].mime_type, byteSize: result.rows[0].byte_size } });
-  } catch (error) { console.error("media upload", error); return res.status(500).json({ error: "media upload failed" }); }
+  } catch (error) {
+    console.error("media upload", error);
+    if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599) return res.status(error.statusCode).json({ error: error.publicMessage || "media storage is unavailable" });
+    return res.status(500).json({ error: "media upload failed" });
+  }
 });
 
 const statusSchema = async () => {

@@ -16,6 +16,8 @@ for (const token of [
   "visibleSocialPost",
   "NOT EXISTS (SELECT 1 FROM blocks",
   "owner_id=$2",
+  "getCachedMediaPayload(pool,mediaId)",
+  "private,max-age=300",
   "p.media_type='video'",
   "maximum reply depth is 5",
   "ON CONFLICT DO NOTHING"
