@@ -76,6 +76,21 @@ assert.deepEqual(optionsSeen[1], {
   credentials: { accessKeyId: common.FYNX_R2_ACCESS_KEY_ID, secretAccessKey: common.FYNX_R2_SECRET_ACCESS_KEY }
 });
 
+const r2Storage = createMediaStorage({
+  env: { ...common, FYNX_MEDIA_STORAGE_PROVIDER: "r2" },
+  clientFactory(options) { optionsSeen.push(options); return fakeClient; },
+  idFactory: () => UUID
+});
+assert.equal(r2Storage.provider, "r2");
+assert.deepEqual(
+  await r2Storage.putMediaObject({ data: Buffer.from("r2-new-media"), mimeType: "video/mp4" }),
+  { storageProvider: "r2", objectKey: "media/" + UUID }
+);
+assert.equal(calls.at(-1).constructor.name, "PutObjectCommand");
+assert.equal(calls.at(-1).input.Bucket, "fynx-r2-media");
+assert.equal(optionsSeen[2].region, "auto");
+assert.equal(optionsSeen[2].forcePathStyle, undefined);
+
 await assert.rejects(storage.createDownloadUrl("../private-file"), /Invalid FYNX media object key/);
 await assert.rejects(storage.createDownloadUrl("media/" + UUID, "neon", 301), /expiry must be between 30 and 300 seconds/);
 await assert.rejects(storage.getMediaObjectBytes("media/" + UUID, "unknown"), MediaStorageConfigurationError);
