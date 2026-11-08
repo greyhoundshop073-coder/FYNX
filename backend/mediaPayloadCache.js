@@ -59,9 +59,9 @@ export async function getCachedMediaPayload(pool, mediaId) {
     if (!row || !row.mime_type) return null;
     const storageProvider = String(row.storage_provider || "postgres").toLowerCase();
     if (storageProvider !== "postgres" && storageProvider !== "neon" && storageProvider !== "r2") return null;
-    const sourceData = storageProvider === "r2"
-      ? await mediaStorage.getMediaObjectBytes(row.object_key, storageProvider)
-      : row.data;
+    const sourceData = storageProvider === "postgres"
+      ? row.data
+      : await mediaStorage.getMediaObjectBytes(row.object_key, storageProvider);
     if (sourceData == null) return null;
     const data = Buffer.isBuffer(sourceData) ? Buffer.from(sourceData) : Buffer.from(sourceData);
     if (data.length < 1) return null;
