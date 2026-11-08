@@ -15,6 +15,8 @@ import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
+import { createEmailDelivery } from "./emailDelivery.js";
+import { createEmailAuthController } from "./emailAuthRoutes.js";
 
 const { Pool } = pg;
 const app = express();
@@ -43,6 +45,7 @@ app.use("/api/assistant", rateLimit("assistant", RATE_LIMITS.assistant));
 app.use("/api/media", rateLimit("media", RATE_LIMITS.media));
 app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));
 
+const emailDelivery = createEmailDelivery();
 const PORT = Number(process.env.PORT || 10000);
 const JWT_SECRET = process.env.JWT_SECRET || "";
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -60,6 +63,7 @@ const pool = DATABASE_URL ? new Pool({
   query_timeout: 20_000,
   keepAlive: true
 }) : null;
+const emailAuth = createEmailAuthController({ pool, emailDelivery, tokenSecret: process.env.JWT_SECRET || "", bcrypt });
 const clientsByUserId = new Map();
 const activeCalls = new Map();
 
@@ -113,6 +117,18 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_code_hash TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_attempts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_last_sent_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_code_hash TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_attempts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_last_sent_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique ON users (LOWER(email)) WHERE email IS NOT NULL;
     UPDATE users SET verified = FALSE;
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -192,9 +208,13 @@ async function initDatabase() {
 function requireConfig(name, value) { if (!value) throw new Error(`${name} is not configured.`); }
 function issueToken(user) {
   requireConfig("JWT_SECRET", JWT_SECRET);
-  return jwt.sign({ sub: String(user.id), username: user.username }, JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign(
+    { sub: String(user.id), username: user.username, sv: Number(user.session_version || 0) },
+    JWT_SECRET,
+    { expiresIn: "30d" }
+  );
 }
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const header = req.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!JWT_SECRET) {
@@ -205,10 +225,26 @@ function auth(req, res, next) {
     console.warn("[fynx-auth] rejected request: bearer token missing", { method: req.method, path: req.path });
     return res.status(401).json({ error: "authentication required" });
   }
-  try { req.user = jwt.verify(token, JWT_SECRET); return next(); } catch (error) {
+  let claims;
+  try {
+    claims = jwt.verify(token, JWT_SECRET);
+  } catch (error) {
     const reason = error?.name === "TokenExpiredError" ? "expired" : error?.name === "JsonWebTokenError" ? "invalid" : "verification_failed";
     console.warn("[fynx-auth] rejected request: bearer token rejected", { method: req.method, path: req.path, reason });
     return res.status(401).json({ error: reason === "expired" ? "token expired" : "invalid or expired token" });
+  }
+  try {
+    if (!pool) return res.status(503).json({ error: "authentication temporarily unavailable" });
+    const current = await pool.query("SELECT session_version FROM users WHERE id = $1", [claims.sub]);
+    const currentVersion = current.rows?.[0] ? Number(current.rows[0].session_version || 0) : -1;
+    if (currentVersion < 0 || currentVersion !== Number(claims.sv || 0)) {
+      console.warn("[fynx-auth] rejected request: session version no longer current", { method: req.method, path: req.path });
+      return res.status(401).json({ error: "session expired; sign in again" });
+    }
+    req.user = claims;
+    return next();
+  } catch {
+    return res.status(503).json({ error: "authentication temporarily unavailable" });
   }
 }
 async function findUserByUsername(username) {
@@ -306,15 +342,25 @@ app.post("/api/auth/register", async (req, res) => {
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const displayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim().slice(0, 80) : "";
     const phone = typeof req.body?.phone === "string" ? req.body.phone.trim().slice(0, 30) : "";
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     if (!/^[a-z0-9_]{3,32}$/.test(username)) return res.status(400).json({ error: "username must be 3-32 characters using letters, numbers, or underscore" });
     if (password.length < 8 || password.length > 128) return res.status(400).json({ error: "password must be 8-128 characters" });
     if (displayName.length < 2) return res.status(400).json({ error: "display name is required" });
+    if (email && !emailAuth.isValidEmail(email)) return res.status(400).json({ error: "enter a valid email address" });
     const passwordHash = await bcrypt.hash(password, 12);
-    const result = await pool.query("INSERT INTO users (username, password_hash, display_name, phone) VALUES ($1, $2, $3, $4) RETURNING id, username, display_name, phone, created_at", [username, passwordHash, displayName, phone]);
+    const result = await pool.query(
+      "INSERT INTO users (username, password_hash, display_name, phone, email) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, display_name, phone, email, email_verified_at, session_version, created_at",
+      [username, passwordHash, displayName, phone, email || null]
+    );
     const user = result.rows[0];
-    return res.status(201).json({ user, accessToken: issueToken(user) });
+    const emailVerificationSent = email ? await emailAuth.sendVerificationForUser(user) : false;
+    return res.status(201).json({
+      user: { id: user.id, username: user.username, display_name: user.display_name, phone: user.phone, email: user.email, email_verified_at: user.email_verified_at, created_at: user.created_at },
+      accessToken: issueToken(user),
+      emailVerificationSent
+    });
   } catch (error) {
-    if (error?.code === "23505") return res.status(409).json({ error: "username already exists" });
+    if (error?.code === "23505") return res.status(409).json({ error: "username or email already exists" });
     console.error("register", error); return res.status(500).json({ error: "registration failed" });
   }
 });
@@ -325,10 +371,10 @@ app.post("/api/auth/login", async (req, res) => {
     const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (password.length > 128) return res.status(400).json({ error: "invalid username or password" });
-    const result = await pool.query("SELECT id, username, password_hash, display_name, phone, created_at FROM users WHERE username = $1", [username]);
+    const result = await pool.query("SELECT id, username, password_hash, display_name, phone, email, email_verified_at, session_version, created_at FROM users WHERE username = $1", [username]);
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash))) return res.status(401).json({ error: "invalid username or password" });
-    return res.json({ user: { id: user.id, username: user.username, display_name: user.display_name, phone: user.phone, created_at: user.created_at }, accessToken: issueToken(user) });
+    return res.json({ user: { id: user.id, username: user.username, display_name: user.display_name, phone: user.phone, email: user.email, email_verified_at: user.email_verified_at, created_at: user.created_at }, accessToken: issueToken(user) });
   } catch (error) { console.error("login", error); return res.status(500).json({ error: "login failed" }); }
 });
 
@@ -927,12 +973,16 @@ app.delete("/api/messages/:id", auth, async (req, res) => {
   } catch (error) { console.error("message delete", error); return res.status(500).json({ error: "message delete failed" }); }
 });
 
-wss.on("connection", (socket, req) => {
+wss.on("connection", async (socket, req) => {
   try {
     const url = new URL(req.url || "/realtime", `http://${req.headers.host || "localhost"}`);
     const token = url.searchParams.get("token") || "";
-    if (!token || !JWT_SECRET) return socket.close(1008, "authentication required");
+    if (!token || !JWT_SECRET || !pool) return socket.close(1008, "authentication required");
     const user = jwt.verify(token, JWT_SECRET);
+    const activeSession = await pool.query("SELECT session_version FROM users WHERE id = $1", [user.sub]);
+    if (!activeSession.rows?.[0] || Number(activeSession.rows[0].session_version || 0) !== Number(user.sv || 0)) {
+      return socket.close(1008, "session expired");
+    }
     const userId = String(user.sub);
     if (!clientsByUserId.has(userId)) clientsByUserId.set(userId, new Set());
     clientsByUserId.get(userId).add(socket);
@@ -989,6 +1039,7 @@ wss.on("connection", (socket, req) => {
   } catch { socket.close(1008, "invalid token"); }
 });
 
+emailAuth.registerRoutes(app, auth);
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
@@ -1002,7 +1053,7 @@ await initDatabase();
 
 const shutdown = async (signal) => {
   console.log(`[fynx-shutdown] ${signal}`);
-  server.close(async () => { if (pool) await pool.end().catch(() => {}); process.exit(0); });
+  server.close(async () => { emailDelivery.close(); if (pool) await pool.end().catch(() => {}); process.exit(0); });
   setTimeout(() => process.exit(1), 10_000).unref();
 };
 process.once("SIGTERM", () => shutdown("SIGTERM"));
