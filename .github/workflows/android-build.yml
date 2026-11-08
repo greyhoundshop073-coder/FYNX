@@ -278,7 +278,7 @@ jobs:
       - name: Fast build, test and lint
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
       - name: Full build, test and lint
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || github.ref == 'refs/heads/work/camera-post-reference-integration-20261108' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101' || github.event.pull_request.head.ref == 'feature/ai-streaming-reliability-20261105' || github.event.pull_request.head.ref == 'work/camera-post-reference-integration-20261108'))) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || github.ref == 'refs/heads/feat/home-feed-professional-feed-conversations-20261103' || github.ref == 'refs/heads/work/camera-post-reference-integration-20261108' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101' || github.event.pull_request.head.ref == 'feature/ai-streaming-reliability-20261105' || github.event.pull_request.head.ref == 'feat/home-feed-professional-feed-conversations-20261103' || github.event.pull_request.head.ref == 'work/camera-post-reference-integration-20261108'))) }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Enable KVM permissions for Android emulator
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || ((github.event_name == 'push' && (github.ref == 'refs/heads/integration/fynx-single-apk-20261013' || github.ref == 'refs/heads/work/camera-post-reference-integration-20261108' || contains(github.event.head_commit.message, '[home-cert]') || (startsWith(github.ref, 'refs/heads/fix/more-tools-professional-reliability-20261013') || startsWith(github.ref, 'refs/heads/fix/FYNX-THIS-CHAT-stale-debug-backend-20261015') || startsWith(github.ref, 'refs/heads/feat/fynx-wallet-ux-hardening-20261031') || startsWith(github.ref, 'refs/heads/fix/railway-runtime-contract-and-wallet-auth-20261101')))) || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'fix/status-marketplace-runtime-closure-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-user-funding-and-commission-20261031' || github.event.pull_request.head.ref == 'feat/fynx-wallet-completion-20261101' || github.event.pull_request.head.ref == 'fix/railway-runtime-contract-and-wallet-auth-20261101' || github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101' || github.event.pull_request.head.ref == 'feature/ai-streaming-reliability-20261105' || github.event.pull_request.head.ref == 'work/camera-post-reference-integration-20261108'))) }}
@@ -324,6 +324,7 @@ jobs:
             echo "No non-empty debug APK exists for this run."
           fi
       - name: Verify debug APK is built from the exact checked-out commit
+        id: apk_integrity
         if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' }}
         run: |
           test -s app/build/outputs/apk/debug/app-debug.apk
@@ -331,7 +332,7 @@ jobs:
           echo "APK source commit: $(git rev-parse HEAD)"
           sha256sum app/build/outputs/apk/debug/app-debug.apk
       - name: Prepare exact-commit debug APK filename
-        if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
+        if: ${{ success() && steps.debug_apk.outputs.exists == 'true' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk "FYNX-Android-Official.apk"
           {
@@ -342,7 +343,7 @@ jobs:
             echo "build_result=success"
           } > "FYNX-Android-Official-build.txt"
       - name: Upload exact-commit debug APK
-        if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
+        if: ${{ success() && steps.debug_apk.outputs.exists == 'true' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-Android-Official.apk
@@ -352,7 +353,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Upload pull-request validation APK
-        if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && github.ref == 'refs/heads/work/camera-post-reference-integration-20261108' }}
+        if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && steps.apk_integrity.outcome == 'success' && (github.ref == 'refs/heads/work/camera-post-reference-integration-20261108' || github.ref == 'refs/heads/feat/home-feed-professional-feed-conversations-20261103' || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'work/camera-post-reference-integration-20261108' || github.event.pull_request.head.ref == 'feat/home-feed-professional-feed-conversations-20261103'))) }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-PR-Validation.apk
