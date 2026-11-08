@@ -497,7 +497,8 @@ fun FynxAiAssistantPanel(
     fun endVoiceSession() {
         // Cancel the in-flight SDP/ICE handshake as well as releasing native WebRTC resources.
         voiceConnectionJob?.cancel()
-        voiceConnectionJob = null        voiceEngine.close()
+        voiceConnectionJob = null
+        voiceEngine.close()
         voiceConnected = false
         voiceConnecting = false
         voiceMuted = false
@@ -996,7 +997,8 @@ fun FynxAiAssistantPanel(
                         items(messages, key = { it.id }) { message ->
                             AiChatBubble(
                                 message = message,
-                                feedback = messageFeedback[message.id] ?: 0,                                speaking = readAloudMessageId == message.id && !readAloudPaused,
+                                feedback = messageFeedback[message.id] ?: 0,
+                                speaking = readAloudMessageId == message.id && !readAloudPaused,
                                 readAloudProgress = if (readAloudMessageId == message.id) readAloudTranscript.takeLast(140) else "",
                                 waveformLevels = if (readAloudMessageId == message.id) readAloudWaveform else emptyList(),
                                 elapsedMs = if (readAloudMessageId == message.id) readAloudElapsedMs else 0L,
@@ -1495,7 +1497,8 @@ internal fun FynxAiFullScreenVoice(
                     DropdownMenu(expanded = showSettings, onDismissRequest = { showSettings = false }) {
                         DropdownMenuItem(
                             text = { Text(if (muted) "Unmute microphone" else "Mute microphone") },
-                            leadingIcon = { Icon(if (muted) Icons.Default.Mic else Icons.Default.MicOff, contentDescription = null) },                            onClick = { showSettings = false; onToggleMute() }
+                            leadingIcon = { Icon(if (muted) Icons.Default.Mic else Icons.Default.MicOff, contentDescription = null) },
+                            onClick = { showSettings = false; onToggleMute() }
                         )
                     }
                 }
@@ -1988,7 +1991,8 @@ internal fun AiChatBubble(
                                     connecting -> "Cancel voice playback connection"
                                     speaking -> "Pause reading response"
                                     else -> "Read response aloud"
-                                },                                tint = if (speaking || paused || connecting) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                },
+                                tint = if (speaking || paused || connecting) Color(0xFF007FFF) else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(19.dp)
                             )
                         }
