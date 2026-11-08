@@ -8,7 +8,7 @@ export async function installHomeCommentExperience() {
   const socialPath = path.join(backendDir, "socialRoutes.js");
   let source = await readFile(socialPath, "utf8");
   if (!source.includes('import { getCachedMediaPayload } from "./mediaPayloadCache.js";')) {
-    source = source.replace('import { Buffer } from "node:buffer";', 'import { Buffer } from "node:buffer";\\nimport { getCachedMediaPayload } from "./mediaPayloadCache.js";');
+    source = source.replace('import { Buffer } from "node:buffer";', 'import { Buffer } from "node:buffer";\nimport { getCachedMediaPayload } from "./mediaPayloadCache.js";');
   }
   if (source.includes("fynxHomeCommentExperienceBatch")) return;
 
