@@ -917,7 +917,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
         return res.status(404).json({ error: 'music track not found' });
       }
       if (await redirectStoredMedia(res, result.rows[0], { cacheControl: 'private, max-age=300' })) return;
-      const payload = await getCachedMediaPayload(pool, mediaId);
+      const payload = await getCachedMediaPayload(pool, catalogueId);
       if (!payload) return res.status(404).json({ error: 'music track not found' });
       res.set('Cache-Control', 'private, max-age=300');
       res.type(payload.mimeType);
