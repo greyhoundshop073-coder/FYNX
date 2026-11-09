@@ -24,6 +24,7 @@ try {
     dispatchLocal: (userId, payload) => deliveredA.push({ userId, payload }),
     getLocalConnectionCount: () => 1,
     getLocalUserIds: () => ["700000001"],
+    getLocalUserIds: () => ["700000001"],
     logger: { log() {}, error: (...args) => { throw new Error(args.join(" ")); } }
   });
   const publishFromA = globalThis.__fynxNeonRealtimePublish;
@@ -32,6 +33,7 @@ try {
     pool,
     dispatchLocal: (userId, payload) => deliveredB.push({ userId, payload }),
     getLocalConnectionCount: () => 1,
+    getLocalUserIds: () => ["700000001"],
     logger: { log() {}, error: (...args) => { throw new Error(args.join(" ")); } }
   });
 
