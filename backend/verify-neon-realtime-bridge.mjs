@@ -23,6 +23,7 @@ try {
     pool,
     dispatchLocal: (userId, payload) => deliveredA.push({ userId, payload }),
     getLocalConnectionCount: () => 1,
+    getLocalUserIds: () => ["700000001"],
     logger: { log() {}, error: (...args) => { throw new Error(args.join(" ")); } }
   });
   const publishFromA = globalThis.__fynxNeonRealtimePublish;

@@ -20,8 +20,8 @@ if (pool) attachDatabasePool(pool);
 // canonical Express server registers its WebSocket connection listener.
 await import("./realtimeIsolationRuntime.js");
 await import("./scalability.js");
-const { app, dispatchRealtimeConnection, dispatchRealtimeEventToLocalSockets, getRealtimeLocalConnectionCount } = await import("./.fynx-runtime-server.js");
-const realtimeBridge = await installNeonRealtimeBridge({ pool, dispatchLocal: dispatchRealtimeEventToLocalSockets, getLocalConnectionCount: getRealtimeLocalConnectionCount, logger: console });
+const { app, dispatchRealtimeConnection, dispatchRealtimeEventToLocalSockets, getRealtimeLocalConnectionCount, getRealtimeLocalUserIds } = await import("./.fynx-runtime-server.js");
+const realtimeBridge = await installNeonRealtimeBridge({ pool, dispatchLocal: dispatchRealtimeEventToLocalSockets, getLocalConnectionCount: getRealtimeLocalConnectionCount, getLocalUserIds: getRealtimeLocalUserIds, logger: console });
 // Restore Node HTTP after the canonical route-registration hook has built the app.
 // serverless-http creates its own adapter server and must not trigger FYNX route wiring twice.
 http.createServer = originalHttpCreateServer;
@@ -106,7 +106,7 @@ async function toApiGatewayEvent(request) {
         method: request.method,
         path: url.pathname,
         protocol: "HTTP/1.1",
-        sourceIp: headers["x-forwarded-for"]?.split(",")[0]?.trim() || "",
+        sourceIp: headers["cf-connecting-ip"] || headers["x-forwarded-for"]?.split(",")[0]?.trim() || headers["x-real-ip"] || "",
         userAgent: headers["user-agent"] || ""
       }
     },

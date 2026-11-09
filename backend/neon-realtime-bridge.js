@@ -24,8 +24,8 @@ function validateSignalPayload(signalType, body) {
   return null;
 }
 
-export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalConnectionCount, logger = console }) {
-  if (!pool || typeof pool.query !== "function" || typeof dispatchLocal !== "function" || typeof getLocalConnectionCount !== "function") {
+export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalConnectionCount, getLocalUserIds, logger = console }) {
+  if (!pool || typeof pool.query !== "function" || typeof dispatchLocal !== "function" || typeof getLocalConnectionCount !== "function" || typeof getLocalUserIds !== "function") {
     throw new Error("Neon realtime bridge requires the shared database pool and local socket dispatchers.");
   }
 
@@ -265,6 +265,8 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
 
   const poll = async () => {
     if (polling || getLocalConnectionCount() < 1) return;
+    const localUserIds = getLocalUserIds();
+    if (!localUserIds.length) return;
     polling = true;
     try {
       const lowerBound = cursor > 10_000n ? cursor - 10_000n : 0n;
@@ -272,9 +274,10 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
         `SELECT id::text AS id, user_id::text AS user_id, source_instance_id, payload
          FROM fynx_realtime_events
          WHERE id > $1::bigint
+           AND (user_id IS NULL OR user_id = ANY($2::bigint[]))
          ORDER BY id ASC
          LIMIT 500`,
-        [lowerBound.toString()]
+        [lowerBound.toString(), localUserIds]
       );
       for (const row of result.rows) {
         if (processed.has(row.id)) continue;

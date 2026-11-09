@@ -75,6 +75,12 @@ export function getRealtimeLocalConnectionCount() {
   return count;
 }
 
+export function getRealtimeLocalUserIds() {
+  return [...clientsByUserId.entries()]
+    .filter(([, sockets]) => [...sockets].some((socket) => socket.readyState === 1))
+    .map(([userId]) => userId);
+}
+
 // Lightweight per-process abuse protection. Production deployments should also enforce
 // rate limits at the edge/load-balancer so limits remain effective across instances.
 const rateBuckets = new Map();

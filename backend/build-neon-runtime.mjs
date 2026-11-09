@@ -37,6 +37,7 @@ for (const route of ["/api/social/feed", "/api/social/posts/multi", "fynxHomeCom
 for (const [source, pattern, label] of [
   [runtime, /export function dispatchRealtimeEventToLocalSockets/, "local realtime event dispatcher"],
   [runtime, /export function getRealtimeLocalConnectionCount/, "local realtime connection counter"],
+  [runtime, /export function getRealtimeLocalUserIds/, "local realtime user filter"],
   [functionSource, /parseTriggerDelivery/, "authenticated Neon schedule trigger parser"],
   [functionSource, /installNeonRealtimeBridge/, "cross-isolate realtime bridge activation"],
   [functionSource, /upgradeWebSocket/, "Neon WebSocket upgrade adapter"],
