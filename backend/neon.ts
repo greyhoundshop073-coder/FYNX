@@ -7,6 +7,7 @@ export default defineConfig({
       source: "./neon-function.js",
       env: {
         NODE_ENV: "production",
+        DB_POOL_MAX: "5",
         JWT_SECRET: process.env.FYNX_JWT_SECRET!,
         GEMINI_API_KEY: process.env.FYNX_GEMINI_API_KEY!,
         PAYSTACK_SECRET_KEY: process.env.FYNX_PAYSTACK_SECRET_KEY!,
