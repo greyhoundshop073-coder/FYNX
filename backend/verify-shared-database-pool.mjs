@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const sharedModules = [
   "server.js",
+  "buyerWallet.js",
+  "buyerWalletMarketplace.js",
   "adminRoutes.js",
   "followRoutes.js",
   "businessRoutes.js",
