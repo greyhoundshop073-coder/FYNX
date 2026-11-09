@@ -671,6 +671,9 @@ def tap_control_permission_aware(
 
 def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     """Exercise the real camera preview/photo editor and safe controls without publishing a post."""
+    # Preserve Home as a deterministic recovery target before optional Status,
+    # photo-editor or post-draft paths replace the active accessibility hierarchy.
+    home = home_xml
     # Keep a defined Home fallback for every early-recovery branch. The camera flow may
     # return to Home after a successful details-page inspection or an aborted draft path.
     # Home's shared chrome collapses while the feed is scrolled. The Home
