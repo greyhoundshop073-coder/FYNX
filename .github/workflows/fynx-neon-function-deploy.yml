@@ -1,0 +1,44 @@
+name: FYNX Neon Function Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-testing-function:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout canonical FYNX integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration/fynx-single-apk-20261013
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install backend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build and verify FYNX Neon Function
+        run: npm run verify:neon
+
+      - name: Require Neon deployment credential
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          if [ -z "$NEON_API_KEY" ]; then
+            echo "::error::Add NEON_API_KEY in GitHub repository Actions secrets before running this deployment."
+            exit 1
+          fi
+
+      - name: Deploy only to the isolated fynx-testing branch
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: npx --yes neon@9.2.0 deploy --project-id patient-lab-43403708 --branch br-floral-shape-b5mbajl5
