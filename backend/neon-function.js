@@ -1,6 +1,12 @@
 import { attachDatabasePool, upgradeWebSocket } from "@neon/functions";
+import { parseTriggerDelivery } from "@neon/functions/triggers";
 import serverless from "serverless-http";
 import { getFynxDatabasePool } from "./databasePool.js";
+import { createBackgroundJobQueue } from "./backgroundJobs.js";
+import { registerMarketplaceSettlementWorker } from "./marketplaceSettlementWorker.js";
+import { expireUnpaidMarketplaceReservations, expireUnpaidMarketplaceCheckoutGroups, recoverInterruptedPaymentInitializations, reconcileTerminalFinancialOperations } from "./marketplacePaymentExpiry.js";
+import { autoCompleteExpiredMarketplaceInspections } from "./marketplaceInspectionExpiry.js";
+import { runMarketplaceBatch2RecoveryOnce } from "./marketplaceBatch2FinalHardening.js";
 
 process.env.FYNX_NEON_FUNCTION = "1";
 
@@ -12,6 +18,41 @@ if (pool) attachDatabasePool(pool);
 await import("./realtimeIsolationRuntime.js");
 await import("./scalability.js");
 const { app, dispatchRealtimeConnection } = await import("./.fynx-runtime-server.js");
+const scheduledJobs = createBackgroundJobQueue({ logger: console, leaseMs: 90_000 });
+const settlementScan = registerMarketplaceSettlementWorker({ jobs: scheduledJobs, logger: console, startTimer: false });
+
+async function runFynxScheduledTasks() {
+  const result = {};
+  const failures = [];
+  const run = async (name, task) => {
+    try { result[name] = await task(); }
+    catch (error) {
+      failures.push(name);
+      console.error("[fynx-scheduled] task failed", name, error?.message || error);
+    }
+  };
+
+  await run("job_queue_schema", () => scheduledJobs.runOnce());
+  await run("expired_payment_reservations", () => expireUnpaidMarketplaceReservations({ logger: console }));
+  await run("expired_checkout_groups", () => expireUnpaidMarketplaceCheckoutGroups({ logger: console }));
+  await run("interrupted_payment_recovery", () => recoverInterruptedPaymentInitializations({ logger: console }));
+  await run("terminal_financial_reconciliation", () => reconcileTerminalFinancialOperations({ logger: console }));
+  await run("expired_inspection_completion", () => autoCompleteExpiredMarketplaceInspections({ logger: console }));
+  await run("marketplace_batch2_recovery", () => runMarketplaceBatch2RecoveryOnce({ logger: console }));
+  if (settlementScan) await run("payout_settlement_scan", () => settlementScan());
+
+  let jobsProcessed = 0;
+  for (let index = 0; index < 20; index += 1) {
+    const before = Number(scheduledJobs.snapshot().claimed || 0);
+    await scheduledJobs.runOnce();
+    const after = Number(scheduledJobs.snapshot().claimed || 0);
+    if (after === before) break;
+    jobsProcessed += 1;
+  }
+  result.jobsProcessed = jobsProcessed;
+  return { ok: failures.length === 0, failures, tasks: result };
+}
+
 const expressHandler = serverless(app, { binary: ["application/octet-stream", "image/*", "video/*", "audio/*"] });
 
 function websocketAdapter(socket) {
@@ -85,6 +126,14 @@ function toFetchResponse(result) {
 export default {
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === "/internal/cron") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+      const parsed = await parseTriggerDelivery(request);
+      if (!parsed.ok) return new Response(parsed.error, { status: parsed.error === "invalid_body" ? 400 : 401 });
+      if (parsed.invocation.type !== "schedule") return new Response("Unsupported trigger type", { status: 400 });
+      const result = await runFynxScheduledTasks();
+      return Response.json({ ...result, invocationId: parsed.invocation.invocationId });
+    }
     if (url.pathname === "/realtime") {
       if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
         return new Response("WebSocket upgrade required", { status: 426 });
