@@ -6,6 +6,10 @@ Deploy the existing Node backend as a Neon Function on the isolated `fynx-testin
 
 The function runs Node.js 24, keeps the existing Express routes, adapts HTTP requests through `serverless-http`, and adapts the existing authenticated `/realtime` WebSocket handler through Neon's `upgradeWebSocket` API.
 
+Realtime is designed for multiple Neon Function isolates: transient user-targeted and global events are written to `fynx_realtime_events`, active WebSocket connections are tracked in `fynx_realtime_connections`, and call state is shared through `fynx_realtime_calls`. Each isolate polls the outbox only while it has local WebSocket clients; event rows are retained for one hour. A PostgreSQL integration check verifies user-targeted and global event fanout between two simulated isolates.
+
+The `fynx-marketplace-maintenance` schedule invokes `/internal/cron` every minute. It runs payment reservation and checkout expiry, interrupted-payment and terminal-financial recovery, inspection expiry, payout settlement scanning, up to 20 queued background jobs per invocation, and stale realtime cleanup. These scheduled jobs replace the corresponding process-local timers in the Neon request runtime.
+
 ## One-time deployment credentials
 
 In GitHub, open **greyhoundshop073-coder/FYNX → Settings → Secrets and variables → Actions**.

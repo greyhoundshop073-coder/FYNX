@@ -9,9 +9,9 @@ Status: historical Cloudflare assessment; no Worker was deployed.
 - The source-patching bootstrap chain now has a build-only mode so generated server modules can be created before deployment rather than written at function startup.
 - The canonical Express app and realtime connection handler are exported for the Neon Function adapter.
 - `neon-function.js` adapts HTTP requests to the existing Express app and WebSocket upgrades to the existing authenticated realtime handler.
-- Periodic process-local workers are skipped in the Neon request runtime; scheduled/idempotent job execution still requires its own implementation and verification.
+- Periodic process-local workers are skipped in the Neon request runtime. The `fynx-marketplace-maintenance` Neon schedule now runs payment/checkout expiry, interrupted-payment recovery, terminal financial reconciliation, inspection expiry, payout settlement scanning, up to 20 queued jobs, and stale realtime cleanup every minute.
 - Cloudflare Worker scaffolding was removed rather than leaving two competing backend targets.
-- No Neon Function has been deployed yet; the existing Railway secrets are redacted to this connected account, so their exact values must be transferred through GitHub Actions secrets.
+- The Neon runtime build, scheduled-task contracts, and PostgreSQL cross-isolate fanout integration check passed in GitHub Actions run `42602489728`. No Neon Function has been deployed yet; the existing Railway secrets are redacted to this connected account, so their exact values must be transferred through the GitHub Actions secrets and variables documented in `NEON_FUNCTIONS_DEPLOYMENT.md`.
 - The Android backend URL, test-user sessions, and Neon database records have not been changed.
 
 
