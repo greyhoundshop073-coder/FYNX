@@ -43,9 +43,12 @@ async function runFynxScheduledTasks() {
   await run("interrupted_payment_recovery", () => recoverInterruptedPaymentInitializations({ logger: console }));
   await run("terminal_financial_reconciliation", () => reconcileTerminalFinancialOperations({ logger: console }));
   await run("expired_inspection_completion", () => autoCompleteExpiredMarketplaceInspections({ logger: console }));
-  await run("marketplace_batch2_recovery", () => runMarketplaceBatch2RecoveryOnce({ logger: console }));
+  const batch2 = await runMarketplaceBatch2RecoveryOnce({ logger: console });
+  result.marketplace_batch2_recovery = batch2;
+  if (batch2?.failures?.length) failures.push("marketplace_batch2_recovery");
   if (settlementScan) await run("payout_settlement_scan", () => settlementScan());
 
+  const jobFailuresBefore = Number(scheduledJobs.snapshot().failures || 0);
   let jobsProcessed = 0;
   for (let index = 0; index < 20; index += 1) {
     const before = Number(scheduledJobs.snapshot().claimed || 0);
@@ -55,6 +58,8 @@ async function runFynxScheduledTasks() {
     jobsProcessed += 1;
   }
   result.jobsProcessed = jobsProcessed;
+  result.jobQueue = scheduledJobs.snapshot();
+  if (Number(result.jobQueue.failures || 0) > jobFailuresBefore) failures.push("background_job_queue");
   return { ok: failures.length === 0, failures, tasks: result };
 }
 
