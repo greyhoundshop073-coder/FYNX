@@ -334,7 +334,7 @@ export async function expireUnpaidMarketplaceCheckoutGroups({ logger = console }
   return expired;
 }
 
-export export async function expireUnpaidMarketplaceReservations({ logger = console } = {}) {
+export async function expireUnpaidMarketplaceReservations({ logger = console } = {}) {
   if (!pool) return 0;
   await expireUnpaidMarketplaceCheckoutGroups({ logger });
   // Multi-product child orders are owned by their checkout-group lifecycle.
