@@ -311,6 +311,8 @@ jobs:
         run: python3 ../scripts/verify_group_permissions_contract.py
       - name: Verify backend package metadata
         run: node -e "const p=require('./package.json'); if(!p.scripts || !p.scripts.start) process.exit(1); console.log('FYNX backend package OK')"
+      - name: Build and syntax-check Cloudflare runtime artifacts
+        run: npm run verify:cloudflare
       - name: Verify production backend reachability
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.run_live_backend_probe) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}
         continue-on-error: true
