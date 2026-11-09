@@ -110,6 +110,10 @@ http.createServer = function fynxCreateServer(...args) {
   server.requestTimeout=30_000;
   server.maxRequestsPerSocket=1_000;
   server.maxConnections=500;
+  if (process.env.FYNX_CLOUDFLARE_WORKER === "1") {
+    globalThis.__fynxIdempotency=createIdempotencyStore({maxEntries:10_000,ttlMs:24*60*60*1000});
+    return server;
+  }
   let requests=0; let completed=0; let totalLatencyMs=0; let errors=0;
   server.on("request",(_req,res)=>{const startedAt=process.hrtime.bigint();requests+=1;res.on("finish",()=>{completed+=1;totalLatencyMs+=Number(process.hrtime.bigint()-startedAt)/1_000_000;if(res.statusCode>=500)errors+=1;});});
   const report=setInterval(()=>{if(!completed)return;const averageLatencyMs=totalLatencyMs/completed;console.log(`[fynx-metrics] requests=${requests} completed=${completed} errors5xx=${errors} avgLatencyMs=${averageLatencyMs.toFixed(1)}`);},60_000);report.unref();
