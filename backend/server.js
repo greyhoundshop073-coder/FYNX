@@ -129,7 +129,6 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_last_sent_at TIMESTAMPTZ;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique ON users (LOWER(email)) WHERE email IS NOT NULL;
-    UPDATE users SET verified = FALSE;
 
     CREATE TABLE IF NOT EXISTS messages (
       id BIGSERIAL PRIMARY KEY,
