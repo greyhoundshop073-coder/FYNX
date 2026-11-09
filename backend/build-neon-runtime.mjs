@@ -43,7 +43,6 @@ for (const [source, pattern, label] of [
   [bridgeSource, /fynx_realtime_events/, "PostgreSQL realtime event outbox"],
   [bridgeSource, /fynx_realtime_connections/, "cross-isolate connection presence"],
   [bridgeSource, /fynx_realtime_calls/, "shared call state"],
-  [configSource, /cron: "\\* \\* \\* \\* \\*"/, "one-minute Marketplace maintenance trigger"],
   [jobsSource, /async function runOnce/, "one-shot background job processing"],
   [settlementSource, /startTimer = true/, "timer-free settlement scan"],
   [paymentExpirySource, /export async function expireUnpaidMarketplaceReservations/, "scheduled reservation expiry"],
@@ -51,6 +50,7 @@ for (const [source, pattern, label] of [
   [scalabilitySource, /FYNX_NEON_FUNCTION/, "request-runtime background timer guard"]
 ]) assert.match(source, pattern, `Neon runtime is missing ${label}`);
 
+assert.ok(configSource.includes('cron: "* * * * *"'), "Neon Marketplace maintenance trigger must run every minute");
 const bridgeSyntax = spawnSync(process.execPath, ["--check", path.join(backendDir, "neon-realtime-bridge.js")], { encoding: "utf8" });
 assert.equal(bridgeSyntax.status, 0, bridgeSyntax.stderr || "Neon realtime bridge syntax check failed");
 
