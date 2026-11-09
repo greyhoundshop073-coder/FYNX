@@ -20,9 +20,9 @@ import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
 
 const { Pool } = pg;
-const app = express();
+export const app = express();
 export const server = http.createServer(app);
-const wss = process.env.FYNX_CLOUDFLARE_WORKER === "1" ? null : new WebSocketServer({ server, path: "/realtime" });
+const wss = process.env.FYNX_NEON_FUNCTION === "1" ? new WebSocketServer({ noServer: true }) : new WebSocketServer({ server, path: "/realtime" });
 
 // Keep the API deliberately strict: large media is uploaded separately and authenticated.
 app.disable("x-powered-by");
@@ -1032,6 +1032,13 @@ if (wss) {
   });
 }
 
+export async function dispatchRealtimeConnection(socket, req) {
+  if (!wss) throw new Error("FYNX realtime server is unavailable.");
+  const handlers = wss.listeners("connection");
+  if (!handlers.length) throw new Error("FYNX realtime connection handler is not registered.");
+  await Promise.all(handlers.map((handler) => handler(socket, req)));
+}
+
 emailAuth.registerRoutes(app, auth);
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
@@ -1052,8 +1059,6 @@ const shutdown = async (signal) => {
 process.once("SIGTERM", () => shutdown("SIGTERM"));
 process.once("SIGINT", () => shutdown("SIGINT"));
 
-if (process.env.FYNX_CLOUDFLARE_WORKER === "1") {
-  server.listen(PORT);
-} else {
+if (process.env.FYNX_NEON_FUNCTION !== "1") {
   server.listen(PORT, "0.0.0.0", () => console.log(`FYNX backend listening on ${PORT}`));
 }
