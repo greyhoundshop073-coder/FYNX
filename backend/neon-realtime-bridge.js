@@ -70,6 +70,15 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
     );
   };
 
+  const emitToUser = async (userId, payload) => {
+    dispatchLocal(String(userId), payload);
+    await publish(String(userId), payload);
+  };
+  const emitGlobal = async (payload) => {
+    dispatchLocal(null, payload);
+    await publish(null, payload);
+  };
+
   const registerConnection = async (userId, connectionId) => {
     await pool.query(
       "INSERT INTO fynx_realtime_connections (connection_id, user_id, instance_id) VALUES ($1, $2, $3)",
@@ -100,11 +109,11 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
       [String(userId)]
     );
     for (const row of result.rows) {
-      await publish(row.caller_id, {
+      await emitToUser(row.caller_id, {
         type: "call", callId: row.id, callType: row.media_type,
         fromUserId: row.callee_id, toUserId: row.caller_id, signalType: reason
       });
-      await publish(row.callee_id, {
+      await emitToUser(row.callee_id, {
         type: "call", callId: row.id, callType: row.media_type,
         fromUserId: row.caller_id, toUserId: row.callee_id, signalType: reason
       });
@@ -122,7 +131,7 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
       [String(userId)]
     );
     if (!remaining.rowCount) {
-      await publish(null, { type: "presence", userId: String(userId), online: false });
+      await emitGlobal({ type: "presence", userId: String(userId), online: false });
       await endCallsForUser(userId);
     }
   };
@@ -214,7 +223,7 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
           fromUserId: targetUserId, toUserId: String(userId)
         });
       }
-      await publish(targetUserId, {
+      await emitToUser(targetUserId, {
         type: "call", callId, callType: mediaType, fromUserId: String(userId),
         toUserId: targetUserId, signalType: "invite", fromUsername: user?.username || null
       });
@@ -237,14 +246,14 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
         [callId, nextStatus]
       );
       if (!updated.rowCount) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call already closed" });
-      await publish(peerId, callEvent(updated.rows[0], userId, signalType));
+      await emitToUser(peerId, callEvent(updated.rows[0], userId, signalType));
       return;
     }
 
     if (!["offer", "answer", "ice"].includes(signalType)) return;
     const payload = validateSignalPayload(signalType, body);
     if (!payload) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "invalid signaling payload" });
-    await publish(peerId, callEvent(call, userId, signalType, payload));
+    await emitToUser(peerId, callEvent(call, userId, signalType, payload));
   };
 
   let cursor = 0n;
@@ -306,7 +315,7 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
         [row.user_id]
       );
       if (!remaining.rowCount) {
-        await publish(null, { type: "presence", userId: row.user_id, online: false });
+        await emitGlobal({ type: "presence", userId: row.user_id, online: false });
         await endCallsForUser(row.user_id);
       }
     }
