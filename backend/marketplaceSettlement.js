@@ -311,6 +311,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
               WHEN funds = 'RELEASE_PENDING' OR payout_status = 'PENDING' THEN 'pending'
               WHEN funds = 'RELEASE_ELIGIBLE' THEN 'available'
               WHEN funds = 'UNKNOWN' AND order_status = 'COMPLETED' AND payout_status IS NULL THEN 'legacy_unreconciled'
+              WHEN funds = 'UNKNOWN' AND order_status = 'COMPLETED' AND payout_status IN ('FAILED', 'BLOCKED') THEN 'failed_unreconciled'
               ELSE 'unclassified'
             END AS summary_bucket
           FROM seller_settlements
@@ -322,10 +323,11 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           COALESCE(SUM(CASE WHEN summary_bucket = 'pending' THEN seller_net_amount ELSE 0 END), 0) AS payout_pending,
           COALESCE(SUM(CASE WHEN summary_bucket = 'paid' THEN seller_net_amount ELSE 0 END), 0) AS paid_out,
           COALESCE(SUM(CASE WHEN summary_bucket = 'legacy_unreconciled' THEN seller_net_amount ELSE 0 END), 0) AS unreconciled_legacy,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled') THEN product_subtotal ELSE 0 END), 0) AS gross_sales,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled') THEN delivery_fee ELSE 0 END), 0) AS delivery_fees,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled') THEN marketplace_fee_seller ELSE 0 END), 0) AS marketplace_fees,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled') THEN seller_net_amount ELSE 0 END), 0) AS net_earnings
+          COALESCE(SUM(CASE WHEN summary_bucket = 'failed_unreconciled' THEN seller_net_amount ELSE 0 END), 0) AS unreconciled_failed_payouts,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled','failed_unreconciled') THEN product_subtotal ELSE 0 END), 0) AS gross_sales,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled','failed_unreconciled') THEN delivery_fee ELSE 0 END), 0) AS delivery_fees,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled','failed_unreconciled') THEN marketplace_fee_seller ELSE 0 END), 0) AS marketplace_fees,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled','failed_unreconciled') THEN seller_net_amount ELSE 0 END), 0) AS net_earnings
         FROM classified_settlements
         GROUP BY currency
         ORDER BY currency
@@ -338,6 +340,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           payoutPending: Number(row.payout_pending || 0),
           paidOut: Number(row.paid_out || 0),
           unreconciledLegacy: Number(row.unreconciled_legacy || 0),
+          unreconciledFailedPayouts: Number(row.unreconciled_failed_payouts || 0),
           grossSales: Number(row.gross_sales || 0),
           deliveryFees: Number(row.delivery_fees || 0),
           marketplaceFees: Number(row.marketplace_fees || 0),

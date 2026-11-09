@@ -34,6 +34,14 @@ checks = [
         and "This is read-only: do not save a shop profile" in navigation,
     ),
     (
+        "Marketplace scrolls back to the real top shortcut rail after Wallet before seller capture",
+        'for attempt in range(5):' in navigation
+        and 'find_control(marketplace_xml, ["My Shop"])' in navigation
+        and 'authenticated-marketplace-my-shop-return-top-' in navigation
+        and 'reverse=True' in navigation
+        and navigation.index("authenticated-marketplace-my-shop-return-top-") < navigation.index("product_target = marketplace_product_card_target(marketplace_xml)"),
+    ),
+    (
         "Android CI attempts focused Marketplace/My Shop capture after instrumentation failure",
         'if [ "${FYNX_AI_VISUALS_ONLY:-0}" = "1" ]; then' in runner
         and 'FYNX_AI_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in runner
