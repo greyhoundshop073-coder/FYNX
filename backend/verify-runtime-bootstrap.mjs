@@ -10,11 +10,11 @@ assert.ok(!normalizedServer.includes("update users set verified = false;"),
 // Keep the current login available for the three active test accounts. This is
 // a source-level compatibility guard: migration work must not gate, replace,
 // or weaken the existing bcrypt-backed login/token contract.
-const loginRoute = server.match(/app\\.post\\(["']\\/api\\/auth\\/login["'], async \\(req, res\\) => \\{([\\s\\S]*?)\\n\\}\\);/);
+const loginRoute = server.match(/app\.post\(["']\/api\/auth\/login["'], async \(req, res\) => \{([\s\S]*?)\n\}\);/);
 assert.ok(loginRoute, "the existing /api/auth/login route must remain registered");
-assert.match(loginRoute[1], /bcrypt\\.compare\\(password,\\s*user\\.password_hash\\)/,
+assert.match(loginRoute[1], /bcrypt\.compare\(password,\s*user\.password_hash\)/,
   "login must continue verifying existing password hashes");
-assert.match(loginRoute[1], /issueToken\\(user\\)/,
+assert.match(loginRoute[1], /issueToken\(user\)/,
   "login must continue issuing the existing access token");
 assert.doesNotMatch(loginRoute[1], /LOGIN_DISABLED|AUTH_DISABLED|MAINTENANCE_MODE/i,
   "migration work must not disable the existing login route");
