@@ -260,6 +260,8 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           o.id AS order_id,
           COALESCE(NULLIF(o.product_snapshot->>'title', ''), 'FYNX order') AS title,
           UPPER(COALESCE(o.currency, 'NGN')) AS currency,
+          COALESCE(o.product_subtotal, 0) AS product_subtotal,
+          COALESCE(o.delivery_fee, 0) AS delivery_fee,
           COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
           COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller,
           COALESCE(e.status, 'UNKNOWN') AS funds,
@@ -282,6 +284,8 @@ export function registerMarketplaceSettlementRoutes({ app }) {
         WITH seller_settlements AS (
           SELECT
             UPPER(COALESCE(o.currency, 'NGN')) AS currency,
+            COALESCE(o.product_subtotal, 0) AS product_subtotal,
+            COALESCE(o.delivery_fee, 0) AS delivery_fee,
             COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
             COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller,
             COALESCE(e.status, 'UNKNOWN') AS funds,
@@ -314,7 +318,8 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           COALESCE(SUM(CASE WHEN summary_bucket = 'available' THEN seller_net_amount ELSE 0 END), 0) AS available_for_payout,
           COALESCE(SUM(CASE WHEN summary_bucket = 'pending' THEN seller_net_amount ELSE 0 END), 0) AS payout_pending,
           COALESCE(SUM(CASE WHEN summary_bucket = 'paid' THEN seller_net_amount ELSE 0 END), 0) AS paid_out,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN seller_net_amount + marketplace_fee_seller ELSE 0 END), 0) AS gross_sales,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN product_subtotal ELSE 0 END), 0) AS gross_sales,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN delivery_fee ELSE 0 END), 0) AS delivery_fees,
           COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN marketplace_fee_seller ELSE 0 END), 0) AS marketplace_fees,
           COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN seller_net_amount ELSE 0 END), 0) AS net_earnings
         FROM classified_settlements
@@ -329,6 +334,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           payoutPending: Number(row.payout_pending || 0),
           paidOut: Number(row.paid_out || 0),
           grossSales: Number(row.gross_sales || 0),
+          deliveryFees: Number(row.delivery_fees || 0),
           marketplaceFees: Number(row.marketplace_fees || 0),
           netEarnings: Number(row.net_earnings || 0)
         })),
@@ -336,6 +342,8 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           orderId: String(row.order_id),
           title: String(row.title || 'FYNX order'),
           currency: String(row.currency || 'NGN').toUpperCase(),
+          productSubtotal: Number(row.product_subtotal || 0),
+          deliveryFee: Number(row.delivery_fee || 0),
           sellerNetAmount: Number(row.seller_net_amount || 0),
           marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0),
           funds: String(row.funds || 'UNKNOWN'),
