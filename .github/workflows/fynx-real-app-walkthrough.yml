@@ -45,7 +45,9 @@ jobs:
       - name: Install video narration and editing tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg espeak-ng fonts-dejavu-core
+          sudo apt-get install -y ffmpeg espeak-ng fonts-dejavu-core python3-pip
+          python3 -m pip install --user --break-system-packages edge-tts || echo "Neural voice install unavailable; the local eSpeak fallback will be used."
+          command -v edge-tts || true
           ffmpeg -version | head -n 1
           espeak-ng --version | head -n 1
 
@@ -91,6 +93,7 @@ jobs:
             fynx-walkthrough/*.wav
             fynx-walkthrough/*.srt
             fynx-walkthrough/*.md
+            fynx-walkthrough/*.txt
             fynx-walkthrough/device-logcat.txt
           if-no-files-found: warn
           retention-days: 30
