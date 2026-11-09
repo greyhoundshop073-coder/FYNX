@@ -33,12 +33,20 @@ jobs:
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
         run: |
-          if [ -z "$NEON_API_KEY" ]; then
-            echo "::error::Add NEON_API_KEY in GitHub repository Actions secrets before running this deployment."
+          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_GEMINI_API_KEY" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ]; then
+            echo "::error::Add NEON_API_KEY, FYNX_JWT_SECRET, FYNX_GEMINI_API_KEY and FYNX_PAYSTACK_SECRET_KEY in GitHub repository Actions secrets."
             exit 1
           fi
 
       - name: Deploy only to the isolated fynx-testing branch
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
+          FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
+          FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
+          FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME }}
+          FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED }}
+          FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED }}
+          FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT }}
+          FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT }}
         run: npx --yes neon@9.2.0 deploy --project-id patient-lab-43403708 --branch br-floral-shape-b5mbajl5
