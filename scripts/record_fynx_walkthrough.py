@@ -56,13 +56,20 @@ try:
     )
     (OUT / "runtime-journey-log.txt").write_text(journey.stdout, encoding="utf-8")
 finally:
+    # Signal the recorder process on Android itself; interrupting the local adb
+    # client alone does not reliably finalize the MP4 container on the device.
+    call("adb", "shell", "sh", "-c", "kill -INT $(pidof screenrecord) 2>/dev/null || true", timeout=10, check=False)
     if recorder.poll() is None:
-        recorder.send_signal(signal.SIGINT)
         try:
             recorder.wait(timeout=12)
         except subprocess.TimeoutExpired:
-            recorder.kill()
-            recorder.wait(timeout=5)
+            recorder.terminate()
+            try:
+                recorder.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                recorder.kill()
+                recorder.wait(timeout=5)
+    time.sleep(2)
 
 # Pull the MP4 even if an individual visual assertion failed; the artifact will
 # retain the test log so the video is not misrepresented as a full certification.
