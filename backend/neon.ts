@@ -5,7 +5,6 @@ export default defineConfig({
     fynxapi: {
       name: "FYNX testing backend",
       source: "./neon-function.js",
-      runtime: "nodejs24",
       env: {
         NODE_ENV: "production",
         JWT_SECRET: process.env.FYNX_JWT_SECRET!,
