@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 const bootstrap = await readFile(new URL("./serverBootstrap.js", import.meta.url), "utf8");
 const server = await readFile(new URL("./server.js", import.meta.url), "utf8");
+const scalability = await readFile(new URL("./scalability.js", import.meta.url), "utf8");
 const normalizedServer = server.replace(/\s+/g, " ").toLowerCase();
 assert.ok(!normalizedServer.includes("update users set verified = false;"),
   "backend startup must never reset existing users verification status");
@@ -18,6 +19,14 @@ assert.match(loginRoute[1], /issueToken\(user\)/,
   "login must continue issuing the existing access token");
 assert.doesNotMatch(loginRoute[1], /LOGIN_DISABLED|AUTH_DISABLED|MAINTENANCE_MODE/i,
   "migration work must not disable the existing login route");
+
+// Exactly one expiry worker may complete expired Marketplace inspections.
+// The retained worker excludes open disputes and protection cases; the legacy
+// bootstrap reconciler did not and could make disputed orders payout-eligible.
+assert.doesNotMatch(bootstrap, /marketplaceInspectionReconciliation|startMarketplaceInspectionReconciliation/,
+  "runtime bootstrap must not start the unsafe duplicate inspection reconciler");
+assert.match(scalability, /registerMarketplaceInspectionExpiryWorker/,
+  "the dispute-aware inspection expiry worker must remain registered");
 const packageJson = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
 const buyerWallet = await readFile(new URL("./buyerWallet.js", import.meta.url), "utf8");
 const buyerWalletMarketplace = await readFile(new URL("./buyerWalletMarketplace.js", import.meta.url), "utf8");
@@ -38,7 +47,6 @@ console.log("Runtime bootstrap integrity checks passed.");
 
 for (const contract of [
   "registerBusinessRoutes({ app, auth })",
-  "startMarketplaceInspectionReconciliation({ pool })",
   "registerMarketplacePaystackWebhook({ app, pool })",
   "registerMarketplaceCheckoutRoutes({ app, pool, auth })",
   "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
