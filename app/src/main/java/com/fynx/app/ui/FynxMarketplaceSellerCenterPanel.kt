@@ -64,7 +64,8 @@ private data class SellerMoneyTotals(
     val availableForPayout: Double,
     val payoutPending: Double,
     val paidOut: Double,
-    val unreconciledLegacy: Double
+    val unreconciledLegacy: Double,
+    val unreconciledFailedPayouts: Double
 )
 
 private data class SellerMoneySnapshot(
@@ -240,7 +241,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 availableForPayout = marketplaceRequiredBalance(row.opt("availableForPayout")),
                                 payoutPending = marketplaceRequiredBalance(row.opt("payoutPending")),
                                 paidOut = marketplaceRequiredBalance(row.opt("paidOut")),
-                                unreconciledLegacy = marketplaceRequiredBalance(row.opt("unreconciledLegacy"))
+                                unreconciledLegacy = marketplaceRequiredBalance(row.opt("unreconciledLegacy")),
+                                unreconciledFailedPayouts = marketplaceRequiredBalance(row.opt("unreconciledFailedPayouts"))
                             )
                         }
                     }
@@ -737,7 +739,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                             val serverTotals = moneyTotals[currency]
                             val reportableRows = rows.filter {
                                 it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING", "RELEASE_ELIGIBLE", "RELEASE_PENDING", "RELEASED") ||
-                                    it.payoutStatus in setOf("PENDING", "SUCCEEDED")
+                                    it.payoutStatus in setOf("PENDING", "SUCCEEDED") ||
+                                    (it.orderStatus == "COMPLETED" && it.funds == "UNKNOWN" && it.payoutStatus in setOf("UNKNOWN", "FAILED", "BLOCKED"))
                             }
                             val grossSales = if (moneyTotalsFromBackend) serverTotals?.grossSales ?: 0.0
                                 else reportableRows.sumOf { it.productSubtotal }
@@ -755,6 +758,10 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 else rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet }
                             val paid = if (moneyTotalsFromBackend) serverTotals?.paidOut ?: 0.0
                                 else rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
+                            val unreconciledLegacy = if (moneyTotalsFromBackend) serverTotals?.unreconciledLegacy ?: 0.0
+                                else rows.filter { it.orderStatus == "COMPLETED" && it.funds == "UNKNOWN" && it.payoutStatus == "UNKNOWN" }.sumOf { it.sellerNet }
+                            val unreconciledFailed = if (moneyTotalsFromBackend) serverTotals?.unreconciledFailedPayouts ?: 0.0
+                                else rows.filter { it.orderStatus == "COMPLETED" && it.funds == "UNKNOWN" && it.payoutStatus in setOf("FAILED", "BLOCKED") }.sumOf { it.sellerNet }
                             Text(currency, fontWeight = FontWeight.Bold)
                             MoneySummaryRow("Gross product sales", grossSales, currency)
                             MoneySummaryRow("Delivery fees", deliveryFees, currency)
@@ -770,10 +777,18 @@ fun FynxMarketplaceSellerCenterPanel() {
                             MoneySummaryRow("Available for payout", available, currency)
                             MoneySummaryRow("Payout pending", pending, currency)
                             MoneySummaryRow("Paid out", paid, currency)
-                            if ((serverTotals?.unreconciledLegacy ?: 0.0) > 0.0) {
-                                MoneySummaryRow("Historical completed · not reconciled", serverTotals?.unreconciledLegacy ?: 0.0, currency)
+                            if (unreconciledLegacy > 0.0) {
+                                MoneySummaryRow("Historical completed · not reconciled", unreconciledLegacy, currency)
                                 Text(
                                     "These completed orders have no matching escrow or payout record. They are included in earnings totals but are not counted as protected, available or paid.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (unreconciledFailed > 0.0) {
+                                MoneySummaryRow("Failed payout · reconciliation required", unreconciledFailed, currency)
+                                Text(
+                                    "A completed order has a failed or blocked payout attempt and no matching escrow record. It is included in earnings totals but is not counted as protected, available or paid. Settlement must be reviewed before retrying.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -815,10 +830,12 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 Text(record.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                                 Text(formatSellerMoney(record.sellerNet, record.currency), color = MaterialTheme.colorScheme.primary)
                             }
-                            val settlementLabel = if (record.orderStatus == "COMPLETED" && record.funds == "UNKNOWN" && record.payoutStatus == "UNKNOWN") {
-                                "LEGACY COMPLETED · SETTLEMENT UNVERIFIED"
-                            } else {
-                                "${record.funds} • payout ${record.payoutStatus}"
+                            val settlementLabel = when {
+                                record.orderStatus == "COMPLETED" && record.funds == "UNKNOWN" && record.payoutStatus == "UNKNOWN" ->
+                                    "LEGACY COMPLETED · SETTLEMENT UNVERIFIED"
+                                record.orderStatus == "COMPLETED" && record.funds == "UNKNOWN" && record.payoutStatus in setOf("FAILED", "BLOCKED") ->
+                                    "COMPLETED · PAYOUT FAILED · RECONCILIATION REQUIRED"
+                                else -> "${record.funds} • payout ${record.payoutStatus}"
                             }
                             Text("$settlementLabel • FYNX commission ${formatSellerMoney(record.marketplaceFee, record.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (record.updatedAt.isNotBlank()) Text(record.updatedAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
