@@ -1,4 +1,5 @@
 import { getFynxDatabasePool } from "./databasePool.js";
+import { randomUUID } from "node:crypto";
 import express from "express";
 // Profile-photo media follows profile visibility and block state.
 import http from "http";
@@ -57,6 +58,22 @@ const pool = getFynxDatabasePool();
 const emailAuth = createEmailAuthController({ pool, emailDelivery, tokenSecret: process.env.JWT_SECRET || "", bcrypt });
 const clientsByUserId = new Map();
 const activeCalls = new Map();
+
+export function dispatchRealtimeEventToLocalSockets(userId, payload) {
+  if (userId == null) {
+    for (const sockets of clientsByUserId.values()) for (const socket of sockets) sendSocket(socket, payload);
+    return;
+  }
+  for (const socket of clientsByUserId.get(String(userId)) || []) sendSocket(socket, payload);
+}
+
+export function getRealtimeLocalConnectionCount() {
+  let count = 0;
+  for (const sockets of clientsByUserId.values()) {
+    for (const socket of sockets) if (socket.readyState === 1) count += 1;
+  }
+  return count;
+}
 
 // Lightweight per-process abuse protection. Production deployments should also enforce
 // rate limits at the edge/load-balancer so limits remain effective across instances.
@@ -242,7 +259,14 @@ async function findUserByUsername(username) {
   return result.rows[0] || null;
 }
 function sendSocket(socket, payload) { if (socket.readyState === 1) socket.send(JSON.stringify(payload)); }
-function broadcastToUser(userId, payload) { for (const socket of clientsByUserId.get(String(userId)) || []) sendSocket(socket, payload); }
+function broadcastToUser(userId, payload) {
+  dispatchRealtimeEventToLocalSockets(String(userId), payload);
+  if (process.env.FYNX_NEON_FUNCTION === "1" && typeof globalThis.__fynxNeonRealtimePublish === "function") {
+    Promise.resolve(globalThis.__fynxNeonRealtimePublish(String(userId), payload)).catch((error) => {
+      console.error("[fynx-realtime] cross-isolate event persistence failed", error?.message || error);
+    });
+  }
+}
 async function broadcastMessage(message) {
   const payload = { type: "message", message };
   broadcastToUser(message.senderId, payload);
@@ -261,7 +285,12 @@ app.locals.fynxBroadcastMessage = broadcastMessage;
 app.locals.fynxBroadcastGroupMessage = broadcastGroupMessage;
 function broadcastPresence(userId, online) {
   const payload = { type: "presence", userId: String(userId), online };
-  for (const sockets of clientsByUserId.values()) for (const socket of sockets) sendSocket(socket, payload);
+  dispatchRealtimeEventToLocalSockets(null, payload);
+  if (process.env.FYNX_NEON_FUNCTION === "1" && typeof globalThis.__fynxNeonRealtimePublish === "function") {
+    Promise.resolve(globalThis.__fynxNeonRealtimePublish(null, payload)).catch((error) => {
+      console.error("[fynx-realtime] presence persistence failed", error?.message || error);
+    });
+  }
 }
 async function markPendingDelivered(userId) {
   if (!pool) return;
@@ -976,15 +1005,28 @@ if (wss) {
       return socket.close(1008, "session expired");
     }
     const userId = String(user.sub);
+    if (process.env.FYNX_NEON_FUNCTION === "1") {
+      const registerConnection = globalThis.__fynxNeonRegisterConnection;
+      if (typeof registerConnection !== "function") return socket.close(1011, "realtime service unavailable");
+      const connectionId = randomUUID();
+      await registerConnection(userId, connectionId);
+      socket.__fynxConnectionId = connectionId;
+    }
     if (!clientsByUserId.has(userId)) clientsByUserId.set(userId, new Set());
     clientsByUserId.get(userId).add(socket);
     broadcastPresence(userId, true);
     markPendingDelivered(userId).catch((error) => console.error("deliver pending", error));
-    socket.on("message", (raw) => {
+    socket.on("message", async (raw) => {
       try {
         const body = JSON.parse(raw.toString());
         const signalType = typeof body?.signalType === "string" ? body.signalType.trim().toLowerCase() : "";
         if (body?.type !== "call") return;
+        if (process.env.FYNX_NEON_FUNCTION === "1") {
+          const handleCall = globalThis.__fynxNeonHandleCall;
+          if (typeof handleCall !== "function") return sendSocket(socket, { type: "call", signalType: "error", error: "call service unavailable" });
+          await handleCall(userId, user, socket, body);
+          return;
+        }
         if (["invite", "accept", "reject", "end"].includes(signalType)) {
           const targetUserId = String(body?.toUserId || "");
           if (!targetUserId || targetUserId === userId) return sendSocket(socket, { type: "call", signalType: "error", error: "invalid call target" });
@@ -1020,10 +1062,18 @@ if (wss) {
     });
     socket.on("close", () => {
       const sockets = clientsByUserId.get(userId);
-      if (!sockets) return;
-      sockets.delete(socket);
-      if (!sockets.size) {
-        clientsByUserId.delete(userId);
+      if (sockets) {
+        sockets.delete(socket);
+        if (!sockets.size) clientsByUserId.delete(userId);
+      }
+      if (process.env.FYNX_NEON_FUNCTION === "1") {
+        const disconnect = globalThis.__fynxNeonDisconnect;
+        if (socket.__fynxConnectionId && typeof disconnect === "function") {
+          Promise.resolve(disconnect(userId, socket.__fynxConnectionId)).catch((error) => {
+            console.error("[fynx-realtime] connection cleanup failed", error?.message || error);
+          });
+        }
+      } else if (!sockets || !sockets.size) {
         broadcastPresence(userId, false);
         for (const [callId, call] of activeCalls) if (call.callerId === userId || call.calleeId === userId) closeCall(callId, "peer_disconnected");
       }
