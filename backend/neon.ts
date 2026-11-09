@@ -18,5 +18,14 @@ export default defineConfig({
         FYNX_WALLET_FUNDING_MAX_AMOUNT: process.env.FYNX_WALLET_FUNDING_MAX_AMOUNT ?? ""
       }
     }
+  },
+  triggers: {
+    "fynx-marketplace-maintenance": {
+      type: "schedule",
+      function: "fynxapi",
+      cron: "* * * * *",
+      functionPath: "/internal/cron",
+      enabled: true
+    }
   }
 });
