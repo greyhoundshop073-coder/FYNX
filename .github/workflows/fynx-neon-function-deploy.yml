@@ -89,4 +89,9 @@ jobs:
           FYNX_WALLET_FUNDING_MIN_AMOUNT=$FYNX_WALLET_FUNDING_MIN_AMOUNT
           FYNX_WALLET_FUNDING_MAX_AMOUNT=$FYNX_WALLET_FUNDING_MAX_AMOUNT
           EOF
-          npx --yes neon@9.2.0 deploy --project-id patient-lab-43403708 --branch br-floral-shape-b5mbajl5 --env .env.neon.deploy
+          # Pin the CLI to the intended project and branch before applying neon.ts.
+          # The deploy command itself applies to the linked branch; it does not accept
+          # project/branch flags.
+          npx --yes neon@9.2.0 link --project-id patient-lab-43403708 --no-env-pull -y
+          npx --yes neon@9.2.0 checkout fynx-testing --no-env-pull
+          npx --yes neon@9.2.0 deploy --env .env.neon.deploy
