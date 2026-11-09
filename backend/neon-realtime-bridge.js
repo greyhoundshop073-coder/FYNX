@@ -331,5 +331,5 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
   };
 
   logger.log("[fynx-realtime] Neon cross-isolate bridge ready", instanceId);
-  return { instanceId, cleanup, stop: () => clearInterval(timer) };
+  return { instanceId, cleanup, pollOnce: poll, stop: () => clearInterval(timer) };
 }
