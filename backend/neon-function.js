@@ -12,7 +12,7 @@ if (pool) attachDatabasePool(pool);
 await import("./realtimeIsolationRuntime.js");
 await import("./scalability.js");
 const { app, dispatchRealtimeConnection } = await import("./.fynx-runtime-server.js");
-const expressHandler = serverless(app);
+const expressHandler = serverless(app, { binary: ["application/octet-stream", "image/*", "video/*", "audio/*"] });
 
 function websocketAdapter(socket) {
   const adapter = {
