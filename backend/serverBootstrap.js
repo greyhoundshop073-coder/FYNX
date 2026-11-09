@@ -154,6 +154,8 @@ assert.ok(generatedSocial.includes("/api/social/posts/multi"),
 assert.ok(generatedSocial.includes("/api/social/posts/:id/media"),
   "generated social runtime must preserve post media retrieval");
 
-await import("./scalability.js");
-await new Promise((resolve) => setImmediate(resolve));
-await import(`${pathToFileURL(runtimePath).href}?boot=${Date.now()}`);
+if (process.env.FYNX_BUILD_RUNTIME_ONLY !== "1") {
+  await import("./scalability.js");
+  await new Promise((resolve) => setImmediate(resolve));
+  await import(`${pathToFileURL(runtimePath).href}?boot=${Date.now()}`);
+}
