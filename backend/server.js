@@ -21,8 +21,8 @@ import { createEmailAuthController } from "./emailAuthRoutes.js";
 
 const { Pool } = pg;
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: "/realtime" });
+export const server = http.createServer(app);
+const wss = process.env.FYNX_CLOUDFLARE_WORKER === "1" ? null : new WebSocketServer({ server, path: "/realtime" });
 
 // Keep the API deliberately strict: large media is uploaded separately and authenticated.
 app.disable("x-powered-by");
@@ -963,7 +963,7 @@ app.delete("/api/messages/:id", auth, async (req, res) => {
   } catch (error) { console.error("message delete", error); return res.status(500).json({ error: "message delete failed" }); }
 });
 
-wss.on("connection", async (socket, req) => {
+if (wss) wss.on("connection", async (socket, req) => {
   try {
     const url = new URL(req.url || "/realtime", `http://${req.headers.host || "localhost"}`);
     const token = url.searchParams.get("token") || "";
@@ -1029,6 +1029,7 @@ wss.on("connection", async (socket, req) => {
     });
   } catch { socket.close(1008, "invalid token"); }
 });
+}
 
 emailAuth.registerRoutes(app, auth);
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
@@ -1050,4 +1051,8 @@ const shutdown = async (signal) => {
 process.once("SIGTERM", () => shutdown("SIGTERM"));
 process.once("SIGINT", () => shutdown("SIGINT"));
 
-server.listen(PORT, "0.0.0.0", () => console.log(`FYNX backend listening on ${PORT}`));
+if (process.env.FYNX_CLOUDFLARE_WORKER === "1") {
+  server.listen(PORT);
+} else {
+  server.listen(PORT, "0.0.0.0", () => console.log(`FYNX backend listening on ${PORT}`));
+}
