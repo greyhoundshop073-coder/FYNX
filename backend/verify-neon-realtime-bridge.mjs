@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { installNeonRealtimeBridge } from "./neon-realtime-bridge.js";
 
@@ -23,7 +22,6 @@ try {
     pool,
     dispatchLocal: (userId, payload) => deliveredA.push({ userId, payload }),
     getLocalConnectionCount: () => 1,
-    getLocalUserIds: () => ["700000001"],
     getLocalUserIds: () => ["700000001"],
     logger: { log() {}, error: (...args) => { throw new Error(args.join(" ")); } }
   });
