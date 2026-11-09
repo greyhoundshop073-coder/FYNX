@@ -2577,9 +2577,8 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("Condition", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }, colors = selectedChipColors) } }
         Text("2. Price and stock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Choose one currency for this listing. Buyers see the price exactly in the selected currency.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FynxMarketplaceSellerFlowSupport.SUPPORTED_CURRENCIES.forEach { code -> FilterChip(selected = currency == code, onClick = { currency = code }, label = { Text(code) }, colors = selectedChipColors) } }
-        OutlinedTextField(price, { price = it.filter { ch -> ch.isDigit() || ch == '.' }.take(14) }, label = { Text("Price ($currency)") }, supportingText = { Text("Enter a positive amount.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Text("FYNX Marketplace prices are in Nigerian Naira (₦).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(price, { price = it.filter { ch -> ch.isDigit() || ch == '.' }.take(14) }, label = { Text("Price (₦)") }, supportingText = { Text("Enter a positive amount.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit).take(9) }, label = { Text("Available quantity") }, supportingText = { Text("How many units can you supply?") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("3. Details buyers care about", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("These optional fields are added to your product description so buyers can compare listings more confidently.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

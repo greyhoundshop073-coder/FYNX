@@ -32,6 +32,8 @@ class FynxMarketplaceListingReceiptValidationTest {
         assertEquals(1200.5, marketplaceRequiredListingPrice(1200.5), 0.0)
         assertEquals("NGN", marketplaceRequiredMarketplaceCurrency("ngn"))
         assertEquals("USD", marketplaceRequiredMarketplaceCurrency(" USD "))
+        assertEquals(true, FynxMarketplaceSellerFlowSupport.isSupportedCurrency("ngn"))
+        assertEquals(false, FynxMarketplaceSellerFlowSupport.isSupportedCurrency("USD"))
         expectInvalid { marketplaceRequiredListingTitle("") }
         expectInvalid { marketplaceRequiredListingTitle("x".repeat(MAX_MARKETPLACE_LISTING_RESPONSE_TITLE_LENGTH + 1)) }
         expectInvalid { marketplaceRequiredListingPrice(null) }

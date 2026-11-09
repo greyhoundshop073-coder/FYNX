@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -159,7 +160,12 @@ fun FynxMarketplaceSellerCenterPanel() {
     var accountSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var accountMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var showPayoutAccount by remember(sellerAccountKey) { mutableStateOf(false) }
-    var bankCode by remember(sellerAccountKey) { mutableStateOf("") }
+    var payoutBanks by remember(sellerAccountKey) { mutableStateOf<List<FynxWalletPayoutBank>>(emptyList()) }
+    var payoutBanksLoading by remember(sellerAccountKey) { mutableStateOf(false) }
+    var payoutBanksError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var payoutBanksReloadKey by remember(sellerAccountKey) { mutableIntStateOf(0) }
+    var selectedPayoutBank by remember(sellerAccountKey) { mutableStateOf<FynxWalletPayoutBank?>(null) }
+    var payoutBankMenuOpen by remember(sellerAccountKey) { mutableStateOf(false) }
     var accountNumber by remember(sellerAccountKey) { mutableStateOf("") }
     var accountName by remember(sellerAccountKey) { mutableStateOf("") }
     var moneyLoading by remember(sellerAccountKey) { mutableStateOf(true) }
@@ -1265,34 +1271,76 @@ fun FynxMarketplaceSellerCenterPanel() {
     }
 
     if (showPayoutAccount) {
+        LaunchedEffect(payoutBanksReloadKey, marketplacePayoutsEnabled) {
+            if (!marketplacePayoutsEnabled || payoutBanks.isNotEmpty()) return@LaunchedEffect
+            payoutBanksLoading = true
+            payoutBanksError = null
+            FynxBackendClient.get(context, "/api/marketplace/settlement/payout-banks")
+                .mapCatching(FynxBuyerWalletClient::parsePayoutBanks)
+                .onSuccess { banks ->
+                    payoutBanks = banks
+                    if (banks.isEmpty()) payoutBanksError = "No supported banks are available right now."
+                }
+                .onFailure { payoutBanksError = marketplaceSafeError(it, "Supported banks could not load.") }
+            payoutBanksLoading = false
+        }
         AlertDialog(
             onDismissRequest = { if (!accountSaving) showPayoutAccount = false },
             title = { Text("Payout account") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("FYNX verifies the bank details with the payout provider before the account can receive protected Marketplace payouts.", style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("NGN", "USD").forEach { currency ->
-                            FilterChip(selected = payoutCurrency == currency, onClick = { payoutCurrency = currency }, label = { Text(currency) }, colors = selectedChipColors)
+                    Text("Nigerian bank account (₦)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    Box {
+                        OutlinedButton(
+                            onClick = { payoutBankMenuOpen = true },
+                            enabled = !accountSaving && payoutBanks.isNotEmpty(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                selectedPayoutBank?.name ?: if (payoutBanksLoading) "Loading banks…" else "Select bank",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = payoutBankMenuOpen,
+                            onDismissRequest = { payoutBankMenuOpen = false },
+                            modifier = Modifier.heightIn(max = 320.dp)
+                        ) {
+                            payoutBanks.forEach { bank ->
+                                DropdownMenuItem(
+                                    text = { Text(bank.name) },
+                                    onClick = {
+                                        selectedPayoutBank = bank
+                                        payoutBankMenuOpen = false
+                                    }
+                                )
+                            }
                         }
                     }
-                    OutlinedTextField(bankCode, { bankCode = it.filter(Char::isDigit) }, label = { Text("Bank code") }, singleLine = true)
-                    OutlinedTextField(accountNumber, { accountNumber = it.filter(Char::isDigit) }, label = { Text("Account number") }, singleLine = true)
+                    payoutBanksError?.let { message ->
+                        Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton(enabled = !payoutBanksLoading, onClick = { payoutBanksReloadKey += 1 }) { Text("Retry banks") }
+                    }
+                    OutlinedTextField(accountNumber, { accountNumber = it.filter(Char::isDigit).take(10) }, label = { Text("10-digit account number") }, singleLine = true)
                     OutlinedTextField(accountName, { accountName = it }, label = { Text("Account name") }, singleLine = true)
                     accountMessage?.let { Text(it, color = if (it == "Payout account verified and connected.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
-                Button(enabled = !accountSaving && marketplacePayoutsEnabled, onClick = {
+                val bank = selectedPayoutBank
+                Button(enabled = !accountSaving && marketplacePayoutsEnabled && bank != null && accountNumber.length == 10 && accountName.trim().length >= 2, onClick = {
+                    if (bank == null) return@Button
                     accountSaving = true
                     accountMessage = null
                     scope.launch {
                         val bodyJson = JSONObject()
-                            .put("bankCode", bankCode.trim())
+                            .put("bankCode", bank.code)
                             .put("accountNumber", accountNumber.trim())
                             .put("accountName", accountName.trim())
                             .put("currency", payoutCurrency)
-                            .put("bankName", payoutAccount?.optString("bankName").orEmpty())
+                            .put("bankName", bank.name)
                         val body = bodyJson.toString()
                         FynxBackendClient.postJson(context, "/api/marketplace/settlement/payout-account", body)
                             .onSuccess { raw ->
@@ -1304,7 +1352,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     payoutCurrency = savedCurrency
                                 }
                                 accountMessage = "Payout account verified and connected."
-                                bankCode = ""; accountNumber = ""; accountName = ""
+                                selectedPayoutBank = null; accountNumber = ""; accountName = ""
                             }
                             .onFailure { accountMessage = marketplaceSafeError(it, "Payout account could not be verified.") }
                         accountSaving = false
