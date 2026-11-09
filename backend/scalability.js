@@ -110,7 +110,7 @@ http.createServer = function fynxCreateServer(...args) {
   server.requestTimeout=30_000;
   server.maxRequestsPerSocket=1_000;
   server.maxConnections=500;
-  if (process.env.FYNX_CLOUDFLARE_WORKER === "1") {
+  if (process.env.FYNX_NEON_FUNCTION === "1") {
     globalThis.__fynxIdempotency=createIdempotencyStore({maxEntries:10_000,ttlMs:24*60*60*1000});
     return server;
   }
