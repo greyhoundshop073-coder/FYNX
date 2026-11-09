@@ -16,7 +16,7 @@ checks = [
     ("real device location resolver exists", 'LocationManager' in location and 'Geocoder' in location and 'currentPlace' in location),
     ("raw coordinates stay local", 'location.latitude' in location and 'location.longitude' in location and 'put("latitude"' not in client and 'put("longitude"' not in client),
     ("location is optional in composer", 'var postLocation by remember' in composer and 'postLocation = null' in composer),
-    ("location chip is wired", 'ComposerQuickChip("Location"' in composer and 'locationPermissionLauncher.launch' in composer),
+    ("location row is wired to the existing permission-aware real location resolver", 'Text("Location"' in composer and 'requestComposerLocation()' in composer and 'FynxPostLocationClient.currentPlace(context)' in composer and 'locationPermissionLauncher.launch' in composer),
     ("permission flow is real", 'RequestMultiplePermissions' in composer and 'ACCESS_FINE_LOCATION' in composer),
     ("location sent through real post client", 'location: String? = null' in client and 'put("location", location?.trim()?.take(160) ?: JSONObject.NULL)' in client),
     ("server bounds stored location", "slice(0,160)" in routes and "slice(0, 160)" in multi),
