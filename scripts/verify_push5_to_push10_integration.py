@@ -51,7 +51,7 @@ check("marketplace dispute path exists", "marketplace_order_disputes" in market_
 
 # Push 8
 check("verification is tied to real user data", "verified" in profile_api)
-check("official FYNX verification is backend-enforced without resetting existing users", "FYNX_OFFICIAL_USERNAME" in server and "verified = TRUE WHERE lower(username)" in server and not re.search(r"UPDATE\\s+users\\s+SET\\s+verified\\s*=\\s*FALSE", server, re.IGNORECASE))
+check("official FYNX verification is backend-enforced without resetting existing users", "FYNX_OFFICIAL_USERNAME" in server and "verified = TRUE WHERE lower(username)" in server and not re.search(r"UPDATE\s+users\s+SET\s+verified\s*=\s*FALSE", server, re.IGNORECASE))
 check("badge rendering has explicit blue color support", "Color(0xFF1877F2)" in other)
 
 # Push 9 investigation
