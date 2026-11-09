@@ -3791,6 +3791,20 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             if wallet_return_xml and find_control(wallet_return_xml, ["Search products, sellers or categories"]):
                 marketplace_xml=wallet_return_xml
 
+        # Wallet can return Marketplace at its previous vertical scroll offset.
+        # My Shop is in the top shortcut rail, so restore the real content viewport
+        # before looking for seller entry points. This is a bounded, read-only gesture.
+        for attempt in range(5):
+            if find_control(marketplace_xml, ["My Shop"]):
+                break
+            scrolled_xml = swipe_vertical_scroll_container(
+                marketplace_xml, "authenticated-marketplace-my-shop-return-top-" + str(attempt) + ".xml",
+                reverse=True
+            )
+            if not scrolled_xml:
+                break
+            marketplace_xml = scrolled_xml
+
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
         product_target = marketplace_product_card_target(marketplace_xml)
