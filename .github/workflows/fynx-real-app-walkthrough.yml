@@ -1,4 +1,4 @@
-name: FYNX Real App Walkthrough Video
+name: FYNX Real App Walkthrough Video # current short-form highlight editor
 
 on:
   push:
