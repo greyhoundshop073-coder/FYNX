@@ -2183,6 +2183,5 @@ export function registerBuyerWalletRoutes({ app }) {
 
 }
 
-export async function closeBuyerWalletPool() {
-  if (pool) await pool.end();
-}
+// Buyer Wallet borrows the application-wide pool; only the application owner may close it.
+export async function closeBuyerWalletPool() {}

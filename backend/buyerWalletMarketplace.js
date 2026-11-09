@@ -651,6 +651,5 @@ export function registerBuyerWalletMarketplaceRoutes({ app }) {
 
 }
 
-export async function closeBuyerWalletMarketplacePool() {
-  if (pool) await pool.end();
-}
+// Wallet Marketplace borrows the application-wide pool; only the application owner may close it.
+export async function closeBuyerWalletMarketplacePool() {}
