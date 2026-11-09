@@ -1,0 +1,80 @@
+name: FYNX Real App Walkthrough Video
+
+on:
+  push:
+    branches:
+      - tools/fynx-real-app-walkthrough-video-20261109
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  record:
+    name: Build, launch and record the real FYNX Android app
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out the canonical FYNX source
+        uses: actions/checkout@v4
+        with:
+          ref: integration/fynx-single-apk-20261013
+          fetch-depth: 1
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build the real debug APK
+        run: ./gradlew assembleDebug --no-daemon --build-cache
+
+      - name: Install video narration and editing tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg espeak-ng fonts-dejavu-core
+          ffmpeg -version | head -n 1
+          espeak-ng --version | head -n 1
+
+      - name: Run FYNX in an Android emulator and record the user journey
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        timeout-minutes: 25
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disk-size: 4G
+          script: |
+            set -euo pipefail
+            mkdir -p fynx-walkthrough
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm grant com.fynx.app android.permission.POST_NOTIFICATIONS || true
+            python3 scripts/record_fynx_walkthrough.py
+            adb logcat -d -v threadtime > fynx-walkthrough/device-logcat.txt
+
+      - name: Create narrated and captioned advertising-ready version
+        if: always()
+        run: |
+          if [ -s fynx-walkthrough/FYNX-Real-App-Walkthrough.mp4 ]; then
+            python3 scripts/finish_fynx_walkthrough_video.py
+          else
+            echo "No raw app recording was produced; refusing to fabricate a video."
+            exit 1
+          fi
+
+      - name: Upload actual FYNX walkthrough videos and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-Real-App-Walkthrough
+          path: |
+            fynx-walkthrough/*.mp4
+            fynx-walkthrough/*.wav
+            fynx-walkthrough/*.srt
+            fynx-walkthrough/*.md
+            fynx-walkthrough/device-logcat.txt
+          if-no-files-found: warn
+          retention-days: 30
