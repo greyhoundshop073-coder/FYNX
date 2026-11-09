@@ -6,8 +6,8 @@
     "verify:wallet-ledger": "node verify-wallet-business-ledger.mjs",
     "prestart": "node test-media-storage.mjs && node verify-media-object-storage.mjs && node verify-media-payload-cache.mjs && node test-assistant-json-body-parser.mjs && node test-ai-conversation-context.mjs && node test-fynx-ai-privacy-policy.mjs && node test-ai-realtime-auth.mjs && node test-email-auth.mjs && node test-fynx-ai-writing-copy.mjs && node test-marketplace-ai-listing-copy.mjs && node test-marketplace-ai-photo-review.mjs && node test-gemini-assistant-provider.mjs && node verify-runtime-bootstrap.mjs && node verify-shared-database-pool.mjs && node verify-deployment-provenance.mjs && node verify-media-route.mjs && node verify-marketplace-discovery-query.mjs && node verify-marketplace-advertising-auth.mjs && node verify-marketplace-advertising-cpc-runtime.mjs && node verify-notification-bootstrap-idempotency.mjs && node verify-social-post-reaction-bootstrap.mjs && node verify-home-comment-reaction-bootstrap.mjs && node verify-home-comment-experience-bootstrap.mjs && node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\" && node verify-wallet-business-ledger.mjs",
     "start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js",
-    "build:cloudflare": "node build-cloudflare-runtime.mjs",
-    "verify:cloudflare": "npm run build:cloudflare && node --check cloudflare-worker.js && node --check .fynx-runtime-server.js && node --check .fynx-runtime-socialRoutes.js"
+    "build:neon": "node build-neon-runtime.mjs",
+    "verify:neon": "npm run build:neon && node --check neon-function.js && node --check realtimeIsolationRuntime.js && node --check .fynx-runtime-server.js && node --check .fynx-runtime-socialRoutes.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -17,6 +17,11 @@
     "ws": "^8.18.3",
     "@aws-sdk/client-s3": "^3.1161.0",
     "@aws-sdk/s3-request-presigner": "^3.1161.0",
-    "nodemailer": "10.3.1"
+    "nodemailer": "10.3.1",
+    "@neon/functions": "^0.11.0",
+    "serverless-http": "^3.2.0"
+  },
+  "devDependencies": {
+    "@neon/config": "^1.10.0"
   }
 }
