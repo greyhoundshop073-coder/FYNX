@@ -8,6 +8,7 @@ import { registerMarketplaceSettlementWorker } from "./marketplaceSettlementWork
 import { expireUnpaidMarketplaceReservations, expireUnpaidMarketplaceCheckoutGroups, recoverInterruptedPaymentInitializations, reconcileTerminalFinancialOperations } from "./marketplacePaymentExpiry.js";
 import { autoCompleteExpiredMarketplaceInspections } from "./marketplaceInspectionExpiry.js";
 import { runMarketplaceBatch2RecoveryOnce } from "./marketplaceBatch2FinalHardening.js";
+import { installNeonRealtimeBridge } from "./neon-realtime-bridge.js";
 
 process.env.FYNX_NEON_FUNCTION = "1";
 const originalHttpCreateServer = http.createServer;
@@ -19,7 +20,8 @@ if (pool) attachDatabasePool(pool);
 // canonical Express server registers its WebSocket connection listener.
 await import("./realtimeIsolationRuntime.js");
 await import("./scalability.js");
-const { app, dispatchRealtimeConnection } = await import("./.fynx-runtime-server.js");
+const { app, dispatchRealtimeConnection, dispatchRealtimeEventToLocalSockets, getRealtimeLocalConnectionCount } = await import("./.fynx-runtime-server.js");
+const realtimeBridge = await installNeonRealtimeBridge({ pool, dispatchLocal: dispatchRealtimeEventToLocalSockets, getLocalConnectionCount: getRealtimeLocalConnectionCount, logger: console });
 // Restore Node HTTP after the canonical route-registration hook has built the app.
 // serverless-http creates its own adapter server and must not trigger FYNX route wiring twice.
 http.createServer = originalHttpCreateServer;
@@ -39,6 +41,7 @@ async function runFynxScheduledTasks() {
   };
 
   await run("job_queue_schema", () => scheduledJobs.runOnce());
+  await run("realtime_event_cleanup", () => realtimeBridge.cleanup());
   await run("expired_payment_reservations", () => expireUnpaidMarketplaceReservations({ logger: console }));
   await run("expired_checkout_groups", () => expireUnpaidMarketplaceCheckoutGroups({ logger: console }));
   await run("interrupted_payment_recovery", () => recoverInterruptedPaymentInitializations({ logger: console }));
