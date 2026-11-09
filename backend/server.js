@@ -963,7 +963,8 @@ app.delete("/api/messages/:id", auth, async (req, res) => {
   } catch (error) { console.error("message delete", error); return res.status(500).json({ error: "message delete failed" }); }
 });
 
-if (wss) wss.on("connection", async (socket, req) => {
+if (wss) {
+  wss.on("connection", async (socket, req) => {
   try {
     const url = new URL(req.url || "/realtime", `http://${req.headers.host || "localhost"}`);
     const token = url.searchParams.get("token") || "";
@@ -1028,7 +1029,7 @@ if (wss) wss.on("connection", async (socket, req) => {
       }
     });
   } catch { socket.close(1008, "invalid token"); }
-});
+  });
 }
 
 emailAuth.registerRoutes(app, auth);
