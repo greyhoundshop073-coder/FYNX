@@ -19,7 +19,7 @@ jobs:
       - name: Check out the canonical FYNX source
         uses: actions/checkout@v4
         with:
-          ref: integration/fynx-single-apk-20261013
+          ref: tools/fynx-real-app-walkthrough-video-20261109
           fetch-depth: 1
 
       - name: Set up Java
