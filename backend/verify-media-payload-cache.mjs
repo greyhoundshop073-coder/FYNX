@@ -15,6 +15,8 @@ const [cacheSource, serverSource, marketplaceSource, socialSource, socialBootstr
 assert.match(cacheSource, /MAX_CACHE_BYTES\s*=\s*32\s*\*\s*1024\s*\*\s*1024/);
 assert.match(cacheSource, /MAX_CACHE_ITEM_BYTES\s*=\s*12\s*\*\s*1024\s*\*\s*1024/);
 assert.match(cacheSource, /pendingLoads/);
+assert.match(cacheSource, /storageProvider !== "neon"/);
+assert.match(cacheSource, /storageProvider === "postgres"\s*\?\s*row\.data\s*:\s*await mediaStorage\.getMediaObjectBytes\(row\.object_key, storageProvider\)/);
 assert.match(cacheSource, /cacheBytes\s*\+\s*data\.length\s*>\s*MAX_CACHE_BYTES/);
 
 function route(source, startMarker, endMarker) {

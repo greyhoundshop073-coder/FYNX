@@ -153,7 +153,7 @@ jobs:
         run: node verify-notification-bootstrap-idempotency.mjs
       - name: Verify bounded media payload cache
         run: node verify-media-payload-cache.mjs
-      - name: Verify optional R2 media object storage adapter
+      - name: Verify portable Neon and R2 media object storage adapters
         run: |
           node --check mediaStorage.js
           node test-media-storage.mjs

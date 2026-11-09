@@ -383,7 +383,7 @@ app.post("/api/media", auth, async (req, res) => {
     try {
       result = await pool.query(
         "INSERT INTO message_media (owner_id, mime_type, data, byte_size, storage_provider, object_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, mime_type, byte_size",
-        [req.user.sub, mimeType, stored.storageProvider === "r2" ? null : data, data.length, stored.storageProvider, stored.objectKey]
+        [req.user.sub, mimeType, stored.storageProvider === "postgres" ? data : null, data.length, stored.storageProvider, stored.objectKey]
       );
     } catch (databaseError) {
       if (stored.objectKey) {
