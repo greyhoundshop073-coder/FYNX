@@ -29,6 +29,7 @@ const settlementScan = registerMarketplaceSettlementWorker({ jobs: scheduledJobs
 async function runFynxScheduledTasks() {
   const result = {};
   const failures = [];
+  const jobFailuresBefore = Number(scheduledJobs.snapshot().failures || 0);
   const run = async (name, task) => {
     try { result[name] = await task(); }
     catch (error) {
@@ -48,7 +49,6 @@ async function runFynxScheduledTasks() {
   if (batch2?.failures?.length) failures.push("marketplace_batch2_recovery");
   if (settlementScan) await run("payout_settlement_scan", () => settlementScan());
 
-  const jobFailuresBefore = Number(scheduledJobs.snapshot().failures || 0);
   let jobsProcessed = 0;
   for (let index = 0; index < 20; index += 1) {
     const before = Number(scheduledJobs.snapshot().claimed || 0);
