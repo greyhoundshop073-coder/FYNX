@@ -10,6 +10,7 @@ if (pool) attachDatabasePool(pool);
 // Apply the existing FYNX realtime socket isolation before the generated
 // canonical Express server registers its WebSocket connection listener.
 await import("./realtimeIsolationRuntime.js");
+await import("./scalability.js");
 const { app, dispatchRealtimeConnection } = await import("./.fynx-runtime-server.js");
 const expressHandler = serverless(app);
 
