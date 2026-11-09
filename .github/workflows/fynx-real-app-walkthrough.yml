@@ -28,8 +28,25 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle dependency and distribution cache
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Build the real debug APK
-        run: ./gradlew assembleDebug --no-daemon --build-cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            echo "Gradle build attempt ${attempt}/5"
+            if ./gradlew assembleDebug --no-daemon --build-cache; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              echo "Gradle distribution/dependency fetch failed; retrying after 15 seconds."
+              sleep 15
+            fi
+          done
+          echo "::error::FYNX APK build failed after five attempts."
+          exit 1
 
       - name: Install video narration and editing tools
         run: |
