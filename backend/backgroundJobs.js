@@ -36,6 +36,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
       enqueue: async () => { throw new Error("DATABASE_URL is not configured"); },
       start: async () => {},
       stop: async () => {},
+      runOnce: async () => ({ enabled: false }),
       snapshot: () => ({ enabled: false })
     };
   }
@@ -65,6 +66,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   }
 
   let timer = null;
+  let schemaPromise = null;
   let running = false;
   let stopped = false;
   let lastAlertSignature = "";
@@ -123,6 +125,11 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
       CREATE INDEX IF NOT EXISTS fynx_background_jobs_lease_idx ON fynx_background_jobs (status, lease_expires_at);
       CREATE UNIQUE INDEX IF NOT EXISTS fynx_background_jobs_idempotency_idx ON fynx_background_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL;
     `);
+  }
+
+  async function ensureSchemaOnce() {
+    if (!schemaPromise) schemaPromise = ensureSchema().catch((error) => { schemaPromise = null; throw error; });
+    return schemaPromise;
   }
 
   async function enqueue(type, payload = {}, options = {}) {
@@ -273,10 +280,16 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
 
   async function start() {
     if (stopped) return;
-    await ensureSchema();
+    await ensureSchemaOnce();
     await reclaimExpired();
     timer = setInterval(() => { void tick(); }, pollMs).unref();
     void tick();
+  }
+
+  async function runOnce() {
+    await ensureSchemaOnce();
+    await tick();
+    return snapshot();
   }
 
   async function stop() {
@@ -286,5 +299,5 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
     if (pool && !usesSharedPool) await pool.end();
   }
 
-  return { enabled: true, enqueue, start, stop, snapshot };
+  return { enabled: true, enqueue, start, runOnce, stop, snapshot };
 }
