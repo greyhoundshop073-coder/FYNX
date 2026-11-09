@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
 
@@ -13,7 +14,7 @@ export function marketplaceRecoveryRetryDelayMs(failureCount) {
   if (retries === 0) return RECOVERY_INTERVAL_MS;
   return Math.min(MAX_RECOVERY_BACKOFF_MS, RECOVERY_INTERVAL_MS * (2 ** Math.min(retries, 4)));
 }
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, max: 2, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000, statement_timeout: 15_000, query_timeout: 20_000, keepAlive: true }) : null;
+const pool = getFynxDatabasePool();
 let fetchInstalled = false;
 
 function timeoutError(url) {

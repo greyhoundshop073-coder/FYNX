@@ -134,6 +134,8 @@ jobs:
           node --check verify-stage15h-admin.mjs
           node --check verify-stage15d-advanced.mjs
           node --check verify-stage15d-jobs.mjs
+      - name: Verify shared bounded database pool
+        run: node verify-shared-database-pool.mjs
       - name: Check and test FYNX assistant request parsing and Gemini provider
         run: |
           node --check assistantJsonBodyParser.js

@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from "pg";
 import { Buffer } from "node:buffer";
 import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
@@ -10,7 +11,7 @@ import { assertFynxAiToolAllowed, FYNX_AI_PRIVACY_INSTRUCTIONS } from "./fynxAiP
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const JWT_SECRET = process.env.JWT_SECRET || "";
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false, max: 4, min: 0, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000, statement_timeout: 10_000, query_timeout: 12_000, keepAlive: true }) : null;
+const pool = getFynxDatabasePool();
 
 const TOOL_DEFINITIONS = [
   { type: "function", name: "prepare_send_message", description: "Prepare a real one-to-one FYNX chat message for the authenticated user. This NEVER sends the message. Use only after the user asks you to message a person. Resolve the recipient with search_users first; if the recipient is ambiguous, ask the user to choose. Return a pending confirmation action containing the exact recipient and exact message. Sending requires separate explicit user confirmation outside the AI tool.", strict: true, parameters: { type: "object", properties: { recipientUsername: { type: "string", description: "Exact FYNX username of the recipient, without @." }, message: { type: "string", description: "The exact message the user wants sent." } }, required: ["recipientUsername","message"], additionalProperties: false } },
