@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 home = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt").read_text(encoding="utf-8")
+visible_updates = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxVisibleUpdatesPanel.kt").read_text(encoding="utf-8")
 camera = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
 overlay = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraTextOverlay.kt").read_text(encoding="utf-8")
 overlay_test = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/CameraTextOverlayInstrumentationTest.kt").read_text(encoding="utf-8")
@@ -19,6 +20,10 @@ app_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(e
 draft_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt").read_text(encoding="utf-8")
 
 checks = [
+    ("Home header camera and quick-capture button have distinct accessible names",
+     'contentDescription = "Open FYNX camera"' in app_source
+     and 'contentDescription = "Open quick camera"' in visible_updates
+     and 'contentDescription = "Open FYNX camera"' not in visible_updates),
     ("Live and editor music chips share a centered position with side clearance",
      "modifier = Modifier.align(Alignment.TopCenter)" in camera
      and ".padding(start = 64.dp, end = 64.dp, top = 74.dp)" in camera
