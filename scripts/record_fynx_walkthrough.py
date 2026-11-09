@@ -48,13 +48,26 @@ if recorder.poll() is not None:
     raise RuntimeError("Android screenrecord did not start: " + detail[-2000:])
 
 journey = None
+journey_command = [sys.executable, "scripts/verify_authenticated_runtime_navigation.py"]
 try:
-    journey = subprocess.run(
-        [sys.executable, "scripts/verify_authenticated_runtime_navigation.py"],
-        env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        timeout=165, check=False
-    )
-    (OUT / "runtime-journey-log.txt").write_text(journey.stdout, encoding="utf-8")
+    try:
+        journey = subprocess.run(
+            journey_command,
+            env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=165, check=False
+        )
+    except subprocess.TimeoutExpired as exc:
+        partial_output = exc.stdout or ""
+        if isinstance(partial_output, bytes):
+            partial_output = partial_output.decode("utf-8", "replace")
+        journey = subprocess.CompletedProcess(
+            journey_command,
+            124,
+            partial_output + "\nRuntime visual journey timed out after 165 seconds; preserving the real Android screen recording.\n"
+        )
+    (OUT / "runtime-journey-log.txt").write_text(journey.stdout or "", encoding="utf-8")
+    if journey.returncode == 124:
+        print("Runtime journey timed out; the recording will still be finalized and retained.")
 finally:
     # Signal the recorder process on Android itself; interrupting the local adb
     # client alone does not reliably finalize the MP4 container on the device.
