@@ -87,7 +87,7 @@ async function confirmLatePayment(client, order, providerFee = 0) {
   return true;
 }
 
-async function recoverInterruptedPaymentInitializations({ logger = console } = {}) {
+export async function recoverInterruptedPaymentInitializations({ logger = console } = {}) {
   if (!pool || !PAYSTACK_SECRET_KEY) return 0;
   const candidates = await pool.query(`
     SELECT id,buyer_id,total_amount,currency,payment_reference,payment_authorization_url,payment_access_code,updated_at
@@ -135,7 +135,7 @@ async function recoverInterruptedPaymentInitializations({ logger = console } = {
   return recovered;
 }
 
-async function reconcileTerminalFinancialOperations({ logger = console } = {}) {
+export async function reconcileTerminalFinancialOperations({ logger = console } = {}) {
   if (!pool || !PAYSTACK_SECRET_KEY) return 0;
   let repaired = 0;
   const payoutRows = await pool.query(`
@@ -236,7 +236,7 @@ async function verifyProviderCheckoutGroupPayment(group) {
  * Reconcile an expired multi-product checkout as one unit. Never release stock
  * while Paystack is unavailable or still processing a referenced payment.
  */
-async function expireUnpaidMarketplaceCheckoutGroups({ logger = console } = {}) {
+export async function expireUnpaidMarketplaceCheckoutGroups({ logger = console } = {}) {
   if (!pool) return 0;
   let expired = 0;
   try {
@@ -334,7 +334,7 @@ async function expireUnpaidMarketplaceCheckoutGroups({ logger = console } = {}) 
   return expired;
 }
 
-export async function expireUnpaidMarketplaceReservations({ logger = console } = {}) {
+export export async function expireUnpaidMarketplaceReservations({ logger = console } = {}) {
   if (!pool) return 0;
   await expireUnpaidMarketplaceCheckoutGroups({ logger });
   // Multi-product child orders are owned by their checkout-group lifecycle.
