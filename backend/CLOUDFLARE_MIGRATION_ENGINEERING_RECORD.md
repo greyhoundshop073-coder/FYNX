@@ -1,6 +1,19 @@
-# FYNX Cloudflare Workers migration — engineering record
+# FYNX backend migration engineering record
 
-Status: assessment and safety preparation; no Worker deployment has been made.
+Status: historical Cloudflare assessment; no Worker was deployed.
+
+> **Superseded architecture decision (9 November 2026):** Neon Functions is now the selected runtime for the FYNX test backend. The existing project is in a supported Neon Functions region, and Node.js 24 supports the current bcrypt, Node HTTP and WebSocket requirements. Cloudflare Free's 10 ms CPU ceiling is unsuitable for safely preserving the existing bcrypt login path. See `NEON_FUNCTIONS_DEPLOYMENT.md` for the active implementation and deployment steps.
+
+## Current implementation status
+
+- The source-patching bootstrap chain now has a build-only mode so generated server modules can be created before deployment rather than written at function startup.
+- The canonical Express app and realtime connection handler are exported for the Neon Function adapter.
+- `neon-function.js` adapts HTTP requests to the existing Express app and WebSocket upgrades to the existing authenticated realtime handler.
+- Periodic process-local workers are skipped in the Neon request runtime; scheduled/idempotent job execution still requires its own implementation and verification.
+- Cloudflare Worker scaffolding was removed rather than leaving two competing backend targets.
+- No Neon Function has been deployed yet; the existing Railway secrets are redacted to this connected account, so their exact values must be transferred through GitHub Actions secrets.
+- The Android backend URL, test-user sessions, and Neon database records have not been changed.
+
 
 Canonical application branch: `integration/fynx-single-apk-20261013`
 
