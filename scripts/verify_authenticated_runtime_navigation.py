@@ -673,9 +673,22 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     """Exercise the real camera preview/photo editor and safe controls without publishing a post."""
     # Keep a defined Home fallback for every early-recovery branch. The camera flow may
     # return to Home after a successful details-page inspection or an aborted draft path.
-    home = home_xml
+    # Home's shared chrome collapses while the feed is scrolled. The Home
+    # screenshot can therefore show Status at the top while the header camera
+    # action is intentionally outside the viewport. Restore the real Home feed
+    # to its top before looking for the header control; do not substitute the
+    # separate quick-camera shortcut, which intentionally opens a different flow.
+    home = restore_home_feed_top(home_xml, f"{prefix}-restore-home-top")
+    if not find_control(home, ["Open FYNX camera"]):
+        FAILURES.append(
+            f"{prefix}-home-camera-composer: Home header camera remained unavailable "
+            f"after bounded scroll-to-top recovery; visible markers: {visible_marker_summary(home)}"
+        )
+        screenshot(f"{prefix}-home-camera-control-missing.png")
+        (ROOT / f"{prefix}-home-camera-control-missing.xml").write_text(home + chr(10), encoding="utf-8")
+        return home
     composer_xml = tap_control(
-        home_xml, ["Open FYNX camera"], f"{prefix}-home-camera-composer",
+        home, ["Open FYNX camera"], f"{prefix}-home-camera-composer",
         ["Add description..."]
     )
     if not composer_xml:
