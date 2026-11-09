@@ -16,7 +16,7 @@ checks = [
     ])),
     ("Built-in FYNX music is 45 seconds per track", "FYNX_MUSIC_DURATION_SECONDS = 45" in routes and "FYNX_MUSIC_DURATION_SECONDS * 1000" in routes),
     ("Built-in catalogue seed is idempotent", "SELECT id FROM fynx_music_catalogue WHERE title=$1 AND artist=$2" in routes and "if (existing.rows[0]) continue" in routes),
-    ("Create Post Music control opens the FYNX catalogue", 'ComposerQuickChip("Music", Icons.Default.MusicNote' in composer and 'showMusicPicker = true' in composer),
+    ("Create Post Music control opens the FYNX catalogue", 'Text(if (selectedCatalogueMusic == null) "Add music" else "Change music")' in composer and 'showMusicPicker = true' in composer),
     ("Normal users no longer get an audio document picker", 'ActivityResultContracts.OpenDocument()' not in composer and 'musicPicker.launch' not in composer),
     ("Catalogue client reads only published FYNX tracks", "FynxMusicCatalogueClient" in composer and "/api/social/music/catalogue" in catalogue and "listPublished" in catalogue),
     ("Catalogue tracks carry a server media reference", "mediaId: Long" in catalogue and 'row.optLong("mediaId"' in catalogue),
