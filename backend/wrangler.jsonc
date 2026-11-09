@@ -3,13 +3,23 @@
   "name": "fynx-backend",
   "main": "cloudflare-worker.js",
   "compatibility_date": "2026-11-09",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": true,
-  "observability": { "enabled": true },
+  "observability": {
+    "enabled": true
+  },
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
       "id": "REPLACE_WITH_FYNX_TESTING_HYPERDRIVE_ID"
     }
-  ]
+  ],
+  "build": {
+    "command": "npm run build:cloudflare",
+    "watch_dir": [
+      "./"
+    ]
+  }
 }
