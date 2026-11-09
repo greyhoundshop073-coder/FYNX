@@ -33,10 +33,14 @@ jobs:
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
         run: |
-          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_GEMINI_API_KEY" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ]; then
-            echo "::error::Add NEON_API_KEY, FYNX_JWT_SECRET, FYNX_GEMINI_API_KEY and FYNX_PAYSTACK_SECRET_KEY in GitHub repository Actions secrets."
-            exit 1
-          fi
+          required="NEON_API_KEY FYNX_JWT_SECRET FYNX_GEMINI_API_KEY FYNX_PAYSTACK_SECRET_KEY FYNX_OFFICIAL_USERNAME FYNX_WALLET_TEST_MODE_ENABLED FYNX_WALLET_CARD_FUNDING_ENABLED FYNX_WALLET_FUNDING_MIN_AMOUNT FYNX_WALLET_FUNDING_MAX_AMOUNT"
+          for name in $required; do
+            eval "value=\$name"
+            if [ -z "$value" ]; then
+              echo "::error::Missing required GitHub secret/variable: $name"
+              exit 1
+            fi
+          done
 
       - name: Deploy only to the isolated fynx-testing branch
         env:
@@ -49,4 +53,16 @@ jobs:
           FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED }}
           FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT }}
           FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT }}
-        run: npx --yes neon@9.2.0 deploy --project-id patient-lab-43403708 --branch br-floral-shape-b5mbajl5
+        run: |
+          umask 077
+          cat > .env.neon.deploy <<EOF
+          FYNX_JWT_SECRET=$FYNX_JWT_SECRET
+          FYNX_GEMINI_API_KEY=$FYNX_GEMINI_API_KEY
+          FYNX_PAYSTACK_SECRET_KEY=$FYNX_PAYSTACK_SECRET_KEY
+          FYNX_OFFICIAL_USERNAME=$FYNX_OFFICIAL_USERNAME
+          FYNX_WALLET_TEST_MODE_ENABLED=$FYNX_WALLET_TEST_MODE_ENABLED
+          FYNX_WALLET_CARD_FUNDING_ENABLED=$FYNX_WALLET_CARD_FUNDING_ENABLED
+          FYNX_WALLET_FUNDING_MIN_AMOUNT=$FYNX_WALLET_FUNDING_MIN_AMOUNT
+          FYNX_WALLET_FUNDING_MAX_AMOUNT=$FYNX_WALLET_FUNDING_MAX_AMOUNT
+          EOF
+          npx --yes neon@9.2.0 deploy --project-id patient-lab-43403708 --branch br-floral-shape-b5mbajl5 --env .env.neon.deploy
