@@ -80,4 +80,4 @@ if (previousUrl === undefined) delete process.env.DATABASE_URL; else process.env
 if (previousMax === undefined) delete process.env.DB_POOL_MAX; else process.env.DB_POOL_MAX = previousMax;
 
 console.log("SHARED DATABASE POOL CONTRACT: GREEN");
-console.log(\`Verified \${sharedModules.length} shared-pool runtime modules, bounded pool settings, and queue shutdown ownership.\`);
+console.log("Verified " + sharedModules.length + " shared-pool runtime modules, bounded pool settings, and queue shutdown ownership.");
