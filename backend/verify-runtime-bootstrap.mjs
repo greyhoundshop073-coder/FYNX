@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 
 const bootstrap = await readFile(new URL("./serverBootstrap.js", import.meta.url), "utf8");
 const server = await readFile(new URL("./server.js", import.meta.url), "utf8");
-assert.doesNotMatch(server, /UPDATE\\s+users\\s+SET\\s+verified\\s*=\\s*FALSE\\s*;/i,
-  "backend startup must never reset existing users' verification status");
+const normalizedServer = server.replace(/\s+/g, " ").toLowerCase();
+assert.ok(!normalizedServer.includes("update users set verified = false;"),
+  "backend startup must never reset existing users verification status");
 const packageJson = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
 const buyerWallet = await readFile(new URL("./buyerWallet.js", import.meta.url), "utf8");
 const buyerWalletMarketplace = await readFile(new URL("./buyerWalletMarketplace.js", import.meta.url), "utf8");
