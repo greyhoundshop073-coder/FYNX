@@ -164,7 +164,6 @@ fun FynxMarketplaceSellerCenterPanel() {
     var payoutAccounts by remember(sellerAccountKey) { mutableStateOf(emptyList<JSONObject>()) }
     var marketplacePayoutsEnabled by remember(sellerAccountKey) { mutableStateOf(false) }
     var payoutReadinessNotice by remember(sellerAccountKey) { mutableStateOf("Checking seller payout eligibility…") }
-    var payoutCurrency by rememberSaveable(sellerAccountKey) { mutableStateOf("NGN") }
     var accountLoading by remember(sellerAccountKey) { mutableStateOf(true) }
     var accountSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var accountMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
@@ -389,8 +388,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                         else "Seller payouts are not enabled yet. Complete the required business and FYNX payout approvals."
                     }
                     payoutAccount = parsed.firstOrNull {
-                        it.optString("currency").trim().uppercase() == payoutCurrency
-                    } ?: parsed.firstOrNull()
+                        it.optString("currency").trim().uppercase() == "NGN"
+                    }
                     accountMessage = null
                 }
                 .onFailure { failure ->
@@ -1407,7 +1406,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             .put("bankCode", bank.code)
                             .put("accountNumber", accountNumber.trim())
                             .put("accountName", accountName.trim())
-                            .put("currency", payoutCurrency)
+                            .put("currency", "NGN")
                             .put("bankName", bank.name)
                         val body = bodyJson.toString()
                         FynxBackendClient.postJson(context, "/api/marketplace/settlement/payout-account", body)
@@ -1417,7 +1416,6 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     val savedCurrency = saved.optString("currency").trim().uppercase()
                                     payoutAccounts = payoutAccounts.filterNot { it.optString("currency").trim().uppercase() == savedCurrency } + saved
                                     payoutAccount = saved
-                                    payoutCurrency = savedCurrency
                                 }
                                 accountMessage = "Payout account verified and connected."
                                 selectedPayoutBank = null; accountNumber = ""; accountName = ""

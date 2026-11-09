@@ -47,7 +47,7 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
         if (safetyResult.shouldBlock) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'listing blocked by marketplace safety protection', code: 'SAFETY_BLOCK' }); }
       }
       const currency = normalizeCurrency(listing.currency);
-      if (currency !== 'NGN') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'listing currency is invalid or not active', code: 'INVALID_CURRENCY' }); }
+      if (!currency || !['NGN', 'USD'].includes(currency)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'listing currency is invalid or not active', code: 'INVALID_CURRENCY' }); }
       const available = Number(listing.quantity) - Number(listing.reserved_quantity || 0);
       if (quantity > available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'requested quantity is not available', availableQuantity: Math.max(0, available) }); }
       if (fulfillmentMethod === 'DELIVERY' && !Boolean(listing.delivery_available)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is not available for this listing' }); }
@@ -136,13 +136,13 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
         }
 
         const currency = normalizeCurrency(listing.currency);
-        if (currency !== 'NGN') {
+        if (!currency || !['NGN', 'USD'].includes(currency)) {
           await client.query('ROLLBACK');
-          return res.status(409).json({ error: 'all Marketplace checkout items must be priced in Nigerian Naira (NGN)', code: 'INVALID_CURRENCY' });
+          return res.status(409).json({ error: 'all Marketplace checkout items must use an active NGN or USD currency', code: 'INVALID_CURRENCY' });
         }
         if (checkoutCurrency && checkoutCurrency !== currency) {
           await client.query('ROLLBACK');
-          return res.status(409).json({ error: 'a multi-product checkout cannot mix currencies', code: 'MIXED_CURRENCIES' });
+          return res.status(409).json({ error: 'a multi-product checkout cannot mix NGN and USD', code: 'MIXED_CURRENCIES' });
         }
         checkoutCurrency = currency;
 

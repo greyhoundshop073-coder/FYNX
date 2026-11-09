@@ -354,7 +354,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
         if(listingSafety.shouldBlock){await client.query('ROLLBACK');return res.status(422).json({error:'listing blocked by marketplace safety protection',code:'SAFETY_BLOCK'});}
       }
       const currency=typeof listing.currency==='string'?listing.currency.trim().toUpperCase():'';
-      if(currency!=='NGN'){await client.query('ROLLBACK');return res.status(409).json({error:'this Marketplace currency is not active yet',code:'UNSUPPORTED_MARKETPLACE_CURRENCY'});}
+      if(!['NGN','USD'].includes(currency)){await client.query('ROLLBACK');return res.status(409).json({error:'this Marketplace currency is not active yet',code:'UNSUPPORTED_MARKETPLACE_CURRENCY'});}
       const available=Number(listing.quantity)-Number(listing.reserved_quantity||0); if(quantity>available){await client.query('ROLLBACK');return res.status(409).json({error:'requested quantity is not available'});}
       if(clientOrderId){const existing=(await client.query('SELECT * FROM marketplace_orders WHERE id=$1 AND buyer_id=$2',[clientOrderId,req.user.sub])).rows[0];if(existing){await client.query('ROLLBACK');return res.status(200).json({order:publicOrder(existing),idempotent:true});}}
       const orderId=clientOrderId||crypto.randomUUID(), unitPrice=Number(listing.price), deliveryFee=listing.delivery_fee==null?0:Number(listing.delivery_fee), productSubtotal=Math.round(unitPrice*quantity*100)/100;

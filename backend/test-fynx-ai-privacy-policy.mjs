@@ -97,7 +97,7 @@ assert.match(privacyQueries[2].sql, /profile_visibility.*Everyone/);
 assert.match(privacyQueries[2].sql, /messages_visibility.*Everyone/);
 assert.match(privacyQueries[3].sql, /l\.active=TRUE/);
 assert.match(privacyQueries[3].sql, /quantity-COALESCE\(l\.reserved_quantity,0\)/);
-assert.match(privacyQueries[3].sql, /UPPER\(COALESCE\(l\.currency,''\)\)='NGN'/);
+assert.match(privacyQueries[3].sql, /UPPER\(COALESCE\(l\.currency,''\)\) IN \('NGN','USD'\)/);
 assert.match(privacyQueries[3].sql, /NOT EXISTS \(SELECT 1 FROM blocks/);
 assert.match(privacyQueries[3].sql, /l\.seller_id<>\$1/);
 assert.deepEqual(privacyQueries[3].params, ["17", "%camera%", "Electronics"]);
