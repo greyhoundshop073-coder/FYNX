@@ -45,7 +45,14 @@ check("production transport security headers are enabled", "X-Content-Type-Optio
 check("request body size is bounded", 'express.json({ limit: "18mb"' in server)
 check("endpoint rate limiting is enabled", 'rateLimit("auth"' in server and 'rateLimit("assistant"' in server and 'rateLimit("media"' in server and 'rateLimit("messages"' in server)
 database_pool = read("backend/databasePool.js")
-check("database pool and query timeouts are bounded", "getFynxDatabasePool" in server and "connectionTimeoutMillis" in database_pool and "statement_timeout" in database_pool and "query_timeout" in database_pool)
+if database_pool:
+    pool_source = database_pool
+    pool_is_wired = "getFynxDatabasePool" in server
+else:
+    # Older canonical integration worktrees still configure pg.Pool inline.
+    pool_source = server
+    pool_is_wired = "new Pool(" in server
+check("database pool and query timeouts are bounded", pool_is_wired and "connectionTimeoutMillis" in pool_source and "statement_timeout" in pool_source and "query_timeout" in pool_source)
 check("message authorization prevents cross-account media use", "mm.owner_id = $2" in server and "m.sender_id = $2" in server and "m.recipient_id = $2" in server)
 check("logout clears secure token storage", "FynxSecureTokenStore.save(context, null)" in auth)
 check("secure token store is separated and Android-Keystore backed", "AndroidKeyStore" in token_store and "AES/GCM/NoPadding" in token_store and "FynxSecureTokenStore" in auth)
