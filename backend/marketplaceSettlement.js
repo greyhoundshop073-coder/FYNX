@@ -265,6 +265,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
           COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller,
           COALESCE(e.status, 'UNKNOWN') AS funds,
+          o.status AS order_status,
           payout.status AS payout_status,
           COALESCE(payout.updated_at, o.updated_at, o.created_at) AS updated_at
         FROM marketplace_orders o
@@ -289,6 +290,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
             COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
             COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller,
             COALESCE(e.status, 'UNKNOWN') AS funds,
+            o.status AS order_status,
             payout.status AS payout_status
           FROM marketplace_orders o
           LEFT JOIN marketplace_escrows e ON e.order_id = o.id
@@ -308,6 +310,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
               WHEN funds = 'RELEASED' OR payout_status = 'SUCCEEDED' THEN 'paid'
               WHEN funds = 'RELEASE_PENDING' OR payout_status = 'PENDING' THEN 'pending'
               WHEN funds = 'RELEASE_ELIGIBLE' THEN 'available'
+              WHEN funds = 'UNKNOWN' AND order_status = 'COMPLETED' AND payout_status IS NULL THEN 'legacy_unreconciled'
               ELSE 'unclassified'
             END AS summary_bucket
           FROM seller_settlements
@@ -318,10 +321,11 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           COALESCE(SUM(CASE WHEN summary_bucket = 'available' THEN seller_net_amount ELSE 0 END), 0) AS available_for_payout,
           COALESCE(SUM(CASE WHEN summary_bucket = 'pending' THEN seller_net_amount ELSE 0 END), 0) AS payout_pending,
           COALESCE(SUM(CASE WHEN summary_bucket = 'paid' THEN seller_net_amount ELSE 0 END), 0) AS paid_out,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN product_subtotal ELSE 0 END), 0) AS gross_sales,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN delivery_fee ELSE 0 END), 0) AS delivery_fees,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN marketplace_fee_seller ELSE 0 END), 0) AS marketplace_fees,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN seller_net_amount ELSE 0 END), 0) AS net_earnings
+          COALESCE(SUM(CASE WHEN summary_bucket = 'legacy_unreconciled' THEN seller_net_amount ELSE 0 END), 0) AS unreconciled_legacy,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled') THEN product_subtotal ELSE 0 END), 0) AS gross_sales,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled') THEN delivery_fee ELSE 0 END), 0) AS delivery_fees,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled') THEN marketplace_fee_seller ELSE 0 END), 0) AS marketplace_fees,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled') THEN seller_net_amount ELSE 0 END), 0) AS net_earnings
         FROM classified_settlements
         GROUP BY currency
         ORDER BY currency
@@ -333,6 +337,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           availableForPayout: Number(row.available_for_payout || 0),
           payoutPending: Number(row.payout_pending || 0),
           paidOut: Number(row.paid_out || 0),
+          unreconciledLegacy: Number(row.unreconciled_legacy || 0),
           grossSales: Number(row.gross_sales || 0),
           deliveryFees: Number(row.delivery_fees || 0),
           marketplaceFees: Number(row.marketplace_fees || 0),
@@ -348,6 +353,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0),
           funds: String(row.funds || 'UNKNOWN'),
           payoutStatus: String(row.payout_status || row.funds || 'UNKNOWN'),
+          orderStatus: String(row.order_status || 'UNKNOWN'),
           updatedAt: row.updated_at
         }))
       });

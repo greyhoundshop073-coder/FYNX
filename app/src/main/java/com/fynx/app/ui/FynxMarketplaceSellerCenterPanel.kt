@@ -51,6 +51,7 @@ private data class SellerMoneyRecord(
     val marketplaceFee: Double,
     val funds: String,
     val payoutStatus: String,
+    val orderStatus: String,
     val updatedAt: String
 )
 
@@ -62,7 +63,8 @@ private data class SellerMoneyTotals(
     val protectedFunds: Double,
     val availableForPayout: Double,
     val payoutPending: Double,
-    val paidOut: Double
+    val paidOut: Double,
+    val unreconciledLegacy: Double
 )
 
 private data class SellerMoneySnapshot(
@@ -237,7 +239,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 protectedFunds = marketplaceRequiredBalance(row.opt("protectedFunds")),
                                 availableForPayout = marketplaceRequiredBalance(row.opt("availableForPayout")),
                                 payoutPending = marketplaceRequiredBalance(row.opt("payoutPending")),
-                                paidOut = marketplaceRequiredBalance(row.opt("paidOut"))
+                                paidOut = marketplaceRequiredBalance(row.opt("paidOut")),
+                                unreconciledLegacy = marketplaceRequiredBalance(row.opt("unreconciledLegacy"))
                             )
                         }
                     }
@@ -260,6 +263,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFeeSeller")),
                             funds = funds,
                             payoutStatus = payoutStatus,
+                            orderStatus = row.optString("orderStatus").ifBlank { "UNKNOWN" },
                             updatedAt = row.optString("updatedAt")
                         )
                     }
@@ -766,6 +770,14 @@ fun FynxMarketplaceSellerCenterPanel() {
                             MoneySummaryRow("Available for payout", available, currency)
                             MoneySummaryRow("Payout pending", pending, currency)
                             MoneySummaryRow("Paid out", paid, currency)
+                            if ((serverTotals?.unreconciledLegacy ?: 0.0) > 0.0) {
+                                MoneySummaryRow("Historical completed · not reconciled", serverTotals.unreconciledLegacy, currency)
+                                Text(
+                                    "These completed orders have no matching escrow or payout record. They are included in earnings totals but are not counted as protected, available or paid.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     } else if (moneyLoading) {
                         Text("Checking current balances…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -803,7 +815,12 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 Text(record.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                                 Text(formatSellerMoney(record.sellerNet, record.currency), color = MaterialTheme.colorScheme.primary)
                             }
-                            Text("${record.funds} • payout ${record.payoutStatus} • FYNX commission ${formatSellerMoney(record.marketplaceFee, record.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val settlementLabel = if (record.orderStatus == "COMPLETED" && record.funds == "UNKNOWN" && record.payoutStatus == "UNKNOWN") {
+                                "LEGACY COMPLETED · SETTLEMENT UNVERIFIED"
+                            } else {
+                                "${record.funds} • payout ${record.payoutStatus}"
+                            }
+                            Text("$settlementLabel • FYNX commission ${formatSellerMoney(record.marketplaceFee, record.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (record.updatedAt.isNotBlank()) Text(record.updatedAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             HorizontalDivider(Modifier.padding(vertical = 5.dp))
                         }

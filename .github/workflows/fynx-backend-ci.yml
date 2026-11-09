@@ -249,6 +249,8 @@ jobs:
         run: node verify-marketplace-price-watch.mjs
       - name: Run marketplace financial reconciliation guard
         run: node verify-marketplace-reconciliation.mjs
+      - name: Verify seller earnings include legacy completed orders without overstating payout status
+        run: node verify-marketplace-seller-earnings.mjs
       - name: Run marketplace receipt integrity verification
         run: node verify-marketplace-receipts.mjs
       - name: Run Marketplace NGN/USD currency contract verification
