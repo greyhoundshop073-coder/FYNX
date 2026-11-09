@@ -6,36 +6,39 @@ Deploy the existing Node backend as a Neon Function on the isolated `fynx-testin
 
 The function runs Node.js 24, keeps the existing Express routes, adapts HTTP requests through `serverless-http`, and adapts the existing authenticated `/realtime` WebSocket handler through Neon's `upgradeWebSocket` API.
 
-## One-time deployment credential
+## One-time deployment credentials
 
-1. In GitHub, open **greyhoundshop073-coder/FYNX → Settings → Secrets and variables → Actions**.
-2. Add repository secret `NEON_API_KEY` using a Neon API key. Do not paste the key into a chat or commit it.
-3. Open **Actions → FYNX Neon Function Deploy → Run workflow**. The workflow deploys only to `fynx-testing`.
+In GitHub, open **greyhoundshop073-coder/FYNX → Settings → Secrets and variables → Actions**.
 
-The workflow is manual-only; ordinary pushes do not deploy a backend.
+Add these repository **Secrets** (values must be copied from the existing Railway `fynx-backend-testing` environment; never paste them into chat or commit them):
 
-## Function environment
+- `NEON_API_KEY` — create an API key in Neon.
+- `FYNX_JWT_SECRET` — copy the exact current Railway `JWT_SECRET`. Do not generate a replacement; existing tester login tokens depend on it.
+- `FYNX_GEMINI_API_KEY` — copy the current Railway `GEMINI_API_KEY`.
+- `FYNX_PAYSTACK_SECRET_KEY` — copy the current Railway `PAYSTACK_SECRET_KEY`.
 
-After the first deployment, configure these variables on the `fynxapi` Function in the `fynx-testing` branch using the Neon Console. Never commit their values.
+Add these repository **Variables** using their exact current Railway values:
 
-Required to preserve existing tester sessions and app services:
+- `FYNX_OFFICIAL_USERNAME`
+- `FYNX_WALLET_TEST_MODE_ENABLED`
+- `FYNX_WALLET_CARD_FUNDING_ENABLED`
+- `FYNX_WALLET_FUNDING_MIN_AMOUNT`
+- `FYNX_WALLET_FUNDING_MAX_AMOUNT`
 
-- `JWT_SECRET` — copy the exact existing value from the Railway `fynx-backend-testing` service. Do not generate a replacement; existing login tokens depend on it.
-- `GEMINI_API_KEY` — existing FYNX Gemini credential.
-- `PAYSTACK_SECRET_KEY` — existing Paystack test secret.
-- `PAYSTACK_PUBLIC_KEY` — existing Paystack public key, if the client config endpoint reads it.
-- `FYNX_WALLET_TEST_MODE_ENABLED`, `FYNX_WALLET_CARD_FUNDING_ENABLED`, `FYNX_WALLET_FUNDING_MIN_AMOUNT`, `FYNX_WALLET_FUNDING_MAX_AMOUNT` — preserve the current test-wallet configuration.
+Then open **Actions → FYNX Neon Function Deploy → Run workflow**. The workflow deploys only to `fynx-testing`. It is manual-only; ordinary pushes do not deploy a backend.
 
-Optional integrations:
+## Runtime configuration
+
+The deployment maps the above secrets and variables into the Neon Function. Neon injects the branch-scoped `DATABASE_URL` automatically. Do not copy Railway's `DATABASE_URL` into the Function.
+
+Optional integrations can be added later as Function environment variables without changing the Android app:
 
 - `OPENAI_API_KEY`, `OPENAI_MODEL`
 - `FYNX_EMAIL_HOST`, `FYNX_EMAIL_PORT`, `FYNX_EMAIL_USER`, `FYNX_EMAIL_PASSWORD`, `FYNX_EMAIL_FROM`, `FYNX_EMAIL_SECURE`, `FYNX_EMAIL_REQUIRE_TLS`
 - `FYNX_MEDIA_STORAGE_PROVIDER` (leave unset or set to `postgres` until Neon Object Storage credentials are configured)
 - `FYNX_NEON_S3_ENDPOINT`, `FYNX_NEON_S3_REGION`, `FYNX_NEON_S3_ACCESS_KEY_ID`, `FYNX_NEON_S3_SECRET_ACCESS_KEY`, `FYNX_NEON_STORAGE_BUCKET`
 - `FYNX_R2_ACCOUNT_ID`, `FYNX_R2_ACCESS_KEY_ID`, `FYNX_R2_SECRET_ACCESS_KEY`, `FYNX_R2_BUCKET`
-- `FYNX_RECEIPT_SIGNING_SECRET`, `FYNX_MARKETPLACE_FEE_BPS`, `FYNX_MARKETPLACE_FEE_BUYER_SHARE_BPS`, `FYNX_MARKETPLACE_FEE_FIXED`, `FYNX_MARKETPLACE_FEE_MODE`, `FYNX_MARKETPLACE_FEE_POLICY_VERSION`, `FYNX_MARKETPLACE_PROVIDER_FEE_PAYER`, `FYNX_AD_ADMIN_IDS`, `FYNX_OFFICIAL_USERNAME`
-
-Neon injects `DATABASE_URL` for the deployed branch. Do not copy Railway's `DATABASE_URL` into the Function.
+- `FYNX_RECEIPT_SIGNING_SECRET`, `FYNX_MARKETPLACE_FEE_BPS`, `FYNX_MARKETPLACE_FEE_BUYER_SHARE_BPS`, `FYNX_MARKETPLACE_FEE_FIXED`, `FYNX_MARKETPLACE_FEE_MODE`, `FYNX_MARKETPLACE_FEE_POLICY_VERSION`, `FYNX_MARKETPLACE_PROVIDER_FEE_PAYER`, `FYNX_AD_ADMIN_IDS`
 
 ## Safety gates before changing Android
 
