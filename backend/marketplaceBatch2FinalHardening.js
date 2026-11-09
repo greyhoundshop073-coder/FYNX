@@ -356,6 +356,27 @@ async function auditCompletedRecovery({ logger = console } = {}) {
   }
 }
 
+export async function runMarketplaceBatch2RecoveryOnce({ logger = console } = {}) {
+  installPaystackTimeoutGuard();
+  if (!pool) return { enabled: false };
+  const tasks = [
+    ["payment_without_local_reference", () => recoverPaymentWithoutLocalReference({ logger })],
+    ["pending_refunds", () => reconcilePendingRefunds({ logger })],
+    ["refund_recovery", () => reconcileRefundRecovery({ logger })],
+    ["payout_reversals", () => reconcilePostSuccessPayoutReversals({ logger })],
+    ["recovery_audit", () => auditCompletedRecovery({ logger })]
+  ];
+  const failures = [];
+  for (const [name, run] of tasks) {
+    try { await run(); }
+    catch (error) {
+      failures.push(name);
+      logger.error("[fynx-marketplace] scheduled recovery task failed", name, error?.message || error);
+    }
+  }
+  return { enabled: true, failures };
+}
+
 export function registerMarketplaceBatch2FinalHardening({ logger = console } = {}) {
   installPaystackTimeoutGuard();
   if (!pool) return;
