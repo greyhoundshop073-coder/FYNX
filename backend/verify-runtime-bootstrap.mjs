@@ -6,6 +6,18 @@ const server = await readFile(new URL("./server.js", import.meta.url), "utf8");
 const normalizedServer = server.replace(/\s+/g, " ").toLowerCase();
 assert.ok(!normalizedServer.includes("update users set verified = false;"),
   "backend startup must never reset existing users verification status");
+
+// Keep the current login available for the three active test accounts. This is
+// a source-level compatibility guard: migration work must not gate, replace,
+// or weaken the existing bcrypt-backed login/token contract.
+const loginRoute = server.match(/app\\.post\\(["']\\/api\\/auth\\/login["'], async \\(req, res\\) => \\{([\\s\\S]*?)\\n\\}\\);/);
+assert.ok(loginRoute, "the existing /api/auth/login route must remain registered");
+assert.match(loginRoute[1], /bcrypt\\.compare\\(password,\\s*user\\.password_hash\\)/,
+  "login must continue verifying existing password hashes");
+assert.match(loginRoute[1], /issueToken\\(user\\)/,
+  "login must continue issuing the existing access token");
+assert.doesNotMatch(loginRoute[1], /LOGIN_DISABLED|AUTH_DISABLED|MAINTENANCE_MODE/i,
+  "migration work must not disable the existing login route");
 const packageJson = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
 const buyerWallet = await readFile(new URL("./buyerWallet.js", import.meta.url), "utf8");
 const buyerWalletMarketplace = await readFile(new URL("./buyerWalletMarketplace.js", import.meta.url), "utf8");
