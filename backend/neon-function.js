@@ -73,12 +73,12 @@ function toFetchResponse(result) {
     headers.delete(name);
     for (const value of values || []) headers.append(name, String(value));
   }
-  const body = result.body == null ? null : result.isBase64Encoded
-    ? Buffer.from(result.body, "base64")
-    : result.body;
   const status = Number.isInteger(result.statusCode) && result.statusCode >= 200 && result.statusCode <= 599
     ? result.statusCode
     : 200;
+  const body = status === 204 || status === 304 || result.body == null ? null : result.isBase64Encoded
+    ? Buffer.from(result.body, "base64")
+    : result.body;
   return new Response(body, { status, headers });
 }
 
