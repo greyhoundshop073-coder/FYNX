@@ -21,7 +21,7 @@ await db.connect();
 try {
   await db.query("CREATE SCHEMA " + schema);
   await db.query("SET search_path TO " + schema);
-  await db.query("CREATE TABLE marketplace_orders (id UUID PRIMARY KEY, seller_id BIGINT NOT NULL, product_subtotal NUMERIC(14,2) NOT NULL, delivery_fee NUMERIC(14,2) NOT NULL, seller_net_amount NUMERIC(14,2) NOT NULL, marketplace_fee_seller NUMERIC(14,2) NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL)");
+  await db.query("CREATE TABLE marketplace_orders (id UUID PRIMARY KEY, seller_id BIGINT NOT NULL, product_subtotal NUMERIC(14,2) NOT NULL, delivery_fee NUMERIC(14,2) NOT NULL, seller_net_amount NUMERIC(14,2) NOT NULL, total_amount NUMERIC(14,2) NOT NULL, marketplace_fee_seller NUMERIC(14,2) NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL)");
   await db.query("CREATE TABLE marketplace_escrows (id UUID PRIMARY KEY, order_id UUID NOT NULL, status TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL)");
   await db.query("CREATE TABLE marketplace_financial_operations (id UUID PRIMARY KEY, order_id UUID NOT NULL, operation_type TEXT NOT NULL, status TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL)");
 
@@ -31,8 +31,8 @@ try {
     const id = crypto.randomUUID();
     const now = new Date();
     await db.query(
-      "INSERT INTO marketplace_orders (id,seller_id,product_subtotal,delivery_fee,seller_net_amount,marketplace_fee_seller,currency,status,updated_at,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)",
-      [id, owner, amounts.productSubtotal, amounts.deliveryFee, amounts.sellerNet, amounts.fee, amounts.currency, amounts.status || "COMPLETED", now]
+      "INSERT INTO marketplace_orders (id,seller_id,product_subtotal,delivery_fee,seller_net_amount,total_amount,marketplace_fee_seller,currency,status,updated_at,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)",
+      [id, owner, amounts.productSubtotal, amounts.deliveryFee, amounts.sellerNet, amounts.sellerNet, amounts.fee, amounts.currency, amounts.status || "COMPLETED", now]
     );
     return id;
   };
