@@ -82,4 +82,5 @@ export function registerMarketplacePayoutRetryRoutes({ app }) {
   });
 }
 
-export async function closeMarketplacePayoutRetry() { if (pool) await pool.end(); }
+// This route module borrows the application-wide pool; it does not own its lifecycle.
+export async function closeMarketplacePayoutRetry() {}

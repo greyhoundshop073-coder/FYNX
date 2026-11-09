@@ -438,8 +438,10 @@ async function recoverBlockedPayoutAfterRefundResolution(operationId, { logger =
   }
 }
 
+let settlementReconciliationTimer = null;
+
 export function registerMarketplaceSettlementWorker({ jobs, logger = console }) {
-  if (!jobs?.enabled || typeof jobs.enqueue !== 'function') return;
+  if (!jobs?.enabled || typeof jobs.enqueue !== 'function' || settlementReconciliationTimer) return;
   globalThis.__fynxJobHandlers = globalThis.__fynxJobHandlers || {};
   globalThis.__fynxJobHandlers['marketplace.payout.release'] = async (payload) => {
     await initiatePayout(payload);
@@ -522,12 +524,13 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
       logger.error('[fynx-marketplace] payout reconciliation failed', error?.message || error);
     }
   };
-  const timer = setInterval(() => { void scan(); }, 15_000);
-  timer.unref();
+  settlementReconciliationTimer = setInterval(() => { void scan(); }, 15_000);
+  settlementReconciliationTimer.unref();
   void scan();
   logger.log('[fynx-marketplace] settlement worker handlers registered');
 }
 
 export async function closeMarketplaceSettlementWorker() {
-  if (pool) await pool.end();
+  if (settlementReconciliationTimer) clearInterval(settlementReconciliationTimer);
+  settlementReconciliationTimer = null;
 }

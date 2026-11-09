@@ -46,6 +46,7 @@ for (const file of sharedModules) {
   assert.match(source, /import \{ getFynxDatabasePool \} from ["']\.\/databasePool\.js["'];/, file + " must use the shared database pool module");
   assert.match(source, /const pool = getFynxDatabasePool\(\);/, file + " must use the shared pool instance");
   assert.doesNotMatch(source, /const\s+pool\s*=\s*DATABASE_URL\s*\?\s*new\s+(?:pg\.)?Pool\(/, file + " must not create its own database pool");
+  if (file !== "server.js") assert.doesNotMatch(source, /pool\.end\(\)/, file + " must not close the application-wide shared database pool");
 }
 
 const runtimeFiles = (await readdir(directory)).filter((name) => name.endsWith(".js"));
