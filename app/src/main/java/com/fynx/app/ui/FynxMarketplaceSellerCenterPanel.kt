@@ -771,7 +771,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             MoneySummaryRow("Payout pending", pending, currency)
                             MoneySummaryRow("Paid out", paid, currency)
                             if ((serverTotals?.unreconciledLegacy ?: 0.0) > 0.0) {
-                                MoneySummaryRow("Historical completed · not reconciled", serverTotals.unreconciledLegacy, currency)
+                                MoneySummaryRow("Historical completed · not reconciled", serverTotals?.unreconciledLegacy ?: 0.0, currency)
                                 Text(
                                     "These completed orders have no matching escrow or payout record. They are included in earnings totals but are not counted as protected, available or paid.",
                                     style = MaterialTheme.typography.bodySmall,
