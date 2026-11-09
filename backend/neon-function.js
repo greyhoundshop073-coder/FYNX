@@ -1,6 +1,7 @@
 import { attachDatabasePool, upgradeWebSocket } from "@neon/functions";
 import { parseTriggerDelivery } from "@neon/functions/triggers";
 import serverless from "serverless-http";
+import http from "node:http";
 import { getFynxDatabasePool } from "./databasePool.js";
 import { createBackgroundJobQueue } from "./backgroundJobs.js";
 import { registerMarketplaceSettlementWorker } from "./marketplaceSettlementWorker.js";
@@ -9,6 +10,7 @@ import { autoCompleteExpiredMarketplaceInspections } from "./marketplaceInspecti
 import { runMarketplaceBatch2RecoveryOnce } from "./marketplaceBatch2FinalHardening.js";
 
 process.env.FYNX_NEON_FUNCTION = "1";
+const originalHttpCreateServer = http.createServer;
 
 const pool = getFynxDatabasePool();
 if (pool) attachDatabasePool(pool);
@@ -18,6 +20,9 @@ if (pool) attachDatabasePool(pool);
 await import("./realtimeIsolationRuntime.js");
 await import("./scalability.js");
 const { app, dispatchRealtimeConnection } = await import("./.fynx-runtime-server.js");
+// Restore Node HTTP after the canonical route-registration hook has built the app.
+// serverless-http creates its own adapter server and must not trigger FYNX route wiring twice.
+http.createServer = originalHttpCreateServer;
 const scheduledJobs = createBackgroundJobQueue({ logger: console, leaseMs: 90_000 });
 const settlementScan = registerMarketplaceSettlementWorker({ jobs: scheduledJobs, logger: console, startTimer: false });
 
