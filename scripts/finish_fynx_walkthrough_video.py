@@ -123,8 +123,7 @@ subprocess.run(
 
 probe = subprocess.run(
     [
-        "ffprobe", "-v", "error", "-show_entries", "format=duration,size",
-        "-show_entries", "stream=codec_type,codec_name,width,height",
+        "ffprobe", "-v", "error", "-show_entries", "format=duration,size:stream=codec_type,codec_name,width,height",
         "-of", "default=noprint_wrappers=1", str(output)
     ],
     text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True, timeout=30
