@@ -29,18 +29,22 @@ jobs:
       - name: Build and verify FYNX Neon Function
         run: npm run verify:neon
 
-      - name: Require Neon deployment credential
+      - name: Require Neon deployment credential and preserved FYNX settings
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
+          FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
+          FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
+          FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME }}
+          FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED }}
+          FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED }}
+          FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT }}
+          FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT }}
         run: |
-          required="NEON_API_KEY FYNX_JWT_SECRET FYNX_GEMINI_API_KEY FYNX_PAYSTACK_SECRET_KEY FYNX_OFFICIAL_USERNAME FYNX_WALLET_TEST_MODE_ENABLED FYNX_WALLET_CARD_FUNDING_ENABLED FYNX_WALLET_FUNDING_MIN_AMOUNT FYNX_WALLET_FUNDING_MAX_AMOUNT"
-          for name in $required; do
-            eval "value=\$name"
-            if [ -z "$value" ]; then
-              echo "::error::Missing required GitHub secret/variable: $name"
-              exit 1
-            fi
-          done
+          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_GEMINI_API_KEY" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ] || [ -z "$FYNX_OFFICIAL_USERNAME" ] || [ -z "$FYNX_WALLET_TEST_MODE_ENABLED" ] || [ -z "$FYNX_WALLET_CARD_FUNDING_ENABLED" ] || [ -z "$FYNX_WALLET_FUNDING_MIN_AMOUNT" ] || [ -z "$FYNX_WALLET_FUNDING_MAX_AMOUNT" ]; then
+            echo "::error::Add all required FYNX secrets and variables listed in backend/NEON_FUNCTIONS_DEPLOYMENT.md."
+            exit 1
+          fi
 
       - name: Deploy only to the isolated fynx-testing branch
         env:
