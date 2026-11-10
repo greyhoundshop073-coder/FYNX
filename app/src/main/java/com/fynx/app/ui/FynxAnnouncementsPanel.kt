@@ -37,6 +37,10 @@ fun FynxAdminControlCenterPanel() {
     var admins by remember { mutableStateOf<List<FynxAdminClient.Admin>>(emptyList()) }
     var protectionCases by remember { mutableStateOf<List<FynxAdminClient.ProtectionCase>>(emptyList()) }
     var appeals by remember { mutableStateOf<List<FynxAdminClient.AppealReview>>(emptyList()) }
+    var safetyReports by remember { mutableStateOf<List<FynxAdminClient.SafetyReportReview>>(emptyList()) }
+    var safetyReportsLoading by remember { mutableStateOf(false) }
+    var safetyReportsError by remember { mutableStateOf<String?>(null) }
+    var refreshSafetyReports by remember { mutableIntStateOf(0) }
     var appealsLoading by remember { mutableStateOf(false) }
     var appealsError by remember { mutableStateOf<String?>(null) }
     var refreshAppeals by remember { mutableIntStateOf(0) }
@@ -63,6 +67,17 @@ fun FynxAdminControlCenterPanel() {
 
     LaunchedEffect(Unit) { FynxAdminClient.dashboard(context).onSuccess { dashboard = it; error = null }.onFailure { error = it.message ?: "Admin access required." }; loading = false }
     LaunchedEffect(refreshAdmins, dashboard?.role) { if (dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
+    LaunchedEffect(refreshSafetyReports, dashboard?.role) {
+        if (dashboard != null) {
+            safetyReportsLoading = true
+            safetyReportsError = null
+            FynxAdminClient.safetyReports(context)
+                .onSuccess { safetyReports = it }
+                .onFailure { safetyReportsError = it.message ?: "Safety reports unavailable." }
+            safetyReportsLoading = false
+        }
+    }
+
     LaunchedEffect(refreshAppeals, dashboard?.role) {
         if (dashboard != null) {
             appealsLoading = true; appealsError = null
@@ -110,6 +125,63 @@ fun FynxAdminControlCenterPanel() {
             val d = dashboard!!
             Text("Role: ${d.role}", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Users", d.users); StatCard("Reports", d.openReports) }; Spacer(Modifier.height(8.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Appeals", d.openAppeals); StatCard("Safety / 24h", d.safetyEvents24h) }
+
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("User safety reports", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = { refreshSafetyReports++ }, enabled = !safetyReportsLoading) { Text("Refresh") }
+            }
+            Text("Review reports submitted by users. Starting review records the assigned admin; resolving or dismissing records the decision.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (safetyReportsLoading && safetyReports.isEmpty()) {
+                CircularProgressIndicator()
+            } else if (safetyReportsError != null && safetyReports.isEmpty()) {
+                Text(safetyReportsError!!, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = { refreshSafetyReports++ }) { Text("Retry reports") }
+            } else if (safetyReports.isEmpty()) {
+                Text("No open safety reports require review.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                safetyReports.take(30).forEach { report ->
+                    Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("${report.contentType} report #${report.id}", style = MaterialTheme.typography.titleSmall)
+                                Text(report.status, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                            }
+                            Text("Reported account: @${report.targetUsername}", style = MaterialTheme.typography.bodyMedium)
+                            Text("Submitted by: @${report.reporterUsername} • ${report.reporterDisplayName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (report.contentId.isNotBlank()) Text("Content ID: ${report.contentId}", style = MaterialTheme.typography.bodySmall)
+                            Text("Reason: ${report.reason}")
+                            if (report.details.isNotBlank()) Text(report.details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (report.moderatorUsername.isNotBlank()) Text("Assigned to: @${report.moderatorUsername}", style = MaterialTheme.typography.labelSmall)
+                            if (report.decisionNote.isNotBlank()) Text("Decision: ${report.decisionNote}", style = MaterialTheme.typography.bodySmall)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (report.status == "OPEN") OutlinedButton(onClick = {
+                                    scope.launch {
+                                        FynxAdminClient.reviewSafetyReport(context, report.id, "UNDER_REVIEW", "Assigned for review.")
+                                            .onSuccess { statusMessage = "Report #${report.id} moved to review."; refreshSafetyReports++ }
+                                            .onFailure { statusMessage = it.message ?: "Could not assign report." }
+                                    }
+                                }) { Text("Start review") }
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        FynxAdminClient.reviewSafetyReport(context, report.id, "RESOLVED", "Reviewed and actioned by FYNX Safety.")
+                                            .onSuccess { statusMessage = "Report #${report.id} resolved."; refreshSafetyReports++ }
+                                            .onFailure { statusMessage = it.message ?: "Could not resolve report." }
+                                    }
+                                }) { Text("Resolve") }
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        FynxAdminClient.reviewSafetyReport(context, report.id, "DISMISSED", "Reviewed and dismissed by FYNX Safety.")
+                                            .onSuccess { statusMessage = "Report #${report.id} dismissed."; refreshSafetyReports++ }
+                                            .onFailure { statusMessage = it.message ?: "Could not dismiss report." }
+                                    }
+                                }) { Text("Dismiss") }
+                            }
+                        }
+                    }
+                }
+                if (safetyReportsError != null) Text(safetyReportsError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
 
             if (d.role == "OWNER" || d.role == "ADMIN") {
                 Spacer(Modifier.height(20.dp))

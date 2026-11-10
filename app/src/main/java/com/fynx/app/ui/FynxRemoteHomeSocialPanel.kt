@@ -637,7 +637,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                             context,
                             post.authorUsername,
                             "Reported post",
-                            "Post ID: ${post.id}"
+                            "Post ID: ${post.id}",
+                            contentType = "POST",
+                            contentId = post.id
                         ).onSuccess {
                             reportNotice = "Report submitted to FYNX Safety."
                             reportBusy = false

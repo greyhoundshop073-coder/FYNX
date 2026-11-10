@@ -8,6 +8,20 @@ object FynxAdminClient {
     data class Announcement(val id: String, val title: String, val body: String, val priority: String, val publishedAt: String)
     data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyEvents24h: Int)
     data class Admin(val id: String, val username: String, val displayName: String, val grantedAt: String)
+    data class SafetyReportReview(
+        val id: String,
+        val reporterUsername: String,
+        val reporterDisplayName: String,
+        val targetUsername: String,
+        val contentType: String,
+        val contentId: String,
+        val reason: String,
+        val details: String,
+        val status: String,
+        val decisionNote: String,
+        val moderatorUsername: String,
+        val createdAt: String
+    )
     data class MusicTrack(
         val id: String,
         val mediaId: String,
@@ -169,6 +183,39 @@ object FynxAdminClient {
             context,
             "/api/admin/social/music/catalogue/" + encode(trackId),
             JSONObject().put("active", active).toString()
+        ).map { Unit }
+
+    suspend fun safetyReports(context: Context): Result<List<SafetyReportReview>> =
+        FynxBackendClient.get(context, "/api/admin/reports").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("reports") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(
+                        SafetyReportReview(
+                            id = item.optString("id"),
+                            reporterUsername = item.optString("reporterUsername"),
+                            reporterDisplayName = item.optString("reporterDisplayName"),
+                            targetUsername = item.optString("targetUsername"),
+                            contentType = item.optString("contentType", "ACCOUNT"),
+                            contentId = item.optString("contentId"),
+                            reason = item.optString("reason"),
+                            details = item.optString("details"),
+                            status = item.optString("status"),
+                            decisionNote = item.optString("decisionNote"),
+                            moderatorUsername = item.optString("moderatorUsername"),
+                            createdAt = item.optString("createdAt")
+                        )
+                    )
+                }
+            }
+        }
+
+    suspend fun reviewSafetyReport(context: Context, reportId: String, status: String, decisionNote: String): Result<Unit> =
+        FynxBackendClient.patchJson(
+            context,
+            "/api/admin/reports/${encode(reportId)}",
+            JSONObject().put("status", status).put("decisionNote", decisionNote.take(500)).toString()
         ).map { Unit }
 
     suspend fun appeals(context: Context): Result<List<AppealReview>> =
