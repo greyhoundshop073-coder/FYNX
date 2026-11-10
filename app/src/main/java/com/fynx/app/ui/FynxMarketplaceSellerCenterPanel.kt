@@ -137,11 +137,15 @@ private fun marketplaceShopProfileSignature(
     shopName: String,
     description: String,
     location: String,
-    contactPhone: String
+    contactPhone: String,
+    logoMediaId: String?,
+    coverMediaId: String?
 ): String = JSONObject().put("shopName", shopName)
     .put("description", description)
     .put("location", location)
     .put("contactPhone", contactPhone)
+    .put("logoMediaId", logoMediaId ?: JSONObject.NULL)
+    .put("coverMediaId", coverMediaId ?: JSONObject.NULL)
     .toString()
 
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
@@ -223,13 +227,19 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     var shopDescriptionAiSuggestion by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopLocation by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var shopContactPhone by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopLogoMediaId by rememberSaveable(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var shopCoverMediaId by rememberSaveable(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var shopLogoUri by remember(sellerAccountKey) { mutableStateOf<Uri?>(null) }
+    var shopCoverUri by remember(sellerAccountKey) { mutableStateOf<Uri?>(null) }
+    val shopLogoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> shopLogoUri = uri }
+    val shopCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> shopCoverUri = uri }
     var shopLoading by remember(sellerAccountKey) { mutableStateOf(true) }
     var shopSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var shopError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopProfileSavedSignature by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     val currentShopProfileSignature = marketplaceShopProfileSignature(
-        shopName, shopDescription, shopLocation, shopContactPhone
+        shopName, shopDescription, shopLocation, shopContactPhone, shopLogoMediaId, shopCoverMediaId
     )
     val shopProfilePreviewReady = shopProfileSavedSignature.isNotBlank() &&
         currentShopProfileSignature == shopProfileSavedSignature
@@ -371,12 +381,18 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                     val savedDescription = profile.optString("description")
                     val savedLocation = profile.optString("location")
                     val savedContactPhone = profile.optString("contactPhone")
+                    val savedLogoMediaId = profile.optString("logoMediaId").takeIf { it.isNotBlank() && it != "null" }
+                    val savedCoverMediaId = profile.optString("coverMediaId").takeIf { it.isNotBlank() && it != "null" }
                     shopName = savedName
                     shopDescription = savedDescription
                     shopLocation = savedLocation
                     shopContactPhone = savedContactPhone
+                    shopLogoMediaId = savedLogoMediaId
+                    shopCoverMediaId = savedCoverMediaId
+                    shopLogoUri = null
+                    shopCoverUri = null
                     shopProfileSavedSignature = marketplaceShopProfileSignature(
-                        savedName, savedDescription, savedLocation, savedContactPhone
+                        savedName, savedDescription, savedLocation, savedContactPhone, savedLogoMediaId, savedCoverMediaId
                     )
                 }
                 .onFailure { failure ->
@@ -702,6 +718,24 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                     Text("Set a shop name and details that stay with your seller account. A Business Account is not required.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     OutlinedTextField(value = shopName, onValueChange = { shopName = it.take(120); shopDescriptionAiSuggestion = null; shopDescriptionAiError = null; shopMessage = null; shopError = null }, label = { Text("Shop name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
+                    Text("Shop branding", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("Use a shop logo and a wide cover image. These are separate from your personal FYNX profile photo.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Shop logo", style = MaterialTheme.typography.labelMedium)
+                            if (shopLogoUri != null) AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { it.setImageURI(shopLogoUri) }, modifier = Modifier.size(72.dp))
+                            else if (!shopLogoMediaId.isNullOrBlank()) FynxRemoteMedia(FynxMarketplaceClient.mediaUrl(context, shopLogoMediaId!!), "image", Modifier.size(72.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                            OutlinedButton(onClick = { shopLogoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !shopSaving) { Text(if (shopLogoMediaId.isNullOrBlank() && shopLogoUri == null) "Choose logo" else "Change logo") }
+                            if (!shopLogoMediaId.isNullOrBlank() || shopLogoUri != null) TextButton(onClick = { shopLogoMediaId = null; shopLogoUri = null; shopMessage = null }) { Text("Remove") }
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Shop cover", style = MaterialTheme.typography.labelMedium)
+                            if (shopCoverUri != null) AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { it.setImageURI(shopCoverUri) }, modifier = Modifier.fillMaxWidth().height(72.dp))
+                            else if (!shopCoverMediaId.isNullOrBlank()) FynxRemoteMedia(FynxMarketplaceClient.mediaUrl(context, shopCoverMediaId!!), "image", Modifier.fillMaxWidth().height(72.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                            OutlinedButton(onClick = { shopCoverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !shopSaving) { Text(if (shopCoverMediaId.isNullOrBlank() && shopCoverUri == null) "Choose cover" else "Change cover") }
+                            if (!shopCoverMediaId.isNullOrBlank() || shopCoverUri != null) TextButton(onClick = { shopCoverMediaId = null; shopCoverUri = null; shopMessage = null }) { Text("Remove") }
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("About your shop (optional)", style = MaterialTheme.typography.labelLarge)
                         OutlinedButton(
@@ -786,7 +820,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                     OutlinedButton(
                         onClick = onViewPublicShop,
                         enabled = !shopLoading && !shopSaving &&
-                            shopName.trim().length >= 2 && shopProfilePreviewReady,
+                            shopName.trim().length >= 2 && shopProfilePreviewReady && shopLogoUri == null && shopCoverUri == null,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Preview public Marketplace profile")
@@ -804,11 +838,32 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                             shopMessage = null
                             shopError = null
                             scope.launch {
+                                val uploadedIds = runCatching {
+                                    val uploadedLogoId = shopLogoUri?.let { uri ->
+                                        val mime = context.contentResolver.getType(uri)?.trim()?.lowercase(Locale.US).orEmpty()
+                                        require(mime.startsWith("image/")) { "Shop logo must be an image." }
+                                        FynxProductionMessaging.uploadMedia(context, uri, mime).getOrThrow().id
+                                    } ?: shopLogoMediaId
+                                    val uploadedCoverId = shopCoverUri?.let { uri ->
+                                        val mime = context.contentResolver.getType(uri)?.trim()?.lowercase(Locale.US).orEmpty()
+                                        require(mime.startsWith("image/")) { "Shop cover must be an image." }
+                                        FynxProductionMessaging.uploadMedia(context, uri, mime).getOrThrow().id
+                                    } ?: shopCoverMediaId
+                                    uploadedLogoId to uploadedCoverId
+                                }
+                                if (uploadedIds.isFailure) {
+                                    shopError = marketplaceSafeError(uploadedIds.exceptionOrNull(), "Shop images could not be uploaded.")
+                                    shopSaving = false
+                                    return@launch
+                                }
+                                val (uploadedLogoId, uploadedCoverId) = uploadedIds.getOrThrow()
                                 val payload = JSONObject()
                                     .put("shopName", shopName.trim())
                                     .put("description", shopDescription.trim())
                                     .put("location", shopLocation.trim())
                                     .put("contactPhone", shopContactPhone.trim())
+                                    .put("logoMediaId", uploadedLogoId ?: JSONObject.NULL)
+                                    .put("coverMediaId", uploadedCoverId ?: JSONObject.NULL)
                                 FynxBackendClient.patchJson(context, "/api/marketplace/my-shop", payload.toString())
                                     .mapCatching { raw ->
                                         JSONObject(raw).optJSONObject("shop")
@@ -819,12 +874,18 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                         val savedDescription = profile.optString("description")
                                         val savedLocation = profile.optString("location")
                                         val savedContactPhone = profile.optString("contactPhone")
+                                        val savedLogoId = profile.optString("logoMediaId").takeIf { it.isNotBlank() && it != "null" }
+                                        val savedCoverId = profile.optString("coverMediaId").takeIf { it.isNotBlank() && it != "null" }
                                         shopName = savedName
                                         shopDescription = savedDescription
                                         shopLocation = savedLocation
                                         shopContactPhone = savedContactPhone
+                                        shopLogoMediaId = savedLogoId
+                                        shopCoverMediaId = savedCoverId
+                                        shopLogoUri = null
+                                        shopCoverUri = null
                                         shopProfileSavedSignature = marketplaceShopProfileSignature(
-                                            savedName, savedDescription, savedLocation, savedContactPhone
+                                            savedName, savedDescription, savedLocation, savedContactPhone, savedLogoId, savedCoverId
                                         )
                                         shopMessage = "Shop profile saved."
                                         shopError = null

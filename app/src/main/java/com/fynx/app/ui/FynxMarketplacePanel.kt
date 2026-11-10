@@ -1861,6 +1861,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             photoId = sellerPhotoIds[username.removePrefix("@").trim().lowercase()],
             onOpenListing = { selected = it; sellerStoreUsername = null },
             onContact = { listing -> contactSeller(username, listing.id) },
+            onContactShop = { contactSeller(username, "") },
             onClose = { sellerStoreUsername = null }
         )
     }
