@@ -51,6 +51,8 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
     var error by remember { mutableStateOf<String?>(null) }
     var refreshError by remember { mutableStateOf<String?>(null) }
     var friendsLoadFailed by remember { mutableStateOf(false) }
+    var requestsLoadFailed by remember { mutableStateOf(false) }
+    var blockedLoadFailed by remember { mutableStateOf(false) }
     var menuUser by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
@@ -62,13 +64,14 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
         val rr = FynxSocialClient.requests(context)
         val br = FynxSocialClient.blocked(context)
         friendsLoadFailed = fr.isFailure
+        requestsLoadFailed = rr.isFailure
+        blockedLoadFailed = br.isFailure
         friends = fr.getOrElse { friends }
         val requests = rr.getOrElse { incoming + outgoing }
         incoming = requests.filter { it.status.equals("incoming", true) }
         outgoing = requests.filter { it.status.equals("outgoing", true) }
         blocked = br.getOrElse { blocked }
         refreshError = fr.exceptionOrNull()?.message ?: rr.exceptionOrNull()?.message ?: br.exceptionOrNull()?.message
-        error = refreshError
         loading = false
     }
 
@@ -119,6 +122,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
                         TextButton(onClick = { scope.launch { refresh() } }, enabled = !loading) { Text("Retry") }
                     }
                 }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
             item {
                 Text("Find People", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
@@ -157,11 +161,10 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
                 else if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here.")
                 else items(friends, key = { "friend_${it.username}" }) { person -> FriendRow(person, busy == person.username, menuUser == person.username, { open -> menuUser = if (open) person.username else null }, onOpenProfile, onOpenChat, onRemove = { act(person.username) { FynxSocialClient.removeFriend(context, person.username) } }, onBlock = { act(person.username) { FynxSocialClient.block(context, person.username) } }) }
             } else {
-                item { error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } }
                 when (section) {
-                    "Requests" -> if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other FYNX accounts will appear here.") else items(incoming, key = { "in_${it.id}" }) { request -> RequestRow(FynxSocialClient.User(request.username, request.displayName, "", profilePhotoMediaId = request.profilePhotoMediaId), "Confirm", "Delete", busy == request.username, onOpenProfile, onOpenChat, onPrimary = { act(request.username) { FynxSocialClient.acceptRequest(context, request.id) } }, onSecondary = { act(request.username) { FynxSocialClient.rejectRequest(context, request.id) } }) }
-                    "Sent" -> if (outgoing.isEmpty()) emptyState("No sent requests", "Requests you send will appear here until they are accepted or rejected.") else items(outgoing, key = { "out_${it.id}" }) { request -> RequestRow(FynxSocialClient.User(request.username, request.displayName, "", profilePhotoMediaId = request.profilePhotoMediaId), "Cancel", null, busy == request.username, onOpenProfile, onOpenChat, onPrimary = { act(request.username) { FynxSocialClient.cancelRequest(context, request.id) } }) }
-                    "Blocked" -> if (blocked.isEmpty()) emptyState("No blocked accounts", "Accounts you block will appear here. You can unblock them at any time.") else items(blocked, key = { "blocked_${it.username}" }) { person -> RequestRow(person, "Unblock", null, busy == person.username, onOpenProfile, onOpenChat, onPrimary = { act(person.username) { FynxSocialClient.unblock(context, person.username) } }) }
+                    "Requests" -> if (incoming.isEmpty() && requestsLoadFailed) emptyState("Couldn’t load requests", "Check your connection and retry.") else if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other FYNX accounts will appear here.") else items(incoming, key = { "in_${it.id}" }) { request -> RequestRow(FynxSocialClient.User(request.username, request.displayName, "", profilePhotoMediaId = request.profilePhotoMediaId), "Confirm", "Delete", busy == request.username, onOpenProfile, onOpenChat, onPrimary = { act(request.username) { FynxSocialClient.acceptRequest(context, request.id) } }, onSecondary = { act(request.username) { FynxSocialClient.rejectRequest(context, request.id) } }) }
+                    "Sent" -> if (outgoing.isEmpty() && requestsLoadFailed) emptyState("Couldn’t load sent requests", "Check your connection and retry.") else if (outgoing.isEmpty()) emptyState("No sent requests", "Requests you send will appear here until they are accepted or rejected.") else items(outgoing, key = { "out_${it.id}" }) { request -> RequestRow(FynxSocialClient.User(request.username, request.displayName, "", profilePhotoMediaId = request.profilePhotoMediaId), "Cancel", null, busy == request.username, onOpenProfile, onOpenChat, onPrimary = { act(request.username) { FynxSocialClient.cancelRequest(context, request.id) } }) }
+                    "Blocked" -> if (blocked.isEmpty() && blockedLoadFailed) emptyState("Couldn’t load blocked accounts", "Check your connection and retry.") else if (blocked.isEmpty()) emptyState("No blocked accounts", "Accounts you block will appear here. You can unblock them at any time.") else items(blocked, key = { "blocked_${it.username}" }) { person -> RequestRow(person, "Unblock", null, busy == person.username, onOpenProfile, onOpenChat, onPrimary = { act(person.username) { FynxSocialClient.unblock(context, person.username) } }) }
                     else -> {
                         val enough = if (searchMethod == FynxPeopleSearchMethod.PHONE) FynxPeopleDiscovery.normalizePhone(query).length >= 7 else query.trim().removePrefix("@").length >= 2
                         if (!enough) emptyState("Search for a FYNX user", "Type at least two characters of a username or display name.")
