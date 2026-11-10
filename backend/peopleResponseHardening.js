@@ -9,7 +9,7 @@ export function installPeopleResponseHardening(app) {
   if (!app?._router?.stack || !pool) return;
   if (app._router.stack.some((layer) => layer.fynxPeopleResponseHardening)) return;
 
-  const paths = new Set(["/api/users/search", "/api/friends", "/api/friends/requests"]);
+  const paths = new Set(["/api/users/search", "/api/friends", "/api/friends/requests", "/api/blocks"]);
   const middleware = (req, res, next) => {
     if (!paths.has(req.path)) return next();
     const originalJson = res.json.bind(res);
@@ -18,15 +18,16 @@ export function installPeopleResponseHardening(app) {
         const users = Array.isArray(payload?.users) ? payload.users : [];
         const friends = Array.isArray(payload?.friends) ? payload.friends : [];
         const requests = Array.isArray(payload?.requests) ? payload.requests : [];
-        const rows = [...users, ...friends, ...requests];
-        const ids = [...new Set(rows.map((row) => String(row?.id ?? row?.user_id ?? "")).filter((id) => /^\d+$/.test(id)))];
+        const blocks = Array.isArray(payload?.blocks) ? payload.blocks : [];
+        const rows = [...users, ...friends, ...requests, ...blocks];
+        const ids = [...new Set(rows.map((row) => String(row?.user_id ?? row?.id ?? "")).filter((id) => /^\d+$/.test(id)))];
         const sanitize = (row, photos) => {
           const safeRow = { ...row };
           delete safeRow.phone;
           return {
             ...safeRow,
-            profile_photo_media_id: photos.has(String(row?.id ?? row?.user_id))
-              ? photos.get(String(row?.id ?? row?.user_id))
+            profile_photo_media_id: photos.has(String(row?.user_id ?? row?.id))
+              ? photos.get(String(row?.user_id ?? row?.id))
               : row?.profile_photo_media_id ?? null
           };
         };
@@ -41,6 +42,7 @@ export function installPeopleResponseHardening(app) {
         if (users.length) payload.users = users.map((row) => sanitize(row, photos));
         if (friends.length) payload.friends = friends.map((row) => sanitize(row, photos));
         if (requests.length) payload.requests = requests.map((row) => sanitize(row, photos));
+        if (blocks.length) payload.blocks = blocks.map((row) => sanitize(row, photos));
       } catch (error) {
         console.error("people response hardening", error);
       }
