@@ -98,6 +98,7 @@ fun FynxHomeSocialHubPanel(
     var textBackground by remember { mutableStateOf<FynxPostTextBackground?>(null) }
     var postLocation by remember { mutableStateOf<String?>(null) }
     var locationLoading by remember { mutableStateOf(false) }
+    var showPostLocationRationale by remember { mutableStateOf(false) }
     var selectedCatalogueMusic by remember { mutableStateOf<FynxMusicCatalogueTrack?>(null) }
     var musicPlaying by remember { mutableStateOf(false) }
     var musicPreviewId by remember { mutableStateOf<Long?>(null) }
@@ -573,7 +574,7 @@ fun FynxHomeSocialHubPanel(
                                             FynxPostLocationClient.currentPlace(context).onSuccess { postLocation = it; notice = null }.onFailure { notice = it.message ?: "Could not determine your location." }
                                             locationLoading = false
                                         }
-                                    } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                    } else showPostLocationRationale = true
                                 }
                                 ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = !posting && postingAllowed) { showFeelingActivityPicker = true }
                             }
@@ -1027,6 +1028,25 @@ fun FynxHomeSocialHubPanel(
                 }
             }
         }
+    }
+
+    if (showPostLocationRationale) {
+        AlertDialog(
+            onDismissRequest = { showPostLocationRationale = false },
+            title = { Text("Add a location to your post?") },
+            text = {
+                Text("FYNX uses your current location to find a general place label for this post. The post stores that place label, not your raw GPS coordinates. You can continue without adding a location.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPostLocationRationale = false
+                    locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                }) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPostLocationRationale = false }) { Text("Not now") }
+            }
+        )
     }
 
     if (showVoiceRecorder) {
