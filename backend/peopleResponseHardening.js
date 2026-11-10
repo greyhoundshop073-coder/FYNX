@@ -12,6 +12,7 @@ export function installPeopleResponseHardening(app) {
   const paths = new Set(["/api/users/search", "/api/friends", "/api/friends/requests", "/api/blocks"]);
   const middleware = (req, res, next) => {
     if (!paths.has(req.path)) return next();
+    res.set("Cache-Control", "private, no-store");
     const originalJson = res.json.bind(res);
     res.json = async (payload) => {
       try {
