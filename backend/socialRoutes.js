@@ -46,6 +46,13 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           PRIMARY KEY (user_id, listing_id)
         );
         CREATE INDEX IF NOT EXISTS marketplace_saved_products_listing_idx ON marketplace_saved_products (listing_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS marketplace_listing_likes (
+          user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, listing_id)
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_listing_likes_listing_idx ON marketplace_listing_likes (listing_id, created_at DESC);
       `).catch((error) => {
         marketplaceSchemaPromise = undefined;
         throw error;
@@ -170,6 +177,72 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await pool.query("DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2", [req.user.sub, target.id]);
       return res.json({ ok: true });
     } catch (error) { console.error("unblock", error); return res.status(500).json({ error: "unblock failed" }); }
+  });
+
+  app.get("/api/marketplace/shops/:username/listing-engagement", auth, async (req, res) => {
+    const username = typeof req.params?.username === "string" ? req.params.username.trim().replace(/^@+/, "") : "";
+    if (!/^[a-zA-Z0-9_.-]{1,40}$/.test(username)) return res.status(400).json({ error: "invalid seller username" });
+    try {
+      await ensureMarketplaceSchema();
+      const result = await pool.query(`
+        SELECT l.id, COUNT(DISTINCT likes.user_id)::INTEGER AS like_count,
+               COALESCE(BOOL_OR(likes.user_id = $2), FALSE) AS liked_by_current_user
+        FROM marketplace_listings l
+        JOIN users seller ON seller.id = l.seller_id
+        LEFT JOIN marketplace_listing_likes likes ON likes.listing_id = l.id
+        WHERE lower(seller.username) = lower($1)
+          AND l.active = TRUE
+          AND GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id = $2 AND b.blocked_id = l.seller_id)
+               OR (b.blocker_id = l.seller_id AND b.blocked_id = $2)
+          )
+        GROUP BY l.id
+      `, [username, req.user.sub]);
+      return res.json({ listings: result.rows.map((row) => ({
+        listingId: String(row.id), likeCount: Number(row.like_count || 0),
+        likedByCurrentUser: Boolean(row.liked_by_current_user)
+      })) });
+    } catch (error) {
+      console.error("marketplace listing engagement", error);
+      return res.status(500).json({ error: "product likes could not be loaded" });
+    }
+  });
+
+  app.post("/api/marketplace/listings/:id/like", auth, async (req, res) => {
+    const id = Number(req.params?.id);
+    if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+    if (typeof req.body?.liked !== "boolean") return res.status(400).json({ error: "liked must be true or false" });
+    try {
+      await ensureMarketplaceSchema();
+      const listing = (await pool.query(
+        "SELECT id, seller_id FROM marketplace_listings WHERE id = $1 AND active = TRUE AND GREATEST(0, quantity - COALESCE(reserved_quantity, 0)) > 0 LIMIT 1",
+        [id]
+      )).rows[0];
+      if (!listing) return res.status(404).json({ error: "product is no longer available" });
+      const blocked = await pool.query(
+        "SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1",
+        [req.user.sub, listing.seller_id]
+      );
+      if (blocked.rowCount) return res.status(404).json({ error: "product is unavailable" });
+      if (req.body.liked && String(listing.seller_id) === String(req.user.sub)) {
+        return res.status(400).json({ error: "you cannot like your own product" });
+      }
+      if (req.body.liked) {
+        await pool.query("INSERT INTO marketplace_listing_likes (user_id, listing_id) VALUES ($1, $2) ON CONFLICT (user_id, listing_id) DO NOTHING", [req.user.sub, id]);
+      } else {
+        await pool.query("DELETE FROM marketplace_listing_likes WHERE user_id = $1 AND listing_id = $2", [req.user.sub, id]);
+      }
+      const count = await pool.query(
+        "SELECT COUNT(*)::INTEGER AS like_count, COALESCE(BOOL_OR(user_id = $2), FALSE) AS liked_by_current_user FROM marketplace_listing_likes WHERE listing_id = $1",
+        [id, req.user.sub]
+      );
+      return res.json({ listingId: String(id), liked: Boolean(count.rows[0]?.liked_by_current_user), likeCount: Number(count.rows[0]?.like_count || 0) });
+    } catch (error) {
+      console.error("marketplace listing like", error);
+      return res.status(500).json({ error: "product like could not be updated" });
+    }
   });
 
   app.get("/api/marketplace/listings", auth, async (req, res) => {
