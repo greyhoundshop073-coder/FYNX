@@ -195,6 +195,7 @@ fun FynxCameraCapturePanel(
     }
     var hasCamera by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var hasAudio by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
+    var showAudioPermissionDisclosure by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasCamera = granted || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     }
@@ -523,6 +524,22 @@ fun FynxCameraCapturePanel(
         })
     }
 
+    if (showAudioPermissionDisclosure) {
+        AlertDialog(
+            onDismissRequest = { showAudioPermissionDisclosure = false },
+            title = { Text("Allow microphone for video?") },
+            text = { Text("FYNX uses your microphone to capture sound with the video you record. Recording starts only after you continue and press the video record control.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAudioPermissionDisclosure = false
+                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAudioPermissionDisclosure = false }) { Text("Not now") }
+            }
+        )
+    }
     if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(Manifest.permission.CAMERA)}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
     if(previewUri!=null && previewType!=null){
@@ -1066,7 +1083,7 @@ fun FynxCameraCapturePanel(
                         val active = recording
                         if (active != null) active.stop() else {
                             if (!hasAudio) {
-                                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                showAudioPermissionDisclosure = true
                                 return@FilledIconButton
                             }
                             val capture = videoCapture ?: run {

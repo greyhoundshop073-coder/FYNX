@@ -136,6 +136,7 @@ fun FynxAiAssistantPanel(
     var voiceMuted by remember { mutableStateOf(false) }
     var voicePhase by remember { mutableStateOf("LISTENING") }
     var showVoiceScreen by remember { mutableStateOf(false) }
+    var showAiMicDisclosure by remember { mutableStateOf(false) }
     var showComposerTools by remember { mutableStateOf(false) }
     var showTranslationDialog by remember { mutableStateOf(false) }
     var translationSourceText by remember { mutableStateOf("") }
@@ -1266,12 +1267,12 @@ fun FynxAiAssistantPanel(
                                         enabled = !creatingConversation && !pendingMediaUploading,
                                         onClick = {
                                             hasStartedInteraction = true
+                                            showVoiceScreen = true
                                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                                                 connectVoice()
                                             } else {
-                                                requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                                showAiMicDisclosure = true
                                             }
-                                            showVoiceScreen = true
                                         },
                                         modifier = Modifier
                                             .size(44.dp)
@@ -1297,6 +1298,25 @@ fun FynxAiAssistantPanel(
                 )
             }
         }
+    }
+
+    if (showAiMicDisclosure) {
+        AlertDialog(
+            onDismissRequest = { showAiMicDisclosure = false; showVoiceScreen = false },
+            title = { Text("Allow microphone for FYNX Assistant?") },
+            text = {
+                Text("FYNX Assistant uses your microphone to hear your speech during a live voice conversation and process it to generate a response. The voice session starts only after you continue.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAiMicDisclosure = false
+                    requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                }) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAiMicDisclosure = false; showVoiceScreen = false }) { Text("Not now") }
+            }
+        )
     }
 
     if (showVoiceScreen) {
@@ -1335,7 +1355,7 @@ fun FynxAiAssistantPanel(
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                     connectVoice()
                 } else {
-                    requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    showAiMicDisclosure = true
                 }
             },
             onMenu = {
