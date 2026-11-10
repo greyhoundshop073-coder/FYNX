@@ -59,6 +59,9 @@ fun FynxContactsPanel(
         scope.launch {
             loading = true
             notice = null
+            connectionStateLoaded = false
+            friendUsernames = emptySet()
+            friendRequests = emptyList()
             try {
                 val local = readDeviceContacts(context)
                 val sim = readSimContacts(context)
