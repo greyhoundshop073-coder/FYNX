@@ -54,7 +54,7 @@ class FynxRealtimeClient(
         data class Typing(val userId: String, val isTyping: Boolean) : Event
         data class Presence(val userId: String, val online: Boolean) : Event
         data class GroupMessage(val groupId: String, val messageJson: String) : Event
-        data class Call(val callId: String, val callType: String, val fromUserId: String, val toUserId: String, val signalType: String, val sdp: String? = null, val candidate: IceCandidatePayload? = null, val fromUsername: String? = null, val error: String? = null) : Event
+        data class Call(val callId: String, val callType: String, val fromUserId: String, val toUserId: String, val signalType: String, val sdp: String? = null, val candidate: IceCandidatePayload? = null, val fromUsername: String? = null, val error: String? = null, val marketplaceListingId: String? = null, val marketplaceProductTitle: String? = null) : Event
     }
     data class IceCandidatePayload(val candidate: String, val sdpMid: String?, val sdpMLineIndex: Int?, val usernameFragment: String?) {
         fun toWebRtcCandidate(): IceCandidate = IceCandidate(sdpMid, sdpMLineIndex ?: 0, candidate)
