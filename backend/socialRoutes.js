@@ -78,12 +78,12 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (mode === "phone") {
         const digits = query.replace(/[^0-9]/g, "");
         if (digits.length < 7 || digits.length > 15) return res.status(400).json({ error: "enter a valid phone number with country code" });
-        const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE regexp_replace(phone, '[^0-9]', '', 'g') = $1 LIMIT 5`, [digits]);
+        const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE regexp_replace(phone, '[^0-9]', '', 'g') = $1 AND id <> $2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = users.id) OR (b.blocker_id = users.id AND b.blocked_id = $2)) LIMIT 5`, [digits, req.user.sub]);
         return res.json({ users: result.rows });
       }
       const normalized = query.replace(/^@+/, "").toLowerCase();
       if (normalized.length < 2 || normalized.length > 32) return res.status(400).json({ error: "username search must be 2-32 characters" });
-      const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE username ILIKE $1 OR display_name ILIKE $2 ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 20`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized]);
+      const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE (username ILIKE $1 OR display_name ILIKE $2) AND id <> $4 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $4 AND b.blocked_id = users.id) OR (b.blocker_id = users.id AND b.blocked_id = $4)) ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 20`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized, req.user.sub]);
       return res.json({ users: result.rows });
     } catch (error) { console.error("user search", error); return res.status(500).json({ error: "user search failed" }); }
   });
