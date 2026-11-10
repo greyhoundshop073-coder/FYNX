@@ -77,6 +77,8 @@ These are source-level observations only. They do not prove which permissions ar
 - [ ] Review `SCHEDULE_EXACT_ALARM` against the exact-alarm policy: FYNX uses it only conditionally for Calendar reminders and has an inexact fallback; do not declare restricted `USE_EXACT_ALARM` unless the app's core functionality genuinely qualifies. Test reminders with access denied and after device reboot.
 
 ### C. User-generated content and social safety
+
+**Source-audit warning (not complete):** The Home feed's current `Report post` action records a `REPORT` discovery event; this is not yet verified as a real moderation report routed to a review queue. Do not treat analytics/event success as proof that a report was received by moderators. The source search also did not find an explicit Terms/Community Guidelines acceptance record in account onboarding. Both must be resolved before production: users need to agree to enforceable UGC rules before posting/using UGC features as required, and reports must reach an actively monitored moderation process.
 - [ ] Verify in-app reporting for users and user-generated content, with a functioning review/moderation process.
 - [ ] Verify user blocking and that blocked users cannot continue the prohibited interactions.
 - [ ] Provide and enforce terms/community standards that prohibit objectionable content and abusive behavior.
