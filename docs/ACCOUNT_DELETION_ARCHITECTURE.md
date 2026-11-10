@@ -102,6 +102,25 @@ Suggested internal states: `REQUESTED`, `AWAITING_VERIFICATION`, `VERIFIED`, `CO
 
 Until these are supplied and reviewed, do not publish a retention period, promise immediate erasure of every copy, or implement destructive user deletion.
 
+
+## 3A. Additional user-linked records found in the broader source scan
+
+The follow-up scan of backend modules on this branch found additional categories that must be included in the deletion job and policy. The scan is source-based; runtime-created tables and live database constraints still need a final database-level export.
+
+| Feature | Source-backed relationships | Deletion concern |
+|---|---|---|
+| AI history | `backend/aiConversationRoutes.js`: conversations reference users with CASCADE; AI messages reference conversations and users with CASCADE; attachment links reference AI messages and `message_media` with CASCADE. | FYNX-held conversation rows and attachment links are cascade-linked, but the underlying media object and Gemini-side processing/log retention require separate handling. |
+| Notifications | `backend/notificationDevices.js` and `backend/notificationPush.js`: device tokens, preferences, notifications and delivery records are user-linked with CASCADE. | Remove/disable tokens promptly; verify provider delivery logs and any token copies outside the database. |
+| Groups | `backend/groupMembershipRoutes.js`: group invites/reports reference group and creator/reporter users with CASCADE; report target user uses SET NULL. `backend/groupContentRoutes.js`: group posts, poll votes, events and RSVPs are user/group-linked with CASCADE. | A cascade may remove reports or group activity that FYNX needs for abuse investigations. Decide how to retain a minimal moderation record while detaching reporter/target identity. Transfer group ownership/administration before removing the owner. |
+| Status | `backend/statusInteractionRoutes.js`: views, likes, reactions and replies reference status/user rows with CASCADE. | Expired status media and its object-store copies need separate lifecycle handling; interaction data may be removed with the account. |
+| Discovery and saved content | `backend/discoveryRoutes.js`: discovery events, saved posts, audience links and repost links are user-linked; target-user and quoted-post references use SET NULL in selected paths. | Define retention for report events and safety signals before allowing cascades to erase them. |
+| Marketplace reputation | `backend/marketplaceReputation.js`: seller reviews reference order, seller and buyer with CASCADE. `backend/marketplaceSchema.js`: weekly seller-award seller reference uses SET NULL. | Account deletion can erase review history through CASCADE. Decide whether reviews should be deleted, retained with a pseudonymous author, or otherwise handled under a documented policy. |
+| Business and shop profiles | `backend/businessRoutes.js` and `backend/marketplaceShopProfiles.js`: business owner/shop seller references use CASCADE. | Deactivate public business/shop surfaces immediately; check outstanding ads, listings, orders and obligations before removing the profile. |
+| Advertising and admin | `backend/marketplaceAdvertising.js`: campaign owners, operations and click viewers use CASCADE; seasonal promotion `created_by` uses RESTRICT; admin-role rows use CASCADE. | A user who created a seasonal promotion may block physical deletion. Preserve campaign billing/metrics and ownership history under an approved policy; do not let an account delete silently remove advertising audit evidence. |
+| Money planner | `backend/moneyPlanner.js`: personal planner/budget rows are user-linked with CASCADE. | Treat as account-owned personal data for erasure, including any derived exports or logs. |
+
+This scan adds important deletion risks not captured by the first focused FK list: group safety reports and seller reviews are currently cascade-linked, while seasonal-promotion creator identity is another RESTRICT dependency. A future implementation must not equate “database cascade succeeds” with “all retention and user-rights duties are satisfied.”
+
 ## 8. Next implementation gate
 
 Before writing the deletion endpoint, complete a full schema/foreign-key scan across every backend module and migration, including runtime-created tables; inspect media storage adapters and object-key lifecycle; and obtain the retention/provider decisions above. Then implement the request state machine and worker in a separate tested change. The account row must not be physically deleted until the dependency classifier proves that all retained obligations have been detached or lawfully preserved.
