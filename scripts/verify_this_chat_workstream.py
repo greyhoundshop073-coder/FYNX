@@ -88,6 +88,9 @@ check('Gifts recipients are restricted to accepted backend friends', 'FynxSocial
 check('friend request models preserve the server-provided profile photo id', 'profilePhotoMediaId: String? = null' in read('app/src/main/java/com/fynx/app/ui/FynxSocialClient.kt') and 'profile_photo_media_id' in read('app/src/main/java/com/fynx/app/ui/FynxSocialClient.kt'))
 people_hardening = read('backend/peopleResponseHardening.js')
 check('people response hardening resolves request photos by user id and covers blocked users', '"/api/blocks"' in people_hardening and 'row?.user_id ?? row?.id' in people_hardening and 'payload.blocks = blocks.map' in people_hardening)
+social_routes = read('backend/socialRoutes.js')
+check('people discovery excludes the signed-in user and either-side blocked accounts for username and phone search', 'id <> $2' in social_routes and 'id <> $4' in social_routes and social_routes.count('b.blocker_id = $2 AND b.blocked_id = users.id') >= 1 and social_routes.count('b.blocker_id = $4 AND b.blocked_id = users.id') >= 1)
+check('authenticated people and block responses are not cacheable', 'res.set("Cache-Control", "private, no-store")' in people_hardening)
 
 client_sources = '\n'.join(str(p.read_text(encoding='utf-8')) for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt'))
 check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}', client_sources))
