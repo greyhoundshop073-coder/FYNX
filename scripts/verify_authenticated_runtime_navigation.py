@@ -3369,12 +3369,28 @@ def find_wallet_feature_entry(xml_text:str):
 
 
 def wallet_destination_ready(xml_text: str) -> bool:
-    """Require the Wallet page and its visible balance buckets, not below-fold copy."""
-    return bool(
+    """Require real Wallet summary buckets online, or the explicit safe offline state."""
+    standard_summary = bool(
         find_control(xml_text, ["FYNX Wallet"])
         and find_control(xml_text, ["Balance details"])
         and find_control(xml_text, ["Reserved"])
         and find_control(xml_text, ["Withdrawal pending"])
+    )
+    if standard_summary:
+        return True
+
+    # The CI debug-only local entry has no server token. In that mode the real
+    # Wallet deliberately renders an unavailable balance and an online-sign-in
+    # explanation instead of fabricated balance buckets. Certify that honest
+    # offline state as a rendered UI destination, not as an authenticated wallet.
+    offline_preview = LOGIN_MODE == "debug-only local UI entry (not server-authenticated)"
+    return bool(
+        offline_preview
+        and find_control(xml_text, ["FYNX Wallet"])
+        and find_control(xml_text, ["Available balance"])
+        and find_control(xml_text, ["Unavailable"])
+        and find_control(xml_text, ["Wallet unavailable"])
+        and find_control(xml_text, ["Wallet security & PIN"])
     )
 
 
@@ -3844,19 +3860,27 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             if wallet_return_xml and find_control(wallet_return_xml, ["Search products, sellers or categories"]):
                 marketplace_xml=wallet_return_xml
 
-        # Wallet can return Marketplace at its previous vertical scroll offset.
-        # My Shop is in the top shortcut rail, so restore the real content viewport
-        # before looking for seller entry points. This is a bounded, read-only gesture.
-        for attempt in range(5):
+        # Returning from Wallet may restore a stale Marketplace hierarchy/scroll
+        # snapshot. Re-select the Marketplace destination once and read the live
+        # hierarchy again before searching for the My Shop shortcut.
+        if not find_control(marketplace_xml, ["My Shop"]):
+            refreshed_marketplace = tap_control(
+                marketplace_xml, ["Marketplace"], "authenticated-marketplace-refresh-after-wallet",
+                ["Search products, sellers or categories"]
+            )
+            if refreshed_marketplace:
+                marketplace_xml = refreshed_marketplace
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and not find_control(marketplace_xml, ["My Shop"]):
+            marketplace_xml = dump_ui("authenticated-marketplace-my-shop-shortcut-wait.xml") or marketplace_xml
             if find_control(marketplace_xml, ["My Shop"]):
                 break
             scrolled_xml = swipe_vertical_scroll_container(
-                marketplace_xml, "authenticated-marketplace-my-shop-return-top-" + str(attempt) + ".xml",
-                reverse=True
+                marketplace_xml, "authenticated-marketplace-my-shop-return-top.xml", reverse=True
             )
-            if not scrolled_xml:
-                break
-            marketplace_xml = scrolled_xml
+            if scrolled_xml:
+                marketplace_xml = scrolled_xml
+            time.sleep(0.35)
 
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
