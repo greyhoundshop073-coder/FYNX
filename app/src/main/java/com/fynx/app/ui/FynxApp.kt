@@ -638,14 +638,28 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 }
             }
         }) { padding ->
+            // Primary tabs scroll under the floating glass bar: their content reaches the bottom
+            // edge and each tab adds LocalFynxBottomBarSpace to the end of its own list.
+            val primaryTab = selected in mainNav.map { it.key }
+            val bottomBarSpace = if (primaryTab) padding.calculateBottomPadding() else 0.dp
+            val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
             val screenContentModifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(
+                    start = padding.calculateStartPadding(layoutDirection),
+                    top = padding.calculateTopPadding(),
+                    end = padding.calculateEndPadding(layoutDirection),
+                    bottom = if (primaryTab) 0.dp else padding.calculateBottomPadding()
+                )
                 // Individual screens own their intentional horizontal content spacing.
                 // Do not add a second global side gutter here: it was shrinking every
                 // screen and making phone controls/composers unnecessarily cramped.
-                .padding(vertical = if (selected == "Home" && statusCreatorRequested) 0.dp else 6.dp)
-                .then(if (selected == "Home") Modifier else Modifier.navigationBarsPadding())
+                .padding(
+                    top = if (selected == "Home" && statusCreatorRequested) 0.dp else 6.dp,
+                    bottom = if (primaryTab || (selected == "Home" && statusCreatorRequested)) 0.dp else 6.dp
+                )
+                .then(if (primaryTab) Modifier else Modifier.navigationBarsPadding())
+            CompositionLocalProvider(LocalFynxBottomBarSpace provides bottomBarSpace) {
             Box(screenContentModifier) {
                 AnimatedContent(
                     targetState = selected,
@@ -826,6 +840,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     }
                 }
             }
+            }
                 if (selected == "Home" && statusCreatorRequested) {
                     FynxStatusHubPanel(
                         startWithCreator = true,
@@ -844,5 +859,5 @@ private fun FynxFeaturesPanel(isAdmin: Boolean, onSelect: (String) -> Unit) {
         add(Triple("Marketplace", "Marketplace", Icons.Default.ShoppingBag)); add(Triple("Wallet", "FYNX Wallet", Icons.Default.AccountBalanceWallet)); add(Triple("Calls", "Voice & Video Calls", Icons.Default.Call)); add(Triple("Notifications", "Notifications", Icons.Default.Notifications)); add(Triple("Gifts", "Gifts", Icons.Default.CardGiftcard)); add(Triple("Share", "Share & Invite", Icons.Default.Share)); add(Triple("To-Do", "To-Do", Icons.Default.CheckCircle)); add(Triple("Calendar", "Calendar", Icons.Default.DateRange)); add(Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet)); add(Triple("Extra Tools", "Extra Tools", Icons.Default.Build)); add(Triple("Privacy", "Privacy & Safety", Icons.Default.Lock)); add(Triple("Saved Posts", "Saved Posts", Icons.Default.Bookmark)); add(Triple("Saved Products", "Saved Marketplace Products", Icons.Default.BookmarkBorder)); add(Triple("Seller Center", "Manage Marketplace Listings", Icons.Default.Inventory2)); add(Triple("Business Account", "Business & Creator Profile", Icons.Default.Storefront)); add(Triple("Advertising", "Create & Manage Advertising", Icons.Default.Campaign)); add(Triple("Advertising Dashboard", "Advertising Analytics Dashboard", Icons.Default.Analytics)); add(Triple("AI", "FYNX AI Assistant", Icons.Default.AutoAwesome)); add(Triple("Announcements", "Official FYNX Announcements", Icons.Default.Campaign)); if (isAdmin) add(Triple("Admin", "Owner / Admin Control Center", Icons.Default.AdminPanelSettings))
     }
     val visible = features.filter { it.second.contains(query.trim(), true) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) { Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Access your tools in one place. Business & Advertising connects your professional identity, products and campaigns.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); FynxFeatureSearchField(query, { query = it }); Spacer(Modifier.height(8.dp)); LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(visible, key = { it.first }) { feature -> Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) } } } } }
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) { Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Access your tools in one place. Business & Advertising connects your professional identity, products and campaigns.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); FynxFeatureSearchField(query, { query = it }); Spacer(Modifier.height(8.dp)); LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = LocalFynxBottomBarSpace.current + 8.dp)) { items(visible, key = { it.first }) { feature -> Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) } } } } }
 }
