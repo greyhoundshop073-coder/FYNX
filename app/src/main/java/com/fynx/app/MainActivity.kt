@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
 
     private fun registerNotificationTokenIfSignedIn() {
         if (FynxAuthStore.load(this).state != AuthState.SIGNED_IN) return
+        if (!com.fynx.app.ui.FynxNotificationPreferencesClient.cached(this).pushEnabled) return
 
         // Do not trigger a system permission prompt during app launch. The user
         // opts into push alerts from Notification Preferences after seeing context.
