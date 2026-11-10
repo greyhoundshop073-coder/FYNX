@@ -67,34 +67,10 @@ fun GiftsPanel(
         }.onFailure { friendsError = it.message ?: "Your FYNX friends could not be loaded." }
         friendsLoading = false
     }
-    var remoteRecipient by remember(recipientName) { mutableStateOf<FriendProfile?>(null) }
-    var recipientLoading by remember(recipientName) { mutableStateOf(false) }
-    LaunchedEffect(recipientName) {
-        val query = recipientName?.trim().orEmpty()
-        if (query.isBlank()) return@LaunchedEffect
-        val localMatch = actualProfiles.firstOrNull {
-            it.displayName.equals(query, ignoreCase = true) || it.username.equals(query, ignoreCase = true)
-        }
-        if (localMatch == null) {
-            recipientLoading = true
-            remoteRecipient = withContext(Dispatchers.IO) {
-                FynxSocialClient.searchUsers(context, query).getOrNull()?.firstOrNull {
-                    it.displayName.equals(query, ignoreCase = true) || it.username.removePrefix("@").equals(query.removePrefix("@"), ignoreCase = true)
-                }?.let { user ->
-                    FriendProfile(
-                        displayName = user.displayName.ifBlank { user.username.removePrefix("@") },
-                        username = user.username.let { if (it.startsWith("@")) it else "@$it" },
-                        hasProfilePhoto = !user.profilePhotoMediaId.isNullOrBlank()
-                    )
-                }
-            }
-            recipientLoading = false
-        }
-    }
-    val initialRecipient = remember(recipientName, actualProfiles, remoteRecipient) {
+    val initialRecipient = remember(recipientName, actualProfiles) {
         actualProfiles.firstOrNull {
             it.displayName.equals(recipientName, ignoreCase = true) || it.username.equals(recipientName, ignoreCase = true)
-        } ?: remoteRecipient
+        }
     }
     var selectedRecipient by remember(recipientName) { mutableStateOf<FriendProfile?>(initialRecipient) }
     LaunchedEffect(initialRecipient) { if (selectedRecipient == null) selectedRecipient = initialRecipient }
@@ -105,10 +81,7 @@ fun GiftsPanel(
     var historyVersion by remember { mutableIntStateOf(0) }
     var historyTab by remember { mutableStateOf("Sent") }
     val historyStore = remember(context) { FynxGiftHistoryStore(context, ::findFynxGift) }
-    val recipients = buildList {
-        addAll(actualProfiles)
-        remoteRecipient?.let { remote -> if (none { it.username.equals(remote.username, true) }) add(remote) }
-    }
+    val recipients = actualProfiles
 
     Column(
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
