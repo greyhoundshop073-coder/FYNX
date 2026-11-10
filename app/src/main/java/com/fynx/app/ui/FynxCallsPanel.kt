@@ -61,7 +61,6 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var localVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var pendingIncomingAccept by remember { mutableStateOf(false) }
-    var showCallPermissionDisclosure by remember { mutableStateOf(false) }
     val mediaEngineForCleanup = remember { arrayOfNulls<FynxWebRtcCallEngine>(1) }
 
     lateinit var realtimeClient: FynxRealtimeClient
@@ -218,7 +217,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 realtimeClient.sendCallInvite(id, resolvedId, isVideo)
                 FynxCallsStore.updateStatus(context, id, "Calling")
                 calls = FynxCallsStore.load(context)
-            } else showCallPermissionDisclosure = true
+            } else permissionLauncher.launch(required)
         }
     }
 
@@ -271,7 +270,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                     calls = FynxCallsStore.load(context)
                 } else {
                     pendingIncomingAccept = true
-                    showCallPermissionDisclosure = true
+                    permissionLauncher.launch(required)
                 }
             },
             onRetry = { targetUsername?.let { beginOutgoing(it, video) } },
@@ -293,38 +292,6 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 calls = FynxCallsStore.load(context); activeCall = null; session = null; pendingIncomingAccept = false; endingCall = false
             }
         )
-        if (showCallPermissionDisclosure) {
-            AlertDialog(
-                onDismissRequest = { showCallPermissionDisclosure = false },
-                title = { Text(if (video) "Allow camera and microphone?" else "Allow microphone access?") },
-                text = {
-                    Text(if (video)
-                        "FYNX needs your microphone for live call audio and your camera for live video with the person you are calling."
-                        else "FYNX needs your microphone for live call audio with the person you are calling.")
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showCallPermissionDisclosure = false
-                        val required = if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
-                        permissionLauncher.launch(required)
-                    }) { Text("Continue") }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        showCallPermissionDisclosure = false
-                        val current = session
-                        if (pendingIncomingAccept && current != null) {
-                            pendingIncomingAccept = false
-                            targetUserId?.let { realtimeClient.sendCallReject(current.id, it, video) }
-                        }
-                        mediaEngine.disconnect()
-                        mediaConnected = false
-                        activeCall = null
-                        session = null
-                    }) { Text("Not now") }
-                }
-            )
-        }
         return
     }
 
