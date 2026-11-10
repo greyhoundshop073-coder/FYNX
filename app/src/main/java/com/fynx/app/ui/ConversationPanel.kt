@@ -164,6 +164,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var sending by remember { mutableStateOf(false) }
     var newConversationRelation by remember(chat.username) { mutableStateOf("loading") }
     var newConversationRequestId by remember(chat.username) { mutableStateOf<String?>(null) }
+    var relationshipRefresh by remember(chat.username) { mutableIntStateOf(0) }
     var uploadedAttachmentCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
     var pendingVoiceRetry by remember(chat.username) { mutableStateOf<Pair<File, Long>?>(null) }
     var uploadedVoiceCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
@@ -361,7 +362,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
-    LaunchedEffect(isNewConversation, chat.username) {
+    LaunchedEffect(isNewConversation, chat.username, relationshipRefresh) {
         if (!isNewConversation) return@LaunchedEffect
         newConversationRelation = "loading"
         val friendsResult = FynxSocialClient.friends(context)
@@ -752,7 +753,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             Text("Checking connection…", color = glassPalette.doodleSecondary)
                         }
                         "friends" -> Text("You are already friends", color = glassPalette.doodleSecondary, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                        "error" -> Text("Connection status unavailable. Retry from Friends or Profile.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        "error" -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Connection status unavailable.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { relationshipRefresh++ }) { Text("Retry") }
+                        }
                         else -> TextButton(
                             enabled = !sending,
                             onClick = {
@@ -761,7 +765,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     val requestId = newConversationRequestId
                                     val action = when (newConversationRelation) {
                                         "incoming" -> requestId?.let { FynxSocialClient.acceptRequest(context, it) }
-                                            ?: Result.failure(IllegalStateException("Friend request is no longer available."))
+                                            ?: Result.failure<Unit>(IllegalStateException("Friend request is no longer available."))
                                         "outgoing" -> requestId?.let { FynxSocialClient.cancelRequest(context, it) }
                                             ?: Result.failure(IllegalStateException("Friend request is no longer available."))
                                         "blocked" -> FynxSocialClient.unblock(context, chat.username.removePrefix("@"))
