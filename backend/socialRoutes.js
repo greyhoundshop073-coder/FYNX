@@ -88,6 +88,47 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } catch (error) { console.error("user search", error); return res.status(500).json({ error: "user search failed" }); }
   });
 
+  app.get("/api/users/recommendations", auth, async (req, res) => {
+    try {
+      res.set("Cache-Control", "private, no-store");
+      const limit = Math.min(Math.max(Number.parseInt(req.query?.limit, 10) || 30, 1), 30);
+      const offset = Math.min(Math.max(Number.parseInt(req.query?.offset, 10) || 0, 0), 10000);
+      const result = await pool.query(`
+        SELECT u.id,u.username,u.display_name,u.verified
+        FROM users u
+        LEFT JOIN privacy_settings ps ON ps.user_id=u.id
+        WHERE u.id<>$1
+          AND COALESCE(ps.profile_visibility,'My friends')='Everyone'
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id=$1 AND b.blocked_id=u.id)
+               OR (b.blocker_id=u.id AND b.blocked_id=$1)
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM friendships rel
+            WHERE ((rel.user_id=$1 AND rel.friend_id=u.id) OR (rel.user_id=u.id AND rel.friend_id=$1))
+              AND rel.status IN ('accepted','pending')
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM social_follows sf
+            WHERE sf.follower_id=$1 AND sf.followed_id=u.id
+          )
+        ORDER BY u.verified DESC,u.created_at DESC
+        LIMIT $2 OFFSET $3
+      `, [req.user.sub, limit, offset]);
+      return res.json({ people: result.rows.map(row => ({
+        id: String(row.id),
+        username: row.username,
+        displayName: row.display_name || "",
+        verified: Boolean(row.verified),
+        reason: row.verified ? "Verified account" : "Suggested for you"
+      })) });
+    } catch (error) {
+      console.error("people recommendations", error);
+      return res.status(500).json({ error: "people recommendations failed" });
+    }
+  });
+
   app.get("/api/friends", auth, async (req, res) => {
     try {
       res.set("Cache-Control", "no-store");
