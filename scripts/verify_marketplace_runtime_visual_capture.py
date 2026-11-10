@@ -49,7 +49,9 @@ checks = [
         and 'find_control(xml_text, ["Unavailable"])' in navigation
         and 'find_control(xml_text, ["Wallet unavailable"])' in navigation
         and 'find_control(xml_text, ["Wallet security & PIN"])' in navigation
-        and 'find_control(xml_text, ["Balance details"])' in navigation,
+        and 'find_control(xml_text, ["Balance details"])' in navigation
+        and 'wallet_destination_ready_scrolling(' in navigation
+        and 'wallet-add-back-home-summary' in navigation,
     ),
     (
         "Android CI attempts focused Marketplace/My Shop capture after instrumentation failure",
