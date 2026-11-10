@@ -226,6 +226,26 @@ fun GiftsPanel(
                     if (status == FynxGiftFlowStatus.READY && transfer != null) {
                         scope.launch {
                             deliveryMessage = null
+                            friendsLoading = true
+                            val currentFriends = FynxSocialClient.friends(context)
+                            val recipientStillFriend = currentFriends.getOrNull()?.any {
+                                it.username.removePrefix("@").equals(recipient.username.removePrefix("@"), true)
+                            } == true
+                            if (currentFriends.isFailure || !recipientStillFriend) {
+                                if (currentFriends.isFailure) {
+                                    friendsError = currentFriends.exceptionOrNull()?.message ?: "Friendship could not be verified."
+                                    deliveryMessage = "Could not verify this recipient's friendship. Please retry."
+                                } else {
+                                    actualProfiles = actualProfiles.filterNot { it.username.equals(recipient.username, true) }
+                                    selectedRecipient = null
+                                    deliveryMessage = "This person is no longer on your accepted friends list."
+                                }
+                                friendsLoading = false
+                                confirmationOpen = false
+                                return@launch
+                            }
+                            friendsError = null
+                            friendsLoading = false
                             val result = withContext(Dispatchers.IO) {
                                 FynxProductionMessaging.sendText(
                                     context,
