@@ -648,7 +648,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                             item.label,
                                             maxLines = 1,
                                             softWrap = false,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)
                                         )
                                     },
