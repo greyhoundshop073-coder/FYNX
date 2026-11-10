@@ -55,6 +55,7 @@ fun GiftsPanel(
     LaunchedEffect(context, authUsername) {
         friendsLoading = true
         friendsError = null
+        actualProfiles = emptyList()
         FynxSocialClient.friends(context).onSuccess { users ->
             actualProfiles = users.filterNot { it.username.equals(authUsername, ignoreCase = true) }.map { user ->
                 FriendProfile(
@@ -75,6 +76,9 @@ fun GiftsPanel(
     }
     var selectedRecipient by remember(recipientName) { mutableStateOf<FriendProfile?>(initialRecipient) }
     LaunchedEffect(initialRecipient) { if (selectedRecipient == null) selectedRecipient = initialRecipient }
+    LaunchedEffect(actualProfiles, selectedRecipient) {
+        if (selectedRecipient != null && actualProfiles.none { it.username.equals(selectedRecipient?.username, true) }) selectedRecipient = null
+    }
     var selectedGift by remember { mutableStateOf<FynxGift?>(null) }
     var confirmationOpen by remember { mutableStateOf(false) }
     var preparedTransfer by remember { mutableStateOf<FynxGiftTransfer?>(null) }
@@ -107,7 +111,7 @@ fun GiftsPanel(
         if (friendsLoading) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Loading your accepted FYNX friends…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        friendsError?.let { message -> Text(message, color = MaterialTheme.colorScheme.error); OutlinedButton(onClick = { scope.launch { friendsLoading = true; FynxSocialClient.friends(context).onSuccess { users -> actualProfiles = users.filterNot { it.username.equals(authUsername, true) }.map { user -> FriendProfile(user.displayName.ifBlank { user.username.removePrefix("@") }, user.username.let { if (it.startsWith("@")) it else "@$it" }, hasProfilePhoto = !user.profilePhotoMediaId.isNullOrBlank(), profilePhotoMediaId = user.profilePhotoMediaId, status = FynxFriendStatus.FRIENDS) }; friendsError = null }.onFailure { friendsError = it.message ?: "Your FYNX friends could not be loaded." }; friendsLoading = false } }) { Text("Retry") } }
+        friendsError?.let { message -> Text(message, color = MaterialTheme.colorScheme.error); OutlinedButton(onClick = { scope.launch { friendsLoading = true; actualProfiles = emptyList(); FynxSocialClient.friends(context).onSuccess { users -> actualProfiles = users.filterNot { it.username.equals(authUsername, true) }.map { user -> FriendProfile(user.displayName.ifBlank { user.username.removePrefix("@") }, user.username.let { if (it.startsWith("@")) it else "@$it" }, hasProfilePhoto = !user.profilePhotoMediaId.isNullOrBlank(), profilePhotoMediaId = user.profilePhotoMediaId, status = FynxFriendStatus.FRIENDS) }; friendsError = null }.onFailure { friendsError = it.message ?: "Your FYNX friends could not be loaded." }; friendsLoading = false } }) { Text("Retry") } }
         if (!friendsLoading && recipients.isEmpty()) {
             Text("No accepted FYNX friends are available as gift recipients yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else if (recipients.isNotEmpty()) {
@@ -153,7 +157,7 @@ fun GiftsPanel(
                     Text("${gift.emoji} ${gift.name}", style = MaterialTheme.typography.titleMedium)
                     Text("Value: ${gift.value} FYNX • ${gift.rarity}", color = MaterialTheme.colorScheme.primary)
                     Text(selectedRecipient?.let { "Recipient: ${it.displayName} (${it.username})" } ?: "Select a recipient before continuing", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(enabled = selectedRecipient != null && authUsername != null && preparedTransfer == null, onClick = { confirmationOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("Review gift") }
+                    Button(enabled = selectedRecipient != null && recipients.any { it.username.equals(selectedRecipient?.username, true) } && authUsername != null && preparedTransfer == null, onClick = { confirmationOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("Review gift") }
                 }
             }
         }
@@ -193,7 +197,7 @@ fun GiftsPanel(
         Text("Virtual gifts currently use FYNX chat delivery. Wallet debits and real-money gifting remain disabled until a secure payment provider is connected.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
-    if (confirmationOpen && selectedGift != null && selectedRecipient != null && authUsername != null) {
+    if (confirmationOpen && selectedGift != null && selectedRecipient != null && recipients.any { it.username.equals(selectedRecipient?.username, true) } && authUsername != null) {
         val gift = selectedGift!!
         val recipient = selectedRecipient!!
         AlertDialog(
