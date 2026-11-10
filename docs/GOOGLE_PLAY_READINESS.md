@@ -11,9 +11,20 @@
 
 The source-backed data-flow inventory is maintained in [`docs/PRIVACY_DATA_INVENTORY.md`](PRIVACY_DATA_INVENTORY.md). It records verified source behavior, unverified provider/runtime facts, account-deletion dependencies, and the legal details that must be supplied before public disclosures can be finalized.
 
-This Stage 1 work adds a versioned, account-scoped disclosure in the Contacts feature before the app reads device/SIM contacts or requests Android Contacts permission. It explains that normalised phone numbers are sent individually to FYNX over HTTPS for matching and that contact names are not included in those lookup requests. It also defers the Android 13+ notification permission prompt until the user enables Push alerts in Notification Preferences, shows an explanation first, and registers the FCM token only when the saved push preference is enabled and Android permission is granted. These changes require Android CI and runtime verification before being marked complete.
+This Stage 1 work adds a versioned, account-scoped Contacts disclosure; defers Android 13+ notification permission until the user opts in from Notification Preferences; and adds pre-permission context for camera capture and chat location sharing. Camera access is requested only after the user chooses Allow camera, and chat coordinates require a separate Share confirmation after permission. These are source-level changes and require Android CI plus runtime verification before being marked complete.
 
 Account deletion, a public deletion web resource, a publishable privacy policy, and final Terms of Use remain launch blockers. Do not publish or link placeholder legal pages, and do not claim that this source inventory completes Play Console Data safety declarations.
+
+## Work staging — what we can do during development vs. what must wait
+
+| Timing | Work | Current handling |
+|---|---|---|
+| **Do now** | Source-backed data/SDK/permission inventory; contextual permission explanations; request sensitive access only when the related feature is used; minimise media access where behavior can be preserved; secure session/token handling; tests for denial/revocation and data boundaries. | In progress. Contacts, notification opt-in, camera entry and chat location disclosure have source changes on PR #503. Home/Marketplace location and remaining microphone/media paths still need review and runtime tests. |
+| **Do now** | Build real UGC safety capability: terms acceptance before posting where required, user/content reporting, blocking, moderation queue and response operations. | Release-critical work preserved in Section 3C; the existing Home report action is not yet verified as a real moderation report. Do not treat analytics/event logging as a report. |
+| **Before production / launch** | Complete account deletion in-app and public web flow; resolve order/wallet/dispute retention and media/processor deletion; publish final Privacy Policy, Terms/Community Guidelines and deletion page; complete accurate Data Safety and other Play Console declarations. | Preserved as explicit blockers. Must use verified developer identity, monitored contact, provider configuration, contracts and approved retention decisions—not placeholders. |
+| **Before production / launch** | Finalise payment/financial policy review, backend/provider availability, support operations, age/content rating, store listing, signed AAB, reviewer access, and the required testing track for the actual developer account type. | Preserved in Sections 3D–3G and 4; confirm the current Play Console requirements immediately before submission. |
+
+A deferred item is not a waived requirement. Keep it open until it is implemented, published/configured where required, and verified against the final release candidate. Do not start production access or the qualifying closed-test period with known core service or compliance blockers.
 
 ## 1. Purpose and release rule
 
