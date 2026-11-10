@@ -404,7 +404,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Upload pull-request validation APK
-        if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && steps.apk_integrity.outcome == 'success' && (github.ref == 'refs/heads/feat/home-feed-professional-feed-conversations-20261103' || github.ref == 'refs/heads/work/camera-post-reference-integration-20261108' || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'feat/home-feed-professional-feed-conversations-20261103' || github.event.pull_request.head.ref == 'work/camera-post-reference-integration-20261108'))) }}
+        if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && steps.apk_integrity.outcome == 'success' && (github.ref == 'refs/heads/feat/home-feed-professional-feed-conversations-20261103' || github.ref == 'refs/heads/work/camera-post-reference-integration-20261108' || (github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'feat/home-feed-professional-feed-conversations-20261103' || github.event.pull_request.head.ref == 'work/camera-post-reference-integration-20261108' || github.event.pull_request.head.ref == 'work1/marketplace-wallet-glass-reconciliation-20261110'))) }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-PR-Validation.apk
