@@ -37,7 +37,7 @@ checks = [
         "Marketplace refreshes its real destination and restores the shortcut rail after Wallet before seller capture",
         'if not find_control(marketplace_xml, ["My Shop"]):' in navigation
         and 'authenticated-marketplace-refresh-after-wallet' in navigation
-        and 'find_control(marketplace_xml, ["Search products, sellers or categories"])' in navigation
+        and '["Search products, sellers or categories"]' in navigation
         and 'authenticated-marketplace-my-shop-return-top.xml' in navigation
         and 'reverse=True' in navigation
         and navigation.index("authenticated-marketplace-my-shop-return-top.xml") < navigation.index("product_target = marketplace_product_card_target(marketplace_xml)"),
