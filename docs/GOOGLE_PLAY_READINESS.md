@@ -67,7 +67,7 @@ These are source-level observations only. They do not prove which permissions ar
 - [ ] Do not publish a guessed or generic privacy policy. Complete it only after the data-flow and processor inventory is verified.
 
 ### B. Permissions and sensitive data
-- [ ] For location, contacts, microphone, camera, photos/videos, notifications, exact alarms, and boot receiver behavior, document the user-facing feature and necessity. Contacts, Home post location, chat location, camera capture, Android 13+ notification opt-in, chat voice messages, voice posts, calls, and the Status custom-media permission now have source-level pre-permission/context explanations. Marketplace Nearby and seller-location entry points remain to be addressed without colliding with the active Marketplace integration PR. Runtime tests remain required.
+- [ ] For location, contacts, microphone, camera, photos/videos, notifications, exact alarms, and boot receiver behavior, document the user-facing feature and necessity. Contacts, Home post location, chat location, camera capture, Android 13+ notification opt-in, chat voice messages, voice posts, and the Status custom-media permission now have source-level pre-permission/context explanations. Voice/video call permission timing and Marketplace Nearby/seller-location entry points remain to be addressed without colliding with the active integration PRs. Runtime tests remain required.
 - [ ] Request sensitive permissions only at the point the related feature is used; explain why before the system prompt where required.
 - [ ] Prefer Android Photo Picker or other scoped access where it can replace broad media permissions.
 - [ ] Confirm contacts are not uploaded or synced without a clear disclosure and user action.
