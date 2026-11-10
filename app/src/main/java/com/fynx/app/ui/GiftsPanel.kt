@@ -49,8 +49,23 @@ fun GiftsPanel(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val authUsername = FynxAuthStore.storedUsername(context)?.let { if (it.startsWith("@")) it else "@$it" }
-    val actualProfiles = remember(context) {
-        FynxFriendsStore(context).load().filterNot { it.username.equals(authUsername, ignoreCase = true) }
+    var actualProfiles by remember { mutableStateOf(emptyList<FriendProfile>()) }
+    var friendsLoading by remember { mutableStateOf(true) }
+    var friendsError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(context, authUsername) {
+        friendsLoading = true
+        friendsError = null
+        FynxSocialClient.friends(context).onSuccess { users ->
+            actualProfiles = users.filterNot { it.username.equals(authUsername, ignoreCase = true) }.map { user ->
+                FriendProfile(
+                    displayName = user.displayName.ifBlank { user.username.removePrefix("@") },
+                    username = user.username.let { if (it.startsWith("@")) it else "@$it" },
+                    hasProfilePhoto = !user.profilePhotoMediaId.isNullOrBlank(),
+                    status = FynxFriendStatus.FRIENDS
+                )
+            }
+        }.onFailure { friendsError = it.message ?: "Your FYNX friends could not be loaded." }
+        friendsLoading = false
     }
     var remoteRecipient by remember(recipientName) { mutableStateOf<FriendProfile?>(null) }
     var recipientLoading by remember(recipientName) { mutableStateOf(false) }
@@ -115,9 +130,13 @@ fun GiftsPanel(
         }
 
         Text("Recipient", style = MaterialTheme.typography.titleMedium)
-        if (recipients.isEmpty()) {
-            Text("No real FYNX user could be found for this chat yet. Keep the chat connected and try again.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
+        if (friendsLoading) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Loading your accepted FYNX friends…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        friendsError?.let { message -> Text(message, color = MaterialTheme.colorScheme.error); OutlinedButton(onClick = { scope.launch { friendsLoading = true; FynxSocialClient.friends(context).onSuccess { users -> actualProfiles = users.filterNot { it.username.equals(authUsername, true) }.map { user -> FriendProfile(user.displayName.ifBlank { user.username.removePrefix("@") }, user.username.let { if (it.startsWith("@")) it else "@$it" }, hasProfilePhoto = !user.profilePhotoMediaId.isNullOrBlank(), status = FynxFriendStatus.FRIENDS) }; friendsError = null }.onFailure { friendsError = it.message ?: "Your FYNX friends could not be loaded." }; friendsLoading = false } }) { Text("Retry") } }
+        if (!friendsLoading && recipients.isEmpty()) {
+            Text("No accepted FYNX friends are available as gift recipients yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (recipients.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 recipients.forEach { person ->
                     Card(
