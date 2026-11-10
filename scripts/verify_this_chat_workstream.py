@@ -92,6 +92,10 @@ check('people response hardening resolves request photos by user id and covers b
 social_routes = read('backend/socialRoutes.js')
 check('people discovery excludes the signed-in user and either-side blocked accounts for username and phone search', 'id <> $2' in social_routes and 'id <> $4' in social_routes and social_routes.count('b.blocker_id = $2 AND b.blocked_id = users.id') >= 1 and social_routes.count('b.blocker_id = $4 AND b.blocked_id = users.id') >= 1)
 check('authenticated people and block responses are not cacheable', 'res.set("Cache-Control", "private, no-store")' in people_hardening)
+recommendations = read('backend/fynxAiToolRegistry.js')
+home_people = read('app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt')
+check('Home people recommendations exclude accepted and pending friends, followed and blocked accounts', all(x in recommendations for x in ["rel.status IN ('accepted','pending')", 'sf.follower_id=$1 AND sf.followed_id=u.id', 'FROM blocks b', 'mutual_friends']))
+check('Home people recommendation cards explain follow and friend-request failures', 'actionError' in home_people and 'Friend request could not be sent.' in home_people and 'Could not follow this account.' in home_people)
 
 legacy_friend_consumers = [p.name for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt') if p.name != 'FynxFriendsStore.kt' and 'FynxFriendsStore(' in p.read_text(encoding='utf-8')]
 check('no live Android screen reads the legacy device-local friend store', not legacy_friend_consumers)
