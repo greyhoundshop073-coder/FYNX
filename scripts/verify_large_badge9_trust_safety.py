@@ -32,6 +32,7 @@ checks=[
 ("admin report queue records moderator and decision timestamps","moderator_id=$2" in read("backend/adminRoutes.js") and "reviewed_at=CASE" in read("backend/adminRoutes.js")),
 ("Android admin client reads and updates safety reports","/api/admin/reports" in read("app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt") and "reviewSafetyReport" in read("app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt")),
 ("Admin Control Center displays report review, resolve and dismiss actions","User safety reports" in read("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt") and "Start review" in read("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt") and "Resolve" in read("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt") and "Dismiss" in read("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt")),]
+checks.append(("closed reports cannot be reopened through the review endpoint","WHERE id=$4 AND status IN ('OPEN','UNDER_REVIEW')" in read("backend/adminRoutes.js")))
 failed=[n for n,o in checks if not o]
 for n,o in checks: print(("PASS: " if o else "FAIL: ")+n)
 if failed: raise SystemExit("Large Badge #9 trust/safety verification failed: "+"; ".join(failed))
