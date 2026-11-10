@@ -1235,6 +1235,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    OutlinedButton(
+                        onClick = { showSell = true },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Sell", maxLines = 1)
+                    }
                     OutlinedButton(onClick = onOpenWallet, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                         Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
