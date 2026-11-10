@@ -14,7 +14,7 @@ object FynxSocialClient {
         val profilePhotoMediaId: String? = null,
         val createdAt: String? = null
     )
-    data class FriendRequest(val id: String, val username: String, val displayName: String, val status: String)
+    data class FriendRequest(val id: String, val username: String, val displayName: String, val status: String, val profilePhotoMediaId: String? = null)
 
     suspend fun searchUsers(context: Context, query: String, phoneSearch: Boolean = false): Result<List<User>> {
         val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
@@ -38,7 +38,7 @@ object FynxSocialClient {
             buildList {
                 for (index in 0 until items.length()) {
                     val item = items.getJSONObject(index)
-                    add(FriendRequest(item.getString("id"), item.getString("username"), item.optString("display_name"), item.getString("status")))
+                    add(FriendRequest(item.getString("id"), item.getString("username"), item.optString("display_name"), item.getString("status"), item.optString("profile_photo_media_id").takeIf { it.isNotBlank() && it != "null" }))
                 }
             }
         }
