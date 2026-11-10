@@ -7,7 +7,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -38,10 +37,6 @@ class MainActivity : ComponentActivity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val deepLinkDestinationState = mutableStateOf<FynxDeepLinkDestination?>(null)
     private val deepLinkRequestId = mutableLongStateOf(0L)
-    private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) registerNotificationTokenIfSignedIn()
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -91,12 +86,11 @@ class MainActivity : ComponentActivity() {
     private fun registerNotificationTokenIfSignedIn() {
         if (FynxAuthStore.load(this).state != AuthState.SIGNED_IN) return
 
+        // Do not trigger a system permission prompt during app launch. The user
+        // opts into push alerts from Notification Preferences after seeing context.
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
-        }
+        ) return
 
         activityScope.launch {
             FynxNotificationDeviceManager.registerCurrentToken(this@MainActivity)
