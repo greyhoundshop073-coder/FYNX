@@ -4016,7 +4016,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 while time.monotonic() < profile_deadline:
                     profile_ready_xml = dump_ui("marketplace-public-profile-settled.xml") or profile_ready_xml
                     has_header = bool(find_control(profile_ready_xml, ["Marketplace profile"]))
-                    has_count = bool(find_control(profile_ready_xml, ["Available products"]))
+                    has_count = bool(find_control(profile_ready_xml, ["Available products"])) or (\n                        bool(find_control(profile_ready_xml, ["Products"], exact_only=True))\n                        and bool(find_control(profile_ready_xml, ["0"], exact_only=True))\n                    )
                     has_product_state = any(
                         find_control(profile_ready_xml, [marker])
                         for marker in profile_terminal_markers
