@@ -85,6 +85,13 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
     const query = String(args.query || "").trim().slice(0, 80);
     if (query.length < 2) throw new Error("search query must be at least 2 characters");
     const normalized = query.replace(/^@+/, "").toLowerCase().slice(0, 32);
+    const result = await databasePool.query(`SELECT u.id,u.username,u.display_name FROM users u LEFT JOIN privacy_settings ps ON ps.user_id=u.id WHERE (u.username ILIKE $1 OR u.display_name ILIKE $2) AND COALESCE(ps.profile_visibility,\'My friends\')=\'Everyone\' AND u.id<>$4 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$4 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$4)) ORDER BY CASE WHEN lower(u.username) = $3 THEN 0 ELSE 1 END, u.username LIMIT 10`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized, userId]);
+    return { users: result.rows.map(row => ({ id: String(row.id), username: row.username, displayName: row.display_name || "" })) };
+  }
+
+  if (name === "get_people_recommendations") {
+    const limit = Math.min(Math.max(Number(args.limit) || 30, 1), 30);
+    const offset = Math.max(Number(args.offset) || 0, 0);
     const result = await databasePool.query(`
       SELECT u.id,u.username,u.display_name,u.verified
       FROM users u
