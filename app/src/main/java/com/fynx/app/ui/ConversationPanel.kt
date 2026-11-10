@@ -762,27 +762,25 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             onClick = {
                                 conversationScope.launch {
                                     sending = true
+                                    val relationBeforeAction = newConversationRelation
                                     val requestId = newConversationRequestId
-                                    val action = when (newConversationRelation) {
+                                    val action = when (relationBeforeAction) {
                                         "incoming" -> requestId?.let { FynxSocialClient.acceptRequest(context, it) }
                                             ?: Result.failure<Unit>(IllegalStateException("Friend request is no longer available."))
                                         "outgoing" -> requestId?.let { FynxSocialClient.cancelRequest(context, it) }
-                                            ?: Result.failure(IllegalStateException("Friend request is no longer available."))
+                                            ?: Result.failure<Unit>(IllegalStateException("Friend request is no longer available."))
                                         "blocked" -> FynxSocialClient.unblock(context, chat.username.removePrefix("@"))
                                         else -> FynxSocialClient.sendRequest(context, chat.username.removePrefix("@"))
                                     }
                                     action.onSuccess {
-                                        newConversationRelation = when (newConversationRelation) {
-                                            "incoming" -> "friends"
-                                            "outgoing" -> "none"
-                                            "blocked" -> "none"
-                                            else -> "outgoing"
+                                        networkError = when (relationBeforeAction) {
+                                            "incoming" -> "Friend request accepted."
+                                            "outgoing" -> "Friend request cancelled."
+                                            "blocked" -> "User unblocked."
+                                            else -> "Friend request sent."
                                         }
-                                        networkError = when (newConversationRelation) {
-                                            "friends" -> "Friend request accepted."
-                                            "outgoing" -> "Friend request sent."
-                                            else -> "Connection updated."
-                                        }
+                                        newConversationRelation = "loading"
+                                        relationshipRefresh++
                                     }.onFailure { networkError = it.message ?: "Friend action could not be completed." }
                                     sending = false
                                 }
