@@ -51,6 +51,7 @@ fun GiftsPanel(
     val authUsername = FynxAuthStore.storedUsername(context)?.let { if (it.startsWith("@")) it else "@$it" }
     var actualProfiles by remember { mutableStateOf(emptyList<FriendProfile>()) }
     var friendsLoading by remember { mutableStateOf(true) }
+    var giftSending by remember { mutableStateOf(false) }
     var friendsError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(context, authUsername) {
         friendsLoading = true
@@ -212,7 +213,7 @@ fun GiftsPanel(
                 }
             },
             confirmButton = {
-                Button(enabled = !friendsLoading, onClick = {
+                Button(enabled = !friendsLoading && !giftSending, onClick = {
                     val transactionId = UUID.randomUUID().toString()
                     val (status, transfer) = FynxGiftFlow.prepare(
                         wallet = FynxWalletFoundation.empty("FYNX"),
@@ -246,6 +247,7 @@ fun GiftsPanel(
                             }
                             friendsError = null
                             friendsLoading = false
+                            giftSending = true
                             val result = withContext(Dispatchers.IO) {
                                 FynxProductionMessaging.sendText(
                                     context,
@@ -262,10 +264,11 @@ fun GiftsPanel(
                             }.onFailure { error ->
                                 deliveryMessage = error.message?.takeIf { it.isNotBlank() }?.let { "Gift could not be sent: $it" } ?: "Gift could not be sent. Please try again."
                             }
+                            giftSending = false
                             confirmationOpen = false
                         }
                     }
-                }) { Text("Send gift") }
+                }) { Text(if (giftSending) "Sending…" else "Send gift") }
             },
             dismissButton = { TextButton(onClick = { confirmationOpen = false }) { Text("Cancel") } }
         )
