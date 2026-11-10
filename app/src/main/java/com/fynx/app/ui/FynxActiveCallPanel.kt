@@ -87,6 +87,7 @@ fun FynxActiveCallPanel(
                 )
                 Spacer(Modifier.height(18.dp))
                 Text(name, style = MaterialTheme.typography.headlineSmall)
+                marketplaceProductTitle?.takeIf { it.isNotBlank() }?.let { Text("Live item: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Spacer(Modifier.height(6.dp))
                 Text(callStatus, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (video && !incoming) {
