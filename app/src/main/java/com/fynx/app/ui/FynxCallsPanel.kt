@@ -185,7 +185,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 calls = FynxCallsStore.load(context)
             } else {
                 if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                targetUserId?.let { realtimeClient.sendCallInvite(current.id, it, video) }
+                targetUserId?.let { realtimeClient.sendCallInvite(current.id, it, video, activeMarketplaceListingId, activeMarketplaceProductTitle) }
                 FynxCallsStore.updateStatus(context, current.id, "Calling")
                 calls = FynxCallsStore.load(context)
             }
