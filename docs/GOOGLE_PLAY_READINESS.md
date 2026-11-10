@@ -56,7 +56,7 @@ These are source-level observations only. They do not prove which permissions ar
 - [ ] Do not publish a guessed or generic privacy policy. Complete it only after the data-flow and processor inventory is verified.
 
 ### B. Permissions and sensitive data
-- [ ] For location, contacts, microphone, camera, photos/videos, notifications, exact alarms, and boot receiver behavior, document the user-facing feature and necessity.
+- [ ] For location, contacts, microphone, camera, photos/videos, notifications, exact alarms, and boot receiver behavior, document the user-facing feature and necessity. Contacts, chat location, camera capture, and Android 13+ notification opt-in now have source-level pre-permission/context changes; runtime verification and the remaining voice/location entry-point review are still required.
 - [ ] Request sensitive permissions only at the point the related feature is used; explain why before the system prompt where required.
 - [ ] Prefer Android Photo Picker or other scoped access where it can replace broad media permissions.
 - [ ] Confirm contacts are not uploaded or synced without a clear disclosure and user action.
