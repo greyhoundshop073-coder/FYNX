@@ -3600,8 +3600,15 @@ def capture_wallet_from_features(prefix:str):
                                 if add_money_after_ussd:
                                     home_after_add = tap_control(
                                         add_money_after_ussd, ["Back to Wallet"], "wallet-add-back-home",
-                                        ["Balance details", "Reserved", "Withdrawal pending"]
+                                        ["FYNX Wallet"]
                                     )
+                                    if home_after_add and not wallet_destination_ready_scrolling(
+                                        home_after_add, "wallet-add-back-home-summary"
+                                    ):
+                                        FAILURES.append(
+                                            "Wallet Add Money return did not restore the real online summary or explicit offline safety state"
+                                        )
+                                        home_after_add = ""
                                     if home_after_add:
                                         withdraw_xml = tap_control(
                                             home_after_add, ["Withdraw"], "wallet-withdraw",
@@ -3932,15 +3939,43 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             report.append("- BLOCKED: the Sell action was not exposed by the rendered Marketplace state; publishing flow not captured.")
 
         # Return the actual Marketplace content to its top before opening My Shop.
-        for attempt in range(5):
+        # The Marketplace chrome collapses while the main content is scrolled. Repeatedly
+        # reverse-scroll the real accessibility scroll container until the shortcut is
+        # actually exposed; do not assume a bottom-tab tap resets the Compose scroll state.
+        for attempt in range(12):
             if find_control(marketplace_xml, ["My Shop"]):
                 break
             scrolled_xml = swipe_vertical_scroll_container(
                 marketplace_xml, "marketplace-return-top-"+str(attempt)+".xml", reverse=True
             )
-            if not scrolled_xml:
+            if not scrolled_xml or scrolled_xml == marketplace_xml:
                 break
             marketplace_xml = scrolled_xml
+
+        # If this is the Marketplace landing/hero state rather than the product surface,
+        # use its real Explore Marketplace action, then wait for the shortcut rail to render.
+        if not find_control(marketplace_xml, ["My Shop"]):
+            explore_xml = tap_control(
+                marketplace_xml, ["Explore Marketplace"], "marketplace-explore-entry",
+                ["Search products, sellers or categories"]
+            )
+            if explore_xml:
+                deadline = time.monotonic() + 12.0
+                latest = explore_xml
+                while time.monotonic() < deadline:
+                    latest = dump_ui("marketplace-explore-entry-settled.xml") or latest
+                    if find_control(latest, ["My Shop"]):
+                        marketplace_xml = latest
+                        break
+                    scrolled_xml = swipe_vertical_scroll_container(
+                        latest, "marketplace-explore-entry-top.xml", reverse=True
+                    )
+                    if scrolled_xml:
+                        latest = scrolled_xml
+                    time.sleep(0.35)
+                if find_control(latest, ["My Shop"]):
+                    marketplace_xml = latest
+
         shop_xml = tap_control(
             marketplace_xml, ["My Shop"], "marketplace-my-shop-overview",
             ["Your shop at a glance", "Manage your storefront", "Shop profile"]
