@@ -1710,6 +1710,7 @@ private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>,
     var busyUsername by remember { mutableStateOf<String?>(null) }
     var followedUsers by remember { mutableStateOf<Set<String>>(emptySet()) }
     var friendRequests by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var actionError by remember { mutableStateOf<String?>(null) }
 
     Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp), shape = FynxDesign.LargeCardShape) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1731,9 +1732,10 @@ private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>,
                         Text(person.displayName, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.clickable { onOpenProfile(person.username) })
                         Text("@$key", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
                         Text(if (person.mutualFriends > 0) person.mutualFriends.toString() + " mutual friend" + if (person.mutualFriends == 1) "" else "s" else person.reason.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = if (person.mutualFriends > 0) MaterialTheme.colorScheme.primary else FynxDesign.TextSecondary, maxLines = 1)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Button(enabled = busyUsername == null && !isFollowing, onClick = { busyUsername = key; scope.launch { FynxRemoteSocialClient.follow(context, person.username, true).onSuccess { followedUsers = followedUsers + key; busyUsername = null }.onFailure { busyUsername = null } } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(if (isFollowing) "Following" else "Follow", maxLines = 1) }
-                            OutlinedButton(enabled = busyUsername == null && !requestSent, onClick = { busyUsername = key; scope.launch { FynxSocialClient.sendRequest(context, person.username).onSuccess { friendRequests = friendRequests + key; busyUsername = null }.onFailure { busyUsername = null } } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(if (requestSent) "Requested" else "Add friend", maxLines = 1) }
+                        actionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Button(enabled = busyUsername == null && !isFollowing, onClick = { busyUsername = key; actionError = null; scope.launch { FynxRemoteSocialClient.follow(context, person.username, true).onSuccess { followedUsers = followedUsers + key; busyUsername = null }.onFailure { actionError = it.message ?: "Could not follow this account." ; busyUsername = null } } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(if (isFollowing) "Following" else "Follow", maxLines = 1) }
+                            OutlinedButton(enabled = busyUsername == null && !requestSent, onClick = { busyUsername = key; actionError = null; scope.launch { FynxSocialClient.sendRequest(context, person.username).onSuccess { friendRequests = friendRequests + key; busyUsername = null }.onFailure { actionError = it.message ?: "Friend request could not be sent." ; busyUsername = null } } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(if (requestSent) "Requested" else "Add friend", maxLines = 1) }
                         }
                         TextButton(enabled = busyUsername == null, onClick = { onDismiss(person.username) }, contentPadding = PaddingValues(horizontal = 2.dp)) { Text("Not now", style = MaterialTheme.typography.labelSmall) }
                     }
