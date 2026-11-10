@@ -92,7 +92,7 @@ fun GiftsPanel(
             Spacer(Modifier.width(10.dp))
             Column {
                 Text("Send a gift", style = MaterialTheme.typography.titleLarge)
-                Text(selectedRecipient?.let { "To ${it.displayName}" } ?: if (recipientLoading) "Finding recipient…" else "Choose a recipient", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(selectedRecipient?.let { "To ${it.displayName}" } ?: if (friendsLoading) "Loading your friends…" else "Choose a recipient", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -207,7 +207,7 @@ fun GiftsPanel(
                 }
             },
             confirmButton = {
-                Button(enabled = !recipientLoading, onClick = {
+                Button(enabled = !friendsLoading, onClick = {
                     val transactionId = UUID.randomUUID().toString()
                     val (status, transfer) = FynxGiftFlow.prepare(
                         wallet = FynxWalletFoundation.empty("FYNX"),
