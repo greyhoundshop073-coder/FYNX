@@ -24,7 +24,14 @@ checks=[
 ("Android can load and submit real appeals","/api/safety/appeals" in client and "submitAppeal" in client),
 ("Privacy & Safety UI exposes report submission","Report an account" in privacy and "submitReport" in privacy),
 ("Privacy & Safety UI exposes appeal submission","Appeal a decision or report" in privacy and "submitAppeal" in privacy),
-("no fabricated report records are embedded","fakeReport" not in privacy and "sampleReport" not in privacy and "dummyReport" not in privacy),]
+("no fabricated report records are embedded","fakeReport" not in privacy and "sampleReport" not in privacy and "dummyReport" not in privacy),
+("reports store typed content targets and moderator audit fields","target_content_type" in trust and "target_content_id" in trust and "moderator_id" in trust and "reviewed_at" in trust),
+("post reports submit a typed post ID",'contentType = "POST"' in read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt") and "contentId = post.id" in read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")),
+("admin dashboard counts the actual safety report and appeal tables","countRows('safety_reports'" in read("backend/adminRoutes.js") and "countRows('safety_appeals'" in read("backend/adminRoutes.js")),
+("moderators have an authenticated report queue and decision endpoint","app.get('/api/admin/reports',auth" in read("backend/adminRoutes.js") and "app.patch('/api/admin/reports/:reportId',auth" in read("backend/adminRoutes.js")),
+("admin report queue records moderator and decision timestamps","moderator_id=$2" in read("backend/adminRoutes.js") and "reviewed_at=CASE" in read("backend/adminRoutes.js")),
+("Android admin client reads and updates safety reports","/api/admin/reports" in read("app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt") and "reviewSafetyReport" in read("app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt")),
+("Admin Control Center displays report review, resolve and dismiss actions","User safety reports" in read("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt") and "Start review" in read("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt") and "Resolve" in read("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt") and "Dismiss" in read("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt")),]
 failed=[n for n,o in checks if not o]
 for n,o in checks: print(("PASS: " if o else "FAIL: ")+n)
 if failed: raise SystemExit("Large Badge #9 trust/safety verification failed: "+"; ".join(failed))
