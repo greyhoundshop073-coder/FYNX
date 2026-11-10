@@ -65,7 +65,7 @@ import org.json.JSONObject
 
 private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
 private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
-private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val mutualFriends: Int, val reason: String, val photoId: String?)
+private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val reason: String, val photoId: String?)
 
 @Composable
 fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, onOpenStatusOwner: (String) -> Unit = { onOpenAuthorProfile(it) }, header: (@Composable () -> Unit)? = null, networkReady: Boolean? = null) {
@@ -192,12 +192,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (peopleRecommendationsLoading || (!peopleRecommendationsHasMore && !replace)) return
         peopleRecommendationsLoading = true
         scope.launch {
-            val body = JSONObject().apply {
-                put("name", "get_people_recommendations")
-                put("arguments", JSONObject().apply { put("limit", 30); put("offset", offset) })
-            }.toString()
-            FynxBackendClient.postJson(context, "/api/assistant/tools", body).onSuccess { raw ->
-                val people = JSONObject(raw).optJSONObject("result")?.optJSONArray("people")
+            FynxBackendClient.get(context, "/api/users/recommendations?limit=30&offset=$offset").onSuccess { raw ->
+                val people = JSONObject(raw).optJSONArray("people")
                 if (people != null) {
                     val parsed = buildList {
                         for (i in 0 until people.length()) {
@@ -205,7 +201,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                             val username = p.optString("username").trim()
                             if (username.isBlank()) continue
                             val photo = FynxProfileRemoteClient.cachedProfilePhotoId(context, username)
-                            add(HomePeopleRecommendation(username, p.optString("displayName").ifBlank { username }, p.optBoolean("verified"), p.optInt("mutualFriends"), p.optString("reason"), photo))
+                            add(HomePeopleRecommendation(username, p.optString("displayName").ifBlank { username }, p.optBoolean("verified"), p.optString("reason"), photo))
                         }
                     }
                     val clean = parsed.filterNot { dismissedPeople.contains(it.username.lowercase()) }
@@ -1732,7 +1728,7 @@ private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>,
                         Box(Modifier.size(64.dp).clip(CircleShape).clickable { onOpenProfile(person.username) }) { FynxRemoteProfileAvatar(person.photoId, person.displayName, Modifier.fillMaxSize(), ownerUsername = person.username) }
                         Text(person.displayName, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.clickable { onOpenProfile(person.username) })
                         Text("@$key", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
-                        Text(if (person.mutualFriends > 0) person.mutualFriends.toString() + " mutual friend" + if (person.mutualFriends == 1) "" else "s" else person.reason.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = if (person.mutualFriends > 0) MaterialTheme.colorScheme.primary else FynxDesign.TextSecondary, maxLines = 1)
+                        Text(person.reason.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                             Button(enabled = busyUsername == null && !isFollowing, onClick = { busyUsername = key; actionError = null; scope.launch { FynxRemoteSocialClient.follow(context, person.username, true).onSuccess { followedUsers = followedUsers + key; busyUsername = null }.onFailure { actionError = it.message ?: "Could not follow this account." ; busyUsername = null } } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(if (isFollowing) "Following" else "Follow", maxLines = 1) }
                             OutlinedButton(enabled = busyUsername == null && !requestSent, onClick = { busyUsername = key; actionError = null; scope.launch { FynxSocialClient.sendRequest(context, person.username).onSuccess { friendRequests = friendRequests + key; busyUsername = null }.onFailure { actionError = it.message ?: "Friend request could not be sent." ; busyUsername = null } } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(if (requestSent) "Requested" else "Add friend", maxLines = 1) }
