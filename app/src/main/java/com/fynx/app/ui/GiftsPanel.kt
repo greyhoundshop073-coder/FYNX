@@ -61,6 +61,7 @@ fun GiftsPanel(
                     displayName = user.displayName.ifBlank { user.username.removePrefix("@") },
                     username = user.username.let { if (it.startsWith("@")) it else "@$it" },
                     hasProfilePhoto = !user.profilePhotoMediaId.isNullOrBlank(),
+                    profilePhotoMediaId = user.profilePhotoMediaId,
                     status = FynxFriendStatus.FRIENDS
                 )
             }
@@ -118,7 +119,7 @@ fun GiftsPanel(
                         colors = CardDefaults.cardColors(containerColor = if (selectedRecipient?.username == person.username) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            FynxAvatar(person.displayName.ifBlank { person.username }, Modifier.size(38.dp), ownerUsername = person.username)
+                            FynxRemoteProfileAvatar(person.profilePhotoMediaId, person.displayName.ifBlank { person.username }, Modifier.size(38.dp), ownerUsername = person.username)
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) { Text(person.displayName, style = MaterialTheme.typography.titleSmall); Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                             if (selectedRecipient?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary)
