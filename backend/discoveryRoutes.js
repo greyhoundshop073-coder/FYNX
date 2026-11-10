@@ -233,7 +233,9 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
          AND (p.author_id=$2 OR p.visibility='PUBLIC'
            OR (p.visibility='ONLY_ME' AND p.author_id=$2)
            OR (p.visibility='FRIENDS_ONLY' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted'))
-           OR (p.visibility='SELECTED_PEOPLE' AND EXISTS (SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2)))
+           OR (p.visibility='SELECTED_PEOPLE'
+             AND EXISTS (SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2)
+             AND EXISTS (SELECT 1 FROM friendships af WHERE ((af.user_id=p.author_id AND af.friend_id=$2) OR (af.user_id=$2 AND af.friend_id=p.author_id)) AND af.status='accepted')))
          AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2))
        LIMIT 1
     `, [postId, userId]);
