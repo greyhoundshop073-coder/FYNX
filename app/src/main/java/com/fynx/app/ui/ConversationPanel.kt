@@ -162,6 +162,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var realtimeState by remember(chat.username) { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var networkError by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
+    var newConversationRelation by remember(chat.username) { mutableStateOf("loading") }
+    var newConversationRequestId by remember(chat.username) { mutableStateOf<String?>(null) }
     var uploadedAttachmentCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
     var pendingVoiceRetry by remember(chat.username) { mutableStateOf<Pair<File, Long>?>(null) }
     var uploadedVoiceCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
@@ -356,6 +358,35 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         } catch (error: Exception) {
             networkError = "This conversation could not connect yet. Check your connection and try again."
             isNewConversation = false
+        }
+    }
+
+    LaunchedEffect(isNewConversation, chat.username) {
+        if (!isNewConversation) return@LaunchedEffect
+        newConversationRelation = "loading"
+        val friendsResult = FynxSocialClient.friends(context)
+        val requestsResult = FynxSocialClient.requests(context)
+        val blockedResult = FynxSocialClient.blocked(context)
+        if (friendsResult.isSuccess && requestsResult.isSuccess && blockedResult.isSuccess) {
+            val target = chat.username.removePrefix("@").trim()
+            val friends = friendsResult.getOrNull().orEmpty()
+            val requests = requestsResult.getOrNull().orEmpty()
+            val blocked = blockedResult.getOrNull().orEmpty()
+            val request = requests.firstOrNull { it.username.removePrefix("@").equals(target, true) }
+            newConversationRequestId = request?.id
+            newConversationRelation = when {
+                blocked.any { it.username.removePrefix("@").equals(target, true) } -> "blocked"
+                friends.any { it.username.removePrefix("@").equals(target, true) } -> "friends"
+                request?.status.equals("incoming", true) -> "incoming"
+                request?.status.equals("outgoing", true) -> "outgoing"
+                else -> "none"
+            }
+        } else {
+            newConversationRelation = "error"
+            networkError = friendsResult.exceptionOrNull()?.message
+                ?: requestsResult.exceptionOrNull()?.message
+                ?: blockedResult.exceptionOrNull()?.message
+                ?: "Connection status could not be loaded."
         }
     }
 
@@ -711,36 +742,73 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 tonalElevation = 0.dp
             ) {
                 Row(
-                    Modifier.fillMaxWidth().height(50.dp).padding(horizontal = 8.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 50.dp).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(
-                        enabled = !sending,
-                        onClick = {
-                            conversationScope.launch {
-                                sending = true
-                                FynxSocialClient.sendRequest(context, chat.username.removePrefix("@"))
-                                    .onSuccess { networkError = "Contact request sent." }
-                                    .onFailure { networkError = "Contact request could not be sent yet. Please try again." }
-                                sending = false
-                            }
+                    when (newConversationRelation) {
+                        "loading" -> {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Checking connection…", color = glassPalette.doodleSecondary)
                         }
-                    ) { Text("Add Contact", color = glassPalette.doodleSecondary, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                        "friends" -> Text("You are already friends", color = glassPalette.doodleSecondary, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        "error" -> Text("Connection status unavailable. Retry from Friends or Profile.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        else -> TextButton(
+                            enabled = !sending,
+                            onClick = {
+                                conversationScope.launch {
+                                    sending = true
+                                    val requestId = newConversationRequestId
+                                    val action = when (newConversationRelation) {
+                                        "incoming" -> requestId?.let { FynxSocialClient.acceptRequest(context, it) }
+                                            ?: Result.failure(IllegalStateException("Friend request is no longer available."))
+                                        "outgoing" -> requestId?.let { FynxSocialClient.cancelRequest(context, it) }
+                                            ?: Result.failure(IllegalStateException("Friend request is no longer available."))
+                                        "blocked" -> FynxSocialClient.unblock(context, chat.username.removePrefix("@"))
+                                        else -> FynxSocialClient.sendRequest(context, chat.username.removePrefix("@"))
+                                    }
+                                    action.onSuccess {
+                                        newConversationRelation = when (newConversationRelation) {
+                                            "incoming" -> "friends"
+                                            "outgoing" -> "none"
+                                            "blocked" -> "none"
+                                            else -> "outgoing"
+                                        }
+                                        networkError = when (newConversationRelation) {
+                                            "friends" -> "Friend request accepted."
+                                            "outgoing" -> "Friend request sent."
+                                            else -> "Connection updated."
+                                        }
+                                    }.onFailure { networkError = it.message ?: "Friend action could not be completed." }
+                                    sending = false
+                                }
+                            }
+                        ) {
+                            Text(when (newConversationRelation) {
+                                "incoming" -> "Accept request"
+                                "outgoing" -> "Cancel request"
+                                "blocked" -> "Unblock user"
+                                else -> "Add friend"
+                            }, color = glassPalette.doodleSecondary, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        }
+                    }
                     Spacer(Modifier.weight(1f))
-                    TextButton(
-                        enabled = !sending,
-                        onClick = {
-                            conversationScope.launch {
-                                sending = true
-                                FynxSocialClient.block(context, chat.username.removePrefix("@"))
-                                    .onSuccess { networkError = "User blocked."; onBack() }
-                                    .onFailure { networkError = "This user could not be blocked yet. Please try again." }
-                                sending = false
+                    if (newConversationRelation != "blocked" && newConversationRelation != "friends" && newConversationRelation != "error" && newConversationRelation != "loading") {
+                        TextButton(
+                            enabled = !sending,
+                            onClick = {
+                                conversationScope.launch {
+                                    sending = true
+                                    FynxSocialClient.block(context, chat.username.removePrefix("@"))
+                                        .onSuccess { networkError = "User blocked."; onBack() }
+                                        .onFailure { networkError = it.message ?: "This user could not be blocked yet. Please try again." }
+                                    sending = false
+                                }
                             }
-                        }
-                    ) { Text("Block User", color = MaterialTheme.colorScheme.error, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                        ) { Text("Block User", color = MaterialTheme.colorScheme.error, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                    }
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Default.Close, "Close", tint = glassPalette.messageMuted, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Close, "Close", tint = glassPalette.messageMuted)
                     }
                 }
             }
