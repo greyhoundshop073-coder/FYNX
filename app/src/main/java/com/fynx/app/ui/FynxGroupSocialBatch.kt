@@ -99,6 +99,7 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
         if (showFriends) {
             friendsLoading = true
             friendsError = null
+            friends = emptyList()
             FynxSocialClient.friends(context).onSuccess { friends = it }.onFailure { friendsError = it.message ?: "Friends could not be loaded." }
             friendsLoading = false
         }
@@ -120,7 +121,7 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
                                 Column { Text(friend.displayName.ifBlank { friend.username }, style = MaterialTheme.typography.titleSmall); Text("@${friend.username.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             }
                             val alreadyMember = group.members.any { it.username.removePrefix("@").equals(friend.username.removePrefix("@"), true) }
-                            TextButton(enabled = !alreadyMember, onClick = { onInvite(friend.username); inviteMessage = "Invitation prepared for ${friend.username}" }) { Text(if (alreadyMember) "In group" else "Invite") }
+                            TextButton(enabled = !alreadyMember && !friendsLoading && friendsError == null, onClick = { onInvite(friend.username); inviteMessage = "Invitation prepared for ${friend.username}" }) { Text(if (alreadyMember) "In group" else "Invite") }
                         }
                     }
                 }
