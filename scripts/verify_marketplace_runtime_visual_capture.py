@@ -169,7 +169,7 @@ checks = [
         "inputs.full_runtime == 'true'" in workflow
         and "refs/heads/integration/fynx-single-apk-20261013" in workflow
         and "contains(github.event.head_commit.message, '[home-cert]')" in workflow
-        and "startsWith(github.head_ref, 'feature/marketplace-public-shop-entry-20261103')" in workflow
+        and "github.event.pull_request.head.ref == 'work1/seller-profile-port-20261110'" in workflow
         and "FYNX_MARKETPLACE_VISUALS_ONLY" in workflow,
     ),
     (
