@@ -91,6 +91,10 @@ export async function installSocialMultiMedia() {
               OR (p.visibility = 'SELECTED_PEOPLE' AND EXISTS (
                 SELECT 1 FROM social_post_audience a
                  WHERE a.post_id = p.id AND a.user_id = $2
+              ) AND EXISTS (
+                SELECT 1 FROM friendships af
+                 WHERE ((af.user_id = p.author_id AND af.friend_id = $2) OR (af.user_id = $2 AND af.friend_id = p.author_id))
+                   AND af.status = 'accepted'
               ))
             )
             AND NOT EXISTS (
