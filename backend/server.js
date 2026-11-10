@@ -1042,10 +1042,12 @@ if (wss) {
             const existing = [...activeCalls.values()].find(call => call.callerId === userId || call.calleeId === userId || call.callerId === targetUserId || call.calleeId === targetUserId);
             if (existing) return sendSocket(socket, { type: "call", signalType: "busy", callId: existing.id, callType: existing.mediaType, fromUserId: targetUserId, toUserId: userId });
             const callId = validCallId(body?.callId) ? body.callId : newCallId();
-            const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, createdAt: Date.now() };
+            const marketplaceListingId = typeof body?.marketplaceListingId === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(body.marketplaceListingId) ? body.marketplaceListingId : null;
+            const marketplaceProductTitle = typeof body?.marketplaceProductTitle === "string" ? body.marketplaceProductTitle.replace(/[\\u0000-\\u001f\\u007f]/g, "").trim().slice(0, 120) || null : null;
+            const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, marketplaceListingId, marketplaceProductTitle, createdAt: Date.now() };
             activeCalls.set(callId, call);
             if (!clientsByUserId.has(targetUserId)) { activeCalls.delete(callId); return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" }); }
-            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null });
+            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null, ...(call.marketplaceListingId ? { marketplaceListingId: call.marketplaceListingId } : {}), ...(call.marketplaceProductTitle ? { marketplaceProductTitle: call.marketplaceProductTitle } : {}) });
             return;
           }
           const callId = validCallId(body?.callId) ? body.callId : "";
