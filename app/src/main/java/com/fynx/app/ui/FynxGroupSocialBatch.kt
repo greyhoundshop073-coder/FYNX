@@ -91,10 +91,11 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
     var inviteMessage by remember { mutableStateOf("") }
     var friends by remember { mutableStateOf(emptyList<FynxSocialClient.User>()) }
     var friendsLoading by remember { mutableStateOf(false) }
+    var friendsRefresh by remember { mutableIntStateOf(0) }
     var friendsError by remember { mutableStateOf<String?>(null) }
     var selectedMedia by remember { mutableStateOf<Uri?>(null) }
     var mediaType by remember { mutableStateOf("image") }
-    LaunchedEffect(showFriends) {
+    LaunchedEffect(showFriends, friendsRefresh) {
         if (showFriends) {
             friendsLoading = true
             friendsError = null
@@ -108,7 +109,7 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
         AlertDialog(onDismissRequest = { showFriends = false }, title = { Text("Invite friends") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (friendsLoading) Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp)) }
-                friendsError?.let { message -> Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall); TextButton(onClick = { showFriends = false; showFriends = true }) { Text("Retry") } }
+                friendsError?.let { message -> Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall); TextButton(onClick = { friendsRefresh++ }) { Text("Retry") } }
                 if (!friendsLoading && friendsError == null && friends.isEmpty()) Text("No confirmed FYNX friends are available to invite yet.")
                 LazyColumn(Modifier.heightIn(max = 300.dp)) {
                     items(friends, key = { it.username }) { friend ->
