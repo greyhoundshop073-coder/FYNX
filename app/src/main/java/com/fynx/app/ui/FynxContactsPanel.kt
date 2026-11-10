@@ -40,6 +40,9 @@ fun FynxContactsPanel(
     var permission by remember { mutableStateOf(context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) }
     var contacts by remember { mutableStateOf(emptyList<DeviceContact>()) }
     var matched by remember { mutableStateOf<Map<String, FynxSocialClient.User>>(emptyMap()) }
+    var friendUsernames by remember { mutableStateOf(emptySet<String>()) }
+    var friendRequests by remember { mutableStateOf(emptyList<FynxSocialClient.FriendRequest>()) }
+    var connectionBusy by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
@@ -77,6 +80,13 @@ fun FynxContactsPanel(
                     }
                 }
                 matched = found.toMap()
+                val friendResult = FynxSocialClient.friends(context)
+                val requestResult = FynxSocialClient.requests(context)
+                friendUsernames = friendResult.getOrNull().orEmpty().map { it.username.removePrefix("@").lowercase() }.toSet()
+                friendRequests = requestResult.getOrNull().orEmpty()
+                if (friendResult.isFailure || requestResult.isFailure) {
+                    notice = friendResult.exceptionOrNull()?.message ?: requestResult.exceptionOrNull()?.message ?: "Friend status could not be refreshed."
+                }
                 if (failedLookups > 0 && found.isEmpty() && candidates.isNotEmpty()) {
                     notice = "FYNX could not complete contact matching right now. Check your connection and try again."
                 } else if (failedLookups > 0) {
@@ -167,10 +177,38 @@ fun FynxContactsPanel(
                                 Text(if (user != null) "@${user.username.removePrefix("@").lowercase()}" else "Not on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                             }
                             if (user != null) {
-                                TextButton(onClick = { profileUser = user.username.removePrefix("@") }) {
-                                    Icon(Icons.Default.People, null)
-                                    Spacer(Modifier.width(3.dp))
-                                    Text("Profile")
+                                val normalizedUsername = user.username.removePrefix("@").lowercase()
+                                val incomingRequest = friendRequests.firstOrNull { it.username.removePrefix("@").equals(normalizedUsername, true) && it.status.equals("incoming", true) }
+                                val outgoingRequest = friendRequests.firstOrNull { it.username.removePrefix("@").equals(normalizedUsername, true) && it.status.equals("outgoing", true) }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    TextButton(onClick = { profileUser = user.username.removePrefix("@") }) {
+                                        Icon(Icons.Default.People, null)
+                                        Spacer(Modifier.width(3.dp))
+                                        Text("Profile")
+                                    }
+                                    if (normalizedUsername in friendUsernames) {
+                                        Text("Friends", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                    } else {
+                                        TextButton(
+                                            enabled = connectionBusy != normalizedUsername,
+                                            onClick = {
+                                                scope.launch {
+                                                    connectionBusy = normalizedUsername
+                                                    val action = when {
+                                                        incomingRequest != null -> FynxSocialClient.acceptRequest(context, incomingRequest.id)
+                                                        outgoingRequest != null -> FynxSocialClient.cancelRequest(context, outgoingRequest.id)
+                                                        else -> FynxSocialClient.sendRequest(context, user.username)
+                                                    }
+                                                    action.onFailure { notice = it.message ?: "Friend action failed. Please try again." }
+                                                    connectionBusy = null
+                                                    if (action.isSuccess) loadContacts()
+                                                }
+                                            }
+                                        ) {
+                                            if (connectionBusy == normalizedUsername) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            else Text(when { incomingRequest != null -> "Accept"; outgoingRequest != null -> "Cancel request"; else -> "Add friend" })
+                                        }
+                                    }
                                 }
                             } else {
                                 TextButton(onClick = {
