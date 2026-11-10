@@ -93,16 +93,38 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
     const limit = Math.min(Math.max(Number(args.limit) || 30, 1), 30);
     const offset = Math.max(Number(args.offset) || 0, 0);
     const result = await databasePool.query(`
-      SELECT u.id,u.username,u.display_name,u.verified
+      SELECT u.id,u.username,u.display_name,u.verified,
+        (
+          SELECT COUNT(DISTINCT CASE WHEN mine.user_id=$1 THEN mine.friend_id ELSE mine.user_id END)
+          FROM friendships mine
+          JOIN friendships theirs
+            ON theirs.status='accepted'
+           AND (
+             (theirs.user_id=u.id AND theirs.friend_id=CASE WHEN mine.user_id=$1 THEN mine.friend_id ELSE mine.user_id END)
+             OR
+             (theirs.friend_id=u.id AND theirs.user_id=CASE WHEN mine.user_id=$1 THEN mine.friend_id ELSE mine.user_id END)
+           )
+          WHERE (mine.user_id=$1 OR mine.friend_id=$1)
+            AND mine.status='accepted'
+        ) AS mutual_friends
       FROM users u
       LEFT JOIN privacy_settings ps ON ps.user_id=u.id
       WHERE u.id<>$1
         AND COALESCE(ps.profile_visibility,'My friends')='Everyone'
         AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$1))
-      ORDER BY u.verified DESC,u.created_at DESC
+        AND NOT EXISTS (SELECT 1 FROM friendships rel WHERE ((rel.user_id=$1 AND rel.friend_id=u.id) OR (rel.user_id=u.id AND rel.friend_id=$1)) AND rel.status IN ('accepted','pending'))
+        AND NOT EXISTS (SELECT 1 FROM social_follows sf WHERE sf.follower_id=$1 AND sf.followed_id=u.id)
+      ORDER BY u.verified DESC,mutual_friends DESC,u.created_at DESC
       LIMIT $2 OFFSET $3
     `, [userId, limit, offset]);
-    return { people: result.rows.map(row => ({ id:String(row.id), username:row.username, displayName:row.display_name || "", verified:Boolean(row.verified) })) };
+    return { people: result.rows.map(row => ({
+      id:String(row.id),
+      username:row.username,
+      displayName:row.display_name || "",
+      verified:Boolean(row.verified),
+      mutualFriends:Number(row.mutual_friends || 0),
+      reason:Number(row.mutual_friends || 0) > 0 ? "Mutual friends" : (row.verified ? "Verified account" : "Suggested for you")
+    })) };
   }
 
   if (name === "search_marketplace") {
