@@ -105,7 +105,8 @@ check('people discovery excludes the signed-in user and either-side blocked acco
 check('authenticated people and block responses are not cacheable', 'res.set("Cache-Control", "private, no-store")' in people_hardening)
 recommendations = read('backend/fynxAiToolRegistry.js')
 home_people = read('app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt')
-check('Home people recommendations exclude accepted and pending friends, followed and blocked accounts', all(x in recommendations for x in ["rel.status IN ('accepted','pending')", 'sf.follower_id=$1 AND sf.followed_id=u.id', 'FROM blocks b', 'mutual_friends']))
+check('AI people recommendations use public profiles and never query private friend or follower graphs', 'profile_visibility' in recommendations and 'FROM blocks b' in recommendations and not any(term in recommendations for term in ['FROM friendships', 'JOIN friendships', 'FROM social_follows', 'JOIN social_follows']))
+check('Home people recommendations exclude accepted and pending friends, followed and blocked accounts without exposing those relationships', all(x in read('backend/socialRoutes.js') for x in ['app.get("/api/users/recommendations"', "rel.status IN ('accepted','pending')", 'sf.follower_id=$1 AND sf.followed_id=u.id', 'FROM blocks b']) and 'FynxBackendClient.get(context, "/api/users/recommendations?limit=30&offset=$offset")' in home_people and 'mutualFriends' not in home_people)
 check('Home people recommendation cards explain follow and friend-request failures', 'actionError' in home_people and 'Friend request could not be sent.' in home_people and 'Could not follow this account.' in home_people)
 
 legacy_friend_consumers = [p.name for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt') if p.name != 'FynxFriendsStore.kt' and 'FynxFriendsStore(' in p.read_text(encoding='utf-8')]
