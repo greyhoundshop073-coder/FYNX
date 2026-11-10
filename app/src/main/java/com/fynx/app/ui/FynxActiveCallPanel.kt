@@ -107,6 +107,7 @@ fun FynxActiveCallPanel(
             ) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(name, style = MaterialTheme.typography.titleMedium)
+                    marketplaceProductTitle?.takeIf { it.isNotBlank() }?.let { Text("Live item: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     Text(callStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
