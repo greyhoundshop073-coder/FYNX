@@ -98,7 +98,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var storefrontError by remember(username) { mutableStateOf<String?>(null) }
     var storefrontReloadKey by remember(username) { mutableStateOf(0) }
     var storefrontHasMore by remember(username) { mutableStateOf(false) }
-    var storefrontOffset by remember(username) { mutableIntStateOf(0) }
+    var storefrontOffset by remember(username) { mutableStateOf(0) }
     var storefrontLoadingMore by remember(username) { mutableStateOf(false) }
     var weeklyAwards by remember(username) { mutableStateOf<List<FynxMarketplaceSellerWeeklyAward>>(emptyList()) }
     var listingEngagement by remember(username, viewerUsername) {
