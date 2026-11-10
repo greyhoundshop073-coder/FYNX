@@ -135,6 +135,7 @@ internal fun MarketplaceReferenceProductCard(
                         if (listing.storeName.isNotBlank() && !listing.storeName.equals(sellerLabel, ignoreCase = true)) {
                             Text("by " + sellerLabel, color = FynxMarketplaceReferenceStyle.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
                         }
+                        sellerRating?.let { MarketplaceSellerTierBadge(it.tier) }
                     }
                     sellerRating?.takeIf { it.reviewCount > 0 }?.let {
                         Icon(Icons.Default.Star, null, Modifier.size(14.dp), tint = androidx.compose.material3.MaterialTheme.colorScheme.tertiary)
