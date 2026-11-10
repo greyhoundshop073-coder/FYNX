@@ -375,6 +375,27 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     }catch(error){try{await client.query('ROLLBACK');}catch{} if(error?.code==='23505')return res.status(409).json({error:'order already exists'});console.error('marketplace order create',error);return res.status(500).json({error:'protected order creation failed'});}finally{client.release();}
   });
 
+  app.get('/api/marketplace/my-purchased-listings', auth, async (req, res) => {
+    try {
+      await ensureMarketplaceTransactionSchema();
+      const result = await pool.query(`
+        SELECT listing_id::TEXT AS listing_id, COUNT(*)::INTEGER AS order_count,
+               COALESCE(SUM(quantity), 0)::INTEGER AS units_purchased
+        FROM marketplace_orders
+        WHERE buyer_id = $1
+          AND status IN ('PAID', 'SHIPPED', 'DELIVERED', 'INSPECTION', 'COMPLETED', 'DISPUTED')
+        GROUP BY listing_id
+      `, [req.user.sub]);
+      return res.json({ purchases: result.rows.map((row) => ({
+        listingId: String(row.listing_id), orderCount: Number(row.order_count || 0),
+        unitsPurchased: Number(row.units_purchased || 0)
+      })) });
+    } catch (error) {
+      console.error("marketplace buyer purchase history", error);
+      return res.status(500).json({ error: "purchase history could not be loaded" });
+    }
+  });
+
   app.get('/api/marketplace/orders',auth,async(req,res)=>{try{await ensureMarketplaceTransactionSchema();const result=await pool.query(`SELECT * FROM (SELECT o.* FROM marketplace_orders o WHERE o.buyer_id = $1 ORDER BY o.created_at DESC LIMIT 100) buyer_orders UNION ALL SELECT * FROM (SELECT o.* FROM marketplace_orders o WHERE o.seller_id = $1 ORDER BY o.created_at DESC LIMIT 100) seller_orders ORDER BY created_at DESC LIMIT 100`,[req.user.sub]);return res.json({orders:result.rows.map(publicOrder)});}catch(error){console.error('marketplace orders',error);return res.status(500).json({error:'order lookup failed'});}});
 
   app.get('/api/marketplace/orders/:id',auth,async(req,res)=>{const id=parseUuid(req.params.id);if(!id)return res.status(400).json({error:'invalid order id'});try{await ensureMarketplaceTransactionSchema();const result=await pool.query(`SELECT o.* FROM marketplace_orders o WHERE o.id=$1`,[id]);const order=result.rows[0];if(!order)return res.status(404).json({error:'order not found'});if(!isParticipant(order, req.user.sub))return res.status(403).json({error:'order unavailable'});const events=await pool.query(`SELECT event_type,from_status,to_status,metadata,created_at FROM marketplace_order_events WHERE order_id=$1 ORDER BY created_at ASC`,[id]);const disputes=await pool.query(`SELECT id,opened_by,reason,details,status,resolution_notes,created_at,updated_at FROM marketplace_order_disputes WHERE order_id=$1 ORDER BY created_at DESC`,[id]);return res.json({order:publicOrder(order),events:events.rows,disputes:disputes.rows});}catch(error){console.error('marketplace order detail',error);return res.status(500).json({error:'order lookup failed'});}});
