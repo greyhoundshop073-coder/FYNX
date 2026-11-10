@@ -291,9 +291,9 @@ class FynxRealtimeClient(
         val sdp = root.optString("sdp").takeIf { it.isNotBlank() && it.length <= 200_000 }
         if ((signalType == "offer" || signalType == "answer") && sdp == null) return null
         if (signalType == "ice" && c == null) return null
-        return Event.Call(callId, callType, fromUserId, toUserId, signalType, sdp, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() })
+        return Event.Call(callId, callType, fromUserId, toUserId, signalType, sdp, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() }, root.optString("marketplaceListingId").takeIf { it.isNotBlank() }, root.optString("marketplaceProductTitle").takeIf { it.isNotBlank() })
     }
-    fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
+    fun sendCallInvite(callId: String, targetUserId: String, video: Boolean, marketplaceListingId: String? = null, marketplaceProductTitle: String? = null) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite", JSONObject().apply { marketplaceListingId?.takeIf { it.isNotBlank() }?.let { put("marketplaceListingId", it.take(80)) }; marketplaceProductTitle?.takeIf { it.isNotBlank() }?.let { put("marketplaceProductTitle", it.filterNot(Char::isISOControl).take(120)) } })
     fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
     fun sendCallReject(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "reject")
     fun sendCallBusy(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "busy")
