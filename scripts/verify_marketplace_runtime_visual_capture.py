@@ -34,12 +34,22 @@ checks = [
         and "This is read-only: do not save a shop profile" in navigation,
     ),
     (
-        "Marketplace scrolls back to the real top shortcut rail after Wallet before seller capture",
-        'for attempt in range(5):' in navigation
-        and 'find_control(marketplace_xml, ["My Shop"])' in navigation
-        and 'authenticated-marketplace-my-shop-return-top-' in navigation
+        "Marketplace refreshes its real destination and restores the shortcut rail after Wallet before seller capture",
+        'if not find_control(marketplace_xml, ["My Shop"]):' in navigation
+        and 'authenticated-marketplace-refresh-after-wallet' in navigation
+        and 'find_control(marketplace_xml, ["Search products, sellers or categories"])' in navigation
+        and 'authenticated-marketplace-my-shop-return-top.xml' in navigation
         and 'reverse=True' in navigation
-        and navigation.index("authenticated-marketplace-my-shop-return-top-") < navigation.index("product_target = marketplace_product_card_target(marketplace_xml)"),
+        and navigation.index("authenticated-marketplace-my-shop-return-top.xml") < navigation.index("product_target = marketplace_product_card_target(marketplace_xml)"),
+    ),
+    (
+        "offline debug Wallet capture accepts only the real unavailable-balance safety state, never fabricated balance buckets",
+        'offline_preview = LOGIN_MODE == "debug-only local UI entry (not server-authenticated)"' in navigation
+        and 'find_control(xml_text, ["Available balance"])' in navigation
+        and 'find_control(xml_text, ["Unavailable"])' in navigation
+        and 'find_control(xml_text, ["Wallet unavailable"])' in navigation
+        and 'find_control(xml_text, ["Wallet security & PIN"])' in navigation
+        and 'find_control(xml_text, ["Balance details"])' in navigation,
     ),
     (
         "Android CI attempts focused Marketplace/My Shop capture after instrumentation failure",
