@@ -428,9 +428,11 @@ fun FynxMarketplaceSellerCenterPanel() {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth().padding(12.dp),
+        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        // Padding lives in the content, not around the list, so rows scroll to the screen edges
+        // instead of being cut off in a hard line.
+        contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 36.dp)
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
