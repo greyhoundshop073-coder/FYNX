@@ -92,6 +92,7 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
     var friends by remember { mutableStateOf(emptyList<FynxSocialClient.User>()) }
     var friendsLoading by remember { mutableStateOf(false) }
     var friendsRefresh by remember { mutableIntStateOf(0) }
+    var inviteBusy by remember { mutableStateOf<String?>(null) }
     var friendsError by remember { mutableStateOf<String?>(null) }
     var selectedMedia by remember { mutableStateOf<Uri?>(null) }
     var mediaType by remember { mutableStateOf("image") }
@@ -121,7 +122,31 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
                                 Column { Text(friend.displayName.ifBlank { friend.username }, style = MaterialTheme.typography.titleSmall); Text("@${friend.username.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             }
                             val alreadyMember = group.members.any { it.username.removePrefix("@").equals(friend.username.removePrefix("@"), true) }
-                            TextButton(enabled = !alreadyMember && !friendsLoading && friendsError == null, onClick = { onInvite(friend.username); inviteMessage = "Invitation prepared for ${friend.username}" }) { Text(if (alreadyMember) "In group" else "Invite") }
+                            TextButton(
+                                enabled = !alreadyMember && !friendsLoading && friendsError == null && inviteBusy != friend.username,
+                                onClick = {
+                                    scope.launch {
+                                        inviteBusy = friend.username
+                                        friendsLoading = true
+                                        val latestFriends = FynxSocialClient.friends(context)
+                                        if (latestFriends.isSuccess) {
+                                            friends = latestFriends.getOrNull().orEmpty()
+                                            val stillFriend = friends.any { it.username.removePrefix("@").equals(friend.username.removePrefix("@"), true) }
+                                            if (stillFriend) {
+                                                onInvite(friend.username)
+                                                inviteMessage = "Invitation prepared for ${friend.username}"
+                                            } else {
+                                                inviteMessage = "This account is no longer on your accepted friends list."
+                                            }
+                                        } else {
+                                            friends = emptyList()
+                                            friendsError = latestFriends.exceptionOrNull()?.message ?: "Friendship could not be verified."
+                                        }
+                                        friendsLoading = false
+                                        inviteBusy = null
+                                    }
+                                }
+                            ) { Text(when { alreadyMember -> "In group"; inviteBusy == friend.username -> "Checking…"; else -> "Invite" }) }
                         }
                     }
                 }
