@@ -67,7 +67,7 @@ These are source-level observations only. They do not prove which permissions ar
 - [ ] Do not publish a guessed or generic privacy policy. Complete it only after the data-flow and processor inventory is verified.
 
 ### B. Permissions and sensitive data
-- [ ] For location, contacts, microphone, camera, photos/videos, notifications, exact alarms, and boot receiver behavior, document the user-facing feature and necessity. Contacts, Home post location, chat location, camera capture, and Android 13+ notification opt-in now have source-level pre-permission/context changes; runtime verification and the remaining Marketplace location and voice entry-point review are still required.
+- [ ] For location, contacts, microphone, camera, photos/videos, notifications, exact alarms, and boot receiver behavior, document the user-facing feature and necessity. Contacts, Home post location, chat location, camera capture, Android 13+ notification opt-in, chat voice messages, voice posts, calls, and the Status custom-media permission now have source-level pre-permission/context explanations. Marketplace Nearby and seller-location entry points remain to be addressed without colliding with the active Marketplace integration PR. Runtime tests remain required.
 - [ ] Request sensitive permissions only at the point the related feature is used; explain why before the system prompt where required.
 - [ ] Prefer Android Photo Picker or other scoped access where it can replace broad media permissions.
 - [ ] Confirm contacts are not uploaded or synced without a clear disclosure and user action.
@@ -78,8 +78,8 @@ These are source-level observations only. They do not prove which permissions ar
 
 ### C. User-generated content and social safety
 
-**Source-audit warning (not complete):** The Home feed's current `Report post` action records a `REPORT` discovery event; this is not yet verified as a real moderation report routed to a review queue. Do not treat analytics/event success as proof that a report was received by moderators. The source search also did not find an explicit Terms/Community Guidelines acceptance record in account onboarding. Both must be resolved before production: users need to agree to enforceable UGC rules before posting/using UGC features as required, and reports must reach an actively monitored moderation process.
-- [ ] Verify in-app reporting for users and user-generated content, with a functioning review/moderation process.
+**Source-audit warning (not complete):** The Home feed `Report post` action has been changed from analytics-only event logging to authenticated submission through `POST /api/social/reports`; the backend persists an account-level report with `OPEN` status and the reported post ID in its details. The current schema is still account-targeted rather than content-targeted, and no moderator/admin queue, assignment, notification/escalation or staffed review workflow was verified. Do not treat a stored report row as proof of active moderation. The source search also did not find an explicit Terms/Community Guidelines acceptance record in account onboarding. Both the enforceable rules/acceptance and a monitored moderation process remain production blockers.
+- [ ] Extend reports to store a typed content target (post/comment/profile/listing/message as applicable), then implement a moderator queue with assignment, audit trail, escalation and monitored response operations; verify the existing account-level report submission end to end.
 - [ ] Verify user blocking and that blocked users cannot continue the prohibited interactions.
 - [ ] Provide and enforce terms/community standards that prohibit objectionable content and abusive behavior.
 - [ ] Provide moderation escalation, response handling, and repeat-offender controls.
