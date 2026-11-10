@@ -4027,14 +4027,16 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                     if has_header and has_count and has_product_state:
                         break
                     time.sleep(0.5)
-                if (
-                    find_control(profile_ready_xml, ["Marketplace profile"])
-                    and find_control(profile_ready_xml, ["Available products"])
-                    and (
-                        any(find_control(profile_ready_xml, [marker]) for marker in profile_terminal_markers)
-                        or find_control(profile_ready_xml, ["NGN", "USD"])
-                    )
-                ):
+                has_header = bool(find_control(profile_ready_xml, ["Marketplace profile"]))
+                has_count = bool(find_control(profile_ready_xml, ["Available products"])) or (
+                    bool(find_control(profile_ready_xml, ["Products"], exact_only=True))
+                    and bool(find_control(profile_ready_xml, ["0"], exact_only=True))
+                )
+                has_product_state = any(
+                    find_control(profile_ready_xml, [marker])
+                    for marker in profile_terminal_markers
+                ) or bool(find_control(profile_ready_xml, ["NGN", "USD"])) or bool(find_control(profile_ready_xml, ["Available: "]))
+                if has_header and has_count and has_product_state:
                     screenshot("authenticated-marketplace-public-profile.png")
                     (ROOT/"authenticated-marketplace-public-profile.xml").write_text(
                         profile_ready_xml + chr(10), encoding="utf-8"
