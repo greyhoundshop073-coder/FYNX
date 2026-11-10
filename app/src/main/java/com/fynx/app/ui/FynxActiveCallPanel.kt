@@ -24,6 +24,7 @@ fun FynxActiveCallPanel(
     realtimeState: FynxRealtimeClient.State = FynxRealtimeClient.State.CONNECTED,
     localVideoTrack: VideoTrack? = null,
     remoteVideoTrack: VideoTrack? = null,
+    marketplaceProductTitle: String? = null,
     onAnswer: () -> Unit,
     onRetry: () -> Unit,
     onToggleMicrophone: () -> Unit,
