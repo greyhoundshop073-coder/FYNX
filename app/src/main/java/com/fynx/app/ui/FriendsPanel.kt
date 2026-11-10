@@ -25,6 +25,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 @Composable
@@ -39,6 +43,8 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
     var incoming by remember { mutableStateOf(emptyList<FynxSocialClient.FriendRequest>()) }
     var outgoing by remember { mutableStateOf(emptyList<FynxSocialClient.FriendRequest>()) }
     var blocked by remember { mutableStateOf(emptyList<FynxSocialClient.User>()) }
+    var searchLoading by remember { mutableStateOf(false) }
+    var searchError by remember { mutableStateOf<String?>(null) }
     var results by remember { mutableStateOf(emptyList<FynxSocialClient.User>()) }
     var loading by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf<String?>(null) }
@@ -71,10 +77,18 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
         val text = query.trim()
         val phone = FynxPeopleDiscovery.normalizePhone(text)
         val ready = if (searchMethod == FynxPeopleSearchMethod.PHONE) phone.length >= 7 else text.removePrefix("@").length >= 2
-        if (!ready) { results = emptyList(); return@LaunchedEffect }
-        FynxSocialClient.searchUsers(context, if (searchMethod == FynxPeopleSearchMethod.PHONE) phone else text.removePrefix("@"), phoneSearch = searchMethod == FynxPeopleSearchMethod.PHONE)
-            .onSuccess { results = it; section = "Discover" }
-            .onFailure { results = emptyList(); error = it.message ?: "Search failed." }
+        if (!ready) { results = emptyList(); searchLoading = false; searchError = null; return@LaunchedEffect }
+        delay(350)
+        searchLoading = true
+        searchError = null
+        try {
+            val response = FynxSocialClient.searchUsers(context, if (searchMethod == FynxPeopleSearchMethod.PHONE) phone else text.removePrefix("@"), phoneSearch = searchMethod == FynxPeopleSearchMethod.PHONE)
+            currentCoroutineContext().ensureActive()
+            response.onSuccess { results = it; section = "Discover" }
+                .onFailure { results = emptyList(); searchError = it.message ?: "Search failed." }
+        } finally {
+            if (currentCoroutineContext().isActive) searchLoading = false
+        }
     }
 
     val friendNames = friends.map { it.username.lowercase() }.toSet()
@@ -122,7 +136,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
             }
             item {
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f), RoundedCornerShape(28.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    listOf("Friends", "Requests", "Sent", "Discover").forEach { tab ->
+                    listOf("Friends", "Requests", "Sent", "Discover", "Blocked").forEach { tab ->
                         val selected = section == tab
                         Surface(modifier = Modifier.weight(1f).height(48.dp).clickable { section = tab }, shape = RoundedCornerShape(24.dp), color = if (selected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent) {
                             Box(contentAlignment = Alignment.Center) {
@@ -140,15 +154,18 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
                 if (loading) item { Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 else if (friends.isEmpty() && friendsLoadFailed) emptyState("Couldn't load friends", "Check your connection and retry.")
                 else if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here.")
-                else items(friends, key = { "friend_${it.username}" }) { person -> FriendRow(person, busy == person.username, menuUser == person.username, { open -> menuUser = if (open) person.username else null }, onOpenProfile, onOpenChat) { act(person.username) { FynxSocialClient.removeFriend(context, person.username) } } }
+                else items(friends, key = { "friend_${it.username}" }) { person -> FriendRow(person, busy == person.username, menuUser == person.username, { open -> menuUser = if (open) person.username else null }, onOpenProfile, onOpenChat, onRemove = { act(person.username) { FynxSocialClient.removeFriend(context, person.username) } }, onBlock = { act(person.username) { FynxSocialClient.block(context, person.username) } }) }
             } else {
                 item { error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } }
                 when (section) {
                     "Requests" -> if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other FYNX accounts will appear here.") else items(incoming, key = { "in_${it.id}" }) { request -> RequestRow(FynxSocialClient.User(request.username, request.displayName, ""), "Confirm", "Delete", busy == request.username, onOpenProfile, onOpenChat, onPrimary = { act(request.username) { FynxSocialClient.acceptRequest(context, request.id) } }, onSecondary = { act(request.username) { FynxSocialClient.rejectRequest(context, request.id) } }) }
                     "Sent" -> if (outgoing.isEmpty()) emptyState("No sent requests", "Requests you send will appear here until they are accepted or rejected.") else items(outgoing, key = { "out_${it.id}" }) { request -> RequestRow(FynxSocialClient.User(request.username, request.displayName, ""), "Cancel", null, busy == request.username, onOpenProfile, onOpenChat, onPrimary = { act(request.username) { FynxSocialClient.cancelRequest(context, request.id) } }) }
+                    "Blocked" -> if (blocked.isEmpty()) emptyState("No blocked accounts", "Accounts you block will appear here. You can unblock them at any time.") else items(blocked, key = { "blocked_${it.username}" }) { person -> RequestRow(person, "Unblock", null, busy == person.username, onOpenProfile, onOpenChat, onPrimary = { act(person.username) { FynxSocialClient.unblock(context, person.username) } }) }
                     else -> {
                         val enough = if (searchMethod == FynxPeopleSearchMethod.PHONE) FynxPeopleDiscovery.normalizePhone(query).length >= 7 else query.trim().removePrefix("@").length >= 2
                         if (!enough) emptyState("Search for a FYNX user", "Type at least two characters of a username or display name.")
+                        else if (searchLoading) item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+                        else if (searchError != null) item { Text(searchError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         else if (discover.isEmpty()) emptyState("No matching people", "No available FYNX account matched that search.")
                         else items(discover, key = { "discover_${it.username}" }) { person -> RequestRow(person, "Add", null, busy == person.username, onOpenProfile, onOpenChat, onPrimary = { act(person.username) { FynxSocialClient.sendRequest(context, person.username) } }) }
                     }
@@ -159,14 +176,14 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
 }
 
 @Composable
-private fun FriendRow(person: FynxSocialClient.User, busy: Boolean, menuOpen: Boolean, onMenuChange: (Boolean) -> Unit, onOpenProfile: (String) -> Unit, onOpenChat: (String) -> Unit, onRemove: () -> Unit) {
+private fun FriendRow(person: FynxSocialClient.User, busy: Boolean, menuOpen: Boolean, onMenuChange: (Boolean) -> Unit, onOpenProfile: (String) -> Unit, onOpenChat: (String) -> Unit, onRemove: () -> Unit, onBlock: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = { onOpenProfile(person.username) }, modifier = Modifier.size(54.dp)) { FynxRemoteProfileAvatar(person.profilePhotoMediaId, person.displayName.ifBlank { person.username }, Modifier.size(48.dp), ownerUsername = person.username) }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) { Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1); Text(if (person.username.startsWith("@")) person.username else "@${person.username}", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
         if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) else {
             IconButton(onClick = { onOpenChat(person.username) }, modifier = Modifier.size(48.dp).semantics { contentDescription = "Open chat" }) { Icon(Icons.Default.ChatBubbleOutline, "Open chat") }
-            Box { IconButton(onClick = { onMenuChange(true) }, modifier = Modifier.size(48.dp).semantics { contentDescription = "Friend options" }) { Icon(Icons.Default.MoreVert, "Friend options") }; DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenuChange(false) }) { DropdownMenuItem(text = { Text("View profile") }, onClick = { onMenuChange(false); onOpenProfile(person.username) }); DropdownMenuItem(text = { Text("Remove friend") }, onClick = { onMenuChange(false); onRemove() }) } }
+            Box { IconButton(onClick = { onMenuChange(true) }, modifier = Modifier.size(48.dp).semantics { contentDescription = "Friend options" }) { Icon(Icons.Default.MoreVert, "Friend options") }; DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenuChange(false) }) { DropdownMenuItem(text = { Text("View profile") }, onClick = { onMenuChange(false); onOpenProfile(person.username) }); DropdownMenuItem(text = { Text("Remove friend") }, onClick = { onMenuChange(false); onRemove() }); DropdownMenuItem(text = { Text("Block account") }, onClick = { onMenuChange(false); onBlock() }) } }
         }
     }
 }
