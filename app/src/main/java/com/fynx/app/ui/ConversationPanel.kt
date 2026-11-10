@@ -147,6 +147,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var showLocationDialog by remember { mutableStateOf(false) }
     var showLocationPermissionRationale by remember { mutableStateOf(false) }
+    var showMicrophonePermissionRationale by remember { mutableStateOf(false) }
     var showContactPreview by remember { mutableStateOf(false) }
     var pendingContactName by remember { mutableStateOf("") }
     var pendingContactPhone by remember { mutableStateOf("") }
@@ -430,7 +431,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         if (fineGranted || coarseGranted) showLocationDialog = true else showLocationPermissionRationale = true
     }
 
-    fun startRecording() = microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+    fun startRecording() { showMicrophonePermissionRationale = true }
     fun cancelRecording() {
         recorder?.release()
         recorder = null
@@ -1280,6 +1281,23 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
+    }
+
+    if (showMicrophonePermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showMicrophonePermissionRationale = false },
+            title = { Text("Allow microphone access?") },
+            text = { Text("FYNX uses your microphone to record a voice message in this chat. Recording starts only after you continue, and the message is sent only when you choose to send it.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMicrophonePermissionRationale = false
+                    microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                }) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMicrophonePermissionRationale = false }) { Text("Not now") }
+            }
+        )
     }
 
     if (showLocationPermissionRationale) {

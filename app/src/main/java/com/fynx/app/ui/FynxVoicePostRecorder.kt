@@ -165,7 +165,7 @@ fun FynxVoicePostRecorder(onRecorded: (Uri) -> Unit, onDismiss: () -> Unit) {
                         recording && paused -> "Recording paused"
                         recording -> "Recording your voice…"
                         hasRecording -> "Preview your voice before publishing. Your recording is not uploaded until you press Post."
-                        else -> "Record up to 2 minutes, preview it, then choose Use recording."
+                        else -> "FYNX uses your microphone to record a voice post up to 2 minutes long. Preview it before you choose Use recording; it is not uploaded until you press Post."
                     }
                 )
                 if (recording) {

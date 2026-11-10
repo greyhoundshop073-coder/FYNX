@@ -623,7 +623,39 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
         if (loadingMore) item(key = "feed_loading_more") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
     }
-    reportPost?.let { post -> AlertDialog(onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } }, title = { Text("Report post") }, text = { Text(reportNotice ?: "Report this post to FYNX for review.") }, confirmButton = { TextButton(enabled = !reportBusy, onClick = { reportBusy = true; reportNotice = "Sending report…"; scope.launch { FynxDiscoveryClient.recordEvent(context, "REPORT", postId = post.id, metadata = JSONObject().put("reason", "user_report")).onSuccess { reportNotice = "Report submitted."; reportBusy = false; delay(700L); reportPost = null; reportNotice = null }.onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false } } }) { Text("Report post") } }, dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }) }
+    reportPost?.let { post ->
+        AlertDialog(
+            onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } },
+            title = { Text("Report post") },
+            text = { Text(reportNotice ?: "Send this post to FYNX Safety. The report identifies the account that published it and includes the post ID so the content can be located.") },
+            confirmButton = {
+                TextButton(enabled = !reportBusy, onClick = {
+                    reportBusy = true
+                    reportNotice = "Sending report…"
+                    scope.launch {
+                        FynxSafetyRemoteClient.submitReport(
+                            context,
+                            post.authorUsername,
+                            "Reported post",
+                            "Post ID: ${post.id}"
+                        ).onSuccess {
+                            reportNotice = "Report submitted to FYNX Safety."
+                            reportBusy = false
+                            delay(900L)
+                            reportPost = null
+                            reportNotice = null
+                        }.onFailure {
+                            reportNotice = it.message ?: "Report could not be submitted. Please try again."
+                            reportBusy = false
+                        }
+                    }
+                }) { Text("Submit report") }
+            },
+            dismissButton = {
+                TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") }
+            }
+        )
+    }
     quotePost?.let { original ->
         AlertDialog(
             onDismissRequest = { if (!quoteBusy) { quotePost = null; quoteText = "" } },

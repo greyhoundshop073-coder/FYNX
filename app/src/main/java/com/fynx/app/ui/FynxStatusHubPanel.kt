@@ -347,6 +347,7 @@ private fun FynxAddStatusPanel(
     var mediaPermissionGranted by remember {
         mutableStateOf(fynxHasMediaPermission(context))
     }
+    var showMediaPermissionDisclosure by remember { mutableStateOf(false) }
     var recentMedia by remember { mutableStateOf<List<FynxRecentMedia>>(emptyList()) }
     var loadingMedia by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
@@ -575,7 +576,7 @@ private fun FynxAddStatusPanel(
                     Text("Choose a photo or video")
                 }
                 TextButton(
-                    onClick = { permissionLauncher.launch(fynxMediaPermissions()) }
+                    onClick = { showMediaPermissionDisclosure = true }
                 ) {
                     Text("Allow access to recent media")
                 }
@@ -618,6 +619,23 @@ private fun FynxAddStatusPanel(
     }
     }
     if (selectionMode) { Surface(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding(), tonalElevation = 6.dp, color = MaterialTheme.colorScheme.surface) { Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { selectionMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("${selectedMediaUris.size} selected", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); TextButton(onClick = { selectedMediaUris = emptySet(); selectionMessage = null; selectionMode = false; layoutMode = false }) { Text("Cancel") }; Button(onClick = ::finishSelection, enabled = selectedMediaUris.isNotEmpty()) { Text(if (layoutMode) "Create layout" else "Next") } } } } }
+    }
+
+    if (showMediaPermissionDisclosure) {
+        AlertDialog(
+            onDismissRequest = { showMediaPermissionDisclosure = false },
+            title = { Text("Allow access to recent media?") },
+            text = { Text("FYNX uses photo and video library access to show your recent items in the in-app Status gallery, including its Photos, Videos and layout tools. You can use the system picker instead and continue without granting this broader access. Only media you select is passed to the Status composer.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMediaPermissionDisclosure = false
+                    permissionLauncher.launch(fynxMediaPermissions())
+                }) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMediaPermissionDisclosure = false }) { Text("Not now") }
+            }
+        )
     }
 }
 
