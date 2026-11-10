@@ -19,7 +19,6 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <application
-        android:name=".FynxApplication"
         android:theme="@style/Theme.FYNX"
         android:label="FYNX"
         android:icon="@drawable/ic_fynx_logo"

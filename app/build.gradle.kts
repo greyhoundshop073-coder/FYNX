@@ -23,7 +23,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        // FynxRemoteFeatureFlags uses BuildConfig.DEBUG for debug-only fetch cadence.
+        buildConfig = true
+    }
 }
 
 kotlin {
