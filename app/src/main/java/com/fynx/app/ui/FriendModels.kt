@@ -5,6 +5,7 @@ data class FriendProfile(
     val username: String,
     val bio: String = "",
     val hasProfilePhoto: Boolean = false,
+    val profilePhotoMediaId: String? = null,
     val status: FynxFriendStatus = FynxFriendStatus.NONE
 ) {
     val isFriend: Boolean get() = status == FynxFriendStatus.FRIENDS
