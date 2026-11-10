@@ -22,10 +22,97 @@ fun FynxAnnouncementsPanel() {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
-    LaunchedEffect(refresh) { loading = true; FynxAdminClient.announcements(context).onSuccess { items = it; error = null }.onFailure { error = it.message ?: "Unable to load announcements." }; loading = false }
-    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Official FYNX Announcements", style = MaterialTheme.typography.headlineSmall); Spacer(Modifier.height(8.dp)); Text("Important updates published by the FYNX team.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(16.dp))
-        when { loading -> CircularProgressIndicator(); error != null -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("Could not load announcements"); Spacer(Modifier.height(6.dp)); Text(error!!, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(10.dp)); TextButton(onClick = { refresh++ }) { Text("Retry") } } }; items.isEmpty() -> Text("No official announcements yet.", color = MaterialTheme.colorScheme.onSurfaceVariant); else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { items.forEach { announcement -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(announcement.title, style = MaterialTheme.typography.titleMedium); if (announcement.priority != "NORMAL") AssistChip(onClick = {}, label = { Text(announcement.priority) }) }; Spacer(Modifier.height(8.dp)); Text(announcement.body); if (announcement.publishedAt.isNotBlank()) { Spacer(Modifier.height(8.dp)); Text(announcement.publishedAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } } } }
+    LaunchedEffect(refresh) {
+        loading = true
+        FynxAdminClient.announcements(context)
+            .onSuccess { items = it; error = null }
+            .onFailure { error = it.message ?: "Unable to load announcements." }
+        loading = false
+    }
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue)
+        ) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(14.dp), color = androidx.compose.ui.graphics.Color.White.copy(alpha = .18f)) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null,
+                            tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(10.dp).size(26.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("FYNX Updates", style = MaterialTheme.typography.headlineSmall,
+                            color = androidx.compose.ui.graphics.Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Text("Official news from the FYNX team", color = androidx.compose.ui.graphics.Color.White.copy(alpha = .88f))
+                    }
+                }
+                Text("Product news, service notices and community updates—all in one trusted place.",
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = .94f), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text("Latest announcements", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("${items.size} published updates", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = { refresh++ }, enabled = !loading) {
+                Icon(androidx.compose.material.icons.Icons.Default.Refresh, contentDescription = null)
+                Spacer(Modifier.width(4.dp)); Text("Refresh")
+            }
+        }
+        when {
+            loading -> Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            error != null -> Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Updates are temporarily unavailable", style = MaterialTheme.typography.titleMedium)
+                    Text(error!!, color = MaterialTheme.colorScheme.error)
+                    OutlinedButton(onClick = { refresh++ }) { Text("Try again") }
+                }
+            }
+            items.isEmpty() -> Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = .06f))) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null,
+                        tint = FynxDesign.AzureBlue, modifier = Modifier.size(36.dp))
+                    Text("No announcements yet", style = MaterialTheme.typography.titleMedium)
+                    Text("Official FYNX updates will appear here when published.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            else -> items.forEach { announcement ->
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = .14f)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("FYNX OFFICIAL", style = MaterialTheme.typography.labelSmall,
+                                color = FynxDesign.AzureBlue, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                modifier = Modifier.weight(1f))
+                            if (announcement.priority != "NORMAL") {
+                                AssistChip(onClick = {}, label = { Text(announcement.priority.replace('_', ' ')) })
+                            }
+                        }
+                        Text(announcement.title, style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Text(announcement.body, style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (announcement.publishedAt.isNotBlank()) {
+                            Text(announcement.publishedAt, style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -114,9 +201,31 @@ fun FynxAdminControlCenterPanel() {
     }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
-        Text("FYNX Control Center", style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text("Manage safety, marketplace operations and your FYNX community.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Card(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue)
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("FYNX CONTROL CENTER", style = MaterialTheme.typography.labelMedium,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = .82f),
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Text("Admin workspace", style = MaterialTheme.typography.headlineSmall,
+                            color = androidx.compose.ui.graphics.Color.White,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                    Surface(shape = RoundedCornerShape(14.dp), color = androidx.compose.ui.graphics.Color.White.copy(alpha = .18f)) {
+                        Icon(androidx.compose.material.icons.Icons.Default.AdminPanelSettings, contentDescription = "Admin",
+                            tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(12.dp).size(28.dp))
+                    }
+                }
+                Text("Manage platform safety, Marketplace operations, people and official updates.",
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = .92f))
+            }
+        }
         Spacer(Modifier.height(12.dp))
         if (loading) CircularProgressIndicator()
         else if (dashboard == null) {
@@ -348,7 +457,47 @@ fun FynxAdminControlCenterPanel() {
             }
             }
             if (activeSection == "Announcements") {
-            Spacer(Modifier.height(20.dp)); Text("Publish official announcement", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Title") }, singleLine = true); Spacer(Modifier.height(8.dp)); OutlinedTextField(body, { body = it }, Modifier.fillMaxWidth(), label = { Text("Message") }, minLines = 4); Spacer(Modifier.height(8.dp)); Button(enabled = title.isNotBlank() && body.isNotBlank(), onClick = { statusMessage = "Publishing..."; scope.launch { FynxAdminClient.publishAnnouncement(context, title, body, "NORMAL").onSuccess { title = ""; body = ""; statusMessage = "Announcement published." }.onFailure { statusMessage = it.message ?: "Publish failed." } } }) { Text("Publish") }; }
+                Spacer(Modifier.height(16.dp))
+                Text("Create an official update", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("Write a clear message for the FYNX community. Publishing sends it to the existing official announcements feed.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = .18f))) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(),
+                            label = { Text("Announcement title") }, singleLine = true)
+                        OutlinedTextField(body, { body = it }, Modifier.fillMaxWidth(),
+                            label = { Text("Message to users") }, minLines = 4,
+                            supportingText = { Text("${body.length}/2000 characters") })
+                        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = .06f))) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("PREVIEW", style = MaterialTheme.typography.labelSmall,
+                                    color = FynxDesign.AzureBlue, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Text(title.ifBlank { "Your announcement title" }, style = MaterialTheme.typography.titleMedium)
+                                Text(body.ifBlank { "Your message will appear here as users read the official FYNX update." },
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = title.isNotBlank() && body.isNotBlank() && body.length <= 2000,
+                            onClick = {
+                                statusMessage = "Publishing..."
+                                scope.launch {
+                                    FynxAdminClient.publishAnnouncement(context, title, body, "NORMAL")
+                                        .onSuccess { title = ""; body = ""; statusMessage = "Announcement published. Refresh the public feed to verify it." }
+                                        .onFailure { statusMessage = it.message ?: "Publish failed." }
+                                }
+                            }
+                        ) {
+                            Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null)
+                            Spacer(Modifier.width(8.dp)); Text("Publish announcement")
+                        }
+                    }
+                }
+            }
             statusMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         }
     }
