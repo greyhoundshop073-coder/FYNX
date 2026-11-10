@@ -74,6 +74,8 @@ These are source-level observations only. They do not prove which permissions ar
 - [ ] Confirm location is not collected in the background unless a compliant, core use case requires it.
 - [ ] Verify audio/video call and recording behavior; do not imply recording when none occurs.
 - [ ] Test permission denial, one-time grants, revocation, and Android-version differences.
+
+**Future policy watch:** Google's 2026-10-29 policy announcement says the Manage Contacts permission becomes restricted from 2027-08-25 for apps targeting Android 18 / API 38+, where system pickers are insufficient. FYNX currently targets API 36 and declares `READ_CONTACTS`, not `MANAGE_CONTACTS`; this is not a current API-36 blocker, but re-evaluate the Contacts design and approved access path before raising the target SDK to API 38. Prefer narrow system contact pickers where they can provide the required feature.
 - [ ] Review `SCHEDULE_EXACT_ALARM` against the exact-alarm policy: FYNX uses it only conditionally for Calendar reminders and has an inexact fallback; do not declare restricted `USE_EXACT_ALARM` unless the app's core functionality genuinely qualifies. Test reminders with access denied and after device reboot.
 
 ### C. User-generated content and social safety
@@ -164,6 +166,7 @@ Ask testers to exercise and report on:
 - Developer Program Policy (privacy, Data safety, account deletion, and other policies): https://support.google.com/googleplay/android-developer/answer/18265346
 - User Data / Data safety: https://support.google.com/googleplay/android-developer/answer/10144311
 - Sensitive permissions and exact alarm policy: https://support.google.com/googleplay/android-developer/answer/16558241
+- Policy announcement (2026-10-29; future Manage Contacts restriction): https://support.google.com/googleplay/android-developer/answer/18100766
 - Upload an app bundle: https://developer.android.com/studio/publish/upload-bundle
 
 ---
