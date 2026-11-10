@@ -43,6 +43,7 @@ fun FynxContactsPanel(
     var friendUsernames by remember { mutableStateOf(emptySet<String>()) }
     var friendRequests by remember { mutableStateOf(emptyList<FynxSocialClient.FriendRequest>()) }
     var connectionBusy by remember { mutableStateOf<String?>(null) }
+    var connectionStateLoaded by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
@@ -84,6 +85,7 @@ fun FynxContactsPanel(
                 val requestResult = FynxSocialClient.requests(context)
                 friendUsernames = friendResult.getOrNull().orEmpty().map { it.username.removePrefix("@").lowercase() }.toSet()
                 friendRequests = requestResult.getOrNull().orEmpty()
+                connectionStateLoaded = friendResult.isSuccess && requestResult.isSuccess
                 if (friendResult.isFailure || requestResult.isFailure) {
                     notice = friendResult.exceptionOrNull()?.message ?: requestResult.exceptionOrNull()?.message ?: "Friend status could not be refreshed."
                 }
@@ -190,7 +192,7 @@ fun FynxContactsPanel(
                                         Text("Friends", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                                     } else {
                                         TextButton(
-                                            enabled = connectionBusy != normalizedUsername,
+                                            enabled = connectionStateLoaded && connectionBusy != normalizedUsername,
                                             onClick = {
                                                 scope.launch {
                                                     connectionBusy = normalizedUsername
@@ -206,7 +208,7 @@ fun FynxContactsPanel(
                                             }
                                         ) {
                                             if (connectionBusy == normalizedUsername) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                                            else Text(when { incomingRequest != null -> "Accept"; outgoingRequest != null -> "Cancel request"; else -> "Add friend" })
+                                            else Text(if (!connectionStateLoaded) "Unavailable" else when { incomingRequest != null -> "Accept"; outgoingRequest != null -> "Cancel request"; else -> "Add friend" })
                                         }
                                     }
                                 }
