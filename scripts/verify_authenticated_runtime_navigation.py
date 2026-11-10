@@ -3844,6 +3844,22 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             marketplace_xml = keyboard_dismissed_xml
         screenshot("authenticated-marketplace.png")
         (ROOT/"authenticated-marketplace.xml").write_text(marketplace_xml+"\n", encoding="utf-8")
+        # Open the real publishing form read-only: no media selection and no publish action.
+        sell_form_xml = tap_control(
+            marketplace_xml, ["Sell"], "authenticated-marketplace-sell-form",
+            ["Sell on FYNX", "Product media", "Product name"]
+        )
+        if sell_form_xml and find_control(sell_form_xml, ["Sell on FYNX"]) and find_control(sell_form_xml, ["Product name"]):
+            screenshot("authenticated-marketplace-sell-form.png")
+            (ROOT/"authenticated-marketplace-sell-form.xml").write_text(sell_form_xml + chr(10), encoding="utf-8")
+            report.append("- PASS: Marketplace Sell shortcut opened the real product publishing form; captured without selecting media or publishing.")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.5)
+            marketplace_xml = dump_ui("authenticated-marketplace-after-sell-form.xml") or marketplace_xml
+            if not find_control(marketplace_xml, ["Search products, sellers or categories"]):
+                FAILURES.append("Marketplace did not return cleanly after read-only Sell form capture")
+        else:
+            FAILURES.append("Marketplace Sell shortcut did not expose the real product publishing form")
         if settle_state == "loading timeout":
             report.append("- FAIL: Marketplace discovery remained in loading state after 20 seconds; the capture is retained for diagnosis.")
             FAILURES.append("Marketplace discovery remained in loading state after 20 seconds")
@@ -4784,6 +4800,7 @@ expected_authenticated_surfaces = [
     "authenticated-ai.png",
     "authenticated-ai-attachment-menu.png",
     "authenticated-marketplace.png",
+    "authenticated-marketplace-sell-form.png",
     "authenticated-marketplace-my-shop-overview.png",
     "authenticated-marketplace-my-shop-profile.png",
     "authenticated-marketplace-my-shop-listings.png",
