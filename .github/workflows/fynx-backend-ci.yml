@@ -297,6 +297,8 @@ jobs:
         run: node verify-marketplace-state-machine.mjs
       - name: Run Marketplace persistent shop profile verification
         run: node verify-marketplace-shop-profile.mjs
+      - name: Run PostgreSQL shop profile and seller review integration tests
+        run: node test-marketplace-shop-reviews-db.mjs
       - name: Exercise Marketplace likes, unlike, counts, self-like and buyer purchase-history routes
         run: node test-marketplace-product-engagement.mjs
       - name: Verify Marketplace public storefront likes and buyer purchase history
