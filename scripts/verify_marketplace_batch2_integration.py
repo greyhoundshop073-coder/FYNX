@@ -3,6 +3,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+realtime = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt").read_text(encoding="utf-8")
+calls = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCallsPanel.kt").read_text(encoding="utf-8")
+active_call = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxActiveCallPanel.kt").read_text(encoding="utf-8")
+backend = (ROOT / "backend/server.js").read_text(encoding="utf-8")
 details = panel.split("private fun MarketplaceDetails", 1)[1]
 files = {
     "trust": ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceTrustPassport.kt",
@@ -33,7 +37,8 @@ checks = [
     ("Trust Passport uses existing seller reputation", "sellerReputation = sellerReputations[sellerKey]" in panel and "sellerReputation:" in details),
     ("Buy Together keeps the canonical listing ID", "FynxShareActions.marketplacePayload(listing.id, listing.title)" in panel),
     ("Live Proof uses the shared CameraX engine with a Marketplace-specific mode", "liveProofMode = true" in live_proof and "FynxCameraCapturePanel(" in live_proof and "onLiveProofStart" in live_proof),
-    ("Live Proof routes the real seller into the existing video-call system", "onLiveProof = { onLiveProof(listing.sellerUsername) }" in panel and 'onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }' in app),
+    ("Live Proof routes the seller and preserves product identity/title through the authenticated call invite", "onLiveProof = { onLiveProof(listing.id, listing.sellerUsername, listing.title) }" in panel and "marketplaceCallListingId = listingId" in app and "marketplaceCallProductTitle = productTitle" in app and "marketplaceListingId: call.marketplaceListingId" in backend and "marketplaceProductTitle: call.marketplaceProductTitle" in backend and "marketplaceListingId: String? = null" in realtime and "initialMarketplaceProductTitle = pendingIncomingCall?.marketplaceProductTitle" in app and "activeMarketplaceProductTitle = event.marketplaceProductTitle" in calls and "marketplaceProductTitle = activeMarketplaceProductTitle" in calls and 'Text("Live item: $it"' in active_call),
+    ("video-call busy responses close the correct pending invitation and return to the original caller", '["invite", "accept", "reject", "end", "busy"]' in backend and 'call.calleeId !== userId || call.callerId !== targetUserId' in backend and 'callId: validCallId(body?.callId) ? body.callId : newCallId()' in backend),
     ("Price Watch uses the authenticated Marketplace backend", "marketplacePriceWatchState(context, listingId)" in panel and "watchMarketplacePrice(context, listingId)" in panel and "price_watch_$listingId" not in panel),
     ("Buying Assistant opens FYNX AI with the selected listing context", "onOpenAssistant = { listingId -> onOpenAi(listingId) }" in panel and 'onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }' in app and "initialMarketplaceListingId = marketplaceAiListingId" in app),
 ]

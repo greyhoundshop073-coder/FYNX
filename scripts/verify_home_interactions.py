@@ -245,7 +245,7 @@ require(app_source, '"Seller Center" -> "Marketplace"', "Seller Center returns t
 require(app_source, 'selected = fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)', "system back and app-bar back share the contextual resolver")
 require(app_source, 'contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"', "back action accessibility label names the resolved parent destination")
 require(app_source, 'if (notificationPreferencesOnly) notificationPreferencesOnly = false', "contextual back clears stale Profile-only notification context")
-require(app_source, 'IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" })', "Home notification entry clears stale Profile-only notification context")
+require(app_source, 'onClick = { notificationPreferencesOnly = false; selected = "Notifications" },\n                                contentDescription = "Notifications"', "Home notification entry clears stale Profile-only notification context")
 require(app_source, 'navigationHistory = (navigationHistory.dropLast(1).filterNot { it == selected } + selected).ifEmpty { listOf("Home") }', "system Back keeps contextual destinations aligned with navigation history")
 require(app_source, 'if (!isKeyboardVisible && selected in mainNav.map { it.key })', "bottom navigation is available on every primary tab")
 if 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' not in app_source and 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' not in app_source:

@@ -54,7 +54,7 @@ class FynxRealtimeClient(
         data class Typing(val userId: String, val isTyping: Boolean) : Event
         data class Presence(val userId: String, val online: Boolean) : Event
         data class GroupMessage(val groupId: String, val messageJson: String) : Event
-        data class Call(val callId: String, val callType: String, val fromUserId: String, val toUserId: String, val signalType: String, val sdp: String? = null, val candidate: IceCandidatePayload? = null, val fromUsername: String? = null, val error: String? = null) : Event
+        data class Call(val callId: String, val callType: String, val fromUserId: String, val toUserId: String, val signalType: String, val sdp: String? = null, val candidate: IceCandidatePayload? = null, val fromUsername: String? = null, val error: String? = null, val marketplaceListingId: String? = null, val marketplaceProductTitle: String? = null) : Event
     }
     data class IceCandidatePayload(val candidate: String, val sdpMid: String?, val sdpMLineIndex: Int?, val usernameFragment: String?) {
         fun toWebRtcCandidate(): IceCandidate = IceCandidate(sdpMid, sdpMLineIndex ?: 0, candidate)
@@ -291,9 +291,9 @@ class FynxRealtimeClient(
         val sdp = root.optString("sdp").takeIf { it.isNotBlank() && it.length <= 200_000 }
         if ((signalType == "offer" || signalType == "answer") && sdp == null) return null
         if (signalType == "ice" && c == null) return null
-        return Event.Call(callId, callType, fromUserId, toUserId, signalType, sdp, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() })
+        return Event.Call(callId, callType, fromUserId, toUserId, signalType, sdp, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() }, root.optString("marketplaceListingId").takeIf { it.isNotBlank() }, root.optString("marketplaceProductTitle").takeIf { it.isNotBlank() })
     }
-    fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
+    fun sendCallInvite(callId: String, targetUserId: String, video: Boolean, marketplaceListingId: String? = null, marketplaceProductTitle: String? = null) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite", JSONObject().apply { marketplaceListingId?.takeIf { it.isNotBlank() }?.let { put("marketplaceListingId", it.take(80)) }; marketplaceProductTitle?.takeIf { it.isNotBlank() }?.let { put("marketplaceProductTitle", it.filterNot(Char::isISOControl).take(120)) } })
     fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
     fun sendCallReject(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "reject")
     fun sendCallBusy(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "busy")

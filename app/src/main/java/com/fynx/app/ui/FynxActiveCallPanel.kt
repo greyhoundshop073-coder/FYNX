@@ -24,6 +24,7 @@ fun FynxActiveCallPanel(
     realtimeState: FynxRealtimeClient.State = FynxRealtimeClient.State.CONNECTED,
     localVideoTrack: VideoTrack? = null,
     remoteVideoTrack: VideoTrack? = null,
+    marketplaceProductTitle: String? = null,
     onAnswer: () -> Unit,
     onRetry: () -> Unit,
     onToggleMicrophone: () -> Unit,
@@ -86,6 +87,7 @@ fun FynxActiveCallPanel(
                 )
                 Spacer(Modifier.height(18.dp))
                 Text(name, style = MaterialTheme.typography.headlineSmall)
+                marketplaceProductTitle?.takeIf { it.isNotBlank() }?.let { Text("Live item: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Spacer(Modifier.height(6.dp))
                 Text(callStatus, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (video && !incoming) {
@@ -105,6 +107,7 @@ fun FynxActiveCallPanel(
             ) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(name, style = MaterialTheme.typography.titleMedium)
+                    marketplaceProductTitle?.takeIf { it.isNotBlank() }?.let { Text("Live item: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     Text(callStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

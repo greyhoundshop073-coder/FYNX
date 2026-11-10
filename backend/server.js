@@ -1033,25 +1033,28 @@ if (wss) {
           await handleCall(userId, user, socket, body);
           return;
         }
-        if (["invite", "accept", "reject", "end"].includes(signalType)) {
+        if (["invite", "accept", "reject", "end", "busy"].includes(signalType)) {
           const targetUserId = String(body?.toUserId || "");
           if (!targetUserId || targetUserId === userId) return sendSocket(socket, { type: "call", signalType: "error", error: "invalid call target" });
           if (signalType === "invite") {
             if (activeCalls.size >= 500) return sendSocket(socket, { type: "call", signalType: "error", error: "call capacity reached" });
             const mediaType = body?.callType === "video" ? "video" : "voice";
             const existing = [...activeCalls.values()].find(call => call.callerId === userId || call.calleeId === userId || call.callerId === targetUserId || call.calleeId === targetUserId);
-            if (existing) return sendSocket(socket, { type: "call", signalType: "busy", callId: existing.id, callType: existing.mediaType, fromUserId: targetUserId, toUserId: userId });
+            if (existing) return sendSocket(socket, { type: "call", signalType: "busy", callId: validCallId(body?.callId) ? body.callId : newCallId(), callType: mediaType, fromUserId: targetUserId, toUserId: userId });
             const callId = validCallId(body?.callId) ? body.callId : newCallId();
-            const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, createdAt: Date.now() };
+            const marketplaceListingId = typeof body?.marketplaceListingId === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(body.marketplaceListingId) ? body.marketplaceListingId : null;
+            const marketplaceProductTitle = typeof body?.marketplaceProductTitle === "string" ? body.marketplaceProductTitle.replace(/[\\u0000-\\u001f\\u007f]/g, "").trim().slice(0, 120) || null : null;
+            const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, marketplaceListingId, marketplaceProductTitle, createdAt: Date.now() };
             activeCalls.set(callId, call);
             if (!clientsByUserId.has(targetUserId)) { activeCalls.delete(callId); return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" }); }
-            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null });
+            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null, ...(call.marketplaceListingId ? { marketplaceListingId: call.marketplaceListingId } : {}), ...(call.marketplaceProductTitle ? { marketplaceProductTitle: call.marketplaceProductTitle } : {}) });
             return;
           }
           const callId = validCallId(body?.callId) ? body.callId : "";
           const call = activeCalls.get(callId);
           if (!call || ![call.callerId, call.calleeId].includes(userId) || ![call.callerId, call.calleeId].includes(targetUserId)) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call not found" });
-          if (signalType === "accept" || signalType === "reject" || signalType === "end") {
+          if (signalType === "busy" && (call.calleeId !== userId || call.callerId !== targetUserId)) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "invalid busy response" });
+          if (signalType === "accept" || signalType === "reject" || signalType === "end" || signalType === "busy") {
             relayCallSignal(call, userId, signalType);
             if (signalType !== "accept") closeCall(callId, signalType, false);
             return;

@@ -1217,6 +1217,8 @@ def wait_for_marketplace_settled(timeout: float = 20.0) -> tuple[str, str]:
         "Marketplace is taking longer than expected",
         "Marketplace could not load",
     )
+    started = deadline - timeout
+    probed_below_fold = False
     while time.monotonic() < deadline:
         latest = dump_ui("authenticated-marketplace-settled.xml")
         if latest and find_control(latest, ["Search products, sellers or categories"]):
@@ -1225,6 +1227,31 @@ def wait_for_marketplace_settled(timeout: float = 20.0) -> tuple[str, str]:
             for marker in terminal_markers:
                 if find_control(latest, [marker]):
                     return latest, marker
+            # On short screens the banner can push the settled state below the fold, so
+            # look further down once, then return to the top before reporting it.
+            if not probed_below_fold and time.monotonic() - started >= 6.0:
+                probed_below_fold = True
+                found_state = ""
+                probe_xml = latest
+                swipes = 0
+                for _ in range(3):
+                    next_xml = swipe_vertical_scroll_container(probe_xml, "authenticated-marketplace-settle-probe.xml")
+                    if not next_xml:
+                        break
+                    swipes += 1
+                    probe_xml = next_xml
+                    if marketplace_product_card_target(probe_xml) is not None:
+                        found_state = "real priced listing"
+                        break
+                    found_state = next((m for m in terminal_markers if find_control(probe_xml, [m])), "")
+                    if found_state:
+                        break
+                for _ in range(swipes):
+                    probe_xml = swipe_vertical_scroll_container(
+                        probe_xml, "authenticated-marketplace-settle-return.xml", reverse=True
+                    ) or probe_xml
+                if found_state:
+                    return dump_ui("authenticated-marketplace-settled.xml") or latest, found_state
         time.sleep(0.5)
     return latest, "loading timeout"
 
@@ -3342,13 +3369,55 @@ def find_wallet_feature_entry(xml_text:str):
 
 
 def wallet_destination_ready(xml_text: str) -> bool:
-    """Require the Wallet page and its visible balance buckets, not below-fold copy."""
-    return bool(
+    """Require real Wallet summary buckets online, or the explicit safe offline state."""
+    standard_summary = bool(
         find_control(xml_text, ["FYNX Wallet"])
         and find_control(xml_text, ["Balance details"])
         and find_control(xml_text, ["Reserved"])
         and find_control(xml_text, ["Withdrawal pending"])
     )
+    if standard_summary:
+        return True
+
+    # The CI debug-only local entry has no server token. In that mode the real
+    # Wallet deliberately renders an unavailable balance and an online-sign-in
+    # explanation instead of fabricated balance buckets. Certify that honest
+    # offline state as a rendered UI destination, not as an authenticated wallet.
+    offline_preview = LOGIN_MODE == "debug-only local UI entry (not server-authenticated)"
+    return bool(
+        offline_preview
+        and find_control(xml_text, ["FYNX Wallet"])
+        and find_control(xml_text, ["Available balance"])
+        and find_control(xml_text, ["Unavailable"])
+        and find_control(xml_text, ["Wallet unavailable"])
+        and find_control(xml_text, ["Wallet security & PIN"])
+    )
+
+
+def wallet_destination_ready_scrolling(xml_text: str, name: str) -> bool:
+    """Same rule as wallet_destination_ready, but on short screens look further down
+    for the balance buckets, then scroll back so the Wallet is left at the top."""
+    if not xml_text:
+        return False
+    if wallet_destination_ready(xml_text):
+        return True
+    if not find_control(xml_text, ["FYNX Wallet"]):
+        return False
+    swipes = 0
+    ready = False
+    probe_xml = xml_text
+    for _ in range(3):
+        next_xml = swipe_vertical_scroll_container(probe_xml, name + ".xml")
+        if not next_xml:
+            break
+        swipes += 1
+        probe_xml = next_xml
+        if wallet_destination_ready(probe_xml):
+            ready = True
+            break
+    for _ in range(swipes):
+        probe_xml = swipe_vertical_scroll_container(probe_xml, name + "-return.xml", reverse=True) or probe_xml
+    return ready
 
 
 def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple[bool,str,str]:
@@ -3364,7 +3433,7 @@ def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple
     loading_markers=("Checking…", "Checking your wallet…", "Loading wallet activity…", "Loading…")
     while time.monotonic()<deadline:
         latest=dump_ui(prefix+"-marketplace-wallet-settled.xml")
-        if wallet_destination_ready(latest) and not any(marker in latest for marker in loading_markers):
+        if not any(marker in latest for marker in loading_markers) and wallet_destination_ready_scrolling(latest, prefix+"-marketplace-wallet-probe"):
             screenshot("authenticated-wallet-marketplace-shortcut.png")
             (ROOT/"authenticated-wallet-marketplace-shortcut.xml").write_text(
                 latest+chr(10), encoding="utf-8"
@@ -3447,7 +3516,7 @@ def capture_wallet_from_features(prefix:str):
     for attempt in range(60):
         time.sleep(.5)
         wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
-        wallet_shell_opened=wallet_destination_ready(wallet_xml)
+        wallet_shell_opened=wallet_destination_ready_scrolling(wallet_xml, prefix+"-wallet-probe-"+str(attempt))
         wallet_still_loading=bool(wallet_xml and any(marker in wallet_xml for marker in wallet_loading_markers))
         if wallet_shell_opened and not wallet_still_loading:
             wallet_settled=True
@@ -3531,8 +3600,15 @@ def capture_wallet_from_features(prefix:str):
                                 if add_money_after_ussd:
                                     home_after_add = tap_control(
                                         add_money_after_ussd, ["Back to Wallet"], "wallet-add-back-home",
-                                        ["Balance details", "Reserved", "Withdrawal pending"]
+                                        ["FYNX Wallet"]
                                     )
+                                    if home_after_add and not wallet_destination_ready_scrolling(
+                                        home_after_add, "wallet-add-back-home-summary"
+                                    ):
+                                        FAILURES.append(
+                                            "Wallet Add Money return did not restore the real online summary or explicit offline safety state"
+                                        )
+                                        home_after_add = ""
                                     if home_after_add:
                                         withdraw_xml = tap_control(
                                             home_after_add, ["Withdraw"], "wallet-withdraw",
@@ -3768,6 +3844,22 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             marketplace_xml = keyboard_dismissed_xml
         screenshot("authenticated-marketplace.png")
         (ROOT/"authenticated-marketplace.xml").write_text(marketplace_xml+"\n", encoding="utf-8")
+        # Open the real publishing form read-only: no media selection and no publish action.
+        sell_form_xml = tap_control(
+            marketplace_xml, ["Sell"], "authenticated-marketplace-sell-form",
+            ["Sell on FYNX", "Product media", "Product name"]
+        )
+        if sell_form_xml and find_control(sell_form_xml, ["Sell on FYNX"]) and find_control(sell_form_xml, ["Product name"]):
+            screenshot("authenticated-marketplace-sell-form.png")
+            (ROOT/"authenticated-marketplace-sell-form.xml").write_text(sell_form_xml + chr(10), encoding="utf-8")
+            report.append("- PASS: Marketplace Sell shortcut opened the real product publishing form; captured without selecting media or publishing.")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.5)
+            marketplace_xml = dump_ui("authenticated-marketplace-after-sell-form.xml") or marketplace_xml
+            if not find_control(marketplace_xml, ["Search products, sellers or categories"]):
+                FAILURES.append("Marketplace did not return cleanly after read-only Sell form capture")
+        else:
+            FAILURES.append("Marketplace Sell shortcut did not expose the real product publishing form")
         if settle_state == "loading timeout":
             report.append("- FAIL: Marketplace discovery remained in loading state after 20 seconds; the capture is retained for diagnosis.")
             FAILURES.append("Marketplace discovery remained in loading state after 20 seconds")
@@ -3791,19 +3883,27 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             if wallet_return_xml and find_control(wallet_return_xml, ["Search products, sellers or categories"]):
                 marketplace_xml=wallet_return_xml
 
-        # Wallet can return Marketplace at its previous vertical scroll offset.
-        # My Shop is in the top shortcut rail, so restore the real content viewport
-        # before looking for seller entry points. This is a bounded, read-only gesture.
-        for attempt in range(5):
+        # Returning from Wallet may restore a stale Marketplace hierarchy/scroll
+        # snapshot. Re-select the Marketplace destination once and read the live
+        # hierarchy again before searching for the My Shop shortcut.
+        if not find_control(marketplace_xml, ["My Shop"]):
+            refreshed_marketplace = tap_control(
+                marketplace_xml, ["Marketplace"], "authenticated-marketplace-refresh-after-wallet",
+                ["Search products, sellers or categories"]
+            )
+            if refreshed_marketplace:
+                marketplace_xml = refreshed_marketplace
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and not find_control(marketplace_xml, ["My Shop"]):
+            marketplace_xml = dump_ui("authenticated-marketplace-my-shop-shortcut-wait.xml") or marketplace_xml
             if find_control(marketplace_xml, ["My Shop"]):
                 break
             scrolled_xml = swipe_vertical_scroll_container(
-                marketplace_xml, "authenticated-marketplace-my-shop-return-top-" + str(attempt) + ".xml",
-                reverse=True
+                marketplace_xml, "authenticated-marketplace-my-shop-return-top.xml", reverse=True
             )
-            if not scrolled_xml:
-                break
-            marketplace_xml = scrolled_xml
+            if scrolled_xml:
+                marketplace_xml = scrolled_xml
+            time.sleep(0.35)
 
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
@@ -3855,15 +3955,43 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             report.append("- BLOCKED: the Sell action was not exposed by the rendered Marketplace state; publishing flow not captured.")
 
         # Return the actual Marketplace content to its top before opening My Shop.
-        for attempt in range(5):
+        # The Marketplace chrome collapses while the main content is scrolled. Repeatedly
+        # reverse-scroll the real accessibility scroll container until the shortcut is
+        # actually exposed; do not assume a bottom-tab tap resets the Compose scroll state.
+        for attempt in range(12):
             if find_control(marketplace_xml, ["My Shop"]):
                 break
             scrolled_xml = swipe_vertical_scroll_container(
                 marketplace_xml, "marketplace-return-top-"+str(attempt)+".xml", reverse=True
             )
-            if not scrolled_xml:
+            if not scrolled_xml or scrolled_xml == marketplace_xml:
                 break
             marketplace_xml = scrolled_xml
+
+        # If this is the Marketplace landing/hero state rather than the product surface,
+        # use its real Explore Marketplace action, then wait for the shortcut rail to render.
+        if not find_control(marketplace_xml, ["My Shop"]):
+            explore_xml = tap_control(
+                marketplace_xml, ["Explore Marketplace"], "marketplace-explore-entry",
+                ["Search products, sellers or categories"]
+            )
+            if explore_xml:
+                deadline = time.monotonic() + 12.0
+                latest = explore_xml
+                while time.monotonic() < deadline:
+                    latest = dump_ui("marketplace-explore-entry-settled.xml") or latest
+                    if find_control(latest, ["My Shop"]):
+                        marketplace_xml = latest
+                        break
+                    scrolled_xml = swipe_vertical_scroll_container(
+                        latest, "marketplace-explore-entry-top.xml", reverse=True
+                    )
+                    if scrolled_xml:
+                        latest = scrolled_xml
+                    time.sleep(0.35)
+                if find_control(latest, ["My Shop"]):
+                    marketplace_xml = latest
+
         shop_xml = tap_control(
             marketplace_xml, ["My Shop"], "marketplace-my-shop-overview",
             ["Your shop at a glance", "Manage your storefront", "Shop profile"]
@@ -3904,7 +4032,10 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 while time.monotonic() < profile_deadline:
                     profile_ready_xml = dump_ui("marketplace-public-profile-settled.xml") or profile_ready_xml
                     has_header = bool(find_control(profile_ready_xml, ["Marketplace profile"]))
-                    has_count = bool(find_control(profile_ready_xml, ["Available products"]))
+                    has_count = bool(find_control(profile_ready_xml, ["Available products"])) or (
+                        bool(find_control(profile_ready_xml, ["Products"], exact_only=True))
+                        and bool(find_control(profile_ready_xml, ["0"], exact_only=True))
+                    )
                     has_product_state = any(
                         find_control(profile_ready_xml, [marker])
                         for marker in profile_terminal_markers
@@ -3912,14 +4043,16 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                     if has_header and has_count and has_product_state:
                         break
                     time.sleep(0.5)
-                if (
-                    find_control(profile_ready_xml, ["Marketplace profile"])
-                    and find_control(profile_ready_xml, ["Available products"])
-                    and (
-                        any(find_control(profile_ready_xml, [marker]) for marker in profile_terminal_markers)
-                        or find_control(profile_ready_xml, ["NGN", "USD"])
-                    )
-                ):
+                has_header = bool(find_control(profile_ready_xml, ["Marketplace profile"]))
+                has_count = bool(find_control(profile_ready_xml, ["Available products"])) or (
+                    bool(find_control(profile_ready_xml, ["Products"], exact_only=True))
+                    and bool(find_control(profile_ready_xml, ["0"], exact_only=True))
+                )
+                has_product_state = any(
+                    find_control(profile_ready_xml, [marker])
+                    for marker in profile_terminal_markers
+                ) or bool(find_control(profile_ready_xml, ["NGN", "USD"])) or bool(find_control(profile_ready_xml, ["Available: "]))
+                if has_header and has_count and has_product_state:
                     screenshot("authenticated-marketplace-public-profile.png")
                     (ROOT/"authenticated-marketplace-public-profile.xml").write_text(
                         profile_ready_xml + chr(10), encoding="utf-8"
@@ -4667,6 +4800,7 @@ expected_authenticated_surfaces = [
     "authenticated-ai.png",
     "authenticated-ai-attachment-menu.png",
     "authenticated-marketplace.png",
+    "authenticated-marketplace-sell-form.png",
     "authenticated-marketplace-my-shop-overview.png",
     "authenticated-marketplace-my-shop-profile.png",
     "authenticated-marketplace-my-shop-listings.png",

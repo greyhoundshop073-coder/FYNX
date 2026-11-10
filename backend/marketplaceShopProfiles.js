@@ -14,6 +14,8 @@ export function ensureMarketplaceShopProfileSchema(pool) {
         description TEXT NOT NULL DEFAULT '',
         location TEXT NOT NULL DEFAULT '',
         contact_phone TEXT NOT NULL DEFAULT '',
+        logo_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL,
+        cover_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         CHECK (length(shop_name) <= 120),
@@ -23,7 +25,10 @@ export function ensureMarketplaceShopProfileSchema(pool) {
       );
       CREATE INDEX IF NOT EXISTS marketplace_shop_profiles_updated_idx
         ON marketplace_shop_profiles (updated_at DESC);
-    `).catch((error) => {
+    `).then(() => pool.query(`
+      ALTER TABLE marketplace_shop_profiles ADD COLUMN IF NOT EXISTS logo_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;
+      ALTER TABLE marketplace_shop_profiles ADD COLUMN IF NOT EXISTS cover_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;
+    `)).catch((error) => {
       schemaPromises.delete(pool);
       throw error;
     });
@@ -42,6 +47,8 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
     description: row.description || '',
     location: row.location || '',
     contactPhone: row.contact_phone || '',
+    logoMediaId: row.logo_media_id == null ? null : String(row.logo_media_id),
+    coverMediaId: row.cover_media_id == null ? null : String(row.cover_media_id),
     updatedAt: row.updated_at || null
   });
 
@@ -50,7 +57,7 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
       await ensureSchema();
       const result = await pool.query(`
         SELECT u.username, u.display_name, p.shop_name, p.description, p.location,
-               p.contact_phone, p.updated_at
+               p.contact_phone, p.logo_media_id, p.cover_media_id, p.updated_at
         FROM users u
         LEFT JOIN marketplace_shop_profiles p ON p.seller_id = u.id
         WHERE u.id = $1
@@ -69,21 +76,33 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
     const description = typeof req.body?.description === 'string' ? req.body.description.trim().slice(0, 800) : '';
     const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : '';
     const contactPhone = typeof req.body?.contactPhone === 'string' ? req.body.contactPhone.trim().slice(0, 40) : '';
+    const logoMediaId = req.body?.logoMediaId == null || req.body.logoMediaId === '' ? null : String(req.body.logoMediaId).trim();
+    const coverMediaId = req.body?.coverMediaId == null || req.body.coverMediaId === '' ? null : String(req.body.coverMediaId).trim();
+    const mediaIds = [logoMediaId, coverMediaId].filter(Boolean);
+    if (mediaIds.some((id) => !/^[1-9][0-9]{0,18}$/.test(id))) return res.status(400).json({ error: 'invalid shop image reference' });
     if (shopName.length < 2) return res.status(400).json({ error: 'shop name must contain at least 2 characters' });
 
     try {
       await ensureSchema();
+      if (mediaIds.length) {
+        const owned = await pool.query('SELECT id, mime_type FROM message_media WHERE id = ANY($1::bigint[]) AND owner_id = $2', [mediaIds, req.user.sub]);
+        if (owned.rows.length !== mediaIds.length || owned.rows.some((row) => !String(row.mime_type || '').toLowerCase().startsWith('image/'))) {
+          return res.status(400).json({ error: 'shop logo and cover must be images uploaded by this account' });
+        }
+      }
       const result = await pool.query(`
-        INSERT INTO marketplace_shop_profiles (seller_id, shop_name, description, location, contact_phone)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO marketplace_shop_profiles (seller_id, shop_name, description, location, contact_phone, logo_media_id, cover_media_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (seller_id) DO UPDATE SET
           shop_name = EXCLUDED.shop_name,
           description = EXCLUDED.description,
           location = EXCLUDED.location,
           contact_phone = EXCLUDED.contact_phone,
+          logo_media_id = EXCLUDED.logo_media_id,
+          cover_media_id = EXCLUDED.cover_media_id,
           updated_at = NOW()
-        RETURNING shop_name, description, location, contact_phone, updated_at
-      `, [req.user.sub, shopName, description, location, contactPhone]);
+        RETURNING shop_name, description, location, contact_phone, logo_media_id, cover_media_id, updated_at
+      `, [req.user.sub, shopName, description, location, contactPhone, logoMediaId, coverMediaId]);
       const user = await pool.query('SELECT username, display_name FROM users WHERE id=$1 LIMIT 1', [req.user.sub]);
       if (!user.rows[0]) return res.status(404).json({ error: 'seller account not found' });
       return res.json({ shop: publicProfile({ ...user.rows[0], ...result.rows[0] }) });
@@ -100,7 +119,7 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
       await ensureSchema();
       const result = await pool.query(`
         SELECT u.username, u.display_name, p.shop_name, p.description, p.location,
-               p.contact_phone, p.updated_at
+               p.contact_phone, p.logo_media_id, p.cover_media_id, p.updated_at
         FROM users u
         LEFT JOIN marketplace_shop_profiles p ON p.seller_id = u.id
         WHERE lower(u.username) = lower($1)

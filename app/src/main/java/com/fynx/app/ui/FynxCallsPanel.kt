@@ -29,7 +29,7 @@ import org.webrtc.VideoTrack
 enum class FynxCallHistoryFilter { ALL, MISSED, VIDEO, VOICE }
 
 @Composable
-fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, currentUsername: String? = null, onIncomingCallConsumed: (String) -> Unit = {}) {
+fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, currentUsername: String? = null, initialMarketplaceListingId: String? = null, initialMarketplaceProductTitle: String? = null, onIncomingCallConsumed: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var activeCall by remember { mutableStateOf(initialName?.removePrefix("@").orEmpty().ifBlank { initialName }) }
@@ -61,6 +61,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var localVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var pendingIncomingAccept by remember { mutableStateOf(false) }
+    var activeMarketplaceListingId by remember { mutableStateOf(initialMarketplaceListingId) }
+    var activeMarketplaceProductTitle by remember { mutableStateOf(initialMarketplaceProductTitle) }
     val mediaEngineForCleanup = remember { arrayOfNulls<FynxWebRtcCallEngine>(1) }
 
     lateinit var realtimeClient: FynxRealtimeClient
@@ -111,6 +113,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         "invite" -> if (!initialOutgoing && session == null) {
                             val incomingName = event.fromUsername?.removePrefix("@").orEmpty().ifBlank { event.fromUserId }
                             video = event.callType.equals("video", true)
+                            activeMarketplaceListingId = event.marketplaceListingId
+                            activeMarketplaceProductTitle = event.marketplaceProductTitle
                             targetUserId = event.fromUserId
                             targetUsername = incomingName
                             targetAvatarUsername = event.fromUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
@@ -181,7 +185,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 calls = FynxCallsStore.load(context)
             } else {
                 if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                targetUserId?.let { realtimeClient.sendCallInvite(current.id, it, video) }
+                targetUserId?.let { realtimeClient.sendCallInvite(current.id, it, video, activeMarketplaceListingId, activeMarketplaceProductTitle) }
                 FynxCallsStore.updateStatus(context, current.id, "Calling")
                 calls = FynxCallsStore.load(context)
             }
@@ -214,7 +218,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             val required = if (isVideo) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
             if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
                 mediaEngine.connect(newSession); mediaConnected = true
-                realtimeClient.sendCallInvite(id, resolvedId, isVideo)
+                realtimeClient.sendCallInvite(id, resolvedId, isVideo, activeMarketplaceListingId, activeMarketplaceProductTitle)
                 FynxCallsStore.updateStatus(context, id, "Calling")
                 calls = FynxCallsStore.load(context)
             } else permissionLauncher.launch(required)
@@ -258,7 +262,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
 
     if (activeCall != null && session != null) {
-        FynxActiveCallPanel(name = activeCall!!, session = session!!, currentUsername = currentUsername, avatarUsername = targetAvatarUsername, realtimeState = realtimeState, localVideoTrack = localVideoTrack, remoteVideoTrack = remoteVideoTrack,
+        FynxActiveCallPanel(name = activeCall!!, session = session!!, currentUsername = currentUsername, avatarUsername = targetAvatarUsername, realtimeState = realtimeState, localVideoTrack = localVideoTrack, remoteVideoTrack = remoteVideoTrack, marketplaceProductTitle = activeMarketplaceProductTitle,
             onAnswer = {
                 val current = session!!
                 val required = if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)

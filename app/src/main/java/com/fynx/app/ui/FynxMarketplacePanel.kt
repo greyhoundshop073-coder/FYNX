@@ -749,7 +749,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String, String, String) -> Unit = { _, _, _ -> }, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
@@ -1235,6 +1235,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    OutlinedButton(
+                        onClick = { showSell = true },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Sell", maxLines = 1)
+                    }
                     OutlinedButton(onClick = onOpenWallet, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                         Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
@@ -1539,7 +1547,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 else -> if (showAllProducts || query.isNotBlank() || category != "All" || nearbyMode) {
                     LazyVerticalGrid(
                         state = productsGridState,
-                        columns = GridCells.Fixed(2),
+                        columns = GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1816,7 +1824,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onAddToCart = { if (cart.none { it.id == listing.id }) { if (cart.size >= 20) error = "Your FYNX cart can contain at most 20 different products." else { cart = cart + listing; cartQuantities = cartQuantities + (listing.id to 1) } }; selected = null },
             onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title), onShareToStatus = onShareListingToStatus) },
             onShareToStatus = onShareListingToStatus,
-            onLiveProof = { onLiveProof(listing.sellerUsername) },
+            onLiveProof = { onLiveProof(listing.id, listing.sellerUsername, listing.title) },
             watchedPrice = priceWatchListingId == listing.id,
             priceWatchBusy = priceWatchBusy,
             productSaved = listing.id in savedProductIds,
@@ -1861,6 +1869,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             photoId = sellerPhotoIds[username.removePrefix("@").trim().lowercase()],
             onOpenListing = { selected = it; sellerStoreUsername = null },
             onContact = { listing -> contactSeller(username, listing.id) },
+            onContactShop = { contactSeller(username, "") },
             onClose = { sellerStoreUsername = null }
         )
     }
