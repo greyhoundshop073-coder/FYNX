@@ -48,6 +48,10 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     var speakNotifications by remember { mutableStateOf(FynxNotificationFoundation.isSpeakNotificationsEnabled(context)) }
     var showPushPermissionRationale by remember { mutableStateOf(false) }
     var pushPermissionMessage by remember { mutableStateOf<String?>(null) }
+    var notificationPermissionGranted by remember {
+        mutableStateOf(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+    }
     val current = remember(localNotifications, remoteNotifications, notifications) { (remoteNotifications + localNotifications + notifications).distinctBy { it.id }.sortedByDescending { it.timestamp } }
     val filtered = FynxNotificationActivityCenter.unreadOnly(FynxNotificationActivityCenter.filterByType(current, selectedType), unreadOnly)
 
@@ -66,7 +70,13 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     }
     LaunchedEffect(Unit) { loadRemoteNotifications() }
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) loadRemoteNotifications() }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notificationPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                loadRemoteNotifications()
+            }
+        }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -96,11 +106,13 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
         }
     }
     val pushPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationPermissionGranted = granted || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
         if (granted) {
             pushPermissionMessage = null
             savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, pushEnabled = true))
             scope.launch { FynxNotificationDeviceManager.registerCurrentToken(context) }
         } else {
+            savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, pushEnabled = false))
             pushPermissionMessage = "Push alerts remain off because Android notification permission was not granted. You can enable them later in Android Settings > Apps > FYNX > Notifications."
         }
     }
@@ -190,12 +202,12 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                     preferenceSaveError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     Text("GENERAL", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp, bottom = 3.dp))
                     NotificationPreferenceSwitch("Notifications", "Master switch for FYNX alerts", notificationPreferences.enabled) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, enabled = it)) }
-                    NotificationPreferenceSwitch("Push alerts", "Allow notification banners and sounds", notificationPreferences.pushEnabled) { enabled ->
+                    NotificationPreferenceSwitch("Push alerts", "Allow notification banners and sounds", notificationPreferences.pushEnabled && notificationPermissionGranted) { enabled ->
                         if (!enabled) {
                             pushPermissionMessage = null
                             savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, pushEnabled = false))
                         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            !notificationPermissionGranted
                         ) {
                             showPushPermissionRationale = true
                         } else {
