@@ -1,9 +1,19 @@
 # FYNX — Google Play Readiness Plan
 
 **Status:** Preparation document; not a declaration of compliance or a final privacy policy.  
-**Reviewed:** 2026-11-09  
+**Reviewed:** 2026-11-10  
 **Canonical Android source reviewed:** `integration/fynx-single-apk-20261013`  
 **Package/application ID observed:** `com.fynx.app`
+
+
+
+## Stage 1 privacy source baseline — 2026-11-10
+
+The source-backed data-flow inventory is maintained in [`docs/PRIVACY_DATA_INVENTORY.md`](PRIVACY_DATA_INVENTORY.md). It records verified source behavior, unverified provider/runtime facts, account-deletion dependencies, and the legal details that must be supplied before public disclosures can be finalized.
+
+This Stage 1 change adds a versioned, account-scoped disclosure in the Contacts feature before the app reads device/SIM contacts or requests Android Contacts permission. It explains that normalised phone numbers are sent individually to FYNX over HTTPS for matching and that contact names are not included in those lookup requests. The implementation still requires Android CI and runtime verification before being marked complete.
+
+Account deletion, a public deletion web resource, a publishable privacy policy, and final Terms of Use remain launch blockers. Do not publish or link placeholder legal pages, and do not claim that this source inventory completes Play Console Data safety declarations.
 
 ## 1. Purpose and release rule
 

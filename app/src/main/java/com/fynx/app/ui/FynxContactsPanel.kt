@@ -37,6 +37,19 @@ fun FynxContactsPanel(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val contactsAccountKey = FynxAuthStore.accountStorageKey(context)
+    val disclosurePreferences = remember(context) {
+        context.getSharedPreferences(FynxContactsDisclosure.PREFERENCES_NAME, Context.MODE_PRIVATE)
+    }
+    var disclosureAccepted by remember(contactsAccountKey) {
+        mutableStateOf(
+            contactsAccountKey?.let { accountKey ->
+                !FynxContactsDisclosure.requiresDisclosure(
+                    disclosurePreferences.getInt(FynxContactsDisclosure.preferenceKey(accountKey), 0)
+                )
+            } ?: false
+        )
+    }
     var permission by remember { mutableStateOf(context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) }
     var contacts by remember { mutableStateOf(emptyList<DeviceContact>()) }
     var matched by remember { mutableStateOf<Map<String, FynxSocialClient.User>>(emptyMap()) }
@@ -49,6 +62,16 @@ fun FynxContactsPanel(
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         permission = granted
         if (!granted) notice = "Contacts permission is needed to find people you already know on FYNX."
+    }
+
+    fun acceptContactsDisclosure() {
+        contactsAccountKey?.let { accountKey ->
+            disclosurePreferences.edit()
+                .putInt(FynxContactsDisclosure.preferenceKey(accountKey), FynxContactsDisclosure.CURRENT_VERSION)
+                .apply()
+        }
+        disclosureAccepted = true
+        if (!permission) permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
     }
 
     fun loadContacts() {
@@ -93,7 +116,9 @@ fun FynxContactsPanel(
         }
     }
 
-    LaunchedEffect(permission) { if (permission) loadContacts() }
+    LaunchedEffect(permission, disclosureAccepted) {
+        if (permission && disclosureAccepted) loadContacts()
+    }
 
     profileUser?.let { username ->
         val normalizedUsername = username.removePrefix("@").trim().lowercase()
@@ -135,8 +160,38 @@ fun FynxContactsPanel(
             Spacer(Modifier.width(8.dp))
             Text("Phone Contacts", style = MaterialTheme.typography.headlineSmall)
         }
-        Text("Find people from the contacts already saved on your phone. FYNX only checks them after you give permission.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-        if (!permission) {
+        Text(
+            "Find people from contacts saved on your phone. FYNX explains how contact matching works before reading them.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+        if (!disclosureAccepted) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Default.People, null, tint = MaterialTheme.colorScheme.primary)
+                    Text("Before you use contact matching", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "To find people you know, FYNX reads contact names and phone numbers saved on your phone, including SIM contacts, only after you choose Continue and allow Contacts access."
+                    )
+                    Text(
+                        "FYNX sends each normalised phone number to FYNX servers over HTTPS to check whether it matches an account. The saved contact name is not included in that phone-number lookup. Numbers are checked individually; FYNX does not upload your address book as one contact file."
+                    )
+                    Text(
+                        "You can choose Not now and continue using other FYNX features. You can also change Contacts permission later in Android Settings.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onBack) { Text("Not now") }
+                        Button(onClick = { acceptContactsDisclosure() }) { Text("Continue") }
+                    }
+                }
+            }
+        } else if (!permission) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(Icons.Default.People, null, tint = MaterialTheme.colorScheme.primary)
