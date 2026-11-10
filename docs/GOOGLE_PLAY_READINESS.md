@@ -74,6 +74,7 @@ These are source-level observations only. They do not prove which permissions ar
 - [ ] Confirm location is not collected in the background unless a compliant, core use case requires it.
 - [ ] Verify audio/video call and recording behavior; do not imply recording when none occurs.
 - [ ] Test permission denial, one-time grants, revocation, and Android-version differences.
+- [ ] Review `SCHEDULE_EXACT_ALARM` against the exact-alarm policy: FYNX uses it only conditionally for Calendar reminders and has an inexact fallback; do not declare restricted `USE_EXACT_ALARM` unless the app's core functionality genuinely qualifies. Test reminders with access denied and after device reboot.
 
 ### C. User-generated content and social safety
 - [ ] Verify in-app reporting for users and user-generated content, with a functioning review/moderation process.
@@ -160,6 +161,7 @@ Ask testers to exercise and report on:
 - Set up internal, closed, or open testing: https://support.google.com/googleplay/android-developer/answer/9845334
 - Developer Program Policy (privacy, Data safety, account deletion, and other policies): https://support.google.com/googleplay/android-developer/answer/18265346
 - User Data / Data safety: https://support.google.com/googleplay/android-developer/answer/10144311
+- Sensitive permissions and exact alarm policy: https://support.google.com/googleplay/android-developer/answer/16558241
 - Upload an app bundle: https://developer.android.com/studio/publish/upload-bundle
 
 ---
