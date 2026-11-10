@@ -66,6 +66,8 @@ dependencies {
 
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // Remote configuration only; Analytics is intentionally not added.
+    implementation("com.google.firebase:firebase-config")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
