@@ -168,7 +168,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
                         else if (searchLoading) item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                         else if (searchError != null) item { Text(searchError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         else if (discover.isEmpty()) emptyState("No matching people", "No available FYNX account matched that search.")
-                        else items(discover, key = { "discover_${it.username}" }) { person -> RequestRow(person, "Add", null, busy == person.username, onOpenProfile, onOpenChat, onPrimary = { act(person.username) { FynxSocialClient.sendRequest(context, person.username) } }) }
+                        else items(discover, key = { "discover_${it.username}" }) { person -> RequestRow(person, "Add", "Block", busy == person.username, onOpenProfile, onOpenChat, onPrimary = { act(person.username) { FynxSocialClient.sendRequest(context, person.username) } }, onSecondary = { act(person.username) { FynxSocialClient.block(context, person.username) } }) }
                     }
                 }
             }
