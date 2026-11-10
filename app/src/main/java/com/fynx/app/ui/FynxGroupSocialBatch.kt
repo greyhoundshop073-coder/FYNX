@@ -119,7 +119,8 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
                                 Spacer(Modifier.width(8.dp))
                                 Column { Text(friend.displayName.ifBlank { friend.username }, style = MaterialTheme.typography.titleSmall); Text("@${friend.username.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             }
-                            TextButton(onClick = { onInvite(friend.username); inviteMessage = "Invitation prepared for ${friend.username}" }) { Text("Invite") }
+                            val alreadyMember = group.members.any { it.username.removePrefix("@").equals(friend.username.removePrefix("@"), true) }
+                            TextButton(enabled = !alreadyMember, onClick = { onInvite(friend.username); inviteMessage = "Invitation prepared for ${friend.username}" }) { Text(if (alreadyMember) "In group" else "Invite") }
                         }
                     }
                 }
