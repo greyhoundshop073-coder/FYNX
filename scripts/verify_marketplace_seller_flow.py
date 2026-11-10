@@ -41,7 +41,7 @@ shop_profile_routes = (ROOT / "backend/marketplaceShopProfiles.js").read_text()
 
 import re
 
-EXPECTED_DISCOVERY_CATEGORIES = ["All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other"]
+EXPECTED_DISCOVERY_CATEGORIES = ["All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Used", "Business & Workshop Supplies", "Other"]
 EXPECTED_SELLER_CATEGORIES = EXPECTED_DISCOVERY_CATEGORIES[1:]
 
 def _extract_string_list(pattern: str, source: str):
