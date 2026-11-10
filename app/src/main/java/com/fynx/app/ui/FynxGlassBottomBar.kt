@@ -100,9 +100,9 @@ internal fun FynxGlassBottomBar(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
 
     val barFill = if (isLight) {
-        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.90f), Color(0xFFEAF0F7).copy(alpha = 0.82f)))
+        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.97f), Color(0xFFEAF0F7).copy(alpha = 0.95f)))
     } else {
-        Brush.verticalGradient(listOf(Color(0xFF28384F).copy(alpha = 0.90f), Color(0xFF0F1A2D).copy(alpha = 0.94f)))
+        Brush.verticalGradient(listOf(Color(0xFF28384F).copy(alpha = 0.96f), Color(0xFF0F1A2D).copy(alpha = 0.98f)))
     }
     val barRim = if (isLight) {
         Brush.linearGradient(listOf(Color.White, Color(0x2264748B), Color.White.copy(alpha = 0.75f)))
