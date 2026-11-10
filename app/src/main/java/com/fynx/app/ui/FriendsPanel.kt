@@ -82,6 +82,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
         val ready = if (searchMethod == FynxPeopleSearchMethod.PHONE) phone.length >= 7 else text.removePrefix("@").length >= 2
         searchLoading = false
         if (!ready) { results = emptyList(); searchError = null; return@LaunchedEffect }
+        section = "Discover"
         delay(350)
         searchLoading = true
         searchError = null
