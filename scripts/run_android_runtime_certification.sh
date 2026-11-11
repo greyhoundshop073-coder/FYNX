@@ -13,6 +13,15 @@ adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.tx
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
+if [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
+  echo "::notice::Capturing the Home composer and Music picker through the debug-only UI entry; no backend account or publishing action is used."
+  FYNX_MUSIC_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  NAV_EXIT=$?
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+  if [ "$NAV_EXIT" -ne 0 ] && [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$NAV_EXIT"; fi
+  exit "$TEST_EXIT"
+fi
+
 if [ "${FYNX_HOME_FEED_VISUALS_ONLY:-0}" = "1" ]; then
   # Home Feed and music-picker screenshot certification is read-only and can
   # use the explicit debug-local entry without requiring an active backend.
