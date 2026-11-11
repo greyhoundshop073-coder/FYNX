@@ -1108,9 +1108,28 @@ private fun FynxFeedTextureVideo(
     var soundtrackEnabled by remember(soundtrackMediaId) { mutableStateOf(false) }
     var soundtrackLoading by remember(soundtrackMediaId) { mutableStateOf(false) }
     var soundtrackFailed by remember(soundtrackMediaId) { mutableStateOf(false) }
+    var soundtrackManuallyDisabled by remember(soundtrackMediaId) { mutableStateOf(false) }
     val latestPlaybackActive by rememberUpdatedState(playbackActive)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    fun startAttachedMusic() {
+        val mediaId = soundtrackMediaId?.takeIf { it.isNotBlank() } ?: return
+        if (soundtrackManuallyDisabled) return
+        soundtrackEnabled = true
+        if (soundtrackFile != null || soundtrackLoading) return
+        scope.launch {
+            soundtrackLoading = true
+            soundtrackFailed = false
+            val downloaded = withContext(Dispatchers.IO) {
+                runCatching { FynxMediaCache.getOrDownload(context, "/api/social/music/media/$mediaId", "audio") }.getOrNull()
+            }
+            soundtrackFile = downloaded
+            soundtrackFailed = downloaded == null
+            soundtrackLoading = false
+            if (!latestPlaybackActive || downloaded == null) soundtrackEnabled = false
+        }
+    }
 
     Box(
         Modifier.fillMaxSize().then(
@@ -1203,21 +1222,11 @@ private fun FynxFeedTextureVideo(
                     IconButton(enabled = playbackActive && !soundtrackLoading, onClick = {
                         if (soundtrackEnabled) {
                             soundtrackEnabled = false
+                            soundtrackManuallyDisabled = true
                             soundtrackOwnerKey?.let { FynxCatalogueMusicPlayback.pause(it) }
                         } else {
-                            val cached = soundtrackFile
-                            if (cached != null) soundtrackEnabled = true
-                            else scope.launch {
-                                soundtrackLoading = true
-                                soundtrackFailed = false
-                                val downloaded = withContext(Dispatchers.IO) {
-                                    runCatching { FynxMediaCache.getOrDownload(context, "/api/social/music/media/$soundtrackMediaId", "audio") }.getOrNull()
-                                }
-                                soundtrackFile = downloaded
-                                soundtrackFailed = downloaded == null
-                                soundtrackLoading = false
-                                if (latestPlaybackActive && downloaded != null) soundtrackEnabled = true
-                            }
+                            soundtrackManuallyDisabled = false
+                            startAttachedMusic()
                         }
                     }) {
                         Icon(if (soundtrackEnabled) Icons.Default.Pause else Icons.Default.PlayArrow, if (soundtrackEnabled) "Pause attached music" else "Play attached music", tint = Color.White)
@@ -1283,7 +1292,10 @@ private fun FynxFeedTextureVideo(
                     FilledIconButton(
                         onClick = {
                             runCatching {
-                                if (playing) { player.pause(); playing = false } else { player.start(); playing = true }
+                                if (playing) { player.pause(); playing = false } else {
+                                    player.start(); playing = true
+                                    startAttachedMusic()
+                                }
                                 onPlayingChanged(playing)
                             }
                         },
@@ -1333,7 +1345,7 @@ private fun FynxFeedTextureVideo(
             player.setOnPreparedListener {
                 prepared = true
                 playbackPositionMs = it.currentPosition.toLong().coerceAtLeast(0L)
-                if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
+                if (playbackActive && !fullScreenControls) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
             player.setOnInfoListener { _, what, _ ->
                 if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) hasVideoFrame = true
@@ -1367,7 +1379,7 @@ private fun FynxFeedTextureVideo(
     LaunchedEffect(playbackActive, prepared) {
         if (!prepared) return@LaunchedEffect
         runCatching {
-            if (playbackActive && !playing) { player.start(); playing = true; onPlayingChanged(true) }
+            if (playbackActive && !playing && !fullScreenControls) { player.start(); playing = true; onPlayingChanged(true) }
             else if (!playbackActive && playing) { player.pause(); playing = false; onPlayingChanged(false) }
         }
     }
