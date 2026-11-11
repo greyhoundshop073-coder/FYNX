@@ -423,6 +423,10 @@ checks.extend([
      and "lineHeight = overlayTextLineHeight" in overlay
      and "lineHeight = 40.sp" not in overlay
      and "textSize = (bitmap.width * 0.055f * item.scale)" in overlay),
+    ("Video duration metadata is recomputed when CameraX finalizes the recorded-duration fallback",
+     "LaunchedEffect(pendingUri, pendingType, recordedVideoDurationFallbackMs)" in camera
+     and "recordedVideoDurationFallbackMs =" in camera
+     and "resolveFynxCameraVideoDurationMs(" in camera),
     ("Video overlay timing retains recorded duration when Android metadata omits it",
      "isFynxCameraTextOverlayVisibleAt" in overlay
      and "playbackPositionMs" in overlay and "playbackPositionMs = if (previewType" in camera

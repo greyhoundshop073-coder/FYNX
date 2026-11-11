@@ -2160,7 +2160,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             right, bottom = map(int, right_bottom.strip("[]").split(","))
         except (ValueError, IndexError):
             continue
-        if right > left and bottom - top >= 120:
+        if right > left and bottom - top >= 80:
             vertical_viewports.append((left, top, right, bottom))
 
     if vertical_viewports:
@@ -2307,7 +2307,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             break
         scroll_viewports = []
         for node in nodes(editor):
-            if node.attrib.get("class") not in ("android.widget.ScrollView", "android.widget.HorizontalScrollView"):
+            if node.attrib.get("class") != "android.widget.ScrollView":
                 continue
             if node.attrib.get("scrollable", "false").lower() != "true":
                 continue
@@ -2316,7 +2316,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 lt, rb = bounds.split("][", 1)
                 left, top = map(int, lt.strip("[]").split(","))
                 right, bottom = map(int, rb.strip("[]").split(","))
-                if right - left > 400 and bottom - top > 160:
+                if right - left > 400 and bottom - top > 80:
                     scroll_viewports.append((right-left, bottom-top, left, top, right, bottom))
             except (ValueError, IndexError):
                 continue
