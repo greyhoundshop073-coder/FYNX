@@ -1471,17 +1471,37 @@ private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECO
 @Composable
 private fun MusicPostPlayer(mediaId: String, title: String, artist: String, durationMs: Long) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var songDetailsOpen by remember(mediaId) { mutableStateOf(false) }
     var file by remember(mediaId) { mutableStateOf<File?>(null) }
-    LaunchedEffect(mediaId) {
-        file = withContext(Dispatchers.IO) {
-            FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio")
-        }
-    }
+    var loadingAudio by remember(mediaId) { mutableStateOf(false) }
+    var audioLoadFailed by remember(mediaId) { mutableStateOf(false) }
     val playback = FynxCatalogueMusicPlayback.snapshot
     val isCurrentTrack = playback.trackKey == mediaId
     val isPlaying = isCurrentTrack && playback.isPlaying
     val isPreparing = isCurrentTrack && playback.isPreparing
+
+    fun playOrPause() {
+        if (loadingAudio || isPreparing) return
+        val cached = file
+        if (cached != null) {
+            FynxCatalogueMusicPlayback.toggle(context, mediaId, cached)
+            return
+        }
+        scope.launch {
+            loadingAudio = true
+            audioLoadFailed = false
+            val downloaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio")
+                }.getOrNull()
+            }
+            file = downloaded
+            audioLoadFailed = downloaded == null
+            loadingAudio = false
+            downloaded?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it) }
+        }
+    }
 
     Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1492,17 +1512,19 @@ private fun MusicPostPlayer(mediaId: String, title: String, artist: String, dura
                 Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                 Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
                 Text("View song details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                if (loadingAudio) Text("Loading preview…", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
                 if (isPreparing) Text("Preparing audio…", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                if (audioLoadFailed) Text("Preview unavailable — tap play to retry", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                 if (isCurrentTrack && playback.error != null) Text("Could not play this track", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
             Text(formatMusicDuration(durationMs), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
             IconButton(
-                enabled = file != null && !isPreparing,
-                onClick = { file?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it) } }
+                enabled = !loadingAudio && !isPreparing,
+                onClick = { playOrPause() }
             ) {
                 Icon(
                     if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    if (isPlaying) "Pause music" else "Play music"
+                    if (loadingAudio) "Loading music" else if (isPlaying) "Pause music" else "Play music"
                 )
             }
         }
