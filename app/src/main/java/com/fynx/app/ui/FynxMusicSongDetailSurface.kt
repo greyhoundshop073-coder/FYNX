@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,6 +75,7 @@ internal fun FynxMusicSongDetailSurface(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val previewOwnerKey = remember(mediaId) { "song-detail:$mediaId" }
     val numericMediaId = remember(mediaId) { mediaId.toLongOrNull()?.takeIf { it > 0L } }
     var audioFile by remember(mediaId) { mutableStateOf<java.io.File?>(null) }
     var audioLoading by remember(mediaId) { mutableStateOf(false) }
@@ -86,7 +88,7 @@ internal fun FynxMusicSongDetailSurface(
         if (audioLoading || numericMediaId == null) return
         val cached = audioFile
         if (cached != null) {
-            FynxCatalogueMusicPlayback.toggle(context, mediaId, cached)
+            FynxCatalogueMusicPlayback.toggle(context, mediaId, cached, previewOwnerKey)
             return
         }
         scope.launch {
@@ -100,12 +102,16 @@ internal fun FynxMusicSongDetailSurface(
             audioFile = downloaded
             audioLoadFailed = downloaded == null
             audioLoading = false
-            downloaded?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it) }
+            downloaded?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it, previewOwnerKey) }
         }
     }
 
+    DisposableEffect(previewOwnerKey) {
+        onDispose { FynxCatalogueMusicPlayback.pause(previewOwnerKey) }
+    }
+
     val playback = FynxCatalogueMusicPlayback.snapshot
-    val isCurrentTrack = playback.trackKey == mediaId
+    val isCurrentTrack = playback.trackKey == mediaId && playback.ownerKey == previewOwnerKey
     val isPlaying = isCurrentTrack && playback.isPlaying
     val isPreparing = isCurrentTrack && playback.isPreparing
     val canUseTrack = numericMediaId != null && FynxMusicSongNavigation.onUseTrack != null
