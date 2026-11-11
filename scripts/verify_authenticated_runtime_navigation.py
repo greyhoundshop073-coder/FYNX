@@ -1529,6 +1529,13 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
                 time.sleep(0.7)
                 resumed_camera = dump_ui(f"{prefix}-camera-status-return-camera.xml")
+                if resumed_camera:
+                    # Dialog dismissal crosses Android windows; poll the restored Camera
+                    # editor instead of relying on one fixed sleep and a possibly stale dump.
+                    resumed_camera = camera_wait_for_control(
+                        resumed_camera, ["Next"], enabled=True, timeout=20.0,
+                        prefix=f"{prefix}-camera-status-return-camera-ready"
+                    )
                 screenshot(f"{prefix}-camera-status-return-camera.png")
                 (ROOT / f"{prefix}-camera-status-return-camera.xml").write_text(
                     resumed_camera + chr(10), encoding="utf-8"
