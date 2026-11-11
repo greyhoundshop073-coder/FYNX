@@ -14,8 +14,9 @@ USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 AI_VISUALS_ONLY=os.environ.get("FYNX_AI_VISUALS_ONLY") == "1"
 HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
+MUSIC_VISUALS_ONLY=os.environ.get("FYNX_MUSIC_VISUALS_ONLY") == "1"
 HOME_FEED_FIXTURES_SEEDED=False
-VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
@@ -3209,6 +3210,30 @@ if AI_VISUALS_ONLY:
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
+if MUSIC_VISUALS_ONLY:
+    report.append("- Focused Music picker runtime mode: captures the actual Home post composer and shared official Music picker through the debug-local UI entry; no server account, track selection or post publishing is used.")
+    if error:
+        report += ["", "## Result: BLOCKED", "- Local UI entry could not reach Home: " + error]
+        (ROOT / "FYNX-music-picker-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(2)
+    home_xml = dump_ui("music-picker-home-entry.xml") or xml
+    home_xml = capture_home_music_picker_visuals(home_xml)
+    composer_proof = (ROOT / "authenticated-home-music-composer.png").is_file()
+    picker_proof = (ROOT / "authenticated-home-music-picker.png").is_file()
+    if not composer_proof or not picker_proof:
+        FAILURES.append("Music picker runtime proof is incomplete; both the Home composer and Music picker screenshots are required.")
+    report += ["", "## Music picker evidence files",
+               "- authenticated-home-music-composer.png" if composer_proof else "- Home composer screenshot unavailable",
+               "- authenticated-home-music-picker.png" if picker_proof else "- Music picker screenshot unavailable",
+               "- authenticated-home-after-music-picker.png" if (ROOT / "authenticated-home-after-music-picker.png").is_file() else "- Home return screenshot unavailable",
+               "", f"## Result: {'GREEN' if not FAILURES and composer_proof and picker_proof else 'RED'}"]
+    if FAILURES:
+        report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+    (ROOT / "FYNX-music-picker-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
+
 if os.environ.get("FYNX_LOCAL_BUSINESS_ONLY") == "1":
     report.append("- Focused Local Businesses runtime mode: verifies the real Marketplace entry, directory UI and Back navigation only; backend-dependent Wallet/My Shop transactions are not represented as passed.")
     if error:
