@@ -34,7 +34,7 @@ object FynxBusinessClient {
             if (split.size == 2 && split[0].isNotBlank() && split[1].isNotBlank()) openingHours.put(split[0].trim().take(20), split[1].trim().take(60))
         }
         val serviceAreas = org.json.JSONArray()
-        serviceAreasText.split(",", "\\n").map { it.trim() }.filter { it.isNotBlank() }.take(20).forEach { serviceAreas.put(it.take(80)) }
+        serviceAreasText.split(",", "\n").map { it.trim() }.filter { it.isNotBlank() }.take(20).forEach { serviceAreas.put(it.take(80)) }
         val services = org.json.JSONArray()
         servicesText.lines().map { it.trim() }.filter { it.isNotBlank() }.take(30).forEach { line ->
             val parts = line.split("|").map { it.trim() }
