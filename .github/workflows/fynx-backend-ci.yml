@@ -79,6 +79,7 @@ jobs:
           node --check marketplaceShopProfiles.js
           node --check verify-marketplace-shop-profile.mjs
           node --check marketplaceReputation.js
+          node --check test-marketplace-shop-reviews-db.mjs
           node --check verify-marketplace-multi-checkout-lifecycle.mjs
           node --check verify-marketplace-multi-payout-isolation.mjs
           node --check verify-marketplace-end-to-end.mjs
