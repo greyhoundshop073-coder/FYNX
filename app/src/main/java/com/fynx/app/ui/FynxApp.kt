@@ -40,6 +40,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -861,14 +863,32 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 }
             }
                 if (selected == "Home" && statusCreatorRequested) {
-                    FynxStatusHubPanel(
-                        startWithCreator = true,
-                        initialMediaUri = statusInitialMediaUri,
-                        initialMediaType = statusInitialMediaType,
-                        onInitialMediaAccepted = { statusInitialMediaUri = null; statusInitialMediaType = null },
-                        onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false; statusInitialMediaUri = null; statusInitialMediaType = null },
-                        onComposerVisibilityChange = { statusComposerImmersive = it }
-                    )
+                    // Camera is already hosted in a full-screen Dialog. The Status creator must
+                    // be a later, equally full-screen Dialog so it appears above Camera and Back
+                    // returns to the exact captured-media editor instead of losing that session.
+                    Dialog(
+                        onDismissRequest = {
+                            statusCreatorRequested = false
+                            statusComposerImmersive = false
+                            statusInitialMediaUri = null
+                            statusInitialMediaType = null
+                        },
+                        properties = DialogProperties(
+                            usePlatformDefaultWidth = false,
+                            decorFitsSystemWindows = false,
+                            dismissOnBackPress = true,
+                            dismissOnClickOutside = false
+                        )
+                    ) {
+                        FynxStatusHubPanel(
+                            startWithCreator = true,
+                            initialMediaUri = statusInitialMediaUri,
+                            initialMediaType = statusInitialMediaType,
+                            onInitialMediaAccepted = { statusInitialMediaUri = null; statusInitialMediaType = null },
+                            onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false; statusInitialMediaUri = null; statusInitialMediaType = null },
+                            onComposerVisibilityChange = { statusComposerImmersive = it }
+                        )
+                    }
                 }
         }
     }
