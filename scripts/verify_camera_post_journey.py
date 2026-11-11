@@ -537,6 +537,6 @@ if failed:
         "",
         *[f"PASS: {name}" for name, ok in checks if ok],
     ]
-    (report_dir / "camera-to-post-source-gate.txt").write_text("\\n".join(report) + "\\n", encoding="utf-8")
+    (report_dir / "camera-to-post-source-gate.txt").write_text(chr(10).join(report) + chr(10), encoding="utf-8")
     raise SystemExit("Camera -> Post journey verification failed: " + ", ".join(failed))
 print(f"Camera -> Post journey verification GREEN ({len(checks)} checks)")
