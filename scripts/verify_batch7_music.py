@@ -30,7 +30,7 @@ checks = [
     ("Catalogue client reads only published FYNX tracks", "FynxMusicCatalogueClient" in composer and "/api/social/music/catalogue" in catalogue and "listPublished" in catalogue),
     ("Catalogue tracks carry a server media reference", "mediaId: Long" in catalogue and 'row.optLong("mediaId"' in catalogue),
     ("Music selection can be removed", 'selectedCatalogueMusic = null' in composer),
-    ("Catalogue music can be previewed", '/api/social/music/catalogue/" + music.id + "/media' in composer and "FynxRemoteAudio" in composer),
+    ("Catalogue music preview uses the selected track media ID", 'mediaUrl = "/api/social/music/media/" + music.mediaId' in composer and "FynxRemoteAudio" in composer),
     ("Post client references catalogue music without uploading it", "catalogueMusic: FynxMusicCatalogueTrack?" in client and "catalogueMusic?.mediaId" in client and "Local music uploads are disabled" in client),
     ("Home supports music-only posts without caption or media", "if (caption.isBlank() && selected.isEmpty() && catalogueMusic == null)" in client and "official FYNX music track" in client),
     ("Legacy local music path is disabled", "Local music uploads are disabled" in legacy and "MediaMetadataRetriever" not in legacy),
