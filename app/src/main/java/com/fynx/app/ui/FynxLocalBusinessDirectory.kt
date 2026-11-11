@@ -155,7 +155,7 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
                     hasMore = more
                 }
             }.onFailure {
-                if (generation == requestGeneration) error = it.message ?: "Business directory is temporarily unavailable."
+                if (generation == requestGeneration) error = "The business directory is temporarily unavailable. Please try again."
             }
             if (generation == requestGeneration) {
                 loading = false
@@ -170,6 +170,7 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
         load(reset = true)
     }
 
+    if (selectedBusiness == null) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
@@ -243,7 +244,7 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
                             scope.launch {
                                 FynxBusinessDirectoryClient.details(context, business.username)
                                     .onSuccess { businessDetails = it }
-                                    .onFailure { error = it.message ?: "Business details are temporarily unavailable." }
+                                    .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
                                 loadingDetails = false
                             }
                         },
@@ -300,6 +301,7 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
         }
     }
 
+    }
     selectedBusiness?.let { business ->
         FynxPublicBusinessProfilePanel(
             business = business,
