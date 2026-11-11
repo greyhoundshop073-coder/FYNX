@@ -43,16 +43,46 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var chatSearch by remember { mutableStateOf("") }
 
     suspend fun refreshChats() {
-        // Computing unread counts parses each stored conversation. Run that work off
-        // Main and never save previews from this collector: savePreview emits
-        // previewUpdates, so writing here created a recursive refresh/event storm.
-        val refreshed = withContext(Dispatchers.IO) {
-            FynxChatStore.loadPreviews(context).map { preview ->
-                val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
-                preview.copy(unreadCount = unread)
+        val local = withContext(Dispatchers.IO) { FynxChatStore.loadPreviews(context) }
+        val remote = FynxProductionMessaging.recentConversations(context).getOrNull()
+        if (remote != null) {
+            val pendingLocal = withContext(Dispatchers.IO) {
+                local.filter { preview -> FynxChatStore.load(context, preview.username).any { !it.delivered } }
+            }
+            val pendingByUsername = pendingLocal.associateBy { it.username.removePrefix("@").trim().lowercase() }
+            val remoteMerged = remote.map { serverPreview ->
+                val pending = pendingByUsername[serverPreview.username.removePrefix("@").trim().lowercase()]
+                if (pending == null) serverPreview else serverPreview.copy(
+                    lastMessage = pending.lastMessage,
+                    time = pending.time,
+                    avatarUri = serverPreview.avatarUri ?: pending.avatarUri
+                )
+            }
+            val remoteUsernames = remoteMerged.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
+            val merged = remoteMerged + pendingLocal.filterNot {
+                it.username.removePrefix("@").trim().lowercase() in remoteUsernames
+            }
+            withContext(Dispatchers.IO) { FynxChatStore.savePreviews(context, merged) }
+            chats = merged
+        } else {
+            chats = withContext(Dispatchers.IO) {
+                local.map { preview ->
+                    val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
+                    preview.copy(unreadCount = unread)
+                }
             }
         }
-        chats = refreshed
+    }
+
+    suspend fun refreshGroups() {
+        val local = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
+        val remote = FynxGroupRemoteClient.loadMyGroups(context).getOrNull()
+        if (remote != null) {
+            withContext(Dispatchers.IO) { FynxGroupsStore.save(context, remote) }
+            groups = remote
+        } else {
+            groups = local
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -65,29 +95,25 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         }
         listView = initialListView
         selfUsername = initialSelfUsername
-        val refreshed = stored.map { chat ->
-            val normalized = chat.username.removePrefix("@").trim()
-            if (normalized.isBlank()) chat else FynxProfileRemoteClient.get(context, normalized).getOrNull()?.let { profile ->
-                val mediaId = profile.profilePhotoMediaId
-                if (!mediaId.isNullOrBlank()) chat.copy(avatarUri = "/api/media/${mediaId.trim()}") else chat.copy(avatarUri = null)
-            } ?: chat
-        }
-        if (refreshed != stored) {
-            val changed = refreshed.zip(stored).filter { (next, previous) -> next != previous }.map { it.first }
-            withContext(Dispatchers.IO) { changed.forEach { FynxChatStore.savePreview(context, it) } }
-        }
-        val hydrated = withContext(Dispatchers.IO) {
-            FynxChatStore.loadPreviews(context).map { preview ->
+        chats = withContext(Dispatchers.IO) {
+            stored.map { preview ->
                 val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
                 preview.copy(unreadCount = unread)
             }
         }
-        chats = hydrated
-        groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
+        refreshChats()
+        refreshGroups()
     }
 
     LaunchedEffect(Unit) {
-        FynxChatStore.previewUpdates.conflate().collectLatest { refreshChats() }
+        FynxChatStore.previewUpdates.conflate().collectLatest {
+            delay(700)
+            refreshChats()
+        }
+    }
+
+    LaunchedEffect(section) {
+        if (section == "Groups") refreshGroups()
     }
 
     val rowSpacing = when (listView) { "Compact" -> 2.dp; "Large" -> 14.dp; else -> 8.dp }
@@ -132,14 +158,14 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 singleLine = true,
                 shape = FynxDesign.ControlShape,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search chats") },
-                placeholder = { Text("Search chats") },
+                placeholder = { Text("Search names, usernames or latest message") },
             )
             Spacer(Modifier.height(14.dp))
             if (visibleChats.isEmpty()) {
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(if (showArchived) "No archived chats" else if (normalizedChatSearch.isNotBlank()) "No matching chats" else "Messages", style = MaterialTheme.typography.titleLarge)
-                        Text(if (showArchived) "Chats you archive will stay here until you restore them." else if (normalizedChatSearch.isNotBlank()) "Try another name, username or message." else "Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (showArchived) "Chats you archive will stay here until you restore them." else if (normalizedChatSearch.isNotBlank()) "Try another name, username or latest message." else "Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             } else {
