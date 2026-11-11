@@ -364,27 +364,45 @@ fun FynxAdminControlCenterPanel() {
                             Text("Order status: ${case.orderStatus}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick = {
-                                    statusMessage = "Resolving case for buyer..."
-                                    scope.launch {
-                                        FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "BUYER")
-                                            .onSuccess { result -> statusMessage = "Buyer resolution: $result"; refreshProtection++ }
-                                            .onFailure { statusMessage = it.message ?: "Buyer resolution failed." }
+                                    requestAdminConfirmation(
+                                        "Resolve in the buyer's favour?",
+                                        "This submits the buyer/refund resolution for order ${case.orderId}. The backend remains responsible for validating eligibility and recording the decision.",
+                                        "Confirm buyer resolution"
+                                    ) {
+                                        statusMessage = "Resolving case for buyer..."
+                                        scope.launch {
+                                            FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "BUYER")
+                                                .onSuccess { result -> statusMessage = "Buyer resolution: $result"; refreshProtection++ }
+                                                .onFailure { statusMessage = it.message ?: "Buyer resolution failed." }
+                                        }
                                     }
                                 }) { Text("Buyer / refund") }
                                 OutlinedButton(onClick = {
-                                    statusMessage = "Resolving case for seller..."
-                                    scope.launch {
-                                        FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "SELLER")
-                                            .onSuccess { result -> statusMessage = "Seller resolution: $result"; refreshProtection++ }
-                                            .onFailure { statusMessage = it.message ?: "Seller resolution failed." }
+                                    requestAdminConfirmation(
+                                        "Resolve in the seller's favour?",
+                                        "This submits the seller/release resolution for order ${case.orderId}. The backend remains responsible for validating eligibility and recording the decision.",
+                                        "Confirm seller resolution"
+                                    ) {
+                                        statusMessage = "Resolving case for seller..."
+                                        scope.launch {
+                                            FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "SELLER")
+                                                .onSuccess { result -> statusMessage = "Seller resolution: $result"; refreshProtection++ }
+                                                .onFailure { statusMessage = it.message ?: "Seller resolution failed." }
+                                        }
                                     }
                                 }) { Text("Seller / release") }
                                 OutlinedButton(onClick = {
-                                    statusMessage = "Cancelling case..."
-                                    scope.launch {
-                                        FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "CANCEL")
-                                            .onSuccess { result -> statusMessage = "Case cancelled: $result"; refreshProtection++ }
-                                            .onFailure { statusMessage = it.message ?: "Case cancellation failed." }
+                                    requestAdminConfirmation(
+                                        "Cancel this protection case?",
+                                        "This submits a cancellation for the case on order ${case.orderId}. Confirm only if cancellation is the correct administrative outcome.",
+                                        "Cancel case"
+                                    ) {
+                                        statusMessage = "Cancelling case..."
+                                        scope.launch {
+                                            FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "CANCEL")
+                                                .onSuccess { result -> statusMessage = "Case cancelled: $result"; refreshProtection++ }
+                                                .onFailure { statusMessage = it.message ?: "Case cancellation failed." }
+                                        }
                                     }
                                 }) { Text("Cancel") }
                             }
@@ -445,17 +463,29 @@ fun FynxAdminControlCenterPanel() {
                         Text("@${user.username}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = {
-                                scope.launch {
-                                    FynxAdminClient.setAccountStatus(context, user.id, "LOCKED")
-                                        .onSuccess { statusMessage = "@${user.username} locked." }
-                                        .onFailure { statusMessage = it.message ?: "Action failed." }
+                                requestAdminConfirmation(
+                                    "Lock this account?",
+                                    "@${user.username} will lose access until an authorised admin restores the account. Continue only after reviewing the account.",
+                                    "Lock account"
+                                ) {
+                                    scope.launch {
+                                        FynxAdminClient.setAccountStatus(context, user.id, "LOCKED")
+                                            .onSuccess { statusMessage = "@${user.username} locked." }
+                                            .onFailure { statusMessage = it.message ?: "Action failed." }
+                                    }
                                 }
                             }) { Text("Lock") }
                             OutlinedButton(onClick = {
-                                scope.launch {
-                                    FynxAdminClient.setAccountStatus(context, user.id, "ACTIVE")
-                                        .onSuccess { statusMessage = "@${user.username} restored." }
-                                        .onFailure { statusMessage = it.message ?: "Action failed." }
+                                requestAdminConfirmation(
+                                    "Restore this account?",
+                                    "@${user.username} will regain access to FYNX if the server accepts the change.",
+                                    "Restore account"
+                                ) {
+                                    scope.launch {
+                                        FynxAdminClient.setAccountStatus(context, user.id, "ACTIVE")
+                                            .onSuccess { statusMessage = "@${user.username} restored." }
+                                            .onFailure { statusMessage = it.message ?: "Action failed." }
+                                    }
                                 }
                             }) { Text("Activate") }
                             if (d.role == "OWNER") OutlinedButton(onClick = {
