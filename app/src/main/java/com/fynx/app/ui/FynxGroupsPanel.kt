@@ -1261,6 +1261,9 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
     var username by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
     var busyMemberAction by remember(group.id) { mutableStateOf<String?>(null) }
+    var reportMemberUsername by remember(group.id) { mutableStateOf<String?>(null) }
+    var reportReason by remember(group.id) { mutableStateOf("") }
+    var reportBusy by remember(group.id) { mutableStateOf(false) }
     LaunchedEffect(group.id) {
         management.value = management.value.copy(state = management.value.state.copy(blockedUsernames = emptySet()))
         FynxSocialClient.blocked(context).onSuccess { blocked ->
@@ -1338,6 +1341,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                                     }
                                 }) { Text(if (busyMemberAction == member.username) "Saving…" else if (member.role == FynxGroupRole.MODERATOR) "Demote" else "Mod") }
                             }
+                            TextButton(onClick = { reportMemberUsername = member.username; reportReason = "" }) { Text("Report") }
                             TextButton(enabled = busyMemberAction == null, onClick = {
                                 busyMemberAction = member.username
                                 scope.launch {
@@ -1371,6 +1375,31 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
             }
         }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
+    if (reportMemberUsername != null) AlertDialog(
+        onDismissRequest = { if (!reportBusy) reportMemberUsername = null },
+        title = { Text("Report member") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Report @${reportMemberUsername?.removePrefix("@")} to FYNX for review.")
+                OutlinedTextField(reportReason, { reportReason = it.take(500) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 5, label = { Text("Reason") })
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !reportBusy && reportReason.isNotBlank(), onClick = {
+                val target = reportMemberUsername ?: return@TextButton
+                reportBusy = true
+                scope.launch {
+                    FynxGroupRemoteClient.reportGroup(context, current.id, reportReason, target).onSuccess {
+                        message = "Member report submitted to FYNX."
+                        reportMemberUsername = null
+                        reportReason = ""
+                    }.onFailure { message = "Member report could not be submitted. Please try again." }
+                    reportBusy = false
+                }
+            }) { Text(if (reportBusy) "Submitting…" else "Submit report") }
+        },
+        dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportMemberUsername = null }) { Text("Cancel") } }
+    )
 }
 
 @Composable
