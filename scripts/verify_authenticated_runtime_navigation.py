@@ -446,6 +446,46 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
     return next_xml
 
 
+def swipe_horizontal_scroll_container(xml_text: str, name: str, *, reverse: bool = False) -> str:
+    """Swipe inside the widest visible horizontal scroll rail using its real accessibility bounds."""
+    if not xml_text:
+        return ""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        if node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        bounds = node.attrib.get("bounds", "")
+        try:
+            left_top, right_bottom = bounds.split("][", 1)
+            left, top = map(int, left_top.strip("[]").split(","))
+            right, bottom = map(int, right_bottom.strip("[]").split(","))
+        except (ValueError, IndexError):
+            continue
+        width, height = right - left, bottom - top
+        if width < 320 or height <= 0 or height >= 320 or width <= height:
+            continue
+        candidates.append((width, left, top, right, bottom))
+    if not candidates:
+        return ""
+    _, left, top, right, bottom = max(candidates, key=lambda item: item[0])
+    y = (top + bottom) // 2
+    inset = max(50, min(120, (right - left) // 8))
+    start_x, end_x = right - inset, left + inset
+    if reverse:
+        start_x, end_x = end_x, start_x
+    if abs(start_x - end_x) < 220:
+        return ""
+    run("adb", "shell", "input", "swipe", str(start_x), str(y), str(end_x), str(y), "450")
+    time.sleep(0.4)
+    return dump_ui(name)
+
+
 def swipe_vertical_scroll_container(xml_text: str, name: str, *, reverse: bool = False) -> str:
     """Swipe inside the largest visible vertical scroll container, not fixed screen coordinates."""
     if not xml_text:
@@ -3808,6 +3848,15 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         # Exercise the new Local Businesses directory from the real Marketplace shortcut rail.
         # The screen is useful even when the live backend is unavailable: certify the actual
         # search/filter UI, but never fabricate a directory result or claim live data loaded.
+        for attempt in range(4):
+            if find_control(marketplace_xml, ["Local businesses"]):
+                break
+            rail_xml = swipe_horizontal_scroll_container(
+                marketplace_xml, "marketplace-local-businesses-rail-" + str(attempt)
+            )
+            if not rail_xml:
+                break
+            marketplace_xml = rail_xml
         local_business_xml = tap_control(
             marketplace_xml, ["Local businesses"], "marketplace-local-businesses",
             ["Search businesses, services or names"]
@@ -3850,6 +3899,15 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 time.sleep(0.4)
             if find_control(local_business_return_xml, ["Search products, sellers or categories"]):
                 marketplace_xml = local_business_return_xml
+                for attempt in range(4):
+                    if find_control(marketplace_xml, ["My Shop"]):
+                        break
+                    rail_xml = swipe_horizontal_scroll_container(
+                        marketplace_xml, "marketplace-local-businesses-return-rail-" + str(attempt), reverse=True
+                    )
+                    if not rail_xml:
+                        break
+                    marketplace_xml = rail_xml
             else:
                 FAILURES.append("Local Businesses Back did not return to Marketplace")
         else:
