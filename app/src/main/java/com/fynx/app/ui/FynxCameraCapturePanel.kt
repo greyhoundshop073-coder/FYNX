@@ -1785,11 +1785,12 @@ fun FynxCameraCapturePanel(
                 selectedMusic = selectedMusic,
                 onChooseMusic = onChooseMusic,
                 onClearMusic = onClearMusic,
-                // Center the live music action to match the captured-media editor while
-                // reserving side space for the camera rail on compact screens.
-                modifier = Modifier.align(Alignment.TopCenter)
+                // Match the supplied live-camera reference: keep Add music directly
+                // below the FYNX identity at the upper left. The captured-media editor
+                // retains its separate centered chip for a balanced editing header.
+                modifier = Modifier.align(Alignment.TopStart)
                     .statusBarsPadding()
-                    .padding(start = 64.dp, end = 64.dp, top = 74.dp)
+                    .padding(start = 8.dp, top = 52.dp)
                     .widthIn(max = 196.dp)
             )
         }

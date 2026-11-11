@@ -24,9 +24,12 @@ checks = [
      'contentDescription = "Open FYNX camera"' in app_source
      and 'contentDescription = "Open quick camera"' in visible_updates
      and 'contentDescription = "Open FYNX camera"' not in visible_updates),
-    ("Live and editor music chips share a centered position with side clearance",
-     "modifier = Modifier.align(Alignment.TopCenter)" in camera
-     and ".padding(start = 64.dp, end = 64.dp, top = 74.dp)" in camera
+    ("Live camera music chip sits below the FYNX identity while the captured-media editor keeps its centered chip",
+     'if (pendingUri == null && !statusCapture && !liveProofMode)' in camera
+     and "modifier = Modifier.align(Alignment.TopStart)" in camera
+     and ".padding(start = 8.dp, top = 52.dp)" in camera
+     and "modifier = Modifier.align(Alignment.TopCenter)" in camera
+     and ".padding(top = 10.dp)" in camera
      and "widthIn(max = 196.dp)" in camera),
     ("Camera self-timer invalidates stale jobs and exposes a full-card cancel target",
       "var timerCaptureJob by remember { mutableStateOf<Job?>(null) }" in camera
