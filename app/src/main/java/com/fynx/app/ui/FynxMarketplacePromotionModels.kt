@@ -7,9 +7,9 @@ import java.util.Locale
 internal val MARKETPLACE_CAMPAIGN_CATEGORIES = listOf(
     "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles",
     "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture",
-    "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Used",
+    "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts",
     "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local",
-    "Business & Workshop Supplies", "Other"
+    "Used", "Business & Workshop Supplies", "Other"
 )
 
 /** Campaign CTA destinations must be resolvable by the actual Marketplace navigation. */
