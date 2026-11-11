@@ -759,8 +759,8 @@ app.get("/api/messages/:username", auth, async (req, res) => {
     if (!other) return res.status(404).json({ error: "user not found" });
     const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [req.user.sub, other.id]);
     if (blocked.rowCount) return res.status(403).json({ error: "conversation unavailable" });
-    const result = await pool.query(`${messageProjection()} WHERE (m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1) ORDER BY m.created_at ASC LIMIT 200`, [req.user.sub, other.id]);
-    return res.json({ messages: result.rows.map(rowToMessage) });
+    const result = await pool.query(`${messageProjection()} WHERE (m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1) ORDER BY m.created_at DESC, m.id DESC LIMIT 200`, [req.user.sub, other.id]);
+    return res.json({ messages: result.rows.reverse().map(rowToMessage) });
   } catch (error) { console.error("messages", error); return res.status(500).json({ error: "message history failed" }); }
 });
 
