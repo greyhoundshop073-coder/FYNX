@@ -223,7 +223,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
-                    FynxInChatSound.play(context)
+                    FynxInChatSound.play(context, chat.username)
                     realtimeClient.acknowledgeMessage(remote.id)
                     conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
                 }
