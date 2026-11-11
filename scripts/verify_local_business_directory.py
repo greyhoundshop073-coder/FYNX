@@ -20,7 +20,7 @@ checks = [
     ("public business profile has a dedicated detail screen", "FynxPublicBusinessProfilePanel" in directory and 'FynxBusinessDirectoryClient.details(context, business.username)' in directory),
     ("public business profile renders opening hours, service areas and service pricing", all(token in directory for token in ['"opening_hours"', '"service_areas"', '"services"', '"Marketplace products"'])),
     ("public profile editor saves opening hours, service areas and service prices", all(token in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBusinessAccount.kt").read_text() for token in ["openingHoursText", "serviceAreasText", "servicesText"])),
-    ("business profile fields are parsed and saved by the client", all(token in client for token in ["opening_hours", "service_areas", "services", 'put("openingHours"']))),
+    ("business profile fields are parsed and saved by the client", all(token in client for token in ["opening_hours", "service_areas", "services", 'put("openingHours"'])),
     ("directory does not render a second in-content Local Businesses heading", 'Text("Local Businesses", style = MaterialTheme.typography.headlineSmall' not in directory),
     ("emulator certification opens and screenshots the real Local Businesses directory", "marketplace-local-businesses" in runtime and "authenticated-marketplace-local-businesses.png" in runtime and "Search businesses, services or names" in runtime and "Area, city or neighbourhood" in runtime),
     ("emulator certification reveals the horizontal Marketplace shortcut without guessed coordinates", "def swipe_horizontal_scroll_container(" in runtime and "marketplace-local-businesses-rail-" in runtime and "marketplace-local-businesses-return-rail-" in runtime),
