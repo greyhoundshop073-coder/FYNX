@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import com.fynx.app.FynxRemoteFeatureFlagPolicy
+import com.fynx.app.FynxRemoteFeatureFlags
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -18,6 +19,23 @@ class FynxRemoteFeatureFlagPolicyTest {
             FynxRemoteFeatureFlagPolicy.defaults.keys
         )
         assertTrue(FynxRemoteFeatureFlagPolicy.defaults.values.none { it })
+    }
+
+    @Test
+    fun flagReaderStartsWithSafeDefaultsAndRejectsUnknownKeys() {
+        FynxRemoteFeatureFlagPolicy.defaults.keys.forEach { key ->
+            assertFalse("Flag must start disabled: $key", FynxRemoteFeatureFlags.isEnabled(key))
+        }
+        assertFalse(FynxRemoteFeatureFlags.isEnabled("unknown_experiment"))
+        assertFalse(FynxRemoteFeatureFlags.isEnabled("wallet_enabled"))
+    }
+
+    @Test
+    fun publishedStateContainsOnlyAllowlistedFlags() {
+        assertEquals(
+            FynxRemoteFeatureFlagPolicy.defaults.keys,
+            FynxRemoteFeatureFlags.values.value.keys
+        )
     }
 
     @Test
