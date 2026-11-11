@@ -19,4 +19,4 @@ jobs:
       - name: Verify private Chat offline send and structured recovery
         run: python3 scripts/verify_offline_chat_send.py
       - name: Android regression build
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache --stacktrace
