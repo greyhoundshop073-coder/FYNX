@@ -749,7 +749,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}, onOpenBusinesses: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
@@ -1244,6 +1244,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
                         Text("My Shop", maxLines = 1)
+                    }
+                    OutlinedButton(onClick = onOpenBusinesses, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                        Icon(Icons.Default.Business, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Local businesses", maxLines = 1)
                     }
                     OutlinedButton(
                         onClick = { sellerStoreUsername = currentUsername.removePrefix("@").trim() },
