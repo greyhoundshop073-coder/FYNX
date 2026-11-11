@@ -953,7 +953,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                                 DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; reactionMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
-                                if (message.fromMe && message.text.isNotBlank() && !message.deleted) {
+                                if (message.fromMe && message.text.isNotBlank()) {
                                     DropdownMenuItem(text = { Text("Edit") }, onClick = {
                                         editingMessageId = message.id
                                         text = message.text
@@ -1249,7 +1249,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
     LaunchedEffect(group.id) {
         FynxSocialClient.blocked(context).onSuccess { blocked ->
             management.value = management.value.copy(state = management.value.state.copy(
-                blockedUsernames = blocked.map { it.username.removePrefix("@").trim() }.toSet()
+                blockedUsernames = blocked.map { it.username.removePrefix("@").trim().lowercase() }.toSet()
             ))
         }
     }
@@ -1293,7 +1293,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
             Spacer(Modifier.height(8.dp))
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(current.members, key = { it.username }) { member ->
-                    val blocked = management.value.state.blockedUsernames.contains(member.username.removePrefix("@").trim())
+                    val blocked = management.value.state.blockedUsernames.contains(member.username.removePrefix("@").trim().lowercase())
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         FynxRemoteProfileAvatar(
                             mediaId = memberPhotoIds[member.username.removePrefix("@").trim()],
@@ -1303,7 +1303,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) { Text(member.username, style = MaterialTheme.typography.titleSmall); Text(if (blocked) "Blocked" else member.role.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if (member.username != current.ownerUsername && !member.username.equals(currentUsername, true)) {
+                        if (!member.username.removePrefix("@").equals(current.ownerUsername.removePrefix("@"), true) && !member.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true)) {
                             if (isAdmin && canManage) {
                                 TextButton(enabled = busyMemberAction == null, onClick = {
                                     val demoting = member.role == FynxGroupRole.MODERATOR
@@ -1323,13 +1323,13 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                                 }) { Text(if (busyMemberAction == member.username) "Saving…" else if (member.role == FynxGroupRole.MODERATOR) "Demote" else "Mod") }
                             }
                             TextButton(enabled = busyMemberAction == null, onClick = {
-                                val action = if (blocked) "unblock" else "block"
                                 busyMemberAction = member.username
                                 scope.launch {
                                     val result = if (blocked) FynxSocialClient.unblock(context, member.username) else FynxSocialClient.block(context, member.username)
                                     result.onSuccess {
-                                        val nextBlocked = if (blocked) management.value.state.blockedUsernames - member.username.removePrefix("@")
-                                            else management.value.state.blockedUsernames + member.username.removePrefix("@")
+                                        val normalizedMember = member.username.removePrefix("@").trim().lowercase()
+                                        val nextBlocked = if (blocked) management.value.state.blockedUsernames - normalizedMember
+                                            else management.value.state.blockedUsernames + normalizedMember
                                         management.value = management.value.copy(state = management.value.state.copy(blockedUsernames = nextBlocked))
                                         message = if (blocked) "Account unblocked." else "Account blocked."
                                     }.onFailure { message = it.message ?: "Account block setting could not be saved." }
