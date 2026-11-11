@@ -49,6 +49,7 @@ checks = [
     ("Official Home music uses one app-scoped player", "object FynxCatalogueMusicPlayback" in playback and "FynxCatalogueMusicPlayback.snapshot" in feed and "FynxCatalogueMusicPlayback.toggle" in feed),
     ("Official Home music prepares asynchronously instead of blocking the feed", "created.prepareAsync()" in playback and "created.prepare()" not in playback),
     ("Official catalogue playback requests and responds to Android audio focus", "requestAudioFocus(request)" in playback and "AUDIOFOCUS_LOSS_TRANSIENT" in playback and "AUDIOFOCUS_GAIN" in playback),
+    ("Stale audio-focus callbacks cannot affect a replacement music track", "if (focusRequest !== request) return@post" in playback and ".setOnAudioFocusChangeListener" in playback),
     ("Voice-note audio path remains separate from catalogue playback", "Voice notes and recorded speech intentionally keep their own audio path." in playback and "AudioPostPlayer" in feed),
     ("Home and Status use the same dedicated music picker surface", "FynxMusicPickerSurface(" in home_picker and "FynxMusicPickerSurface(" in status_picker),
     ("Music picker is a spacious glass-style full-screen library", "usePlatformDefaultWidth = false" in picker_surface and "fillMaxSize(0.96f)" in picker_surface and "Brush.linearGradient" in picker_surface and "RoundedCornerShape(30.dp)" in picker_surface),
