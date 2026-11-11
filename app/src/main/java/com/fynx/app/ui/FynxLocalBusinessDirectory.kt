@@ -119,7 +119,7 @@ object FynxBusinessDirectoryClient {
 }
 
 @Composable
-fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
+fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}, onOpenListing: (String) -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -309,7 +309,8 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
             onWebsite = {
                 try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(business.website))) }
                 catch (_: Exception) { Toast.makeText(context, "Unable to open this website.", Toast.LENGTH_SHORT).show() }
-            }
+            },
+            onOpenListing = onOpenListing
         )
     }
 }
@@ -322,7 +323,8 @@ private fun FynxPublicBusinessProfilePanel(
     loading: Boolean,
     onBack: () -> Unit,
     onCall: () -> Unit,
-    onWebsite: () -> Unit
+    onWebsite: () -> Unit,
+    onOpenListing: (String) -> Unit
 ) {
     val profile = details?.optJSONObject("profile")
     val products = details?.optJSONArray("products")
@@ -374,11 +376,17 @@ private fun FynxPublicBusinessProfilePanel(
                 Text("Marketplace products", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 for (i in 0 until products.length()) {
                     val item = products.optJSONObject(i) ?: continue
-                    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Surface(
+                        onClick = { item.optString("id").takeIf { it.isNotBlank() }?.let(onOpenListing) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(item.optString("title"), fontWeight = FontWeight.SemiBold)
                             Text("${item.optString("currency")} ${item.optString("price")} • ${item.optInt("available_quantity")} available", color = MaterialTheme.colorScheme.primary)
                             Text(item.optString("category"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                            Text("View in Marketplace", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
