@@ -148,7 +148,14 @@ export function registerBusinessRoutes({ app, auth }) {
     const location = clean(req.body?.location, 160);
     const phone = clean(req.body?.phone, 30);
     const website = clean(req.body?.website, 200);
-    const openingHours = req.body?.openingHours && typeof req.body.openingHours === "object" && !Array.isArray(req.body.openingHours) ? req.body.openingHours : {};
+    const openingHours = {};
+    if (req.body?.openingHours && typeof req.body.openingHours === "object" && !Array.isArray(req.body.openingHours)) {
+      for (const [day, hours] of Object.entries(req.body.openingHours).slice(0, 7)) {
+        const key = clean(day, 20);
+        const value = clean(hours, 60);
+        if (key && value) openingHours[key] = value;
+      }
+    }
     const serviceAreas = Array.isArray(req.body?.serviceAreas) ? req.body.serviceAreas.map(value => clean(value, 80)).filter(Boolean).slice(0, 20) : [];
     const services = Array.isArray(req.body?.services) ? req.body.services.slice(0, 30).map(item => ({
       name: clean(item?.name, 100),
