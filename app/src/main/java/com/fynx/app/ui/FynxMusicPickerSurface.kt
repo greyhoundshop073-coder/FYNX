@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -86,7 +87,7 @@ internal fun FynxMusicPickerSurface(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             Modifier.size(48.dp).clip(CircleShape)
-                                .background(Brush.linearGradient(listOf(Color(0xFF007FFF), Color(0xFF65B5FF))),
+                                .background(Brush.linearGradient(listOf(Color(0xFF007FFF), Color(0xFF65B5FF)))),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.LibraryMusic, contentDescription = null, tint = Color.White, modifier = Modifier.size(25.dp))
@@ -163,7 +164,7 @@ internal fun FynxMusicPickerSurface(
                                     ) {
                                         Box(
                                             Modifier.size(46.dp).clip(RoundedCornerShape(15.dp))
-                                                .background(Brush.linearGradient(listOf(Color(0xFFDCEEFF), Color(0xFFB9DCFF))),
+                                                .background(Brush.linearGradient(listOf(Color(0xFFDCEEFF), Color(0xFFB9DCFF)))),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(Icons.Default.MusicNote, contentDescription = null, tint = azure, modifier = Modifier.size(25.dp))
