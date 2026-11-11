@@ -160,7 +160,14 @@ checks = [
     ("marketplace cart passes selected products into multi-product checkout", "onCheckout = { selectedItems -> showCart = false; multiCheckoutItems = selectedItems }" in marketplace and "multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities" in marketplace and "multiPaymentListingIds = selectedItems.map { it.id }.toSet()" in marketplace),
     ("cart checkout is blocked when a selected listing has become unavailable or cart quantity exceeds available stock", "val unavailable = selected.any { it.quantity <= 0 || (quantities[it.id] ?: 1) > it.quantity }" in marketplace and "enabled = selected.isNotEmpty() && !mixed && !unavailable" in marketplace and "Some selected products no longer have enough stock." in marketplace),
     ("marketplace Buy now and Add to cart are disabled for out-of-stock products and seller-owned listings", "onBuyNow" in marketplace and "enabled = canPurchase && l.quantity > 0" in marketplace and "Text(if (!canPurchase) \"Your listing\" else if (l.quantity > 0) \"Add to cart\" else \"Out of stock\")" in marketplace),
-    ("marketplace checkout initializes payment against the protected order", "initializeMarketplacePayment(context, order.id, email)" in marketplace),
+    ("marketplace checkout initializes Paystack with the protected order's reviewed amount and currency",
+     "initializeMarketplacePayment(context, order.id, email, order.totalAmount, order.currency)" in marketplace
+     and "amountSubunit == expectedAmountSubunit" in marketplace_payments
+     and "currency == normalizedExpectedCurrency" in marketplace_payments),
+    ("buyer and seller order lists reject missing or unsupported currency instead of defaulting to NGN",
+     "marketplaceRequiredOrderCurrency(o.opt(\"currency\"))" in remote_client
+     and "marketplaceRequiredOrderCurrency(order.opt(\"currency\"))" in seller_orders
+     and "internal fun marketplaceRequiredOrderCurrency(value: Any?)" in support),
     ("marketplace checkout requires payment verification before protection confirmation", "verifyMarketplacePayment(context, payment?.reference.orEmpty())" in marketplace),
     ("single-item checkout rejects invalid quantities without converting zero into a purchase of one", "val quantity = quantityText.toIntOrNull() ?: 0" in checkout and "quantityText.toIntOrNull()?.coerceAtLeast(1)" not in checkout and "val quantityError = when" in checkout and "This product is currently out of stock." in checkout and "Choose a quantity of at least 1." in checkout and "Maximum available quantity is ${listing.quantity}." in checkout and "quantityError?.let" in checkout and "enabled = !busy && quantityError == null" in checkout),
     ("marketplace checkout rejects an expired client-side quote before order creation", "marketplaceQuoteExpired(q.expiresAt)" in checkout),
