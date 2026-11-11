@@ -46,8 +46,14 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         val local = withContext(Dispatchers.IO) { FynxChatStore.loadPreviews(context) }
         val remote = FynxProductionMessaging.recentConversations(context).getOrNull()
         if (remote != null) {
-            val pendingLocal = withContext(Dispatchers.IO) {
-                local.filter { preview -> FynxChatStore.load(context, preview.username).any { !it.delivered } }
+            val localHistories = withContext(Dispatchers.IO) {
+                local.associateBy(
+                    { it.username.removePrefix("@").trim().lowercase() },
+                    { FynxChatStore.load(context, it.username) }
+                )
+            }
+            val pendingLocal = local.filter { preview ->
+                localHistories[preview.username.removePrefix("@").trim().lowercase()]?.any { !it.delivered } == true
             }
             val remoteByUsername = remote.associateBy { it.username.removePrefix("@").trim().lowercase() }
             val pendingMerged = pendingLocal.map { pending ->
@@ -59,9 +65,15 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 )
             }
             val pendingUsernames = pendingLocal.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
+            val remoteUsernames = remote.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
+            val cachedLocalOnly = local.filter { preview ->
+                val username = preview.username.removePrefix("@").trim().lowercase()
+                username !in remoteUsernames && username !in pendingUsernames &&
+                    localHistories[username].orEmpty().isNotEmpty()
+            }
             val merged = pendingMerged + remote.filterNot {
                 it.username.removePrefix("@").trim().lowercase() in pendingUsernames
-            }
+            } + cachedLocalOnly
             withContext(Dispatchers.IO) { FynxChatStore.savePreviews(context, merged) }
             chats = merged
         } else {
