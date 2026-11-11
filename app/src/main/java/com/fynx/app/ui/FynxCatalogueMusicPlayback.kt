@@ -35,9 +35,11 @@ internal object FynxCatalogueMusicPlayback {
     private var audioManager: AudioManager? = null
     private var focusRequest: AudioFocusRequest? = null
     private var resumeAfterTransientFocus = false
+    private var requestedVolume = 1f
+    private var focusDuckMultiplier = 1f
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun toggle(context: Context, trackKey: String, file: File, ownerKey: String? = null) {
+    fun toggle(context: Context, trackKey: String, file: File, ownerKey: String? = null, initialPositionMs: Long = 0L, loopPlayback: Boolean = false) {
         check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
         if (snapshot.trackKey == trackKey && snapshot.ownerKey == ownerKey && player != null) {
             val current = player ?: return
@@ -86,9 +88,13 @@ internal object FynxCatalogueMusicPlayback {
                             if (active.isPlaying) active.pause()
                             snapshot = snapshot.copy(isPlaying = false)
                         }
-                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> runCatching { active.setVolume(0.2f, 0.2f) }
+                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> runCatching {
+                            focusDuckMultiplier = 0.2f
+                            applyRequestedVolume(active)
+                        }
                         AudioManager.AUDIOFOCUS_GAIN -> runCatching {
-                            active.setVolume(1f, 1f)
+                            focusDuckMultiplier = 1f
+                            applyRequestedVolume(active)
                             if (resumeAfterTransientFocus && player === active) {
                                 active.start()
                                 snapshot = snapshot.copy(isPlaying = true)
@@ -107,16 +113,27 @@ internal object FynxCatalogueMusicPlayback {
         focusRequest = request
         resumeAfterTransientFocus = false
 
+        requestedVolume = 1f
+        focusDuckMultiplier = 1f
         val created = MediaPlayer()
         player = created
         try {
             created.setAudioAttributes(attributes)
             created.setDataSource(file.absolutePath)
             created.setOnPreparedListener { prepared ->
-                if (player !== prepared) return@setOnPreparedListener
+                if (player !== prepared || snapshot.ownerKey != ownerKey || !snapshot.isPreparing) return@setOnPreparedListener
                 runCatching {
-                    prepared.start()
-                    snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey, isPlaying = true)
+                    prepared.isLooping = loopPlayback
+                    val duration = prepared.duration.coerceAtLeast(0)
+                    val target = if (duration > 0) (initialPositionMs.coerceAtLeast(0L) % duration.toLong()).toInt() else 0
+                    if (target > 0) {
+                        prepared.setOnSeekCompleteListener { seeked ->
+                            startPreparedPlayback(seeked, trackKey, ownerKey)
+                        }
+                        prepared.seekTo(target)
+                    } else {
+                        startPreparedPlayback(prepared, trackKey, ownerKey)
+                    }
                 }.onFailure {
                     snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey, error = it.message)
                     releaseCurrent(resetSnapshot = false)
@@ -158,8 +175,9 @@ internal object FynxCatalogueMusicPlayback {
             }.onFailure { snapshot = snapshot.copy(isPlaying = false, error = it.message) }
             return
         }
-        toggle(context, trackKey, file, ownerKey)
-        runCatching { player?.isLooping = true }
+        // Prepare the new player at the video's current clock position. The prepared
+        // callback seeks before starting, so the soundtrack never audibly begins at 0.
+        toggle(context, trackKey, file, ownerKey, initialPositionMs = positionMs, loopPlayback = true)
     }
 
     /** Keeps the soundtrack aligned to the video clock and corrects audible drift. */
@@ -178,7 +196,8 @@ internal object FynxCatalogueMusicPlayback {
     fun setVolume(ownerKey: String, volume: Float) {
         check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
         if (snapshot.ownerKey != ownerKey) return
-        runCatching { player?.setVolume(volume.coerceIn(0f, 1f), volume.coerceIn(0f, 1f)) }
+        requestedVolume = volume.coerceIn(0f, 1f)
+        runCatching { player?.let(::applyRequestedVolume) }
     }
 
     fun pause() {
@@ -206,6 +225,19 @@ internal object FynxCatalogueMusicPlayback {
             snapshot = snapshot.copy(isPlaying = false)
             abandonAudioFocus(clear = false)
         }
+    }
+
+    private fun startPreparedPlayback(prepared: MediaPlayer, trackKey: String, ownerKey: String?) {
+        if (player !== prepared || snapshot.trackKey != trackKey || snapshot.ownerKey != ownerKey || !snapshot.isPreparing) return
+        prepared.setOnSeekCompleteListener(null)
+        applyRequestedVolume(prepared)
+        prepared.start()
+        snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey, isPlaying = true)
+    }
+
+    private fun applyRequestedVolume(active: MediaPlayer) {
+        val effective = (requestedVolume * focusDuckMultiplier).coerceIn(0f, 1f)
+        active.setVolume(effective, effective)
     }
 
     private fun requestAudioFocus(): Boolean {
