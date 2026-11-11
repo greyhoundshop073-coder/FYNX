@@ -49,18 +49,18 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             val pendingLocal = withContext(Dispatchers.IO) {
                 local.filter { preview -> FynxChatStore.load(context, preview.username).any { !it.delivered } }
             }
-            val pendingByUsername = pendingLocal.associateBy { it.username.removePrefix("@").trim().lowercase() }
-            val remoteMerged = remote.map { serverPreview ->
-                val pending = pendingByUsername[serverPreview.username.removePrefix("@").trim().lowercase()]
-                if (pending == null) serverPreview else serverPreview.copy(
+            val remoteByUsername = remote.associateBy { it.username.removePrefix("@").trim().lowercase() }
+            val pendingMerged = pendingLocal.map { pending ->
+                val serverPreview = remoteByUsername[pending.username.removePrefix("@").trim().lowercase()]
+                if (serverPreview == null) pending else serverPreview.copy(
                     lastMessage = pending.lastMessage,
                     time = pending.time,
                     avatarUri = serverPreview.avatarUri ?: pending.avatarUri
                 )
             }
-            val remoteUsernames = remoteMerged.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
-            val merged = remoteMerged + pendingLocal.filterNot {
-                it.username.removePrefix("@").trim().lowercase() in remoteUsernames
+            val pendingUsernames = pendingLocal.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
+            val merged = pendingMerged + remote.filterNot {
+                it.username.removePrefix("@").trim().lowercase() in pendingUsernames
             }
             withContext(Dispatchers.IO) { FynxChatStore.savePreviews(context, merged) }
             chats = merged
