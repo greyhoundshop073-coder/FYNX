@@ -14,6 +14,7 @@ playback = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCatalogueMusicPlayback
 home_picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt").read_text(encoding="utf-8")
 status_picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt").read_text(encoding="utf-8")
 picker_surface = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicPickerSurface.kt").read_text(encoding="utf-8")
+song_page = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicSongDetailSurface.kt").read_text(encoding="utf-8")
 routes = (ROOT / "backend/socialRoutes.js").read_text(encoding="utf-8")
 
 checks = [
@@ -53,6 +54,11 @@ checks = [
     ("Music picker supports scrolling through many catalogue tracks", "LazyColumn(" in picker_surface and "items(tracks, key = { it.id })" in picker_surface),
     ("Music picker search, preview, retry and track selection are wired", "onSearchChange" in picker_surface and "FynxRemoteAudio(" in picker_surface and "onRetry" in picker_surface and "onSelect(track)" in picker_surface),
     ("Home catalogue search is debounced and authenticated", "kotlinx.coroutines.delay(300)" in home_picker and "FynxBackendClient.hasAccessToken(context)" in home_picker),
+    ("Home feed soundtrack opens the song destination", "songDetailsOpen" in feed and "FynxMusicSongDetailSurface(" in feed and "View song details" in feed),
+    ("Song destination previews through the shared catalogue player", "FynxCatalogueMusicPlayback.toggle" in song_page and '/api/social/music/media/$mediaId' in song_page),
+    ("Song destination hands the exact media asset to the Home composer", "FynxMusicSongNavigation.useTrack" in song_page and "FynxMusicSongNavigation.onUseTrack = handler" in home_picker and "mediaId = mediaId" in home_picker),
+    ("Song reuse preserves the existing Home draft and selected media", "showComposer = true" in home_picker and "capturedUris" not in home_picker[home_picker.find("val handler:"):home_picker.find("LaunchedEffect(Unit)")]),
+    ("Song destination does not fabricate artwork or public creations", "Public creations will appear here when FYNX's catalogue-linked discovery service is available." in song_page and "FYNX SOUND" in song_page),
     ("Android model still parses persisted music metadata", "musicMediaId: String?" in models and "musicDurationMs: Long" in models),
 ]
 
