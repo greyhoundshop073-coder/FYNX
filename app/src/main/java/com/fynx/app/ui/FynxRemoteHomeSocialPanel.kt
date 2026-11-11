@@ -1488,6 +1488,9 @@ private fun MusicPostPlayer(postId: String, mediaId: String, title: String, arti
     LaunchedEffect(playbackActive, ownerKey) {
         if (!playbackActive) FynxCatalogueMusicPlayback.pause(ownerKey)
     }
+    DisposableEffect(ownerKey) {
+        onDispose { FynxCatalogueMusicPlayback.pause(ownerKey) }
+    }
 
     fun playOrPause() {
         if (!playbackActive || loadingAudio || isPreparing) return
