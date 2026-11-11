@@ -69,7 +69,7 @@ object FynxProductionMessaging {
                 delivered = message.delivered,
                 read = message.read,
                 edited = message.edited,
-                deleted = false,
+                deleted = message.deleted,
                 replyToId = message.replyToId,
                 reaction = message.reaction,
                 messageType = message.messageType,
@@ -393,7 +393,8 @@ object FynxProductionMessaging {
             mediaId = if (mediaUrl != null) message.mediaId?.trim()?.takeIf { it.isNotBlank() } else null,
             pinned = message.pinned,
             senderName = message.senderDisplayName,
-            senderUsername = message.senderUsername
+            senderUsername = message.senderUsername,
+            deleted = message.deleted
         )
     }
 
