@@ -46,6 +46,11 @@ object FynxBackendClient {
     data class DownloadedMedia(val contentType: String?, val byteCount: Long)
 
     fun availability(context: Context): FynxBackendAvailability = if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
+    fun isAccessDeniedOrMissing(error: Throwable): Boolean {
+        val httpError = generateSequence(error) { it.cause }.filterIsInstance<FynxHttpException>().firstOrNull()
+        return httpError?.status == 403 || httpError?.status == 404
+    }
+
     fun baseUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd('/')
