@@ -987,11 +987,10 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
             }
         }
         if (mediaItems.isNotEmpty()) {
-            PostMediaGrid(mediaItems, playbackActive = playbackActive, onOpenMedia = { index -> onOpenMediaViewer(mediaItems, index) }, onOpenVideoDiscovery = onOpenVideoDiscovery.takeIf { mediaItems.size == 1 })
+            PostMediaGrid(mediaItems, playbackActive = playbackActive, onOpenMedia = { index -> onOpenMediaViewer(mediaItems, index) }, onOpenVideoDiscovery = onOpenVideoDiscovery.takeIf { mediaItems.size == 1 }, postId = post.id, musicMediaId = post.musicMediaId, musicTitle = post.musicTitle.orEmpty(), musicArtist = post.musicArtist.orEmpty(), musicDurationMs = post.musicDurationMs)
         } else {
-            post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, playbackActive = playbackActive) }
+            post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, playbackActive = playbackActive, soundtrackPostId = post.id, soundtrackMediaId = post.musicMediaId, soundtrackTitle = post.musicTitle.orEmpty(), soundtrackArtist = post.musicArtist.orEmpty(), soundtrackDurationMs = post.musicDurationMs) }
         }
-        if (!post.musicMediaId.isNullOrBlank()) MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
         if (reactionPickerOpen) Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ReactionChoice("👍", "LIKE", reactionState.currentReaction == "LIKE", onReact = { onReact(post.id, it) }); ReactionChoice("❤️", "LOVE", reactionState.currentReaction == "LOVE", onReact = { onReact(post.id, it) }); ReactionChoice("😂", "LAUGH", reactionState.currentReaction == "LAUGH", onReact = { onReact(post.id, it) }); ReactionChoice("😮", "WOW", reactionState.currentReaction == "WOW", onReact = { onReact(post.id, it) }); ReactionChoice("😢", "SAD", reactionState.currentReaction == "SAD", onReact = { onReact(post.id, it) }) } }
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -1018,12 +1017,12 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
 }
 
 @Composable
-private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, playbackActive: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideoDiscovery: (() -> Unit)?) {
+private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, playbackActive: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideoDiscovery: (() -> Unit)?, postId: String, musicMediaId: String?, musicTitle: String, musicArtist: String, musicDurationMs: Long) {
     val visual = items.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }.take(4)
     if (visual.isEmpty()) return
     @Composable fun Cell(item: FynxHomePostMediaClient.PostMediaItem, index: Int, modifier: Modifier = Modifier) {
         Box(modifier.clip(RoundedCornerShape(4.dp)).clickable { onOpenMedia(index) }) {
-            RemoteSocialMedia(item.mediaUrl, item.mediaType, onOpenMedia = { onOpenMedia(index) }, playbackActive = playbackActive && index == visual.indexOfFirst { it.mediaType.equals("video", true) })
+            RemoteSocialMedia(item.mediaUrl, item.mediaType, onOpenMedia = { onOpenMedia(index) }, playbackActive = playbackActive && index == visual.indexOfFirst { it.mediaType.equals("video", true) }, soundtrackPostId = postId.takeIf { index == 0 }, soundtrackMediaId = musicMediaId.takeIf { index == 0 }, soundtrackTitle = musicTitle, soundtrackArtist = musicArtist, soundtrackDurationMs = musicDurationMs)
         }
     }
     when (visual.size) {
@@ -1090,7 +1089,12 @@ private fun FynxFeedTextureVideo(
     onPlayingChanged: (Boolean) -> Unit,
     onMutedChanged: (Boolean) -> Unit,
     onOpenFullscreen: (() -> Unit)?,
-    fullScreenControls: Boolean
+    fullScreenControls: Boolean,
+    soundtrackMediaId: String? = null,
+    soundtrackOwnerKey: String? = null,
+    soundtrackTitle: String = "",
+    soundtrackArtist: String = "",
+    soundtrackDurationMs: Long = 0L
 ) {
     val textureState = remember(file) { mutableStateOf<android.graphics.SurfaceTexture?>(null) }
     val textureViewState = remember(file) { mutableStateOf<TextureView?>(null) }
@@ -1101,6 +1105,33 @@ private fun FynxFeedTextureVideo(
     var playbackPositionMs by remember(file) { mutableLongStateOf(0L) }
     var hasVideoFrame by remember(file) { mutableStateOf(false) }
     var playbackError by remember(file) { mutableStateOf(false) }
+    var soundtrackFile by remember(soundtrackMediaId) { mutableStateOf<File?>(null) }
+    var soundtrackEnabled by remember(soundtrackMediaId) { mutableStateOf(false) }
+    var soundtrackLoading by remember(soundtrackMediaId) { mutableStateOf(false) }
+    var soundtrackFailed by remember(soundtrackMediaId) { mutableStateOf(false) }
+    var soundtrackManuallyDisabled by remember(soundtrackMediaId) { mutableStateOf(false) }
+    var songDetailsOpen by remember(soundtrackMediaId) { mutableStateOf(false) }
+    val latestPlaybackActive by rememberUpdatedState(playbackActive)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    fun startAttachedMusic() {
+        val mediaId = soundtrackMediaId?.takeIf { it.isNotBlank() } ?: return
+        if (soundtrackManuallyDisabled) return
+        soundtrackEnabled = true
+        if (soundtrackFile != null || soundtrackLoading) return
+        scope.launch {
+            soundtrackLoading = true
+            soundtrackFailed = false
+            val downloaded = withContext(Dispatchers.IO) {
+                runCatching { FynxMediaCache.getOrDownload(context, "/api/social/music/media/$mediaId", "audio") }.getOrNull()
+            }
+            soundtrackFile = downloaded
+            soundtrackFailed = downloaded == null
+            soundtrackLoading = false
+            if (!latestPlaybackActive || downloaded == null) soundtrackEnabled = false
+        }
+    }
 
     Box(
         Modifier.fillMaxSize().then(
@@ -1180,6 +1211,31 @@ private fun FynxFeedTextureVideo(
                 }
             }
         }
+        if (!soundtrackMediaId.isNullOrBlank()) {
+            Surface(Modifier.align(Alignment.TopStart).padding(10.dp), shape = RoundedCornerShape(18.dp), color = Color.Black.copy(alpha = 0.68f), tonalElevation = 0.dp) {
+                Row(Modifier.padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.MusicNote, contentDescription = "Attached music", tint = Color.White, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Column(Modifier.weight(1f, fill = false).clickable { songDetailsOpen = true }) {
+                        Text(if (soundtrackTitle.isBlank()) "Music" else if (soundtrackArtist.isBlank()) soundtrackTitle else "$soundtrackTitle · $soundtrackArtist", color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        if (soundtrackLoading) Text("Loading music…", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
+                        if (soundtrackFailed) Text("Music unavailable — retry", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                    }
+                    IconButton(enabled = playbackActive && !soundtrackLoading, onClick = {
+                        if (soundtrackEnabled) {
+                            soundtrackEnabled = false
+                            soundtrackManuallyDisabled = true
+                            soundtrackOwnerKey?.let { FynxCatalogueMusicPlayback.pause(it) }
+                        } else {
+                            soundtrackManuallyDisabled = false
+                            startAttachedMusic()
+                        }
+                    }) {
+                        Icon(if (soundtrackEnabled) Icons.Default.Pause else Icons.Default.PlayArrow, if (soundtrackEnabled) "Pause attached music" else "Play attached music", tint = Color.White)
+                    }
+                }
+            }
+        }
         if (fullScreenControls && durationMs > 0L) {
             val durationLabel = formatHomeVideoDuration(durationMs)
             Surface(
@@ -1238,7 +1294,10 @@ private fun FynxFeedTextureVideo(
                     FilledIconButton(
                         onClick = {
                             runCatching {
-                                if (playing) { player.pause(); playing = false } else { player.start(); playing = true }
+                                if (playing) { player.pause(); playing = false } else {
+                                    player.start(); playing = true
+                                    startAttachedMusic()
+                                }
                                 onPlayingChanged(playing)
                             }
                         },
@@ -1249,6 +1308,21 @@ private fun FynxFeedTextureVideo(
         }
     }
 
+    LaunchedEffect(playbackActive, soundtrackOwnerKey) {
+        if (!playbackActive) {
+            soundtrackEnabled = false
+            soundtrackOwnerKey?.let { FynxCatalogueMusicPlayback.pause(it) }
+        }
+    }
+    LaunchedEffect(soundtrackEnabled, playing, playbackPositionMs, soundtrackFile, soundtrackMediaId, soundtrackOwnerKey, muted) {
+        val mediaId = soundtrackMediaId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val owner = soundtrackOwnerKey?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val audioFile = soundtrackFile
+        if (soundtrackEnabled && playing && audioFile != null) {
+            FynxCatalogueMusicPlayback.playAt(context, mediaId, audioFile, owner, playbackPositionMs, if (muted) 0f else 0.85f)
+            FynxCatalogueMusicPlayback.syncTo(owner, playbackPositionMs)
+        } else FynxCatalogueMusicPlayback.pause(owner)
+    }
     LaunchedEffect(textureViewState.value, aspectRatio) {
         textureViewState.value?.let { applyFynxFeedVideoFit(it, aspectRatio) }
     }
@@ -1268,11 +1342,11 @@ private fun FynxFeedTextureVideo(
             player.setDataSource(file.absolutePath)
             player.setSurface(surface)
             player.isLooping = true
-            player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
+            player.setVolume(if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f, if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f)
             player.setOnPreparedListener {
                 prepared = true
                 playbackPositionMs = it.currentPosition.toLong().coerceAtLeast(0L)
-                if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
+                if (playbackActive && !fullScreenControls) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
             player.setOnInfoListener { _, what, _ ->
                 if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) hasVideoFrame = true
@@ -1298,15 +1372,15 @@ private fun FynxFeedTextureVideo(
             onPlayingChanged(false)
         }
     }
-    LaunchedEffect(muted, prepared) {
+    LaunchedEffect(muted, prepared, soundtrackEnabled) {
         if (!prepared) return@LaunchedEffect
         // Keep the actual decoder volume in sync with the visible mute control.
-        runCatching { player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f) }
+        runCatching { player.setVolume(if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f, if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f) }
     }
     LaunchedEffect(playbackActive, prepared) {
         if (!prepared) return@LaunchedEffect
         runCatching {
-            if (playbackActive && !playing) { player.start(); playing = true; onPlayingChanged(true) }
+            if (playbackActive && !playing && !fullScreenControls) { player.start(); playing = true; onPlayingChanged(true) }
             else if (!playbackActive && playing) { player.pause(); playing = false; onPlayingChanged(false) }
         }
     }
@@ -1321,11 +1395,20 @@ private fun FynxFeedTextureVideo(
                 .getOrDefault(playbackPositionMs)
         }
     }
-    LaunchedEffect(muted, prepared) {
-        if (prepared) runCatching { player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f) }
+    LaunchedEffect(muted, prepared, soundtrackEnabled) {
+        if (prepared) runCatching { player.setVolume(if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f, if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f) }
     }
-    DisposableEffect(file) {
-        onDispose { runCatching { player.stop() }; runCatching { player.release() }; textureState.value = null }
+    DisposableEffect(file, soundtrackOwnerKey) {
+        onDispose { soundtrackOwnerKey?.let { FynxCatalogueMusicPlayback.pause(it) }; runCatching { player.stop() }; runCatching { player.release() }; textureState.value = null }
+    }
+    if (songDetailsOpen && !soundtrackMediaId.isNullOrBlank()) {
+        FynxMusicSongDetailSurface(
+            mediaId = soundtrackMediaId,
+            title = soundtrackTitle,
+            artist = soundtrackArtist,
+            durationMs = soundtrackDurationMs,
+            onDismiss = { songDetailsOpen = false }
+        )
     }
 }
 
@@ -1351,7 +1434,7 @@ private fun applyFynxFeedVideoFit(view: TextureView, sourceAspectRatio: Float) {
 }
 
 @Composable
-internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (() -> Unit)? = null, onOpenMedia: (() -> Unit)? = null, playbackActive: Boolean = true) {
+internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (() -> Unit)? = null, onOpenMedia: (() -> Unit)? = null, playbackActive: Boolean = true, soundtrackPostId: String? = null, soundtrackMediaId: String? = null, soundtrackTitle: String = "", soundtrackArtist: String = "", soundtrackDurationMs: Long = 0L) {
     val context = LocalContext.current
     var file by remember(path) { mutableStateOf<File?>(null) }
     var mediaLoading by remember(path) { mutableStateOf(true) }
@@ -1420,7 +1503,12 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     onOpenFullscreen = {
                         if (onOpenMedia != null) onOpenMedia() else fullscreen = true
                     },
-                    fullScreenControls = false
+                    fullScreenControls = false,
+                    soundtrackMediaId = soundtrackMediaId,
+                    soundtrackOwnerKey = soundtrackPostId?.let { "home-post:$it:inline" },
+                    soundtrackTitle = soundtrackTitle,
+                    soundtrackArtist = soundtrackArtist,
+                    soundtrackDurationMs = soundtrackDurationMs
                 )
             }
         }
@@ -1430,6 +1518,9 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
         bitmap?.let { image ->
             Box(Modifier.fillMaxWidth().aspectRatio((image.width.toFloat() / image.height.toFloat()).coerceIn(0.62f, 1.9f)).clickable { when { onOpenMarketplace != null -> onOpenMarketplace(); onOpenMedia != null -> onOpenMedia(); else -> fullscreen = true } }) {
                 Image(image.asImageBitmap(), "Post media", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                if (!soundtrackMediaId.isNullOrBlank() && !soundtrackPostId.isNullOrBlank()) {
+                    MusicPostPlayer(soundtrackPostId, soundtrackMediaId, soundtrackTitle, soundtrackArtist, soundtrackDurationMs, playbackActive, Modifier.align(Alignment.BottomCenter))
+                }
             }
         }
     }
@@ -1453,7 +1544,12 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                         onPlayingChanged = {},
                         onMutedChanged = { muted = it },
                         onOpenFullscreen = null,
-                        fullScreenControls = true
+                        fullScreenControls = true,
+                        soundtrackMediaId = soundtrackMediaId,
+                        soundtrackOwnerKey = soundtrackPostId?.let { "home-post:$it:fullscreen" },
+                        soundtrackTitle = soundtrackTitle,
+                        soundtrackArtist = soundtrackArtist,
+                        soundtrackDurationMs = soundtrackDurationMs
                     )
                 } else {
                     var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -1469,28 +1565,85 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
 private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
 
 @Composable
-private fun MusicPostPlayer(mediaId: String, title: String, artist: String, durationMs: Long) {
+private fun MusicPostPlayer(postId: String, mediaId: String, title: String, artist: String, durationMs: Long, playbackActive: Boolean, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val ownerKey = remember(postId) { "home-post:$postId" }
+    val latestPlaybackActive by rememberUpdatedState(playbackActive)
+    var songDetailsOpen by remember(mediaId) { mutableStateOf(false) }
     var file by remember(mediaId) { mutableStateOf<File?>(null) }
-    LaunchedEffect(mediaId) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio") } }
-    if (file != null) {
-        val player = remember(file) { MediaPlayer().apply { setDataSource(file!!.absolutePath); prepare() } }
-        var playing by remember(file) { mutableStateOf(false) }
-        DisposableEffect(player) {
-            player.setOnCompletionListener { playing = false; runCatching { player.seekTo(0) } }
-            onDispose { runCatching { player.release() } }
+    var loadingAudio by remember(mediaId) { mutableStateOf(false) }
+    var audioLoadFailed by remember(mediaId) { mutableStateOf(false) }
+    val playback = FynxCatalogueMusicPlayback.snapshot
+    val isCurrentTrack = playback.trackKey == mediaId && playback.ownerKey == ownerKey
+    val isPlaying = isCurrentTrack && playback.isPlaying
+    val isPreparing = isCurrentTrack && playback.isPreparing
+
+    // Only the post currently occupying the feed's active playback slot may own audio.
+    // A stale/partially visible post can never pause another post's soundtrack.
+    LaunchedEffect(playbackActive, ownerKey) {
+        if (!playbackActive) FynxCatalogueMusicPlayback.pause(ownerKey)
+    }
+    DisposableEffect(ownerKey) {
+        onDispose { FynxCatalogueMusicPlayback.pause(ownerKey) }
+    }
+
+    fun playOrPause() {
+        if (!playbackActive || loadingAudio || isPreparing) return
+        val cached = file
+        if (cached != null) {
+            FynxCatalogueMusicPlayback.toggle(context, mediaId, cached, ownerKey)
+            return
         }
-        Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
-            Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                    Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
-                }
-                Text(formatMusicDuration(durationMs.takeIf { it > 0 } ?: player.duration.toLong()), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
-                IconButton(onClick = { runCatching { if (player.isPlaying) { player.pause(); playing = false } else { if (player.currentPosition >= player.duration) player.seekTo(0); player.start(); playing = true } } }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause music" else "Play music") }
+        scope.launch {
+            loadingAudio = true
+            audioLoadFailed = false
+            val downloaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio")
+                }.getOrNull()
+            }
+            file = downloaded
+            audioLoadFailed = downloaded == null
+            loadingAudio = false
+            if (latestPlaybackActive) downloaded?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it, ownerKey) }
+        }
+    }
+
+    Card(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+            Column(
+                Modifier.weight(1f).padding(horizontal = 10.dp).clickable { songDetailsOpen = true }
+            ) {
+                Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                Text("View song details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                if (loadingAudio) Text("Loading preview…", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                if (isPreparing) Text("Preparing audio…", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                if (audioLoadFailed) Text("Preview unavailable — tap play to retry", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                if (isCurrentTrack && playback.error != null) Text("Could not play this track", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            }
+            Text(formatMusicDuration(durationMs), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+            IconButton(
+                enabled = playbackActive && !loadingAudio && !isPreparing,
+                onClick = { playOrPause() }
+            ) {
+                Icon(
+                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    if (loadingAudio) "Loading music" else if (isPlaying) "Pause music" else "Play music"
+                )
             }
         }
+    }
+    if (songDetailsOpen) {
+        FynxMusicSongDetailSurface(
+            mediaId = mediaId,
+            title = title,
+            artist = artist,
+            durationMs = durationMs,
+            onDismiss = { songDetailsOpen = false }
+        )
     }
 }
 

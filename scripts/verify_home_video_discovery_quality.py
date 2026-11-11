@@ -103,8 +103,9 @@ checks = [
     ),
     (
         "Home video mute toggle changes the active MediaPlayer volume after preparation",
-        "LaunchedEffect(muted, prepared)" in home
-        and "player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)" in home,
+        "LaunchedEffect(muted, prepared, soundtrackEnabled)" in home
+        and "player.setVolume(if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f" in home
+        and "FynxCatalogueMusicPlayback.playAt(context, mediaId, audioFile, owner, playbackPositionMs, if (muted) 0f else 0.85f)" in home,
     ),
     (
         "Discovery viewer mute control updates the actual MediaPlayer volume",
