@@ -11,6 +11,9 @@ app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding
 music_admin = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8")
 feed = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text(encoding="utf-8")
 playback = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCatalogueMusicPlayback.kt").read_text(encoding="utf-8")
+home_picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt").read_text(encoding="utf-8")
+status_picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt").read_text(encoding="utf-8")
+picker_surface = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicPickerSurface.kt").read_text(encoding="utf-8")
 routes = (ROOT / "backend/socialRoutes.js").read_text(encoding="utf-8")
 
 checks = [
@@ -45,6 +48,11 @@ checks = [
     ("Official Home music prepares asynchronously instead of blocking the feed", "created.prepareAsync()" in playback and "created.prepare()" not in playback),
     ("Official catalogue playback requests and responds to Android audio focus", "requestAudioFocus(request)" in playback and "AUDIOFOCUS_LOSS_TRANSIENT" in playback and "AUDIOFOCUS_GAIN" in playback),
     ("Voice-note audio path remains separate from catalogue playback", "Voice notes and recorded speech intentionally keep their own audio path." in playback and "AudioPostPlayer" in feed),
+    ("Home and Status use the same dedicated music picker surface", "FynxMusicPickerSurface(" in home_picker and "FynxMusicPickerSurface(" in status_picker),
+    ("Music picker is a spacious glass-style full-screen library", "usePlatformDefaultWidth = false" in picker_surface and "fillMaxSize(0.96f)" in picker_surface and "Brush.linearGradient" in picker_surface and "RoundedCornerShape(30.dp)" in picker_surface),
+    ("Music picker supports scrolling through many catalogue tracks", "LazyColumn(" in picker_surface and "items(tracks, key = { it.id })" in picker_surface),
+    ("Music picker search, preview, retry and track selection are wired", "onSearchChange" in picker_surface and "FynxRemoteAudio(" in picker_surface and "onRetry" in picker_surface and "onSelect(track)" in picker_surface),
+    ("Home catalogue search is debounced and authenticated", "kotlinx.coroutines.delay(300)" in home_picker and "FynxBackendClient.hasAccessToken(context)" in home_picker),
     ("Android model still parses persisted music metadata", "musicMediaId: String?" in models and "musicDurationMs: Long" in models),
 ]
 
