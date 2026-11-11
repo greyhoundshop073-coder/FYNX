@@ -142,6 +142,43 @@ internal object FynxCatalogueMusicPlayback {
         }
     }
 
+    /** Starts a post soundtrack at the paired video's current position. */
+    fun playAt(context: Context, trackKey: String, file: File, ownerKey: String, positionMs: Long) {
+        check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
+        if (snapshot.trackKey == trackKey && snapshot.ownerKey == ownerKey && player != null) {
+            if (snapshot.isPreparing) return
+            val current = player ?: return
+            runCatching {
+                if (!current.isPlaying) {
+                    if (!requestAudioFocus()) { snapshot = snapshot.copy(isPlaying = false, error = "Audio focus is unavailable."); return }
+                    if (current.duration > 0) current.seekTo(positionMs.coerceIn(0L, current.duration.toLong()).toInt())
+                    current.start(); snapshot = snapshot.copy(isPlaying = true, error = null)
+                } else syncTo(ownerKey, positionMs)
+            }.onFailure { snapshot = snapshot.copy(isPlaying = false, error = it.message) }
+            return
+        }
+        toggle(context, trackKey, file, ownerKey)
+    }
+
+    /** Keeps the soundtrack aligned to the video clock and corrects audible drift. */
+    fun syncTo(ownerKey: String, positionMs: Long) {
+        check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
+        if (snapshot.ownerKey != ownerKey || snapshot.isPreparing || !snapshot.isPlaying) return
+        val current = player ?: return
+        runCatching {
+            val duration = current.duration.coerceAtLeast(0)
+            if (duration == 0) return@runCatching
+            val target = positionMs.coerceIn(0L, duration.toLong()).toInt()
+            if (kotlin.math.abs(current.currentPosition - target) > 350) current.seekTo(target)
+        }
+    }
+
+    fun setVolume(ownerKey: String, volume: Float) {
+        check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
+        if (snapshot.ownerKey != ownerKey) return
+        runCatching { player?.setVolume(volume.coerceIn(0f, 1f), volume.coerceIn(0f, 1f)) }
+    }
+
     fun pause() {
         pauseCurrent()
     }
