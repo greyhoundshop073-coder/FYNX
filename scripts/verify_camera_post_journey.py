@@ -523,5 +523,19 @@ failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
 if failed:
+    # Upload the precise failed assertion names even when workflow logs are unavailable.
+    # The Android workflow always uploads this directory after a source-gate failure.
+    report_dir = ROOT / "fynx-runtime-screenshots"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report = [
+        "FYNX Camera -> Post source gate diagnostics",
+        f"Total checks: {len(checks)}",
+        f"Failed checks: {len(failed)}",
+        "",
+        *[f"FAIL: {name}" for name in failed],
+        "",
+        *[f"PASS: {name}" for name, ok in checks if ok],
+    ]
+    (report_dir / "camera-to-post-source-gate.txt").write_text("\\n".join(report) + "\\n", encoding="utf-8")
     raise SystemExit("Camera -> Post journey verification failed: " + ", ".join(failed))
 print(f"Camera -> Post journey verification GREEN ({len(checks)} checks)")
