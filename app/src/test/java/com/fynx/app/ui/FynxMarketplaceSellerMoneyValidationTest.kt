@@ -42,6 +42,15 @@ class FynxMarketplaceSellerMoneyValidationTest {
         expectInvalid { marketplaceRequiredCurrency("USDD") }
     }
 
+    @Test
+    fun marketplaceOrderCurrencyMustBeExplicitAndSupported() {
+        assertEquals("NGN", marketplaceRequiredOrderCurrency("ngn"))
+        assertEquals("USD", marketplaceRequiredOrderCurrency(" USD "))
+        expectInvalid { marketplaceRequiredOrderCurrency(null) }
+        expectInvalid { marketplaceRequiredOrderCurrency("") }
+        expectInvalid { marketplaceRequiredOrderCurrency("EUR") }
+    }
+
     private fun expectInvalid(block: () -> Unit) {
         try {
             block()

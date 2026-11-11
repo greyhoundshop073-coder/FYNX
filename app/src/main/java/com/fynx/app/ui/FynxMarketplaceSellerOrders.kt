@@ -110,10 +110,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                             if (status.isBlank()) {
                                 throw IllegalStateException("Seller orders response contains an order without status.")
                             }
-                            val currency = order.optString("currency", "NGN").trim().uppercase(Locale.ROOT)
-                            if (currency.isBlank()) {
-                                throw IllegalStateException("Seller orders response contains an order without currency.")
-                            }
+                            val currency = marketplaceRequiredOrderCurrency(order.opt("currency"))
                             add(
                                 SellerOrderRow(
                                     id = orderId,

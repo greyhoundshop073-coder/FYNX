@@ -69,6 +69,15 @@ internal fun marketplaceRequiredCurrency(value: Any?): String {
     return currency
 }
 
+/** Marketplace orders and payment sessions support only the explicitly declared NGN/USD currencies. */
+internal fun marketplaceRequiredOrderCurrency(value: Any?): String {
+    val currency = marketplaceRequiredCurrency(value)
+    if (currency !in setOf("NGN", "USD")) {
+        throw IllegalStateException("Marketplace order currency is unsupported.")
+    }
+    return currency
+}
+
 /** Listing APIs allow up to 160 characters on edit; the publish form remains capped at 120. */
 internal const val MAX_MARKETPLACE_LISTING_RESPONSE_TITLE_LENGTH = 160
 

@@ -2337,7 +2337,7 @@ private fun MarketplacePaymentDialog(
                                     message = marketplaceSafeError(it, "Wallet payment could not be completed.")
                                 }
                             } else {
-                                initializeMarketplacePayment(context, order.id, email)
+                                initializeMarketplacePayment(context, order.id, email, order.totalAmount, order.currency)
                                     .onSuccess { checkout ->
                                         payment = checkout
                                         openMarketplaceCheckout(context, checkout.authorizationUrl).onFailure {
