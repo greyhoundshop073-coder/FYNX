@@ -105,6 +105,8 @@ fun FynxHomeSocialHubPanel(
     var musicSearch by remember { mutableStateOf("") }
     var musicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
     var musicLoading by remember { mutableStateOf(false) }
+    var musicError by remember { mutableStateOf<String?>(null) }
+    var musicRetryKey by remember { mutableIntStateOf(0) }
     var selectedFeelingActivity by remember { mutableStateOf<FynxFeelingActivityOption?>(null) }
     var showFeelingActivityPicker by remember { mutableStateOf(false) }
     var feelingActivitySearch by remember { mutableStateOf("") }
@@ -181,14 +183,27 @@ fun FynxHomeSocialHubPanel(
         }
     }
 
-    LaunchedEffect(showMusicPicker, musicSearch) {
+    LaunchedEffect(showMusicPicker, musicSearch, musicRetryKey) {
         if (showMusicPicker) {
             musicLoading = true
-            FynxMusicCatalogueClient.listPublished(context, musicSearch)
-                .onSuccess { musicCatalogue = it }
-                .onFailure { notice = it.message ?: "Music catalogue could not be loaded." }
+            musicError = null
+            kotlinx.coroutines.delay(300)
+            if (!FynxBackendClient.hasAccessToken(context)) {
+                musicCatalogue = emptyList()
+                musicError = "Sign in to FYNX to browse published music."
+            } else {
+                FynxMusicCatalogueClient.listPublished(context, musicSearch)
+                    .onSuccess { musicCatalogue = it; musicError = null }
+                    .onFailure { error ->
+                        musicCatalogue = emptyList()
+                        musicError = error.message ?: "Music catalogue could not be loaded. Check your connection and retry."
+                    }
+            }
             musicLoading = false
         }
+    }
+    LaunchedEffect(showMusicPicker) {
+        if (!showMusicPicker) musicPreviewId = null
     }
 
     LaunchedEffect(showPeoplePicker) {
@@ -212,84 +227,31 @@ fun FynxHomeSocialHubPanel(
     }
 
     if (showMusicPicker) {
-        AlertDialog(
-            onDismissRequest = {
+        FynxMusicPickerSurface(
+            tracks = musicCatalogue,
+            search = musicSearch,
+            loading = musicLoading,
+            error = musicError,
+            previewingTrackId = musicPreviewId,
+            onSearchChange = { musicSearch = it },
+            onPreview = { musicPreviewId = it.id },
+            onStopPreview = { musicPreviewId = null },
+            onSelect = { track ->
+                selectedCatalogueMusic = track
+                musicPlaying = false
+                musicPreviewId = null
+                showMusicPicker = false
+                musicSearch = ""
+                musicError = null
+                notice = null
+            },
+            onRetry = { musicRetryKey++ },
+            onDismiss = {
                 if (!posting) {
                     showMusicPicker = false
                     musicSearch = ""
+                    musicPreviewId = null
                 }
-            },
-            title = { Text("FYNX Music") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = musicSearch,
-                        onValueChange = { musicSearch = it.take(80) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = { Text("Search music") },
-                        placeholder = { Text("Song or artist") }
-                    )
-                    Column(
-                        Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        if (musicLoading) {
-                            Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
-                            }
-                        } else if (musicCatalogue.isEmpty()) {
-                            Text(
-                                "No FYNX music is published yet. Music can only be added by FYNX administrators.",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            musicCatalogue.forEach { track ->
-                                Card(Modifier.fillMaxWidth()) {
-                                    Row(
-                                        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary)
-                                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                                            Text(track.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-                                            Text(track.artist.ifBlank { "FYNX" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                                            Text(
-                                                "${track.durationMs.coerceAtLeast(0L) / 60000}:${((track.durationMs.coerceAtLeast(0L) / 1000L) % 60).toString().padStart(2, '0')}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        if (musicPreviewId == track.id) {
-                                            FynxRemoteAudio(
-                                                mediaUrl = "/api/social/music/catalogue/" + track.id + "/media",
-                                                modifier = Modifier.width(108.dp),
-                                                maxDurationMs = track.durationMs.coerceAtLeast(1_000L)
-                                            )
-                                            TextButton(onClick = { musicPreviewId = null }) { Text("Stop") }
-                                        } else {
-                                            TextButton(onClick = { musicPreviewId = track.id }) { Text("Preview") }
-                                        }
-                                        Button(
-                                            onClick = {
-                                                selectedCatalogueMusic = track
-                                                musicPlaying = false
-                                                musicPreviewId = null
-                                                showMusicPicker = false
-                                                musicSearch = ""
-                                                notice = null
-                                            }
-                                        ) { Text("Add") }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showMusicPicker = false; musicSearch = "" }) { Text("Close") }
             }
         )
     }
