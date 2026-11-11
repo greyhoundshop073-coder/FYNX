@@ -1960,7 +1960,14 @@ def probe_media_stream_types(path: Path) -> set[str] | None:
         return set()
     if result.returncode != 0:
         return set()
-    return {line.strip().lower() for line in result.stdout.splitlines() if line.strip()}
+    # ffprobe's CSV formatter may emit a trailing comma (for example
+    # "video,"). Split fields rather than comparing the entire raw line.
+    return {
+        field.strip().lower()
+        for line in result.stdout.splitlines()
+        for field in line.split(",")
+        if field.strip()
+    }
 
 def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     """Record a short real clip, run a video look, inspect the output and never tap Next."""

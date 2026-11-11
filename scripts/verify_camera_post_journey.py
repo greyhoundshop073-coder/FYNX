@@ -423,6 +423,10 @@ checks.extend([
      and "lineHeight = overlayTextLineHeight" in overlay
      and "lineHeight = 40.sp" not in overlay
      and "textSize = (bitmap.width * 0.055f * item.scale)" in overlay),
+    ("ffprobe CSV stream parsing recognizes video when the formatter emits a trailing comma",
+     'for field in line.split(",")' in runtime
+     and 'if field.strip()' in runtime
+     and "return {line.strip().lower() for line in result.stdout.splitlines() if line.strip()}" not in runtime),
     ("Video duration metadata is recomputed when CameraX finalizes the recorded-duration fallback",
      "LaunchedEffect(pendingUri, pendingType, recordedVideoDurationFallbackMs)" in camera
      and "recordedVideoDurationFallbackMs =" in camera
