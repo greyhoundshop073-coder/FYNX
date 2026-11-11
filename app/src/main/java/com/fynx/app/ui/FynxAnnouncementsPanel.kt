@@ -49,7 +49,7 @@ fun FynxAnnouncementsPanel() {
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("FYNX Updates", style = MaterialTheme.typography.headlineSmall,
+                        Text("Official FYNX Announcements", style = MaterialTheme.typography.headlineSmall,
                             color = androidx.compose.ui.graphics.Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                         Text("Official news from the FYNX team", color = androidx.compose.ui.graphics.Color.White.copy(alpha = .88f))
                     }
