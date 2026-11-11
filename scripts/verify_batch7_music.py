@@ -59,6 +59,7 @@ checks = [
     ("Home feed music is downloaded only after explicit play", "fun playOrPause()" in feed and "loadingAudio" in feed and "LaunchedEffect(mediaId)" not in feed[feed.find("private fun MusicPostPlayer"):feed.find("private fun formatMusicDuration", feed.find("private fun MusicPostPlayer"))]),
     ("Feed soundtrack playback is owned by one specific post", 'MusicPostPlayer(post.id, post.musicMediaId!!' in feed and 'val ownerKey = remember(postId) { "home-post:$postId" }' in feed and "ownerKey: String? = null" in playback),
     ("A post leaving the active feed slot pauses only its own soundtrack", "FynxCatalogueMusicPlayback.pause(ownerKey)" in feed and "if (snapshot.ownerKey != ownerKey) return" in playback),
+    ("A soundtrack still preparing is released when its post loses focus", "if (snapshot.isPreparing)" in playback and "releaseCurrent(resetSnapshot = true)" in playback),
     ("Inactive posts cannot start soundtrack playback", "enabled = playbackActive && !loadingAudio && !isPreparing" in feed and "if (!playbackActive || loadingAudio || isPreparing) return" in feed),
     ("A soundtrack download finishing after a scroll change cannot start stale audio", "latestPlaybackActive" in feed and "if (latestPlaybackActive) downloaded?.let" in feed),
     ("Song destination preview download is user initiated", "fun loadAndPreview()" in song_page and "audioLoading" in song_page and "LaunchedEffect(mediaId)" not in song_page),
