@@ -77,7 +77,7 @@ internal object FynxCatalogueMusicPlayback {
                             resumeAfterTransientFocus = false
                             runCatching { if (active.isPlaying) active.pause() }
                             snapshot = snapshot.copy(isPlaying = false)
-                            abandonAudioFocus()
+                            abandonAudioFocus(clear = false)
                         }
                         AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> runCatching {
                             resumeAfterTransientFocus = active.isPlaying
@@ -146,7 +146,7 @@ internal object FynxCatalogueMusicPlayback {
             player?.takeIf { it.isPlaying }?.pause()
             resumeAfterTransientFocus = false
             snapshot = snapshot.copy(isPlaying = false)
-            abandonAudioFocus()
+            abandonAudioFocus(clear = false)
         }
     }
 
@@ -156,12 +156,14 @@ internal object FynxCatalogueMusicPlayback {
         return manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     }
 
-    private fun abandonAudioFocus() {
+    private fun abandonAudioFocus(clear: Boolean = true) {
         val manager = audioManager
         val request = focusRequest
         if (manager != null && request != null) runCatching { manager.abandonAudioFocusRequest(request) }
-        audioManager = null
-        focusRequest = null
+        if (clear) {
+            audioManager = null
+            focusRequest = null
+        }
         resumeAfterTransientFocus = false
     }
 
