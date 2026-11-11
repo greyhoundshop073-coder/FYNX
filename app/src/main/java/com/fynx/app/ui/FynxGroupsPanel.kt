@@ -78,12 +78,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) -> Unit = {}) {
     val context = LocalContext.current
-    val groupAppearance = FynxConversationPreferences.groupAppearance(context, groupId)
-    val glassThemeId = when (groupAppearance) {
-        "Light" -> FynxGlassThemeId.LIGHT
-        "Dark" -> FynxGlassThemeId.PURE_BLACK
-        else -> FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
-    }
+    val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -293,7 +288,12 @@ private fun FynxPulseStat(label: String, value: String, modifier: Modifier = Mod
 @Composable
 fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@preview", onBack: () -> Unit) {
     val context = LocalContext.current
-    val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
+    val groupAppearance = FynxConversationPreferences.groupAppearance(context, groupId)
+    val glassThemeId = when (groupAppearance) {
+        "Light" -> FynxGlassThemeId.LIGHT
+        "Dark" -> FynxGlassThemeId.PURE_BLACK
+        else -> FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
+    }
     val glassPalette = fynxGlassPalette(glassThemeId)
     val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, "group_$groupId")
     val bubbleTransparency = FynxConversationPreferences.chatBubbleTransparency(context, "group_$groupId")
