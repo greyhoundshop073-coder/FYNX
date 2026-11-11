@@ -38,6 +38,22 @@ object FynxGroupRemoteClient {
         FynxBackendClient.delete(context,"/api/groups/$groupId/members/${Uri.encode(username.trim().removePrefix("@"))}").getOrThrow()
         Unit
     }
+    suspend fun transferOwnership(context:Context,groupId:String,username:String):Result<String> = runCatching {
+        val body=JSONObject().put("username",username.trim().removePrefix("@"))
+        JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/ownership",body.toString()).getOrThrow()).optString("ownerUsername").takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Ownership transfer was not confirmed")
+    }
+    suspend fun leaveGroup(context:Context,groupId:String):Result<Unit> = runCatching {
+        FynxBackendClient.postJson(context,"/api/groups/$groupId/leave","{}").getOrThrow()
+        Unit
+    }
+    suspend fun reportGroup(context:Context,groupId:String,reason:String,username:String?=null):Result<Unit> = runCatching {
+        val body=JSONObject().put("reason",reason.trim().take(500)).apply {
+            username?.trim()?.removePrefix("@")?.takeIf { it.isNotBlank() }?.let { put("username",it) }
+        }
+        FynxBackendClient.postJson(context,"/api/groups/$groupId/reports",body.toString()).getOrThrow()
+        Unit
+    }
     suspend fun loadPermissions(context:Context,groupId:String):Result<RemotePermissions> = runCatching { val o=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/permissions").getOrThrow()).optJSONObject("permissions")?:JSONObject();RemotePermissions(o.optBoolean("send_messages",true),o.optBoolean("send_media",true),o.optBoolean("add_members",true),o.optBoolean("invite_links",true),o.optBoolean("approve_new_members",false),o.optInt("disappearing_seconds",0),o.optBoolean("show_history_to_new_members",true)) }
     suspend fun updatePermissions(context:Context,groupId:String,permissions:RemotePermissions):Result<RemotePermissions> = runCatching { val body=JSONObject().apply{put("sendMessages",permissions.sendMessages);put("sendMedia",permissions.sendMedia);put("addMembers",permissions.addMembers);put("inviteLinks",permissions.inviteLinks);put("approveNewMembers",permissions.approveNewMembers);put("disappearingSeconds",permissions.disappearingSeconds);put("showHistoryToNewMembers",permissions.showHistoryToNewMembers)};val o=JSONObject(FynxBackendClient.patchJson(context,"/api/groups/$groupId/permissions",body.toString()).getOrThrow()).optJSONObject("permissions")?:JSONObject();RemotePermissions(o.optBoolean("send_messages",permissions.sendMessages),o.optBoolean("send_media",permissions.sendMedia),o.optBoolean("add_members",permissions.addMembers),o.optBoolean("invite_links",permissions.inviteLinks),o.optBoolean("approve_new_members",permissions.approveNewMembers),o.optInt("disappearing_seconds",permissions.disappearingSeconds),o.optBoolean("show_history_to_new_members",permissions.showHistoryToNewMembers)) }
     suspend fun createInvite(context:Context,groupId:String):Result<Pair<String,String>> = runCatching { val o=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/invites",JSONObject().toString()).getOrThrow());o.getString("token") to o.getString("inviteUri") }
