@@ -141,7 +141,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
 
         // Products, profile/follow state and shop identity are independent requests.
         // Fetch them concurrently so a slow endpoint cannot delay the whole storefront.
-        coroutineScope {
+        coroutineScope<Unit> {
             launch {
                 FynxRemoteSocialClient.marketplaceSellerListingsPage(context, username, limit = 24, offset = 0)
                     .onSuccess { page ->
