@@ -82,6 +82,11 @@ require("group history visibility is persisted as a server permission", 'show_hi
 require("group message history enforces the new-member visibility setting", 'm.created_at >= $4' in (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8") and 'access.show_history_to_new_members' in (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8"))
 require("group mentions suggest actual members from the current group", 'val mentionSuggestions' in ACTIVE_GROUP and 'Mention a member' in ACTIVE_GROUP)
 
+require("group remote messages do not claim a per-member read receipt that the backend does not provide", "read=false" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and 'if (message.read) "✓✓" else if (message.delivered) "✓" else "…"' in ACTIVE_GROUP)
+require("group optimistic text messages remain pending until server acknowledgement", "delivered = false, read = false, replyToId = replyToId" in ACTIVE_GROUP)
+require("private chat history returns the newest 200 messages rather than the oldest 200", "ORDER BY m.created_at DESC, m.id DESC LIMIT 200" in (ROOT / "backend/server.js").read_text(encoding="utf-8") and "result.rows.reverse().map(rowToMessage)" in (ROOT / "backend/server.js").read_text(encoding="utf-8"))
+
+
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:
