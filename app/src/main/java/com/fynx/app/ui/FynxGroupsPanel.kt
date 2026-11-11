@@ -1283,7 +1283,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                                 onGroupChanged(updated)
                                 username = ""
                                 message = "Member added to this group."
-                            }.onFailure { message = it.message ?: "Member could not be added. Check group permissions and try again." }
+                            }.onFailure { message = "Member could not be added. Check group permissions and try again." }
                             busyMemberAction = null
                         }
                     }
@@ -1317,7 +1317,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                                             current = updated
                                             onGroupChanged(updated)
                                             message = if (demoting) "Moderator role removed." else "Moderator role saved."
-                                        }.onFailure { message = it.message ?: "Member role could not be updated." }
+                                        }.onFailure { message = "Member role could not be updated. Please try again." }
                                         busyMemberAction = null
                                     }
                                 }) { Text(if (busyMemberAction == member.username) "Saving…" else if (member.role == FynxGroupRole.MODERATOR) "Demote" else "Mod") }
@@ -1332,7 +1332,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                                             else management.value.state.blockedUsernames + normalizedMember
                                         management.value = management.value.copy(state = management.value.state.copy(blockedUsernames = nextBlocked))
                                         message = if (blocked) "Account unblocked." else "Account blocked."
-                                    }.onFailure { message = it.message ?: "Account block setting could not be saved." }
+                                    }.onFailure { message = "Account block setting could not be saved. Please try again." }
                                     busyMemberAction = null
                                 }
                             }) { Text(if (blocked) "Unblock" else "Block") }
@@ -1345,7 +1345,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                                         current = updated
                                         onGroupChanged(updated)
                                         message = "Member removed from the group."
-                                    }.onFailure { message = it.message ?: "Member could not be removed." }
+                                    }.onFailure { message = "Member could not be removed. Please try again." }
                                     busyMemberAction = null
                                 }
                             }) { Text("Remove") }
