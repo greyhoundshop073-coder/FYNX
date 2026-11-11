@@ -3,6 +3,8 @@ package com.fynx.app.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import java.net.URI
+import java.util.Locale
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 
@@ -13,6 +15,16 @@ internal data class FynxMarketplacePayment(
     val amount: Double,
     val currency: String
 )
+
+internal fun isTrustedMarketplaceCheckoutUrl(value: String): Boolean {
+    val parsed = runCatching { URI(value.trim()) }.getOrNull() ?: return false
+    val host = parsed.host?.lowercase(Locale.US) ?: return false
+    return parsed.scheme.equals("https", ignoreCase = true) &&
+        host in setOf("checkout.paystack.com", "paystack.com") &&
+        parsed.userInfo == null &&
+        parsed.port in setOf(-1, 443) &&
+        !parsed.isOpaque
+}
 
 internal fun marketplacePaymentFailureMessage(error: Throwable): String {
     val details = generateSequence(error) { it.cause }
@@ -48,7 +60,7 @@ internal suspend fun initializeMarketplacePayment(
         val reference = o.optString("reference").trim()
         val amountSubunit = o.optLong("amountSubunit", -1L)
         val currency = o.optString("currency", "NGN").trim().uppercase()
-        require(authorizationUrl.startsWith("https://")) { "Payment provider returned an invalid checkout URL." }
+        require(isTrustedMarketplaceCheckoutUrl(authorizationUrl)) { "Payment provider returned an untrusted checkout URL." }
         require(reference.isNotBlank()) { "Payment provider returned no payment reference." }
         require(amountSubunit > 0L) { "Payment provider returned an invalid amount." }
         require(currency == "NGN" || currency == "USD") { "Payment provider returned an unsupported currency." }
@@ -64,7 +76,7 @@ internal suspend fun initializeMarketplacePayment(
 
 internal fun openMarketplaceCheckout(context: Context, authorizationUrl: String): Result<Unit> = runCatching {
     val url = authorizationUrl.trim()
-    require(url.startsWith("https://")) { "Invalid payment checkout URL." }
+    require(isTrustedMarketplaceCheckoutUrl(url)) { "Untrusted payment checkout URL." }
     context.startActivity(
         Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     )
@@ -114,7 +126,7 @@ internal suspend fun initializeMarketplaceCheckoutGroupPayment(
         val reference = o.optString("reference").trim()
         val amountSubunit = o.optLong("amountSubunit", -1L)
         val currency = o.optString("currency", "NGN").trim().uppercase()
-        require(authorizationUrl.startsWith("https://")) { "Payment provider returned an invalid checkout URL." }
+        require(isTrustedMarketplaceCheckoutUrl(authorizationUrl)) { "Payment provider returned an untrusted checkout URL." }
         require(reference.startsWith("FYNX-CHECKOUT-")) { "Payment provider returned an invalid checkout reference." }
         require(amountSubunit > 0L) { "Payment provider returned an invalid amount." }
         require(currency == "NGN" || currency == "USD") { "Payment provider returned an unsupported currency." }
