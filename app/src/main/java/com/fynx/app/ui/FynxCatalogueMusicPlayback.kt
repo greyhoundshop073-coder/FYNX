@@ -78,6 +78,7 @@ internal object FynxCatalogueMusicPlayback {
             .setAudioAttributes(attributes)
             .setOnAudioFocusChangeListener({ change ->
                 mainHandler.post {
+                    if (focusRequest !== request) return@post
                     val active = player ?: return@post
                     when (change) {
                         AudioManager.AUDIOFOCUS_LOSS -> {
