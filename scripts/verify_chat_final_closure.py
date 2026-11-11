@@ -25,6 +25,8 @@ checks = [
     ("group search", "FynxGroupsPanel.kt", "searchQuery"),
     ("group member authority", "FynxGroupsPanel.kt", "FynxGroupRemoteClient.removeMember"),
     ("group message edit", "FynxGroupsPanel.kt", "FynxGroupRemoteClient.editMessage"),
+    ("group history visibility control", "FynxGroupSettingsPanel.kt", "showHistoryToNewMembers"),
+    ("group settings errors are user-safe", "FynxGroupSettingsPanel.kt", "Group permissions could not be saved. Please try again."),
     # The production panel uses the title-cased UI label "Chat Settings".
     ("chat settings", "FynxChatSettingsPanel.kt", "Chat Settings"),
     ("wallpaper", "FynxChatWallpaper.kt", "FynxChatWallpaperBackground"),
@@ -38,9 +40,9 @@ for label, filename, needle in checks:
         raise SystemExit(f"CHAT CLOSURE RED: {label} missing expected implementation marker: {needle}")
 
 # User-facing recovery surfaces must not leak raw backend/exception messages.
-for label, filename in [("private conversation", "ConversationPanel.kt"), ("group conversation", "FynxGroupsPanel.kt")]:
+for label, filename in [("private conversation", "ConversationPanel.kt"), ("group conversation", "FynxGroupsPanel.kt"), ("group settings", "FynxGroupSettingsPanel.kt")]:
     source = (APP / filename).read_text(encoding="utf-8")
     if "error.message" in source or "it.message" in source:
         raise SystemExit(f"CHAT CLOSURE RED: {label} exposes raw exception text")
 
-print("CHAT CLOSURE GREEN: required private/group chat surfaces, foundations, and friendly recovery errors are present")
+print("CHAT CLOSURE GREEN: active private/group chat surfaces, server-backed group history settings, foundations, and friendly recovery errors are present")
