@@ -11,7 +11,7 @@ assert.match(routes, /business_name ILIKE|bp\.business_name ILIKE/);
 assert.match(routes, /business_username ILIKE|bp\.business_username ILIKE/);
 assert.match(routes, /category ILIKE|bp\.category ILIKE/);
 assert.match(routes, /location ILIKE|bp\.location ILIKE/);
-assert.match(routes, /LIMIT \$\d+ OFFSET \$\d+/);
+assert.ok(routes.includes('LIMIT $${limitIndex} OFFSET $${offsetIndex}'));
 assert.match(routes, /hasMore/);
 assert.match(routes, /verified/);
 assert.doesNotMatch(routes, /SELECT\s+\*\s+FROM\s+business_profiles/i);
