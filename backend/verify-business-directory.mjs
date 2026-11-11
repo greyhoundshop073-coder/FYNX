@@ -17,7 +17,7 @@ assert.ok(routes.includes("LIMIT $${limitIndex} OFFSET $${offsetIndex}"));
 assert.match(routes, /opening_hours JSONB NOT NULL DEFAULT/);
 assert.match(routes, /service_areas JSONB NOT NULL DEFAULT/);
 assert.match(routes, /services JSONB NOT NULL DEFAULT/);
-assert.ok(routes.includes('app.get("/api/business/:username"'));
+assert.ok(routes.includes('app.get("/api/business/public/:username"'));
 assert.ok(routes.includes("business_username=$1 AND active=TRUE"));
 assert.ok(routes.includes("WHERE business_id=$1 AND COALESCE(active,TRUE)=TRUE AND quantity>0"));
 assert.ok(routes.includes("LIMIT 20"));
