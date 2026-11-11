@@ -51,11 +51,6 @@ require("active group Poll action opens the existing group content panel directl
 require("private chat protects top system inset", "statusBarsPadding" in PRIVATE)
 require("message model supports audio attachments", "attachmentType: String?" in MODELS and "audio" in MODELS and "ChatMessage" in MODELS)
 
-failed = [label for label, ok in checks if not ok]
-print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
-if failed:
-    raise SystemExit("GATE RED: " + "; ".join(failed))
-print("GATE GREEN: active Chat/Group route, realtime, and layout contracts are present")
 require("group Gallery uses the Android single-item photo picker for images and videos rather than a generic file picker", "ActivityResultContracts.PickVisualMedia()" in ACTIVE_GROUP and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in ACTIVE_GROUP and 'groupMediaPicker.launch("*/*")' not in ACTIVE_GROUP)
 require("private chat Gallery uses the Android single-item photo picker for images and videos while Files retains the document picker", "ActivityResultContracts.PickVisualMedia()" in PRIVATE and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in PRIVATE and 'galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))' in PRIVATE and 'Triple("Files", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf"' in PRIVATE)
 require("private chat maps selected MIME types to supported semantic media types and never guesses unknown files are images", 'attachmentType = context.contentResolver.getType(uris.first())?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "application/octet-stream"' in PRIVATE and 'attachmentType?.startsWith("image/") == true -> "image"' in PRIVATE and 'attachmentType?.startsWith("video/") == true -> "video"' in PRIVATE and 'attachmentType?.startsWith("audio/") == true -> "audio"' in PRIVATE and 'else -> "document"' in PRIVATE and 'val selectedType = attachmentType ?: "image"' not in PRIVATE)
@@ -80,3 +75,15 @@ require("failed ICE calls reset session state and release call resources instead
 require("group attachment actions use distinct colors for quick recognition", "tint = Color(0xFF1685F8)" in ACTIVE_GROUP and "tint = Color(0xFF8B6FF7)" in ACTIVE_GROUP and "tint = Color(0xFF00C99A)" in ACTIVE_GROUP and "tint = Color(0xFF00A8E8)" in ACTIVE_GROUP and "tint = Color(0xFFFFB938)" in ACTIVE_GROUP)
 require("group composer exposes a dedicated video-note camera action and sends it through the group attachment pipeline", "FynxGroupCameraPicker(context, videoNoteMode = true" in ACTIVE_GROUP and 'Text("Video note", style = MaterialTheme.typography.labelMedium, color = Color(0xFFEF6C35))' in ACTIVE_GROUP and "sendGroupAttachment(uri, type)" in ACTIVE_GROUP)
 require("chat attachment sheet gives each action its own recognizable color", '"Camera" -> Color(0xFFE85D75)' in PRIVATE and '"Gallery" -> Color(0xFF1685F8)' in PRIVATE and '"Files" -> Color(0xFF8B6FF7)' in PRIVATE and '"Location" -> Color(0xFF00A879)' in PRIVATE and '"Contact" -> Color(0xFF00A8E8)' in PRIVATE and '"Poll" -> Color(0xFFFFB938)' in PRIVATE and '"Video note" -> Color(0xFFEF6C35)' in PRIVATE)
+
+require("active group message editing uses the authenticated backend action", 'FynxGroupRemoteClient.editMessage(context, groupId, messageId, updatedText)' in ACTIVE_GROUP and 'Text("Edit")' in ACTIVE_GROUP)
+require("active group member add/remove and role changes use authenticated backend operations", all(token in ACTIVE_GROUP for token in ['FynxGroupRemoteClient.addMember(', 'FynxGroupRemoteClient.promoteMember(', 'FynxGroupRemoteClient.demoteMember(', 'FynxGroupRemoteClient.removeMember(']))
+require("group history visibility is persisted as a server permission", 'show_history_to_new_members' in (ROOT / "backend/groupMembershipRoutes.js").read_text(encoding="utf-8") and 'showHistoryToNewMembers' in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
+require("group message history enforces the new-member visibility setting", 'm.created_at >= $4' in (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8") and 'access.show_history_to_new_members' in (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8"))
+require("group mentions suggest actual members from the current group", 'val mentionSuggestions' in ACTIVE_GROUP and 'Mention a member' in ACTIVE_GROUP)
+
+failed = [label for label, ok in checks if not ok]
+print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
+if failed:
+    raise SystemExit("GATE RED: " + "; ".join(failed))
+print("GATE GREEN: active Chat/Group route, realtime, permissions, history and layout contracts are present")
