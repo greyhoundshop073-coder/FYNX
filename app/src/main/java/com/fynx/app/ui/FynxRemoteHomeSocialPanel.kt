@@ -1319,8 +1319,7 @@ private fun FynxFeedTextureVideo(
         val owner = soundtrackOwnerKey?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         val audioFile = soundtrackFile
         if (soundtrackEnabled && playing && audioFile != null) {
-            FynxCatalogueMusicPlayback.playAt(context, mediaId, audioFile, owner, playbackPositionMs)
-            FynxCatalogueMusicPlayback.setVolume(owner, if (muted) 0f else 0.85f)
+            FynxCatalogueMusicPlayback.playAt(context, mediaId, audioFile, owner, playbackPositionMs, if (muted) 0f else 0.85f)
             FynxCatalogueMusicPlayback.syncTo(owner, playbackPositionMs)
         } else FynxCatalogueMusicPlayback.pause(owner)
     }
