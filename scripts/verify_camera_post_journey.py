@@ -403,11 +403,11 @@ checks.extend([
      and 'label = { Text("Highlight") }' in overlay
      and 'Text("Delete")' in overlay
      and "Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())" in overlay),
-    ("Status-to-post runtime keeps the supported rear camera and restores the same editor without stale hierarchy reuse",
+    ("Status-to-post runtime keeps the supported rear camera and waits for the same editor to return without stale hierarchy reuse",
      "-camera-front none" in workflow
-     and "wait_attempts=80" in runtime
      and "camera_wait_for_control(" in runtime
      and 'enabled=True, timeout=20.0' in runtime
+     and 'prefix=f"{prefix}-camera-status-return-camera-ready"' in runtime
      and "camera-status-return-camera.xml" in runtime
      and "closing Status restored the same captured-media Camera editor" in runtime
      and 'lens_switch = find_control(fresh_camera_xml, ["Switch front/back camera"])' not in runtime),
