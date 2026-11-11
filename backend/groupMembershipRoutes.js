@@ -26,6 +26,7 @@ export function registerGroupMembershipRoutes({ app }) {
       ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS invite_links BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS approve_new_members BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS disappearing_seconds INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS show_history_to_new_members BOOLEAN NOT NULL DEFAULT TRUE;
       CREATE TABLE IF NOT EXISTS fynx_group_invites (token TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE, created_by BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), revoked_at TIMESTAMPTZ);
       CREATE INDEX IF NOT EXISTS fynx_group_invites_group_idx ON fynx_group_invites(group_id, created_at DESC);
       CREATE TABLE IF NOT EXISTS fynx_group_reports (id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE, reporter_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, target_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL, reason TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
@@ -89,7 +90,7 @@ export function registerGroupMembershipRoutes({ app }) {
     try {
       await ensureSchema();
       if (!(await member(String(req.params?.groupId || ''), req.user.sub))) return res.status(403).json({ error: 'group membership required' });
-      const row = (await pool.query(`SELECT send_messages,send_media,add_members,invite_links,approve_new_members,disappearing_seconds FROM fynx_groups WHERE id=$1 LIMIT 1`, [String(req.params?.groupId || '')])).rows[0];
+      const row = (await pool.query(`SELECT send_messages,send_media,add_members,invite_links,approve_new_members,disappearing_seconds,show_history_to_new_members FROM fynx_groups WHERE id=$1 LIMIT 1`, [String(req.params?.groupId || '')])).rows[0];
       if (!row) return res.status(404).json({ error: 'group not found' });
       return res.json({ permissions: row });
     } catch (error) {
@@ -106,7 +107,7 @@ export function registerGroupMembershipRoutes({ app }) {
       if (!isAdmin(actor?.role)) return res.status(403).json({ error: 'group admin permission required' });
       const bool = (value, fallback) => typeof value === 'boolean' ? value : fallback;
       const int = (value, fallback) => Number.isInteger(value) && value >= 0 && value <= 90 * 24 * 60 * 60 ? value : fallback;
-      const current = (await pool.query(`SELECT send_messages,send_media,add_members,invite_links,approve_new_members,disappearing_seconds FROM fynx_groups WHERE id=$1 LIMIT 1`, [groupId])).rows[0];
+      const current = (await pool.query(`SELECT send_messages,send_media,add_members,invite_links,approve_new_members,disappearing_seconds,show_history_to_new_members FROM fynx_groups WHERE id=$1 LIMIT 1`, [groupId])).rows[0];
       if (!current) return res.status(404).json({ error: 'group not found' });
       const next = {
         send_messages: bool(req.body?.sendMessages, current.send_messages),
@@ -114,9 +115,10 @@ export function registerGroupMembershipRoutes({ app }) {
         add_members: bool(req.body?.addMembers, current.add_members),
         invite_links: bool(req.body?.inviteLinks, current.invite_links),
         approve_new_members: bool(req.body?.approveNewMembers, current.approve_new_members),
-        disappearing_seconds: int(req.body?.disappearingSeconds, current.disappearing_seconds)
+        disappearing_seconds: int(req.body?.disappearingSeconds, current.disappearing_seconds),
+        show_history_to_new_members: bool(req.body?.showHistoryToNewMembers, current.show_history_to_new_members)
       };
-      const row = (await pool.query(`UPDATE fynx_groups SET send_messages=$1,send_media=$2,add_members=$3,invite_links=$4,approve_new_members=$5,disappearing_seconds=$6,updated_at=NOW() WHERE id=$7 RETURNING send_messages,send_media,add_members,invite_links,approve_new_members,disappearing_seconds`, [next.send_messages,next.send_media,next.add_members,next.invite_links,next.approve_new_members,next.disappearing_seconds,groupId])).rows[0];
+      const row = (await pool.query(`UPDATE fynx_groups SET send_messages=$1,send_media=$2,add_members=$3,invite_links=$4,approve_new_members=$5,disappearing_seconds=$6,show_history_to_new_members=$7,updated_at=NOW() WHERE id=$8 RETURNING send_messages,send_media,add_members,invite_links,approve_new_members,disappearing_seconds,show_history_to_new_members`, [next.send_messages,next.send_media,next.add_members,next.invite_links,next.approve_new_members,next.disappearing_seconds,next.show_history_to_new_members,groupId])).rows[0];
       return res.json({ permissions: row });
     } catch (error) {
       console.error('group permissions update', error);
