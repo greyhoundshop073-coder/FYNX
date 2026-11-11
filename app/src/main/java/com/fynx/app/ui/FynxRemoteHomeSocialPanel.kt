@@ -1093,7 +1093,8 @@ private fun FynxFeedTextureVideo(
     soundtrackMediaId: String? = null,
     soundtrackOwnerKey: String? = null,
     soundtrackTitle: String = "",
-    soundtrackArtist: String = ""
+    soundtrackArtist: String = "",
+    soundtrackDurationMs: Long = 0L
 ) {
     val textureState = remember(file) { mutableStateOf<android.graphics.SurfaceTexture?>(null) }
     val textureViewState = remember(file) { mutableStateOf<TextureView?>(null) }
@@ -1109,6 +1110,7 @@ private fun FynxFeedTextureVideo(
     var soundtrackLoading by remember(soundtrackMediaId) { mutableStateOf(false) }
     var soundtrackFailed by remember(soundtrackMediaId) { mutableStateOf(false) }
     var soundtrackManuallyDisabled by remember(soundtrackMediaId) { mutableStateOf(false) }
+    var songDetailsOpen by remember(soundtrackMediaId) { mutableStateOf(false) }
     val latestPlaybackActive by rememberUpdatedState(playbackActive)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1209,13 +1211,13 @@ private fun FynxFeedTextureVideo(
                 }
             }
         }
-        if (!soundtrackMediaId.isNullOrBlank() && soundtrackTitle.isNotBlank()) {
+        if (!soundtrackMediaId.isNullOrBlank()) {
             Surface(Modifier.align(Alignment.TopStart).padding(10.dp), shape = RoundedCornerShape(18.dp), color = Color.Black.copy(alpha = 0.68f), tonalElevation = 0.dp) {
                 Row(Modifier.padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.MusicNote, contentDescription = "Attached music", tint = Color.White, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(5.dp))
-                    Column(Modifier.weight(1f, fill = false)) {
-                        Text(if (soundtrackArtist.isBlank()) soundtrackTitle else "$soundtrackTitle · $soundtrackArtist", color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    Column(Modifier.weight(1f, fill = false).clickable { songDetailsOpen = true }) {
+                        Text(if (soundtrackTitle.isBlank()) "Music" else if (soundtrackArtist.isBlank()) soundtrackTitle else "$soundtrackTitle · $soundtrackArtist", color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                         if (soundtrackLoading) Text("Loading music…", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
                         if (soundtrackFailed) Text("Music unavailable — retry", color = Color.White, style = MaterialTheme.typography.labelSmall)
                     }
@@ -1400,6 +1402,15 @@ private fun FynxFeedTextureVideo(
     DisposableEffect(file, soundtrackOwnerKey) {
         onDispose { soundtrackOwnerKey?.let { FynxCatalogueMusicPlayback.pause(it) }; runCatching { player.stop() }; runCatching { player.release() }; textureState.value = null }
     }
+    if (songDetailsOpen && !soundtrackMediaId.isNullOrBlank()) {
+        FynxMusicSongDetailSurface(
+            mediaId = soundtrackMediaId,
+            title = soundtrackTitle,
+            artist = soundtrackArtist,
+            durationMs = soundtrackDurationMs,
+            onDismiss = { songDetailsOpen = false }
+        )
+    }
 }
 
 private fun formatHomeVideoDuration(durationMs: Long): String {
@@ -1497,7 +1508,8 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     soundtrackMediaId = soundtrackMediaId,
                     soundtrackOwnerKey = soundtrackPostId?.let { "home-post:$it:inline" },
                     soundtrackTitle = soundtrackTitle,
-                    soundtrackArtist = soundtrackArtist
+                    soundtrackArtist = soundtrackArtist,
+                    soundtrackDurationMs = soundtrackDurationMs
                 )
             }
         }
@@ -1537,7 +1549,8 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                         soundtrackMediaId = soundtrackMediaId,
                         soundtrackOwnerKey = soundtrackPostId?.let { "home-post:$it:fullscreen" },
                         soundtrackTitle = soundtrackTitle,
-                        soundtrackArtist = soundtrackArtist
+                        soundtrackArtist = soundtrackArtist,
+                        soundtrackDurationMs = soundtrackDurationMs
                     )
                 } else {
                     var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }

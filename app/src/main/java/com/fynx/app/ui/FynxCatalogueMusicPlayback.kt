@@ -152,7 +152,7 @@ internal object FynxCatalogueMusicPlayback {
                 current.isLooping = true
                 if (!current.isPlaying) {
                     if (!requestAudioFocus()) { snapshot = snapshot.copy(isPlaying = false, error = "Audio focus is unavailable."); return }
-                    if (current.duration > 0) current.seekTo(positionMs.coerceIn(0L, current.duration.toLong()).toInt())
+                    if (current.duration > 0) current.seekTo((positionMs.coerceAtLeast(0L) % current.duration.toLong()).toInt())
                     current.start(); snapshot = snapshot.copy(isPlaying = true, error = null)
                 } else syncTo(ownerKey, positionMs)
             }.onFailure { snapshot = snapshot.copy(isPlaying = false, error = it.message) }
@@ -170,7 +170,7 @@ internal object FynxCatalogueMusicPlayback {
         runCatching {
             val duration = current.duration.coerceAtLeast(0)
             if (duration == 0) return@runCatching
-            val target = positionMs.coerceIn(0L, duration.toLong()).toInt()
+            val target = (positionMs.coerceAtLeast(0L) % duration.toLong()).toInt()
             if (kotlin.math.abs(current.currentPosition - target) > 350) current.seekTo(target)
         }
     }
