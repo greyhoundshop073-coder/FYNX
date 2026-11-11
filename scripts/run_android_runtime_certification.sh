@@ -111,6 +111,11 @@ else
     FYNX_CAMERA_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
     VISUAL_EXIT=$?
     if [ "${VISUAL_EXIT}" -ne 0 ]; then echo "::warning::Camera visual capture did not complete (exit ${VISUAL_EXIT}); instrumentation remains ${TEST_EXIT}."; fi
+    if [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
+      FYNX_CAMERA_VISUALS_ONLY=0 FYNX_MUSIC_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+      MUSIC_VISUAL_EXIT=$?
+      if [ "${MUSIC_VISUAL_EXIT}" -ne 0 ]; then echo "::warning::Music picker visual capture did not complete (exit ${MUSIC_VISUAL_EXIT}); instrumentation remains ${TEST_EXIT}."; fi
+    fi
   elif [ "${FYNX_AI_VISUALS_ONLY:-0}" = "1" ]; then
     FYNX_AI_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
     VISUAL_EXIT=$?
