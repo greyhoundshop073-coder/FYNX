@@ -43,11 +43,13 @@ object FynxProductionMessaging {
                     if (username.isBlank()) continue
                     val displayName = item.optString("displayName").trim().ifBlank { username }
                     val timestamp = item.optLong("lastMessageTimestamp", System.currentTimeMillis())
-                    val time = DateUtils.getRelativeTimeSpanString(
-                        timestamp,
-                        System.currentTimeMillis(),
-                        DateUtils.MINUTE_IN_MILLIS
-                    ).toString()
+                    val now = System.currentTimeMillis()
+                    val time = if (timestamp > 0L && now - timestamp < DateUtils.MINUTE_IN_MILLIS) "Now" else
+                        DateUtils.getRelativeTimeSpanString(
+                            timestamp,
+                            now,
+                            DateUtils.MINUTE_IN_MILLIS
+                        ).toString()
                     val mediaId = item.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" }
                     add(
                         ChatPreview(
