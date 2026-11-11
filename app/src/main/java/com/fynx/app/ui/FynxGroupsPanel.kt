@@ -933,7 +933,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                     if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
-                                    if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted) }
+                                    if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓" else "…", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted) }
                                 }
                                 }
                             }
@@ -1117,7 +1117,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             if (editingMessageId != null) {
                                 submitGroupEdit()
                             } else if (text.isNotBlank() && !sending && selectedGroup != null) {
-                                val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                                val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyToId)
                                 messages = messages + optimistic
                                 FynxChatStore.save(context, "group_$groupId", messages)
                                 text = ""; replyToId = null; sending = true
@@ -1151,7 +1151,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     voiceRecording -> finishGroupVoiceRecording()
                                     editingMessageId != null -> submitGroupEdit()
                                     text.isNotBlank() && !sending && selectedGroup != null -> {
-                                        val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                                        val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyToId)
                                         messages = messages + optimistic
                                         FynxChatStore.save(context, "group_$groupId", messages)
                                         text = ""; replyToId = null; sending = true
