@@ -14,7 +14,13 @@ const checks = [
   ['seller history exposes order status for transparent reconciliation labels', settlement.includes("orderStatus: String(row.order_status || 'UNKNOWN')") && sellerUi.includes('orderStatus = row.optString("orderStatus")')],
   ['seller UI labels historical completed rows as settlement-unverified', sellerUi.includes('LEGACY COMPLETED · SETTLEMENT UNVERIFIED')],
   ['seller UI explains unreconciled earnings are not payout-confirmed', sellerUi.includes('not counted as protected, available or paid')],
-  ['seller UI displays the unreconciled legacy total', sellerUi.includes('Historical completed · not reconciled') && sellerUi.includes('unreconciledLegacy')]
+  ['seller UI displays the unreconciled legacy total', sellerUi.includes('Historical completed · not reconciled') && sellerUi.includes('unreconciledLegacy')],
+  ['seller settlement history uses a bounded page size', settlement.includes("Math.min(100, Math.max(1, requestedLimit))") && settlement.includes('LIMIT $4')],
+  ['seller settlement cursor is validated before use', settlement.includes('parseSellerSettlementCursor(cursorValue)') && settlement.includes("invalid seller settlement cursor")],
+  ['seller settlement pages use a stable timestamp and order-id keyset', settlement.includes('o.id DESC') && settlement.includes('o.id) < ($2::timestamptz, $3::uuid)')],
+  ['seller settlement cursor is scoped to the authenticated seller query', settlement.includes('WHERE o.seller_id = $1') && settlement.includes('cursor?.orderId || null')],
+  ['seller settlement response reports the next page without changing all-time totals', settlement.includes('hasMore,') && settlement.includes('nextCursor') && settlement.includes('GROUP BY currency')],
+  ['seller UI can append older pages without duplicating order records', sellerUi.includes('Load older earnings') && sellerUi.includes('existingIds') && sellerUi.includes('moneyHasMore')]
 ];
 
 checks.push(['seller UI labels failed/blocked payouts as unresolved and unavailable', sellerUi.includes('Failed payout · reconciliation required') && sellerUi.includes('COMPLETED · PAYOUT FAILED · RECONCILIATION REQUIRED') && sellerUi.includes('unreconciledFailedPayouts')]);

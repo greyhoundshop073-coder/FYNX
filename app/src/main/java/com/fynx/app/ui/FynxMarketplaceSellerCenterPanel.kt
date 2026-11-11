@@ -70,7 +70,9 @@ private data class SellerMoneyTotals(
 
 private data class SellerMoneySnapshot(
     val records: List<SellerMoneyRecord>,
-    val totals: Map<String, SellerMoneyTotals>?
+    val totals: Map<String, SellerMoneyTotals>?,
+    val nextCursor: String?,
+    val hasMore: Boolean
 )
 
 private fun marketplaceDescriptionSubcategory(description: String): String =
@@ -193,6 +195,9 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     var moneyRecords by remember(sellerAccountKey) { mutableStateOf(emptyList<SellerMoneyRecord>()) }
     var moneyTotals by remember(sellerAccountKey) { mutableStateOf(emptyMap<String, SellerMoneyTotals>()) }
     var moneyTotalsFromBackend by remember(sellerAccountKey) { mutableStateOf(false) }
+    var moneyNextCursor by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var moneyHasMore by remember(sellerAccountKey) { mutableStateOf(false) }
+    var moneyPageLoading by remember(sellerAccountKey) { mutableStateOf(false) }
     var showDriverAssignments by remember(sellerAccountKey) { mutableStateOf(false) }
     var activeSection by rememberSaveable(sellerAccountKey) { mutableStateOf("Overview") }
     var weeklySellerAwards by remember(sellerAccountKey) { mutableStateOf<List<FynxMarketplaceSellerWeeklyAward>>(emptyList()) }
@@ -233,7 +238,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         scope.launch {
             moneyLoading = true
             moneyError = null
-            val result = FynxBackendClient.get(context, "/api/marketplace/settlement/seller/summary")
+            val result = FynxBackendClient.get(context, "/api/marketplace/settlement/seller/summary?limit=100")
                 .mapCatching { raw ->
                     val root = JSONObject(raw)
                     val settlements = root.optJSONArray("settlements")
@@ -285,21 +290,81 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                             updatedAt = row.optString("updatedAt")
                         )
                     }
-                    SellerMoneySnapshot(records, if (totalsArray != null) totals else null)
+                    val nextCursor = root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" }
+                    SellerMoneySnapshot(records, if (totalsArray != null) totals else null, nextCursor, root.optBoolean("hasMore", false))
                 }
             if (requestGeneration != moneyRequestGeneration) return@launch
             result.onSuccess { snapshot ->
-                moneyRecords = snapshot.records.sortedByDescending { it.updatedAt }
+                moneyRecords = snapshot.records.sortedWith(compareByDescending<SellerMoneyRecord> { it.updatedAt }.thenByDescending { it.orderId })
                 moneyTotals = snapshot.totals.orEmpty()
                 moneyTotalsFromBackend = snapshot.totals != null
+                moneyNextCursor = snapshot.nextCursor
+                moneyHasMore = snapshot.hasMore
             }.onFailure { failure ->
                 // A failed refresh must never leave old payout amounts looking current.
                 moneyRecords = emptyList()
                 moneyTotals = emptyMap()
                 moneyTotalsFromBackend = false
+                moneyNextCursor = null
+                moneyHasMore = false
                 moneyError = marketplaceSafeError(failure, "Seller earnings could not load.")
             }
             moneyLoading = false
+        }
+    }
+
+    fun loadMoreMoney() {
+        val cursor = moneyNextCursor ?: return
+        if (moneyPageLoading || moneyLoading) return
+        val requestGeneration = moneyRequestGeneration
+        scope.launch {
+            moneyPageLoading = true
+            FynxBackendClient.get(
+                context,
+                "/api/marketplace/settlement/seller/summary?limit=100&cursor=$cursor"
+            ).mapCatching { raw ->
+                val root = JSONObject(raw)
+                val settlements = root.optJSONArray("settlements")
+                    ?: throw IllegalStateException("Seller earnings history was incomplete.")
+                val records = mutableListOf<SellerMoneyRecord>()
+                for (i in 0 until settlements.length()) {
+                    val row = settlements.optJSONObject(i)
+                        ?: throw IllegalStateException("Seller earnings history was incomplete.")
+                    val orderId = row.optString("orderId").trim()
+                    if (orderId.isBlank()) throw IllegalStateException("Seller earnings history was incomplete.")
+                    val currency = marketplaceRequiredCurrency(row.opt("currency"))
+                    val funds = row.optString("funds").ifBlank { "UNKNOWN" }
+                    val payoutStatus = row.optString("payoutStatus").ifBlank { funds }
+                    records += SellerMoneyRecord(
+                        orderId = orderId,
+                        title = row.optString("title").ifBlank { "FYNX order" },
+                        currency = currency,
+                        productSubtotal = marketplaceRequiredBalance(row.opt("productSubtotal")),
+                        deliveryFee = marketplaceRequiredBalance(row.opt("deliveryFee")),
+                        sellerNet = marketplaceRequiredAmount(row.opt("sellerNetAmount")),
+                        marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFeeSeller")),
+                        funds = funds,
+                        payoutStatus = payoutStatus,
+                        orderStatus = row.optString("orderStatus").ifBlank { "UNKNOWN" },
+                        updatedAt = row.optString("updatedAt")
+                    )
+                }
+                val nextCursor = root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" }
+                Triple(records, nextCursor, root.optBoolean("hasMore", false))
+            }.onSuccess { (records, nextCursor, hasMore) ->
+                if (requestGeneration == moneyRequestGeneration) {
+                    val existingIds = moneyRecords.mapTo(mutableSetOf()) { it.orderId }
+                    moneyRecords = (moneyRecords + records.filterNot { it.orderId in existingIds })
+                        .sortedWith(compareByDescending<SellerMoneyRecord> { it.updatedAt }.thenByDescending { it.orderId })
+                    moneyNextCursor = nextCursor
+                    moneyHasMore = hasMore
+                }
+            }.onFailure { failure ->
+                if (requestGeneration == moneyRequestGeneration) {
+                    moneyError = marketplaceSafeError(failure, "Older seller earnings could not load.")
+                }
+            }
+            moneyPageLoading = false
         }
     }
 
@@ -440,7 +505,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     val settlementSummary = when {
         moneyLoading -> "Checking recent earnings…"
         moneyError != null -> "Recent earnings unavailable until refresh succeeds"
-        else -> "${moneyRecords.size} recent settlement record${if (moneyRecords.size == 1) "" else "s"} (latest 100)"
+        else -> "${moneyRecords.size} settlement record${if (moneyRecords.size == 1) "" else "s"} loaded${if (moneyHasMore) " · more available" else ""}"
     }
     val shopSections = listOf("Overview", "Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts")
     val shopSectionsScrollState = rememberLazyListState()
@@ -849,7 +914,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                     }
                     if (!moneyLoading && moneyError == null && !moneyTotalsFromBackend) {
                         Text(
-                            "This backend only provides the latest 100 settlements. Totals below may not include older orders.",
+                            "Settlement history is paginated. The totals above cover all seller orders, not just the loaded history page.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -861,7 +926,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         if (activeSection == "Earnings & payouts") item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Recent earnings history (latest 100; showing 20)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("Seller earnings history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     moneyError?.let { message ->
                         Text(message, color = MaterialTheme.colorScheme.error)
                         TextButton(onClick = { loadMoney() }, enabled = !moneyLoading) {
@@ -872,7 +937,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                     }
                     if (moneyLoading) CircularProgressIndicator(Modifier.size(20.dp))
                     else if (moneyRecords.isEmpty() && moneyError == null) Text("Completed and protected Marketplace earnings will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    else moneyRecords.take(20).forEach { record ->
+                    else moneyRecords.forEach { record ->
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(record.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
@@ -890,6 +955,17 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                             HorizontalDivider(Modifier.padding(vertical = 5.dp))
                         }
                     }
+                    if (moneyHasMore && moneyError == null) {
+                        Button(
+                            onClick = { loadMoreMoney() },
+                            enabled = !moneyPageLoading && !moneyLoading && !moneyNextCursor.isNullOrBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (moneyPageLoading) CircularProgressIndicator(Modifier.size(18.dp))
+                            else Text("Load older earnings")
+                        }
+                    }
+                    if (moneyPageLoading) Text("Loading older settlement records…", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
