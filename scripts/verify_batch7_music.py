@@ -17,6 +17,9 @@ status_picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt
 picker_surface = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicPickerSurface.kt").read_text(encoding="utf-8")
 song_page = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicSongDetailSurface.kt").read_text(encoding="utf-8")
 routes = (ROOT / "backend/socialRoutes.js").read_text(encoding="utf-8")
+runtime_capture = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+runtime_shell = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
+workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
     ("Backend seeds six original FYNX catalogue tracks through real message_media rows", all(x in routes for x in [
@@ -59,6 +62,8 @@ checks = [
     ("Home feed soundtrack opens the song destination", "songDetailsOpen" in feed and "FynxMusicSongDetailSurface(" in feed and "View song details" in feed),
     ("Song destination previews through the shared catalogue player", "FynxCatalogueMusicPlayback.toggle" in song_page and '/api/social/music/media/$mediaId' in song_page),
     ("Song destination preview is scoped and released when details close", 'val previewOwnerKey = remember(mediaId) { "song-detail:$mediaId" }' in song_page and "FynxCatalogueMusicPlayback.toggle(context, mediaId, cached, previewOwnerKey)" in song_page and "FynxCatalogueMusicPlayback.pause(previewOwnerKey)" in song_page and "playback.ownerKey == previewOwnerKey" in song_page),
+    ("Android runtime certification captures the real Home composer and shared Music picker", "def capture_home_music_picker_visuals" in runtime_capture and "capture_home_music_picker_visuals(home_xml)" in runtime_capture and "authenticated-home-music-composer.png" in runtime_capture and "authenticated-home-music-picker.png" in runtime_capture),
+    ("Music picker screenshot runs through backend-independent local UI mode", "FYNX_HOME_FEED_VISUALS_ONLY" in workflow and "fix/music-foundation-owner-gate-20261111" in workflow and "FYNX_LOCAL_VISUALS_ONLY" in workflow and "Capturing the Home composer and Music picker" in runtime_shell),
     ("Home feed music is downloaded only after explicit play", "fun playOrPause()" in feed and "loadingAudio" in feed and "LaunchedEffect(mediaId)" not in feed[feed.find("private fun MusicPostPlayer"):feed.find("private fun formatMusicDuration", feed.find("private fun MusicPostPlayer"))]),
     ("Music cache stays inside account-scoped private app storage", 'File(context.filesDir, "$FYNX_MEDIA_CACHE_DIR/${accountCacheKey(accountKey)}")' in media_cache and "MediaStore" not in media_cache and "Environment.DIRECTORY_DOWNLOADS" not in media_cache),
     ("Music cache has a bounded local storage budget", "MAX_FYNX_MEDIA_CACHE_BYTES = 100L * 1024L * 1024L" in media_cache and "trim(directory, file)" in media_cache),
