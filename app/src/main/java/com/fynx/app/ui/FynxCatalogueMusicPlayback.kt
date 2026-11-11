@@ -37,9 +37,10 @@ internal object FynxCatalogueMusicPlayback {
     private var resumeAfterTransientFocus = false
     private var requestedVolume = 1f
     private var focusDuckMultiplier = 1f
+    private var pendingResumePlayer: MediaPlayer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun toggle(context: Context, trackKey: String, file: File, ownerKey: String? = null, initialPositionMs: Long = 0L, loopPlayback: Boolean = false) {
+    fun toggle(context: Context, trackKey: String, file: File, ownerKey: String? = null, initialPositionMs: Long = 0L, loopPlayback: Boolean = false, initialVolume: Float = 1f) {
         check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
         if (snapshot.trackKey == trackKey && snapshot.ownerKey == ownerKey && player != null) {
             val current = player ?: return
@@ -65,6 +66,8 @@ internal object FynxCatalogueMusicPlayback {
         }
 
         releaseCurrent(resetSnapshot = false)
+        requestedVolume = initialVolume.coerceIn(0f, 1f)
+        focusDuckMultiplier = 1f
         snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey, isPreparing = true)
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -78,6 +81,8 @@ internal object FynxCatalogueMusicPlayback {
                     val active = player ?: return@post
                     when (change) {
                         AudioManager.AUDIOFOCUS_LOSS -> {
+                            pendingResumePlayer?.let { runCatching { it.setOnSeekCompleteListener(null) } }
+                            pendingResumePlayer = null
                             resumeAfterTransientFocus = false
                             if (snapshot.isPreparing) {
                                 releaseCurrent(resetSnapshot = true)
@@ -88,6 +93,8 @@ internal object FynxCatalogueMusicPlayback {
                             abandonAudioFocus(clear = false)
                         }
                         AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> runCatching {
+                            pendingResumePlayer?.let { runCatching { it.setOnSeekCompleteListener(null) } }
+                            pendingResumePlayer = null
                             // A pending initial seek must never start after focus was lost.
                             if (snapshot.isPreparing) {
                                 releaseCurrent(resetSnapshot = true)
@@ -122,8 +129,6 @@ internal object FynxCatalogueMusicPlayback {
         focusRequest = request
         resumeAfterTransientFocus = false
 
-        requestedVolume = 1f
-        focusDuckMultiplier = 1f
         val created = MediaPlayer()
         player = created
         try {
@@ -169,24 +174,51 @@ internal object FynxCatalogueMusicPlayback {
     }
 
     /** Starts a post soundtrack at the paired video's current position. */
-    fun playAt(context: Context, trackKey: String, file: File, ownerKey: String, positionMs: Long) {
+    fun playAt(context: Context, trackKey: String, file: File, ownerKey: String, positionMs: Long, initialVolume: Float) {
         check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
+        requestedVolume = initialVolume.coerceIn(0f, 1f)
         if (snapshot.trackKey == trackKey && snapshot.ownerKey == ownerKey && player != null) {
+            player?.let(::applyRequestedVolume)
             if (snapshot.isPreparing) return
             val current = player ?: return
             runCatching {
                 current.isLooping = true
                 if (!current.isPlaying) {
                     if (!requestAudioFocus()) { snapshot = snapshot.copy(isPlaying = false, error = "Audio focus is unavailable."); return }
-                    if (current.duration > 0) current.seekTo((positionMs.coerceAtLeast(0L) % current.duration.toLong()).toInt())
-                    current.start(); snapshot = snapshot.copy(isPlaying = true, error = null)
+                    val duration = current.duration.coerceAtLeast(0)
+                    val target = if (duration > 0) (positionMs.coerceAtLeast(0L) % duration.toLong()).toInt() else 0
+                    if (target > 0) {
+                        pendingResumePlayer = current
+                        current.setOnSeekCompleteListener { seeked ->
+                            if (player !== seeked || pendingResumePlayer !== seeked ||
+                                snapshot.trackKey != trackKey || snapshot.ownerKey != ownerKey ||
+                                snapshot.isPreparing || snapshot.isPlaying
+                            ) return@setOnSeekCompleteListener
+                            pendingResumePlayer = null
+                            seeked.setOnSeekCompleteListener(null)
+                            runCatching {
+                                applyRequestedVolume(seeked)
+                                if (requestAudioFocus()) {
+                                    seeked.start()
+                                    snapshot = snapshot.copy(isPlaying = true, error = null)
+                                } else {
+                                    snapshot = snapshot.copy(isPlaying = false, error = "Audio focus is unavailable.")
+                                }
+                            }.onFailure { snapshot = snapshot.copy(isPlaying = false, error = it.message) }
+                        }
+                        current.seekTo(target)
+                    } else {
+                        applyRequestedVolume(current)
+                        current.start()
+                        snapshot = snapshot.copy(isPlaying = true, error = null)
+                    }
                 } else syncTo(ownerKey, positionMs)
             }.onFailure { snapshot = snapshot.copy(isPlaying = false, error = it.message) }
             return
         }
         // Prepare the new player at the video's current clock position. The prepared
         // callback seeks before starting, so the soundtrack never audibly begins at 0.
-        toggle(context, trackKey, file, ownerKey, initialPositionMs = positionMs, loopPlayback = true)
+        toggle(context, trackKey, file, ownerKey, initialPositionMs = positionMs, loopPlayback = true, initialVolume = initialVolume)
     }
 
     /** Keeps the soundtrack aligned to the video clock and corrects audible drift. */
@@ -224,6 +256,8 @@ internal object FynxCatalogueMusicPlayback {
         check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
         // A MediaPlayer that is still preparing can start later from its prepared callback.
         // Releasing it here prevents a soundtrack from starting after its post has left focus.
+        pendingResumePlayer?.let { runCatching { it.setOnSeekCompleteListener(null) } }
+        pendingResumePlayer = null
         if (snapshot.isPreparing) {
             releaseCurrent(resetSnapshot = true)
             return
@@ -267,6 +301,8 @@ internal object FynxCatalogueMusicPlayback {
     }
 
     private fun releaseCurrent(resetSnapshot: Boolean) {
+        pendingResumePlayer?.let { runCatching { it.setOnSeekCompleteListener(null) } }
+        pendingResumePlayer = null
         runCatching { player?.release() }
         player = null
         abandonAudioFocus()
