@@ -1471,6 +1471,7 @@ private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECO
 @Composable
 private fun MusicPostPlayer(mediaId: String, title: String, artist: String, durationMs: Long) {
     val context = LocalContext.current
+    var songDetailsOpen by remember(mediaId) { mutableStateOf(false) }
     var file by remember(mediaId) { mutableStateOf<File?>(null) }
     LaunchedEffect(mediaId) {
         file = withContext(Dispatchers.IO) {
@@ -1485,9 +1486,12 @@ private fun MusicPostPlayer(mediaId: String, title: String, artist: String, dura
     Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+            Column(
+                Modifier.weight(1f).padding(horizontal = 10.dp).clickable { songDetailsOpen = true }
+            ) {
                 Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                 Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                Text("View song details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 if (isPreparing) Text("Preparing audio…", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
                 if (isCurrentTrack && playback.error != null) Text("Could not play this track", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
@@ -1502,6 +1506,15 @@ private fun MusicPostPlayer(mediaId: String, title: String, artist: String, dura
                 )
             }
         }
+    }
+    if (songDetailsOpen) {
+        FynxMusicSongDetailSurface(
+            mediaId = mediaId,
+            title = title,
+            artist = artist,
+            durationMs = durationMs,
+            onDismiss = { songDetailsOpen = false }
+        )
     }
 }
 
