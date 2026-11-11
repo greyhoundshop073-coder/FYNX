@@ -179,18 +179,20 @@ checks = [
      and "LaunchedEffect(initialMediaUri, initialMediaType)" in status_hub
      and "FynxMatureStatusComposerPanel(" in status_hub
      and "initialMediaUri = selectedInitialMedia?.uri" in status_hub),
-    ("Your Story dismisses Camera Dialog and opens the real Status composer without publishing",
+    ("Your Story opens Status above Camera and Back restores the same captured-media editor",
      'onShareToStatus = { uri, type ->' in home
-     and "showCamera = false" in home
+     and "showCamera = true" in home
      and 'onOpenStatusWithMedia(uri, type)' in home
+     and "DialogProperties(" in app_source
+     and "FynxStatusHubPanel(" in app_source
      and '["Your Story"]' in runtime
      and '["Send"]' in runtime
      and '["Back from Status composer"]' in runtime
      and "camera-status-composer.png" in runtime
      and "Your Story opened the existing Status composer with the captured media; Send was not tapped" in runtime
-     and '"KEYCODE_BACK"' in runtime
-     and "camera-status-return-home.xml" in runtime
-     and "camera-after-status-photo" in runtime),
+     and "camera-status-return-camera.xml" in runtime
+     and "closing Status restored the same captured-media Camera editor" in runtime
+     and '"KEYCODE_BACK"' in runtime),
     ("Camera editor exposes Next and preserves the existing captured-media callback",
      'Text("Next")' in camera and 'onClick = { finishCameraMedia(toStatus = false) }' in camera and "onCaptured(finalUri, mediaType)" in camera),
     ("Next details composer shows media preview, description, tag helpers and privacy entry",
@@ -380,6 +382,7 @@ checks = [
      '["Status"]' in runtime
      and "camera-video-status-composer.png" in runtime
      and "recorded video opened the existing Status composer with Send available; Send was not tapped" in runtime
+     and "Status close did not restore the recorded-video Camera editor" in runtime
      and "camera-video-status-close" in runtime),
 ]
 
