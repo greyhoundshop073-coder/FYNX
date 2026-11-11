@@ -155,6 +155,12 @@ internal object FynxCatalogueMusicPlayback {
 
     private fun pauseCurrent() {
         check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
+        // A MediaPlayer that is still preparing can start later from its prepared callback.
+        // Releasing it here prevents a soundtrack from starting after its post has left focus.
+        if (snapshot.isPreparing) {
+            releaseCurrent(resetSnapshot = true)
+            return
+        }
         runCatching {
             player?.takeIf { it.isPlaying }?.pause()
             resumeAfterTransientFocus = false
