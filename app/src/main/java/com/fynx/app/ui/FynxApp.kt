@@ -728,7 +728,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     }
                 }            )
             "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" })
-            "Local Businesses" -> FynxLocalBusinessesPanel(onBack = { selected = "Marketplace" })
+            "Local Businesses" -> FynxLocalBusinessesPanel(
+                onBack = { selected = "Marketplace" },
+                onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
+            )
             "Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenBusinesses = { selected = "Local Businesses" }, onOpenWallet = { selected = "Wallet" }, onOpenSavedProducts = { selected = "Saved Products" }, initialSellerUsername = marketplaceProfileUsername, onInitialSellerOpened = { marketplaceProfileUsername = null }, onShareListingToStatus = { listingId, title ->
                 val draft = FynxDeepLinkParser.marketplaceStatusDraftText(listingId, title)
                 if (draft.isNotBlank()) {
