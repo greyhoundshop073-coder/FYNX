@@ -34,6 +34,8 @@ check("FCM retry and invalid-token cleanup", 'response.status !== 429' in push a
 check("privacy-safe data payload", 'You have a new message.' in bootstrap and 'body: String(message)' in push)
 check("notification deep-link routing", 'route' in service and 'Uri.parse(route)' in service)
 check("group message push hook", 'queueFynxNotification' in bootstrap and 'group-message-' in bootstrap)
+check("group mention push targets the mentioned member with a distinct notification", "mentionedUsers" in bootstrap and "You were mentioned in a group" in bootstrap and "group-mention-" in bootstrap)
+check("generic group push remains for non-mentioned members", "New group message" in bootstrap and "group-message" in bootstrap)
 check("group push has a distinct Android channel", 'GROUPS_CHANNEL = "fynx_groups_v1"' in read("app/src/main/java/com/fynx/app/ui/NotificationFoundation.kt") and '"GROUP" -> FynxNotificationFoundation.GROUPS_CHANNEL' in service)
 check("group channel maps to the global Groups notification preference", 'GROUPS_CHANNEL -> FynxNotificationType.GROUP' in read("app/src/main/java/com/fynx/app/ui/NotificationFoundation.kt"))
 check("per-chat mute suppresses its FCM banner on this device", 'FynxConversationPreferences.chatNotifications(this, sourceUsername)' in service and 'FynxPreferencesStore.isChatMuted(this, sourceUsername)' in service)
