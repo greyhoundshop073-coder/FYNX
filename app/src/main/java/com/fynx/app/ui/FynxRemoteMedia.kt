@@ -97,6 +97,7 @@ private fun saveRemoteMediaToGallery(context: android.content.Context, source: F
         hex.startsWith("89504E47") -> "image/png"
         ascii.startsWith("GIF8") -> "image/gif"
         ascii.substring(8).startsWith("WEBP") -> "image/webp"
+        ascii.substring(4, 8) == "ftyp" && (ascii.substring(8).startsWith("heic") || ascii.substring(8).startsWith("heix") || ascii.substring(8).startsWith("mif1")) -> "image/heic"
         ascii.substring(4, 8) == "ftyp" -> "video/mp4"
         else -> null
     }
