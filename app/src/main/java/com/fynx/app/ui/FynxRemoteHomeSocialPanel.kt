@@ -1472,23 +1472,34 @@ private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECO
 private fun MusicPostPlayer(mediaId: String, title: String, artist: String, durationMs: Long) {
     val context = LocalContext.current
     var file by remember(mediaId) { mutableStateOf<File?>(null) }
-    LaunchedEffect(mediaId) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio") } }
-    if (file != null) {
-        val player = remember(file) { MediaPlayer().apply { setDataSource(file!!.absolutePath); prepare() } }
-        var playing by remember(file) { mutableStateOf(false) }
-        DisposableEffect(player) {
-            player.setOnCompletionListener { playing = false; runCatching { player.seekTo(0) } }
-            onDispose { runCatching { player.release() } }
+    LaunchedEffect(mediaId) {
+        file = withContext(Dispatchers.IO) {
+            FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio")
         }
-        Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
-            Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                    Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
-                }
-                Text(formatMusicDuration(durationMs.takeIf { it > 0 } ?: player.duration.toLong()), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
-                IconButton(onClick = { runCatching { if (player.isPlaying) { player.pause(); playing = false } else { if (player.currentPosition >= player.duration) player.seekTo(0); player.start(); playing = true } } }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause music" else "Play music") }
+    }
+    val playback = FynxCatalogueMusicPlayback.snapshot
+    val isCurrentTrack = playback.trackKey == mediaId
+    val isPlaying = isCurrentTrack && playback.isPlaying
+    val isPreparing = isCurrentTrack && playback.isPreparing
+
+    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                if (isPreparing) Text("Preparing audio…", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                if (isCurrentTrack && playback.error != null) Text("Could not play this track", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            }
+            Text(formatMusicDuration(durationMs), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+            IconButton(
+                enabled = file != null && !isPreparing,
+                onClick = { file?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it) } }
+            ) {
+                Icon(
+                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    if (isPlaying) "Pause music" else "Play music"
+                )
             }
         }
     }
