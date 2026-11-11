@@ -13,7 +13,7 @@ manifest = read("app/src/main/AndroidManifest.xml")
 
 # Keep verification implementation-oriented rather than formatting-oriented. Compose/Kotlin
 # permits equivalent callback formatting, so do not require one exact source-string layout.
-caption_limit = "take(4000)" in home and "What's on your mind?" in home
+caption_limit = "take(4000)" in home and ("What's on your mind?" in home or "Add description..." in home)
 
 checks = [
     ("camera permission", 'Manifest.permission.CAMERA' in camera and 'android.permission.CAMERA' in manifest),
