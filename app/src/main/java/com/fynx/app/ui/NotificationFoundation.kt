@@ -19,6 +19,7 @@ import java.util.UUID
 object FynxNotificationFoundation {
     const val FRIENDS_CHANNEL = "fynx_friends_v2"
     const val MESSAGES_CHANNEL = "fynx_messages_v2"
+    const val GROUPS_CHANNEL = "fynx_groups_v1"
     const val CALLS_CHANNEL = "fynx_calls_v2"
     const val GIFTS_CHANNEL = "fynx_gifts_v2"
     const val MONEY_CHANNEL = "fynx_money_v2"
@@ -70,6 +71,10 @@ object FynxNotificationFoundation {
                 setSound(notificationSound, notificationAudio)
             },
             NotificationChannel(MESSAGES_CHANNEL, "Messages", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(notificationSound, notificationAudio)
+            },
+            NotificationChannel(GROUPS_CHANNEL, "Groups", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Messages and activity from your FYNX groups"
                 setSound(notificationSound, notificationAudio)
             },
             NotificationChannel(CALLS_CHANNEL, "Calls", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -182,6 +187,7 @@ object FynxNotificationFoundation {
 
     private fun typeForChannel(channelId: String): FynxNotificationType = when (channelId) {
         MESSAGES_CHANNEL, CALLS_CHANNEL -> FynxNotificationType.MESSAGE
+        GROUPS_CHANNEL -> FynxNotificationType.GROUP
         FRIENDS_CHANNEL -> FynxNotificationType.FRIEND_REQUEST
         GIFTS_CHANNEL -> FynxNotificationType.REACTION
         MONEY_CHANNEL -> FynxNotificationType.WALLET_ACTIVITY
