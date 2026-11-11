@@ -579,7 +579,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             }
                         }
                         val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
-                        val pendingLocal = messages.filter { it.id !in remoteIds }
+                        val pendingLocal = messages.filter { it.id !in remoteIds && !it.delivered }
                         val mergedMessages = (remoteMessages + pendingLocal)
                             .distinctBy { it.id }
                             .sortedBy { it.timestamp }
@@ -657,7 +657,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     !FynxConversationPreferences.groupMuted(context, groupId)) {
                                     FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_RECEIVED)
                                 }
-                                val pendingLocal = latestMessages.filter { it.id !in remoteIds }
+                                val pendingLocal = latestMessages.filter { it.id !in remoteIds && !it.delivered }
                                 val merged = (remoteMessages + pendingLocal).distinctBy { it.id }.sortedBy { it.timestamp }
                                 messages = merged
                                 // Group history may contain years of chat JSON. Keep
