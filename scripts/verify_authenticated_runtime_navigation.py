@@ -1524,48 +1524,29 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     FAILURES.append(
                         prefix + ": Your Story hand-off did not expose both Send and Back from Status composer"
                     )
-                # System Back must be handled by the innermost Status composer and return to Home.
+                # Back must dismiss only the Status dialog and reveal the same captured-media
+                # Camera editor underneath it. Keep this exact editor for the separate Next-to-post test.
                 run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
                 time.sleep(0.7)
-                recovered_home = dump_ui(f"{prefix}-camera-status-return-home.xml")
-                if not is_authenticated_home_surface(recovered_home):
-                    FAILURES.append(prefix + ": Status hand-off did not return to the Home surface with system Back")
-                    home = camera_return_to_home(recovered_home or story_xml, prefix + "-status-return-recovery")
-                    return capture_camera_video_journey(home, prefix)
-                # Reopen Camera from the recovered Home and capture a fresh photo.
-                post_composer_xml = tap_control(
-                    recovered_home, ["Open FYNX camera"], f"{prefix}-camera-post-camera-reopen",
-                    ["Add description..."]
+                resumed_camera = dump_ui(f"{prefix}-camera-status-return-camera.xml")
+                screenshot(f"{prefix}-camera-status-return-camera.png")
+                (ROOT / f"{prefix}-camera-status-return-camera.xml").write_text(
+                    resumed_camera + chr(10), encoding="utf-8"
                 )
-                post_options_xml = camera_scroll_until_control(
-                    post_composer_xml, ["More options"], f"{prefix}-camera-post-more-options", max_swipes=8
-                ) if post_composer_xml else ""
-                post_options_xml = tap_control(
-                    post_options_xml, ["More options"], f"{prefix}-camera-post-camera-more-options",
-                    ["Take photo or video", "Add photo or video"]
-                ) if post_options_xml else ""
-                fresh_camera_xml = tap_control_permission_aware(
-                    post_options_xml, ["Take photo or video"], f"{prefix}-camera-post-camera-reopen-action",
-                    ["Switch front/back camera"]
-                ) if post_options_xml else ""
-                if fresh_camera_xml:
-                    fresh_camera_xml = camera_wait_for_control(
-                        fresh_camera_xml, ["Take photo"], enabled=True, timeout=20.0,
-                        prefix=f"{prefix}-camera-after-status-shutter-ready"
-                    )
-                    next_editor = tap_control(
-                        fresh_camera_xml, ["Take photo"], f"{prefix}-camera-after-status-photo",
-                        ["Retake", "Next"], wait_attempts=80
-                    )
-                    if next_editor:
-                        second_editor = next_editor
-                    else:
-                        FAILURES.append(prefix + ": fresh camera capture after Status did not reach the photo editor")
-                        home = camera_return_to_home(fresh_camera_xml, prefix + "-post-handoff-capture-failed")
-                        return capture_camera_video_journey(home, prefix)
+                camera_restored = (
+                    find_control(resumed_camera, ["Next"]) is not None
+                    and find_control(resumed_camera, ["Your Story"]) is not None
+                    and find_control(resumed_camera, ["Retake"]) is not None
+                )
+                if camera_restored:
+                    report.append("- PASS closing Status restored the same captured-media Camera editor with Next and Your Story still available")
+                    second_editor = resumed_camera
                 else:
-                    FAILURES.append(prefix + ": could not reopen Camera from Home after Status hand-off")
-                    home = camera_return_to_home(recovered_home, prefix + "-post-handoff-camera-missing")
+                    FAILURES.append(
+                        prefix + ": closing Status did not restore the original Camera editor; visible markers: "
+                        + visible_marker_summary(resumed_camera)
+                    )
+                    home = camera_return_to_home(resumed_camera or story_xml, prefix + "-status-return-recovery")
                     return capture_camera_video_journey(home, prefix)
             else:
                 FAILURES.append(prefix + ": Your Story did not open the Status destination")
@@ -2491,12 +2472,16 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 FAILURES.append(prefix + ": recorded video Status composer did not expose both Send and Back from Status composer")
             status_closed_xml = tap_control(
                 video_status_xml, ["Back from Status composer"],
-                f"{prefix}-camera-video-status-close", ["Open FYNX camera"]
+                f"{prefix}-camera-video-status-close", ["Next"]
             )
             if status_closed_xml:
+                if find_control(status_closed_xml, ["Next"]) and find_control(status_closed_xml, ["Status"]):
+                    report.append("- PASS closing Status restored the same recorded-video Camera editor; Next remains available")
+                else:
+                    FAILURES.append(prefix + ": Status close did not restore the recorded-video Camera editor")
                 current = status_closed_xml
             else:
-                FAILURES.append(prefix + ": could not close the unpublished video Status composer")
+                FAILURES.append(prefix + ": could not close the unpublished video Status composer and restore Camera")
 
     # Dismiss without publishing. The actual server post flow remains untouched.
     current = dump_ui(f"{prefix}-camera-video-before-return.xml") or current
