@@ -34,6 +34,8 @@ export function registerBusinessRoutes({ app, auth }) {
       ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS opening_hours JSONB NOT NULL DEFAULT '{}'::jsonb;
       ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS service_areas JSONB NOT NULL DEFAULT '[]'::jsonb;
       ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS services JSONB NOT NULL DEFAULT '[]'::jsonb;
+      ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS business_id BIGINT REFERENCES business_profiles(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS marketplace_listings_business_idx ON marketplace_listings(business_id,active,created_at DESC);
     `);
     return schemaReady;
   };
