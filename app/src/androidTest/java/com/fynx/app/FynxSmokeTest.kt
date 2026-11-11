@@ -5,9 +5,8 @@ import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,6 +55,20 @@ class FynxSmokeTest {
 
         assertTrue("FYNX must become the foreground package after a profile deep link; current=" + device.currentPackageName, reachedFynx)
         assertEquals(context.packageName, device.currentPackageName)
+    }
+
+    @Test
+    fun remoteConfigInitializationIsPresentAndUnknownFlagsFailClosed() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val application = context.applicationContext
+
+        assertTrue("FYNX must use its process-level Application initializer", application is FynxApplication)
+        assertEquals(
+            FynxRemoteFeatureFlagPolicy.defaults.keys,
+            FynxRemoteFeatureFlags.values.value.keys
+        )
+        assertFalse("Unknown remote keys must remain disabled", FynxRemoteFeatureFlags.isEnabled("unknown_experiment"))
+        assertFalse("Wallet must not be remotely controllable", FynxRemoteFeatureFlags.isEnabled("wallet_enabled"))
     }
 
     private fun waitForForegroundPackage(device: UiDevice, packageName: String, timeoutMs: Long): Boolean {
