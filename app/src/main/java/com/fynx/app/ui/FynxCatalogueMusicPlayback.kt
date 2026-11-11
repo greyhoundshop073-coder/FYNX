@@ -184,6 +184,9 @@ internal object FynxCatalogueMusicPlayback {
             runCatching {
                 current.isLooping = true
                 if (!current.isPlaying) {
+                    // Video position updates arrive repeatedly while a seek is pending.
+                    // Keep the in-flight seek; the next clock tick corrects any residual drift.
+                    if (pendingResumePlayer === current) return
                     if (!requestAudioFocus()) { snapshot = snapshot.copy(isPlaying = false, error = "Audio focus is unavailable."); return }
                     val duration = current.duration.coerceAtLeast(0)
                     val target = if (duration > 0) (positionMs.coerceAtLeast(0L) % duration.toLong()).toInt() else 0
