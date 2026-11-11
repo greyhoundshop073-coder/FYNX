@@ -70,6 +70,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import java.util.UUID
+import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1256,6 +1257,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
     var message by remember { mutableStateOf("") }
     var busyMemberAction by remember(group.id) { mutableStateOf<String?>(null) }
     LaunchedEffect(group.id) {
+        management.value = management.value.copy(state = management.value.state.copy(blockedUsernames = emptySet()))
         FynxSocialClient.blocked(context).onSuccess { blocked ->
             management.value = management.value.copy(state = management.value.state.copy(
                 blockedUsernames = blocked.map { it.username.removePrefix("@").trim().lowercase() }.toSet()
