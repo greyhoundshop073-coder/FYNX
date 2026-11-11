@@ -4631,6 +4631,27 @@ if not FAILURES:
                                 report.append("- PASS actual FynxGroupConversationPanel opened; captured group-chat-inside.png")
                             else:
                                 FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
+                            group_more = tap_control(group_after, ["More"], "group-more-menu-for-members", ["Members"]) if group_after else None
+                            if group_more:
+                                members_screen = tap_control(group_more, ["Members"], "group-members-dialog", ["Members"])
+                                if members_screen:
+                                    screenshot("group-members-dialog.png")
+                                    report.append("- PASS actual group Members dialog captured, including server-backed member actions")
+                                    members_closed = tap_control(members_screen, ["Done"], "group-members-dialog-close", ["More"]) or dump_ui("group-members-dialog-closed.xml")
+                                    settings_menu = tap_control(members_closed, ["More"], "group-more-menu-for-settings", ["Group settings"])
+                                    if settings_menu:
+                                        settings_screen = tap_control(settings_menu, ["Group settings"], "group-settings-screen")
+                                        if settings_screen:
+                                            screenshot("group-settings-top.png")
+                                            run("adb", "shell", "input", "swipe", "520", "1510", "520", "560", "350")
+                                            time.sleep(.4)
+                                            screenshot("group-settings-management.png")
+                                            report.append("- PASS active Group Settings top and management sections captured")
+                                            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                                else:
+                                    report.append("- Group Members dialog screenshot skipped: Members menu item did not open")
+                            else:
+                                report.append("- Group Members/Settings screenshots skipped: More menu was unavailable")
                             if group_id:
                                 exercise_notification_route("fynx://group/" + group_id, "group-chat")
                         if not group_after:
