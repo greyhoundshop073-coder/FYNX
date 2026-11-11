@@ -642,8 +642,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }
                                 }
                                 val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
-                                val incomingIds = remoteMessages.filter { !it.fromMe && latestMessages.none { old -> old.id == it.id } }
-                                if (incomingIds.isNotEmpty() &&
+                                val eventMessageId = runCatching { JSONObject(event.messageJson).optString("id") }.getOrNull()
+                                val incomingEventMessage = remoteMessages.firstOrNull {
+                                    it.id == eventMessageId && !it.fromMe && latestMessages.none { old -> old.id == it.id }
+                                }
+                                if (incomingEventMessage != null &&
                                     FynxConversationPreferences.groupNotifications(context, groupId) &&
                                     !FynxConversationPreferences.groupMuted(context, groupId)) {
                                     FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_RECEIVED)
