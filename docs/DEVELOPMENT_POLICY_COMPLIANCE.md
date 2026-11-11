@@ -156,3 +156,19 @@ Every new chat/agent must be told to read:
 The next contributor must inspect the latest canonical branch and current PRs, then continue unresolved items. Do not duplicate work, create competing APK branches, or assume checklist entries are complete.
 
 **Definition of done:** feature works as intended, required policy/security controls are implemented, tests/evidence pass, disclosures are updated, and unresolved risks are explicitly reported. A policy checklist is not a substitute for legal advice or Google approval.
+
+
+## 13. Remote configuration and gradual feature rollout
+
+- Remote configuration may change typed configuration values or switch optional experiences that are already included in the installed app; it must not download or execute new code.
+- Keep an allowlist of supported parameters and safe in-app defaults. Unknown parameters must fail closed.
+- Never use remote flags as authorization or as a security boundary, and never remotely disable login, account recovery, reporting/blocking, Wallet, payment verification, orders, refunds, disputes, or other core protections.
+- Treat all client-delivered configuration as public. Never include secrets, tokens, personal data, balances, or transaction history in parameter names or values.
+- Preserve app startup and offline behavior when the remote service fails; use defaults or the last successfully activated configuration.
+- Record each new SDK's data flows in the privacy inventory and reconcile them with the Play Console Data safety form before release.
+- For Firebase Remote Config specifically, account for Firebase Installations IDs and periodic communication with Firebase. Do not enable Analytics audiences, user properties, or additional Analytics collection without a separate privacy and policy review.
+- Test both enabled and disabled states, offline startup, stale configuration, and rollback before enabling a flag for users.
+
+Official Firebase references:
+- https://firebase.google.com/docs/remote-config/android/get-started
+- https://firebase.google.com/docs/reference/android/com/google/firebase/remoteconfig/FirebaseRemoteConfig
