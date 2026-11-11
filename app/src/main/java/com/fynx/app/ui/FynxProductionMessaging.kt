@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
+import android.text.format.DateUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,6 +32,36 @@ object FynxProductionMessaging {
         val text: String, val timestamp: Long, val delivered: Boolean, val read: Boolean, val edited: Boolean, val deleted: Boolean,
         val replyToId: String?, val reaction: String? = null, val messageType: String = "text", val messagePayload: Map<String, String> = emptyMap(), val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L, val pinned: Boolean = false
     )
+
+    suspend fun recentConversations(context: Context): Result<List<ChatPreview>> =
+        FynxBackendClient.get(context, "/api/messages/recent").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("conversations") ?: JSONArray()
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val username = item.optString("username").trim().removePrefix("@")
+                    if (username.isBlank()) continue
+                    val displayName = item.optString("displayName").trim().ifBlank { username }
+                    val timestamp = item.optLong("lastMessageTimestamp", System.currentTimeMillis())
+                    val time = DateUtils.getRelativeTimeSpanString(
+                        timestamp,
+                        System.currentTimeMillis(),
+                        DateUtils.MINUTE_IN_MILLIS
+                    ).toString()
+                    val mediaId = item.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" }
+                    add(
+                        ChatPreview(
+                            name = displayName,
+                            username = "@$username",
+                            lastMessage = item.optString("lastMessage").ifBlank { "Message" },
+                            time = time,
+                            unreadCount = item.optInt("unreadCount").coerceAtLeast(0),
+                            avatarUri = mediaId?.let { "/api/media/$it" }
+                        )
+                    )
+                }
+            }.distinctBy { it.username.lowercase() }
+        }
 
     suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> {
         val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
