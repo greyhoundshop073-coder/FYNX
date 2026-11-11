@@ -642,6 +642,12 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }
                                 }
                                 val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
+                                val incomingIds = remoteMessages.filter { !it.fromMe && latestMessages.none { old -> old.id == it.id } }
+                                if (incomingIds.isNotEmpty() &&
+                                    FynxConversationPreferences.groupNotifications(context, groupId) &&
+                                    !FynxConversationPreferences.groupMuted(context, groupId)) {
+                                    FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_RECEIVED)
+                                }
                                 val pendingLocal = latestMessages.filter { it.id !in remoteIds }
                                 val merged = (remoteMessages + pendingLocal).distinctBy { it.id }.sortedBy { it.timestamp }
                                 messages = merged
