@@ -1531,12 +1531,11 @@ fun FynxHomeSocialHubPanel(
                         onClearMusic = { selectedCatalogueMusic = null; musicPlaying = false },
                         showYourStoryAction = cameraEditingMediaUri == null,
                         onShareToStatus = { uri, type ->
-                            // The Status creator is mounted in the Home content, while Camera
-                            // is a full-screen Android Dialog in a separate window. Dismiss the
-                            // Camera Dialog first; otherwise it remains above and hides Status.
-                            // The captured file stays in app cache and is handed to the shared
-                            // Status composer. Publishing remains an explicit Send action.
-                            showCamera = false
+                            // Preserve the Camera editor so closing Status returns to this exact
+                            // captured-media preview. FynxApp opens Status in a separate full-screen
+                            // Dialog above this Camera Dialog, preventing window z-order from hiding it.
+                            // Publishing still requires the explicit Send action in the Status composer.
+                            showCamera = true
                             showFastCamera = false
                             cameraOpenedFromComposer = false
                             onOpenStatusWithMedia(uri, type)
