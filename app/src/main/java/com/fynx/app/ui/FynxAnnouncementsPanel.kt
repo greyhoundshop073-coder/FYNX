@@ -3,10 +3,13 @@ package com.fynx.app.ui
 import androidx.compose.ui.Alignment
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -21,10 +24,97 @@ fun FynxAnnouncementsPanel() {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
-    LaunchedEffect(refresh) { loading = true; FynxAdminClient.announcements(context).onSuccess { items = it; error = null }.onFailure { error = it.message ?: "Unable to load announcements." }; loading = false }
-    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Official FYNX Announcements", style = MaterialTheme.typography.headlineSmall); Spacer(Modifier.height(8.dp)); Text("Important updates published by the FYNX team.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(16.dp))
-        when { loading -> CircularProgressIndicator(); error != null -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("Could not load announcements"); Spacer(Modifier.height(6.dp)); Text(error!!, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(10.dp)); TextButton(onClick = { refresh++ }) { Text("Retry") } } }; items.isEmpty() -> Text("No official announcements yet.", color = MaterialTheme.colorScheme.onSurfaceVariant); else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { items.forEach { announcement -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(announcement.title, style = MaterialTheme.typography.titleMedium); if (announcement.priority != "NORMAL") AssistChip(onClick = {}, label = { Text(announcement.priority) }) }; Spacer(Modifier.height(8.dp)); Text(announcement.body); if (announcement.publishedAt.isNotBlank()) { Spacer(Modifier.height(8.dp)); Text(announcement.publishedAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } } } }
+    LaunchedEffect(refresh) {
+        loading = true
+        FynxAdminClient.announcements(context)
+            .onSuccess { items = it; error = null }
+            .onFailure { error = it.message ?: "Unable to load announcements." }
+        loading = false
+    }
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue)
+        ) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(14.dp), color = androidx.compose.ui.graphics.Color.White.copy(alpha = .18f)) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null,
+                            tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(10.dp).size(26.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Official FYNX Announcements", style = MaterialTheme.typography.headlineSmall,
+                            color = androidx.compose.ui.graphics.Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Text("Official news from the FYNX team", color = androidx.compose.ui.graphics.Color.White.copy(alpha = .88f))
+                    }
+                }
+                Text("Product news, service notices and community updates—all in one trusted place.",
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = .94f), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text("Latest announcements", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("${items.size} published updates", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = { refresh++ }, enabled = !loading) {
+                Icon(androidx.compose.material.icons.Icons.Default.Refresh, contentDescription = null)
+                Spacer(Modifier.width(4.dp)); Text("Refresh")
+            }
+        }
+        when {
+            loading -> Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            error != null -> Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Updates are temporarily unavailable", style = MaterialTheme.typography.titleMedium)
+                    Text(error!!, color = MaterialTheme.colorScheme.error)
+                    OutlinedButton(onClick = { refresh++ }) { Text("Try again") }
+                }
+            }
+            items.isEmpty() -> Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = .06f))) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null,
+                        tint = FynxDesign.AzureBlue, modifier = Modifier.size(36.dp))
+                    Text("No announcements yet", style = MaterialTheme.typography.titleMedium)
+                    Text("Official FYNX updates will appear here when published.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            else -> items.forEach { announcement ->
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = .14f)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("FYNX OFFICIAL", style = MaterialTheme.typography.labelSmall,
+                                color = FynxDesign.AzureBlue, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                modifier = Modifier.weight(1f))
+                            if (announcement.priority != "NORMAL") {
+                                AssistChip(onClick = {}, label = { Text(announcement.priority.replace('_', ' ')) })
+                            }
+                        }
+                        Text(announcement.title, style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Text(announcement.body, style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (announcement.publishedAt.isNotBlank()) {
+                            Text(announcement.publishedAt, style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -60,8 +150,27 @@ fun FynxAdminControlCenterPanel() {
     var revenueLoading by remember { mutableStateOf(false) }
     var revenueError by remember { mutableStateOf<String?>(null) }
     var refreshRevenue by remember { mutableIntStateOf(0) }
+    var refreshDashboard by remember { mutableIntStateOf(0) }
+    var activeSection by remember { mutableStateOf("Overview") }
+    var confirmationTitle by remember { mutableStateOf("") }
+    var confirmationMessage by remember { mutableStateOf("") }
+    var confirmationLabel by remember { mutableStateOf("Confirm") }
+    var confirmationAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    LaunchedEffect(Unit) { FynxAdminClient.dashboard(context).onSuccess { dashboard = it; error = null }.onFailure { error = it.message ?: "Admin access required." }; loading = false }
+    fun requestAdminConfirmation(title: String, message: String, label: String, action: () -> Unit) {
+        confirmationTitle = title
+        confirmationMessage = message
+        confirmationLabel = label
+        confirmationAction = action
+    }
+
+    LaunchedEffect(refreshDashboard) {
+        loading = true
+        FynxAdminClient.dashboard(context)
+            .onSuccess { dashboard = it; error = null }
+            .onFailure { error = it.message ?: "Admin access required." }
+        loading = false
+    }
     LaunchedEffect(refreshAdmins, dashboard?.role) { if (dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
     LaunchedEffect(refreshAppeals, dashboard?.role) {
         if (dashboard != null) {
@@ -104,14 +213,60 @@ fun FynxAdminControlCenterPanel() {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Owner / Admin Control Center", style = MaterialTheme.typography.headlineSmall); Spacer(Modifier.height(8.dp))
-        if (loading) CircularProgressIndicator() else if (dashboard == null) Text(error ?: "Admin access required.", color = MaterialTheme.colorScheme.error) else {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
+        Card(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue)
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("FYNX CONTROL CENTER", style = MaterialTheme.typography.labelMedium,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = .82f),
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Text("Admin workspace", style = MaterialTheme.typography.headlineSmall,
+                            color = androidx.compose.ui.graphics.Color.White,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                    Surface(shape = RoundedCornerShape(14.dp), color = androidx.compose.ui.graphics.Color.White.copy(alpha = .18f)) {
+                        Icon(androidx.compose.material.icons.Icons.Default.AdminPanelSettings, contentDescription = "Admin",
+                            tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(12.dp).size(28.dp))
+                    }
+                }
+                Text("Manage platform safety, Marketplace operations, people and official updates.",
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = .92f))
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        if (loading) CircularProgressIndicator()
+        else if (dashboard == null) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Admin access could not be verified", style = MaterialTheme.typography.titleMedium)
+                    Text(error ?: "Sign in with an authorised owner or admin account.")
+                    OutlinedButton(onClick = { refreshDashboard++ }) { Text("Retry access check") }
+                }
+            }
+        } else {
             val d = dashboard!!
-            Text("Role: ${d.role}", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Users", d.users); StatCard("Reports", d.openReports) }; Spacer(Modifier.height(8.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Appeals", d.openAppeals); StatCard("Safety / 24h", d.safetyEvents24h) }
-
-            if (d.role == "OWNER" || d.role == "ADMIN") {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                AssistChip(onClick = {}, label = { Text(if (d.role == "OWNER") "OWNER ACCOUNT" else "ADMIN ACCOUNT") })
+                TextButton(onClick = { refreshDashboard++ }, enabled = !loading) { Text("Refresh") }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Users", d.users); StatCard("Open reports", d.openReports) }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Open appeals", d.openAppeals); StatCard("Safety · 24h", d.safetyEvents24h) }
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Overview", "Safety", "Marketplace", "People", "Announcements").forEach { section ->
+                    FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section) })
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            if (activeSection == "Overview" && (d.role == "OWNER" || d.role == "ADMIN")) {
                 Spacer(Modifier.height(20.dp))
                 Text("FYNX Business Revenue", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                 Text(
@@ -176,7 +331,7 @@ fun FynxAdminControlCenterPanel() {
                 }
             }
 
-            if (d.role == "OWNER" || d.role == "ADMIN") {
+            if (activeSection == "Overview" && (d.role == "OWNER" || d.role == "ADMIN")) {
                 Spacer(Modifier.height(20.dp))
                 Text("Music Library", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
@@ -185,7 +340,34 @@ fun FynxAdminControlCenterPanel() {
                 FynxMarketplaceSeasonalPromotionAdminPanel()
                 Spacer(Modifier.height(20.dp))
             }
-            Text("Applications & Appeals", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review account appeals and restore an account when an appeal is accepted.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); if (appealsLoading) CircularProgressIndicator() else if (appealsError != null) { Text(appealsError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshAppeals++ }) { Text("Retry") } } else if (appeals.isEmpty()) { Text("No open appeals require review.", color = MaterialTheme.colorScheme.onSurfaceVariant) } else { appeals.take(20).forEach { appeal -> Card(Modifier.fillMaxWidth().padding(top = 8.dp)) { Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("${appeal.displayName.ifBlank { "FYNX user" }}  @${appeal.username}", style = MaterialTheme.typography.titleMedium); Text("Appeal #${appeal.id} • ${appeal.status}", color = MaterialTheme.colorScheme.primary); Text(appeal.subject); if (appeal.details.isNotBlank()) Text(appeal.details, maxLines = 5); Text("Current account status: ${appeal.accountStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "UNDER_REVIEW", "Appeal moved to review.").onSuccess { statusMessage = "Appeal moved to review."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not update appeal." } } }) { Text("Review") }; Button(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "ACCEPTED", "Appeal accepted; account restored to ACTIVE.").onSuccess { statusMessage = "Appeal accepted and account restored."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not restore account." } } }) { Text("Approve & restore") }; OutlinedButton(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "REJECTED", "Appeal rejected after review.").onSuccess { statusMessage = "Appeal rejected."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not reject appeal." } } }) { Text("Reject") } } } } } }; Spacer(Modifier.height(20.dp)); Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (activeSection == "Safety") {
+            Text("Applications & Appeals", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review account appeals and restore an account when an appeal is accepted.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); if (appealsLoading) CircularProgressIndicator() else if (appealsError != null) { Text(appealsError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshAppeals++ }) { Text("Retry") } } else if (appeals.isEmpty()) { Text("No open appeals require review.", color = MaterialTheme.colorScheme.onSurfaceVariant) } else { appeals.take(20).forEach { appeal -> Card(Modifier.fillMaxWidth().padding(top = 8.dp)) { Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("${appeal.displayName.ifBlank { "FYNX user" }}  @${appeal.username}", style = MaterialTheme.typography.titleMedium); Text("Appeal #${appeal.id} • ${appeal.status}", color = MaterialTheme.colorScheme.primary); Text(appeal.subject); if (appeal.details.isNotBlank()) Text(appeal.details, maxLines = 5); Text("Current account status: ${appeal.accountStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton(onClick = {
+    requestAdminConfirmation("Move appeal to review?", "This marks appeal #${appeal.id} as under review. No account status is changed by this action.", "Confirm review") {
+        scope.launch {
+            FynxAdminClient.reviewAppeal(context, appeal.id, "UNDER_REVIEW", "Appeal moved to review.")
+                .onSuccess { statusMessage = "Appeal moved to review."; refreshAppeals++ }
+                .onFailure { statusMessage = it.message ?: "Could not update appeal." }
+        }
+    }
+}) { Text("Review") }; Button(onClick = {
+    requestAdminConfirmation("Accept appeal and restore account?", "This accepts appeal #${appeal.id} and asks the server to restore @${appeal.username} to ACTIVE. Confirm only after reviewing the appeal details.", "Approve & restore") {
+        scope.launch {
+            FynxAdminClient.reviewAppeal(context, appeal.id, "ACCEPTED", "Appeal accepted; account restored to ACTIVE.")
+                .onSuccess { statusMessage = "Appeal accepted and account restored."; refreshAppeals++ }
+                .onFailure { statusMessage = it.message ?: "Could not restore account." }
+        }
+    }
+}) { Text("Approve & restore") }; OutlinedButton(onClick = {
+    requestAdminConfirmation("Reject this appeal?", "This rejects appeal #${appeal.id} for @${appeal.username}. The existing account status will remain subject to the server's decision.", "Reject appeal") {
+        scope.launch {
+            FynxAdminClient.reviewAppeal(context, appeal.id, "REJECTED", "Appeal rejected after review.")
+                .onSuccess { statusMessage = "Appeal rejected."; refreshAppeals++ }
+                .onFailure { statusMessage = it.message ?: "Could not reject appeal." }
+        }
+    }
+}) { Text("Reject") } } } } } };             }
+            if (activeSection == "Marketplace") {
+            Spacer(Modifier.height(20.dp)); Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             if (protectionLoading) CircularProgressIndicator() else if (protectionError != null) {
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) { Text(protectionError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshProtection++ }) { Text("Retry") } } }
@@ -206,27 +388,45 @@ fun FynxAdminControlCenterPanel() {
                             Text("Order status: ${case.orderStatus}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick = {
-                                    statusMessage = "Resolving case for buyer..."
-                                    scope.launch {
-                                        FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "BUYER")
-                                            .onSuccess { result -> statusMessage = "Buyer resolution: $result"; refreshProtection++ }
-                                            .onFailure { statusMessage = it.message ?: "Buyer resolution failed." }
+                                    requestAdminConfirmation(
+                                        "Resolve in the buyer's favour?",
+                                        "This submits the buyer/refund resolution for order ${case.orderId}. The backend remains responsible for validating eligibility and recording the decision.",
+                                        "Confirm buyer resolution"
+                                    ) {
+                                        statusMessage = "Resolving case for buyer..."
+                                        scope.launch {
+                                            FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "BUYER")
+                                                .onSuccess { result -> statusMessage = "Buyer resolution: $result"; refreshProtection++ }
+                                                .onFailure { statusMessage = it.message ?: "Buyer resolution failed." }
+                                        }
                                     }
                                 }) { Text("Buyer / refund") }
                                 OutlinedButton(onClick = {
-                                    statusMessage = "Resolving case for seller..."
-                                    scope.launch {
-                                        FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "SELLER")
-                                            .onSuccess { result -> statusMessage = "Seller resolution: $result"; refreshProtection++ }
-                                            .onFailure { statusMessage = it.message ?: "Seller resolution failed." }
+                                    requestAdminConfirmation(
+                                        "Resolve in the seller's favour?",
+                                        "This submits the seller/release resolution for order ${case.orderId}. The backend remains responsible for validating eligibility and recording the decision.",
+                                        "Confirm seller resolution"
+                                    ) {
+                                        statusMessage = "Resolving case for seller..."
+                                        scope.launch {
+                                            FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "SELLER")
+                                                .onSuccess { result -> statusMessage = "Seller resolution: $result"; refreshProtection++ }
+                                                .onFailure { statusMessage = it.message ?: "Seller resolution failed." }
+                                        }
                                     }
                                 }) { Text("Seller / release") }
                                 OutlinedButton(onClick = {
-                                    statusMessage = "Cancelling case..."
-                                    scope.launch {
-                                        FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "CANCEL")
-                                            .onSuccess { result -> statusMessage = "Case cancelled: $result"; refreshProtection++ }
-                                            .onFailure { statusMessage = it.message ?: "Case cancellation failed." }
+                                    requestAdminConfirmation(
+                                        "Cancel this protection case?",
+                                        "This submits a cancellation for the case on order ${case.orderId}. Confirm only if cancellation is the correct administrative outcome.",
+                                        "Cancel case"
+                                    ) {
+                                        statusMessage = "Cancelling case..."
+                                        scope.launch {
+                                            FynxAdminClient.resolveMarketplaceProtectionCase(context, case.id, "CANCEL")
+                                                .onSuccess { result -> statusMessage = "Case cancelled: $result"; refreshProtection++ }
+                                                .onFailure { statusMessage = it.message ?: "Case cancellation failed." }
+                                        }
                                     }
                                 }) { Text("Cancel") }
                             }
@@ -252,18 +452,37 @@ fun FynxAdminControlCenterPanel() {
                             Text(if (driver.active) "Approved" else "Approval revoked", color = if (driver.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                         }
                         OutlinedButton(enabled = !driversLoading, onClick = {
-                            scope.launch {
-                                statusMessage = if (driver.active) "Revoking driver approval..." else "Restoring driver approval..."
-                                FynxAdminClient.setMarketplaceDriverApproval(context, driver.userId, !driver.active)
-                                    .onSuccess { statusMessage = if (driver.active) "Driver approval revoked." else "Driver approved."; refreshDrivers++ }
-                                    .onFailure { statusMessage = it.message ?: "Driver approval could not be changed." }
+                            val action = if (driver.active) "Revoke delivery-driver approval?" else "Approve this delivery driver?"
+                            val detail = if (driver.active) "This asks the server to revoke @${driver.username}'s approval. Revocation may be blocked while the driver has a parcel in active custody." else "This asks the server to approve @${driver.username} as a Marketplace delivery driver."
+                            requestAdminConfirmation(action, detail, if (driver.active) "Revoke driver" else "Approve driver") {
+                                scope.launch {
+                                    statusMessage = if (driver.active) "Revoking driver approval..." else "Restoring driver approval..."
+                                    FynxAdminClient.setMarketplaceDriverApproval(context, driver.userId, !driver.active)
+                                        .onSuccess { statusMessage = if (driver.active) "Driver approval revoked." else "Driver approved."; refreshDrivers++ }
+                                        .onFailure { statusMessage = it.message ?: "Driver approval could not be changed." }
+                                }
                             }
                         }) { Text(if (driver.active) "Revoke" else "Approve") }
                     }
                 }
             }
 
-            if (d.role == "OWNER") { Spacer(Modifier.height(20.dp)); Text("Administration", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Owner-only administrator access.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(6.dp)); Text("Current Admins", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); if (admins.isEmpty()) Text("No additional Admins yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) else admins.forEach { admin -> Card(Modifier.fillMaxWidth().padding(top = 6.dp)) { Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(admin.displayName.ifBlank { "FYNX Admin" }, style = MaterialTheme.typography.titleMedium); Text("@${admin.username}", color = MaterialTheme.colorScheme.onSurfaceVariant) }; TextButton(onClick = { statusMessage = "Removing @${admin.username}..."; scope.launch { FynxAdminClient.revokeAdmin(context, admin.id).onSuccess { statusMessage = "Admin access removed."; refreshAdmins++ }.onFailure { statusMessage = it.message ?: "Admin removal failed." } } }) { Text("Remove") } } } } }
+            }
+            if (activeSection == "People") {
+            if (d.role == "OWNER") { Spacer(Modifier.height(20.dp)); Text("Administration", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Owner-only administrator access.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(6.dp)); Text("Current Admins", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); if (admins.isEmpty()) Text("No additional Admins yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) else admins.forEach { admin -> Card(Modifier.fillMaxWidth().padding(top = 6.dp)) { Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(admin.displayName.ifBlank { "FYNX Admin" }, style = MaterialTheme.typography.titleMedium); Text("@${admin.username}", color = MaterialTheme.colorScheme.onSurfaceVariant) }; TextButton(onClick = {
+                requestAdminConfirmation(
+                    "Remove administrator access?",
+                    "This will revoke @${admin.username}'s administrator privileges. The server will verify your owner permission.",
+                    "Remove access"
+                ) {
+                    statusMessage = "Removing @${admin.username}..."
+                    scope.launch {
+                        FynxAdminClient.revokeAdmin(context, admin.id)
+                            .onSuccess { statusMessage = "Admin access removed."; refreshAdmins++ }
+                            .onFailure { statusMessage = it.message ?: "Admin removal failed." }
+                    }
+                }
+            }) { Text("Remove") } } } } }
             Spacer(Modifier.height(20.dp)); Text("Manage an account", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); OutlinedTextField(targetQuery, { targetQuery = it }, Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true); Spacer(Modifier.height(6.dp)); Button(enabled = targetQuery.isNotBlank(), onClick = { targetMessage = "Searching..."; scope.launch { FynxSocialClient.searchUsers(context, targetQuery).onSuccess { targets = it; targetMessage = if (it.isEmpty()) "No users found." else null }.onFailure { targetMessage = it.message ?: "User search failed." } } }) { Text("Find user") }; targetMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             targets.take(5).forEach { user ->
                 Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -272,46 +491,148 @@ fun FynxAdminControlCenterPanel() {
                         Text("@${user.username}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = {
-                                scope.launch {
-                                    FynxAdminClient.setAccountStatus(context, user.id, "LOCKED")
-                                        .onSuccess { statusMessage = "@${user.username} locked." }
-                                        .onFailure { statusMessage = it.message ?: "Action failed." }
+                                requestAdminConfirmation(
+                                    "Lock this account?",
+                                    "@${user.username} will lose access until an authorised admin restores the account. Continue only after reviewing the account.",
+                                    "Lock account"
+                                ) {
+                                    scope.launch {
+                                        FynxAdminClient.setAccountStatus(context, user.id, "LOCKED")
+                                            .onSuccess { statusMessage = "@${user.username} locked." }
+                                            .onFailure { statusMessage = it.message ?: "Action failed." }
+                                    }
                                 }
                             }) { Text("Lock") }
                             OutlinedButton(onClick = {
-                                scope.launch {
-                                    FynxAdminClient.setAccountStatus(context, user.id, "ACTIVE")
-                                        .onSuccess { statusMessage = "@${user.username} restored." }
-                                        .onFailure { statusMessage = it.message ?: "Action failed." }
+                                requestAdminConfirmation(
+                                    "Restore this account?",
+                                    "@${user.username} will regain access to FYNX if the server accepts the change.",
+                                    "Restore account"
+                                ) {
+                                    scope.launch {
+                                        FynxAdminClient.setAccountStatus(context, user.id, "ACTIVE")
+                                            .onSuccess { statusMessage = "@${user.username} restored." }
+                                            .onFailure { statusMessage = it.message ?: "Action failed." }
+                                    }
                                 }
                             }) { Text("Activate") }
                             if (d.role == "OWNER") OutlinedButton(onClick = {
-                                scope.launch {
-                                    FynxAdminClient.grantAdmin(context, user.id)
-                                        .onSuccess { statusMessage = "@${user.username} is now an Admin."; refreshAdmins++ }
-                                        .onFailure { statusMessage = it.message ?: "Admin grant failed." }
+                                requestAdminConfirmation(
+                                    "Grant administrator access?",
+                                    "@${user.username} will receive FYNX administrator privileges. Only continue if this person is trusted to manage the platform.",
+                                    "Grant access"
+                                ) {
+                                    scope.launch {
+                                        FynxAdminClient.grantAdmin(context, user.id)
+                                            .onSuccess { statusMessage = "@${user.username} is now an Admin."; refreshAdmins++ }
+                                            .onFailure { statusMessage = it.message ?: "Admin grant failed." }
+                                    }
                                 }
                             }) { Text("Make Admin") }
                             OutlinedButton(onClick = {
                                 val currentlyApproved = marketplaceDrivers.any { it.userId == user.id && it.active }
-                                scope.launch {
-                                    statusMessage = if (currentlyApproved) "Revoking driver approval..." else "Approving delivery driver..."
-                                    FynxAdminClient.setMarketplaceDriverApproval(context, user.id, !currentlyApproved)
-                                        .onSuccess {
-                                            statusMessage = if (currentlyApproved) "@${user.username} is no longer an approved driver." else "@${user.username} is an approved driver."
-                                            refreshDrivers++
-                                        }
-                                        .onFailure { statusMessage = it.message ?: "Driver approval could not be changed." }
+                                requestAdminConfirmation(
+                                    if (currentlyApproved) "Revoke delivery-driver approval?" else "Approve this delivery driver?",
+                                    if (currentlyApproved) "This asks the server to revoke @${user.username}'s approval. Revocation may be blocked while the driver has a parcel in active custody." else "This asks the server to approve @${user.username} as a Marketplace delivery driver.",
+                                    if (currentlyApproved) "Revoke driver" else "Approve driver"
+                                ) {
+                                    scope.launch {
+                                        statusMessage = if (currentlyApproved) "Revoking driver approval..." else "Approving delivery driver..."
+                                        FynxAdminClient.setMarketplaceDriverApproval(context, user.id, !currentlyApproved)
+                                            .onSuccess {
+                                                statusMessage = if (currentlyApproved) "@${user.username} is no longer an approved driver." else "@${user.username} is an approved driver."
+                                                refreshDrivers++
+                                            }
+                                            .onFailure { statusMessage = it.message ?: "Driver approval could not be changed." }
+                                    }
                                 }
                             }) { Text(if (marketplaceDrivers.any { it.userId == user.id && it.active }) "Revoke Driver" else "Approve Driver") }
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(20.dp)); Text("Publish official announcement", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Title") }, singleLine = true); Spacer(Modifier.height(8.dp)); OutlinedTextField(body, { body = it }, Modifier.fillMaxWidth(), label = { Text("Message") }, minLines = 4); Spacer(Modifier.height(8.dp)); Button(enabled = title.isNotBlank() && body.isNotBlank(), onClick = { statusMessage = "Publishing..."; scope.launch { FynxAdminClient.publishAnnouncement(context, title, body, "NORMAL").onSuccess { title = ""; body = ""; statusMessage = "Announcement published." }.onFailure { statusMessage = it.message ?: "Publish failed." } } }) { Text("Publish") }; statusMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            if (activeSection == "Announcements") {
+                Spacer(Modifier.height(16.dp))
+                Text("Create an official update", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("Write a clear message for the FYNX community. Publishing sends it to the existing official announcements feed.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = .18f))) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(),
+                            label = { Text("Announcement title") }, singleLine = true)
+                        OutlinedTextField(body, { body = it }, Modifier.fillMaxWidth(),
+                            label = { Text("Message to users") }, minLines = 4,
+                            supportingText = { Text("${body.length}/2000 characters") })
+                        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = .06f))) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("PREVIEW", style = MaterialTheme.typography.labelSmall,
+                                    color = FynxDesign.AzureBlue, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Text(title.ifBlank { "Your announcement title" }, style = MaterialTheme.typography.titleMedium)
+                                Text(body.ifBlank { "Your message will appear here as users read the official FYNX update." },
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = title.isNotBlank() && body.isNotBlank() && body.length <= 2000,
+                            onClick = {
+                                requestAdminConfirmation(
+                                    "Publish this official announcement?",
+                                    "This will send ${title.trim()} to the existing FYNX announcements feed. Check the preview and wording before publishing.",
+                                    "Publish announcement"
+                                ) {
+                                    statusMessage = "Publishing..."
+                                    scope.launch {
+                                        FynxAdminClient.publishAnnouncement(context, title.trim(), body.trim(), "NORMAL")
+                                            .onSuccess { title = ""; body = ""; statusMessage = "Announcement published. Refresh the public feed to verify it." }
+                                            .onFailure { statusMessage = it.message ?: "Publish failed." }
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null)
+                            Spacer(Modifier.width(8.dp)); Text("Publish announcement")
+                        }
+                    }
+                }
+            }
+            if (confirmationAction != null) {
+                AlertDialog(
+                    onDismissRequest = { confirmationAction = null },
+                    title = { Text(confirmationTitle) },
+                    text = { Text(confirmationMessage) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val action = confirmationAction
+                            confirmationAction = null
+                            action?.invoke()
+                        }) { Text(confirmationLabel) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmationAction = null }) { Text("Go back") }
+                    }
+                )
+            }
+            statusMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }
 
 @Composable
-private fun RowScope.StatCard(label: String, value: Int) { Card(Modifier.weight(1f)) { Column(Modifier.padding(14.dp)) { Text(label, style = MaterialTheme.typography.labelMedium); Text(value.toString(), style = MaterialTheme.typography.headlineSmall) } } }
+private fun RowScope.StatCard(label: String, value: Int) {
+    Card(
+        Modifier.weight(1f),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = 0.07f)),
+        border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = 0.20f))
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value.toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = FynxDesign.AzureBlue)
+        }
+    }
+}
