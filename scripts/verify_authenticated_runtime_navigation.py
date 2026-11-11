@@ -3134,8 +3134,8 @@ if os.environ.get("FYNX_LOCAL_BUSINESS_ONLY") == "1":
     report.append("- Focused Local Businesses runtime mode: verifies the real Marketplace entry, directory UI and Back navigation only; backend-dependent Wallet/My Shop transactions are not represented as passed.")
     if error:
         report += ["", "## Result: BLOCKED", "- Local UI entry could not reach Home: " + error]
-        (ROOT/"FYNX-local-business-runtime.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
-        print("\\n".join(report))
+        (ROOT/"FYNX-local-business-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+        print("\n".join(report))
         raise SystemExit(2)
     home_xml = dump_ui("local-business-home.xml") or xml
     marketplace_xml = tap_control(home_xml, ["Marketplace"], "local-business-marketplace", ["Search products, sellers or categories"])
@@ -3188,8 +3188,8 @@ if os.environ.get("FYNX_LOCAL_BUSINESS_ONLY") == "1":
     report += ["", "## Evidence boundary", "- This is a local UI/navigation certification; no backend directory records or live search results are claimed.", "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
     if FAILURES:
         report += ["", "Failures:"] + ["- " + item for item in FAILURES]
-    (ROOT/"FYNX-local-business-runtime.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
-    print("\\n".join(report))
+    (ROOT/"FYNX-local-business-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+    print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 if HOME_FEED_VISUALS_ONLY and not error and LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
     fixtures_ready = seed_offline_home_feed_visual_fixtures(USERNAME or "marketplace_visual_check")
