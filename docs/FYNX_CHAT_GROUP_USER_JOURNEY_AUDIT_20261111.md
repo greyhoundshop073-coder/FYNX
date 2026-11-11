@@ -1,0 +1,52 @@
+# FYNX Chat & Groups real-user audit — 11 November 2026
+
+## Scope and method
+
+This audit follows the production routes from `FynxApp.kt`, not similarly named legacy panels. The active private conversation is `ConversationPanel.kt`; the active group conversation is `FynxGroupConversationPanel` in `FynxGroupsPanel.kt`. The review traces the Chat list, message persistence/outbox, authenticated messaging clients, group membership and message routes, realtime events, notification delivery, and the Android runtime workflow.
+
+This is a source-and-CI investigation, not a claim that a real two-account session has already been completed. The live backend probe was skipped in the prior CI evidence, and the CI runtime workflow did not run the full authenticated Chat/Groups navigation for that PR.
+
+## What is already present in the active implementation
+
+- Private chat history is fetched from the authenticated messages API; the local store is account-scoped and includes pending-message reconciliation to avoid losing an acknowledged send when Compose writes a stale snapshot.
+- Private message actions include reply, edit, delete, reactions, pinning and forwarding. The messaging client also has a bounded read-receipt operation.
+- Private outgoing messages have a persistent local outbox/retry path and server client-message IDs for idempotent recovery.
+- The active group conversation uses authenticated group history/send/action endpoints and a realtime group-message event with periodic refresh as a fallback.
+- Group attachments are staged in app-owned storage before upload; the current contract bounds staged files, retains failed items for retry and reuses an uploaded media ID where possible.
+- The active group composer includes camera, video note, gallery, files, location, contact, poll, emoji and member mention suggestions. Group social content includes posts/polls and events.
+- Group message reply, reactions, pinning and deletion are wired in the active screen. The server also has an edit endpoint, but the active screen previously did not expose it; this audit branch adds the missing action.
+
+These are source-path observations. Each still needs runtime verification on an authenticated test account.
+
+## Confirmed defects and repair status
+
+| Area | Finding | Repair status in this branch |
+|---|---|---|
+| Group member add/remove/roles | The active Members dialog previously edited only the local group model. The server's authenticated add, promote, demote and remove endpoints were not called. A later group refresh could undo the apparent changes. | Connected to authenticated APIs; local state changes only after success. |
+| Group member blocking | The Members dialog previously stored block state only in local group preferences. | Now loads and updates the account's authenticated block list. This is an account-level block, not group removal. |
+| New-member history privacy | “Show chat history to new members” previously saved only a local preference. The group messages endpoint did not enforce it, so a newly added member could still receive old messages. | Added a server-backed group setting and filter by the member's join timestamp when history sharing is disabled. |
+| Group message editing | The edit endpoint existed and the legacy `GroupChatPanel.kt` used it, but the app routes users to `FynxGroupConversationPanel` in `FynxGroupsPanel.kt`, which had no Edit action. | Added Edit to the active message menu and save/cancel composer state. |
+| Group delivery indicator | Group messages were mapped as both delivered and read immediately; optimistic text messages were also initially marked delivered/read before the request completed. Group UI therefore showed a misleading double-check. | Pending messages now start undelivered/unread; successful group sends show a single server-delivered check until per-member read receipts exist. |
+| Test target accuracy | The R5A and final-closure checks read legacy `GroupChatPanel.kt` for active group behavior. The final-closure required-path mapping also pointed “group settings” at `FynxGroupsPanel.kt`. | Updated the checks to inspect the active group screen and actual settings panel. |
+| Test enforcement | The Chat/Group parity script calculated and printed its pass/fail result before later assertions were added, so those later checks could not fail the job. | Moved the final evaluation to the end so every assertion is enforced. |
+| Runtime coverage | The Chat/Groups PR path was not in the Android workflow's full runtime trigger list. Prior CI therefore did not run the authenticated Chat/Groups navigation for this workstream. | Added this repair branch to the emulator/runtime trigger list. Runtime result is still pending. |
+
+## Remaining gaps requiring the next repair batches
+
+1. **History pagination:** the private messages endpoint returns at most 200 messages; the group endpoint defaults to 50 and caps at 100. Neither active screen exposes older-page loading. Search can only inspect messages already loaded.
+2. **Per-chat mute and notifications:** Chat list mute and the private conversation notification switch persist local preferences, but the push-delivery path does not consult those per-chat settings. A displayed “Muted” state is not yet proof that push notifications are suppressed.
+3. **Per-chat sound/vibration:** the private Chat Settings switches save preferences, but those per-chat values are not read by the notification/sound delivery path.
+4. **Per-group mute and notifications:** group mute/notification preferences are local-only and are not applied by the server push path or active realtime event handling.
+5. **Group settings that do not affect the active screen:** “Save received media” has no active consumer, and the group appearance preference is only read by the legacy group panel, not the active group conversation.
+6. **Mention notifications:** the active composer suggests actual group members after `@`, but the current backend notification hook queues a generic group-message notification for members; no targeted mention notification was found.
+7. **Group administration completion:** the server has leave, ownership-transfer and report endpoints, but the active client/settings journey does not expose the complete leave/transfer/report flow.
+8. **Message selection:** the Chat completion contract lists message selection in V1 scope, but no multi-select state/action flow was found in the active private conversation.
+9. **Real-user certification:** add authenticated tests for send/receive, retry after disconnect, edit/delete/reaction/pin, attachment upload/download/playback, read receipts, mute/push behavior, group add/remove/promote/demote, history visibility for a newly joined account, mentions, polls/events, and account isolation. A two-account test is required for cross-user delivery and group membership claims.
+
+## Runtime evidence required before declaring completion
+
+- The Android build, unit tests, lint and the active Chat/Groups source gates must pass on the exact PR head.
+- The emulator run must execute the authenticated runtime navigation when the CI E2E credentials and backend are healthy. If credentials/backend are unavailable, report the visual run as local-only and do not call it a real-user test.
+- Capture the actual active private conversation, active group conversation, member dialog, group permissions/history control, and retry/error states from the running app. Do not substitute a mock image or a legacy screen.
+- Use two test accounts for cross-user delivery and membership verification. Backend-dependent checks must be explicitly marked skipped when the backend is unavailable.
+- Do not merge or certify the Chat/Groups gate while any of the above remains unverified.
