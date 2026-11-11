@@ -1504,20 +1504,20 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             # Verify the left CTA enters the existing Status composer with this captured
             # asset preselected. This is a navigation hand-off only: Send is never tapped.
             story_xml = tap_control(
-                second_editor, ["Status"], f"{prefix}-camera-status-handoff",
-                ["Back from Status composer"]
+                second_editor, ["Your Story"], f"{prefix}-camera-status-handoff",
+                ["Back", "Send"]
             )
             if story_xml:
                 screenshot(f"{prefix}-camera-status-composer.png")
                 (ROOT / f"{prefix}-camera-status-composer.xml").write_text(
                     story_xml + chr(10), encoding="utf-8"
                 )
-                if find_control(story_xml, ["Send"]) and find_control(story_xml, ["Back from Status composer"]):
+                if find_control(story_xml, ["Send"]) and find_control(story_xml, ["Back"]):
                     report.append("- PASS Your Story opened the existing Status composer with the captured media; Send was not tapped")
                 else:
                     FAILURES.append(prefix + ": Your Story opened, but the existing Status media composer controls were not confirmed")
                 status_close_xml = tap_control(
-                    story_xml, ["Back from Status composer"], f"{prefix}-camera-status-close",
+                    story_xml, ["Back"], f"{prefix}-camera-status-close",
                     ["Open FYNX camera"]
                 )
                 if status_close_xml:
@@ -2262,9 +2262,14 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 screenshot(f"{prefix}-camera-video-text-overlay-typing.png")
                 if "FYNXvideo" in typed_video:
                     report.append("- PASS video text is typed directly over the clip")
+                    # Timing and export controls live below the text editor. Dismiss the
+                    # IME first, then re-read the actual hierarchy before looking for Timing.
+                    run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(0.6)
+                    typed_video = dump_ui(f"{prefix}-camera-video-text-keyboard-dismissed.xml") or typed_video
+                    if "FYNXvideo" not in typed_video:
+                        FAILURES.append(prefix + ": video text overlay disappeared when the keyboard was dismissed")
                     # Use the editor's explicit Timing and Finish text editing actions.
-                    # Back can be consumed by the IME and leave the text layer focused;
-                    # tapping Done commits the overlay and reliably closes the keyboard.
                     timing_ready = camera_wait_for_control(
                         typed_video, ["Timing"], enabled=True, timeout=12.0,
                         prefix=f"{prefix}-camera-video-text-timing-ready"
@@ -4794,20 +4799,38 @@ def capture_home_music_picker_visuals(home_xml: str) -> str:
         home_xml,
         ["Create post"],
         "home-music-composer",
-        ["New post", "Music"],
+        ["New post", "More options"],
         exact_only=True
     )
     if not composer_xml:
         return home_xml
+    screenshot("authenticated-home-music-composer.png")
     (ROOT / "authenticated-home-music-composer.xml").write_text(
         composer_xml + chr(10), encoding="utf-8"
     )
 
+    # Music is intentionally grouped under the composer’s More options sheet.
+    # Scroll the real composer viewport to its More options row before opening it.
+    composer_options_row = camera_scroll_until_control(
+        composer_xml, ["More options"], "home-music-composer-more-options", max_swipes=8
+    )
+    options_xml = tap_control(
+        composer_options_row,
+        ["More options"],
+        "home-music-composer-more-options-open",
+        ["Add music", "Change music"],
+        exact_only=True
+    ) if composer_options_row else ""
+    if not options_xml:
+        FAILURES.append("The Home composer did not expose its More options sheet for Music.")
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        return home_xml
+
     picker_xml = tap_control(
-        composer_xml,
-        ["Music"],
+        options_xml,
+        ["Add music", "Change music"],
         "home-music-picker",
-        ["Choose your music"],
+        ["FYNX MUSIC LIBRARY", "Search song or artist"],
         exact_only=True
     )
     if not picker_xml:
@@ -4836,7 +4859,7 @@ def capture_home_music_picker_visuals(home_xml: str) -> str:
         picker_xml,
         ["Close music picker"],
         "home-music-picker-close",
-        ["New post", "Music"],
+        ["New post", "More options"],
         exact_only=True
     )
     if not composer_restored:
