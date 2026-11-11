@@ -10,6 +10,7 @@ announcements = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPane
 app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 music_admin = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8")
 feed = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text(encoding="utf-8")
+playback = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCatalogueMusicPlayback.kt").read_text(encoding="utf-8")
 routes = (ROOT / "backend/socialRoutes.js").read_text(encoding="utf-8")
 
 checks = [
@@ -40,6 +41,10 @@ checks = [
     ("Music admin UI accurately states OWNER-only management", "Only the official FYNX OWNER can add, restore or remove catalogue tracks." in music_admin),
     ("Backend accepts only published catalogue music for posts", "music selection is not published in the FYNX catalogue" in routes and "FROM fynx_music_catalogue" in routes and "music selection is not published in the FYNX catalogue" in (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8") and "let musicTitle" in (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")),
     ("Feed still renders attached music", "MusicPostPlayer" in feed and 'musicMediaId' in feed),
+    ("Official Home music uses one app-scoped player", "object FynxCatalogueMusicPlayback" in playback and "FynxCatalogueMusicPlayback.snapshot" in feed and "FynxCatalogueMusicPlayback.toggle" in feed),
+    ("Official Home music prepares asynchronously instead of blocking the feed", "created.prepareAsync()" in playback and "created.prepare()" not in playback),
+    ("Official catalogue playback requests and responds to Android audio focus", "requestAudioFocus(request)" in playback and "AUDIOFOCUS_LOSS_TRANSIENT" in playback and "AUDIOFOCUS_GAIN" in playback),
+    ("Voice-note audio path remains separate from catalogue playback", "Voice notes and recorded speech intentionally keep their own audio path." in playback and "AudioPostPlayer" in feed),
     ("Android model still parses persisted music metadata", "musicMediaId: String?" in models and "musicDurationMs: Long" in models),
 ]
 
