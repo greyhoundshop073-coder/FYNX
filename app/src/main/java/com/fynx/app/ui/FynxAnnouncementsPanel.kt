@@ -341,7 +341,31 @@ fun FynxAdminControlCenterPanel() {
                 Spacer(Modifier.height(20.dp))
             }
             if (activeSection == "Safety") {
-            Text("Applications & Appeals", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review account appeals and restore an account when an appeal is accepted.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); if (appealsLoading) CircularProgressIndicator() else if (appealsError != null) { Text(appealsError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshAppeals++ }) { Text("Retry") } } else if (appeals.isEmpty()) { Text("No open appeals require review.", color = MaterialTheme.colorScheme.onSurfaceVariant) } else { appeals.take(20).forEach { appeal -> Card(Modifier.fillMaxWidth().padding(top = 8.dp)) { Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("${appeal.displayName.ifBlank { "FYNX user" }}  @${appeal.username}", style = MaterialTheme.typography.titleMedium); Text("Appeal #${appeal.id} • ${appeal.status}", color = MaterialTheme.colorScheme.primary); Text(appeal.subject); if (appeal.details.isNotBlank()) Text(appeal.details, maxLines = 5); Text("Current account status: ${appeal.accountStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "UNDER_REVIEW", "Appeal moved to review.").onSuccess { statusMessage = "Appeal moved to review."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not update appeal." } } }) { Text("Review") }; Button(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "ACCEPTED", "Appeal accepted; account restored to ACTIVE.").onSuccess { statusMessage = "Appeal accepted and account restored."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not restore account." } } }) { Text("Approve & restore") }; OutlinedButton(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "REJECTED", "Appeal rejected after review.").onSuccess { statusMessage = "Appeal rejected."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not reject appeal." } } }) { Text("Reject") } } } } } };             }
+            Text("Applications & Appeals", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review account appeals and restore an account when an appeal is accepted.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); if (appealsLoading) CircularProgressIndicator() else if (appealsError != null) { Text(appealsError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshAppeals++ }) { Text("Retry") } } else if (appeals.isEmpty()) { Text("No open appeals require review.", color = MaterialTheme.colorScheme.onSurfaceVariant) } else { appeals.take(20).forEach { appeal -> Card(Modifier.fillMaxWidth().padding(top = 8.dp)) { Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("${appeal.displayName.ifBlank { "FYNX user" }}  @${appeal.username}", style = MaterialTheme.typography.titleMedium); Text("Appeal #${appeal.id} • ${appeal.status}", color = MaterialTheme.colorScheme.primary); Text(appeal.subject); if (appeal.details.isNotBlank()) Text(appeal.details, maxLines = 5); Text("Current account status: ${appeal.accountStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton(onClick = {
+    requestAdminConfirmation("Move appeal to review?", "This marks appeal #${appeal.id} as under review. No account status is changed by this action.", "Confirm review") {
+        scope.launch {
+            FynxAdminClient.reviewAppeal(context, appeal.id, "UNDER_REVIEW", "Appeal moved to review.")
+                .onSuccess { statusMessage = "Appeal moved to review."; refreshAppeals++ }
+                .onFailure { statusMessage = it.message ?: "Could not update appeal." }
+        }
+    }
+}) { Text("Review") }; Button(onClick = {
+    requestAdminConfirmation("Accept appeal and restore account?", "This accepts appeal #${appeal.id} and asks the server to restore @${appeal.username} to ACTIVE. Confirm only after reviewing the appeal details.", "Approve & restore") {
+        scope.launch {
+            FynxAdminClient.reviewAppeal(context, appeal.id, "ACCEPTED", "Appeal accepted; account restored to ACTIVE.")
+                .onSuccess { statusMessage = "Appeal accepted and account restored."; refreshAppeals++ }
+                .onFailure { statusMessage = it.message ?: "Could not restore account." }
+        }
+    }
+}) { Text("Approve & restore") }; OutlinedButton(onClick = {
+    requestAdminConfirmation("Reject this appeal?", "This rejects appeal #${appeal.id} for @${appeal.username}. The existing account status will remain subject to the server's decision.", "Reject appeal") {
+        scope.launch {
+            FynxAdminClient.reviewAppeal(context, appeal.id, "REJECTED", "Appeal rejected after review.")
+                .onSuccess { statusMessage = "Appeal rejected."; refreshAppeals++ }
+                .onFailure { statusMessage = it.message ?: "Could not reject appeal." }
+        }
+    }
+}) { Text("Reject") } } } } } };             }
             if (activeSection == "Marketplace") {
             Spacer(Modifier.height(20.dp)); Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
@@ -428,11 +452,15 @@ fun FynxAdminControlCenterPanel() {
                             Text(if (driver.active) "Approved" else "Approval revoked", color = if (driver.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                         }
                         OutlinedButton(enabled = !driversLoading, onClick = {
-                            scope.launch {
-                                statusMessage = if (driver.active) "Revoking driver approval..." else "Restoring driver approval..."
-                                FynxAdminClient.setMarketplaceDriverApproval(context, driver.userId, !driver.active)
-                                    .onSuccess { statusMessage = if (driver.active) "Driver approval revoked." else "Driver approved."; refreshDrivers++ }
-                                    .onFailure { statusMessage = it.message ?: "Driver approval could not be changed." }
+                            val action = if (driver.active) "Revoke delivery-driver approval?" else "Approve this delivery driver?"
+                            val detail = if (driver.active) "This asks the server to revoke @${driver.username}'s approval. Revocation may be blocked while the driver has a parcel in active custody." else "This asks the server to approve @${driver.username} as a Marketplace delivery driver."
+                            requestAdminConfirmation(action, detail, if (driver.active) "Revoke driver" else "Approve driver") {
+                                scope.launch {
+                                    statusMessage = if (driver.active) "Revoking driver approval..." else "Restoring driver approval..."
+                                    FynxAdminClient.setMarketplaceDriverApproval(context, driver.userId, !driver.active)
+                                        .onSuccess { statusMessage = if (driver.active) "Driver approval revoked." else "Driver approved."; refreshDrivers++ }
+                                        .onFailure { statusMessage = it.message ?: "Driver approval could not be changed." }
+                                }
                             }
                         }) { Text(if (driver.active) "Revoke" else "Approve") }
                     }
@@ -503,14 +531,20 @@ fun FynxAdminControlCenterPanel() {
                             }) { Text("Make Admin") }
                             OutlinedButton(onClick = {
                                 val currentlyApproved = marketplaceDrivers.any { it.userId == user.id && it.active }
-                                scope.launch {
-                                    statusMessage = if (currentlyApproved) "Revoking driver approval..." else "Approving delivery driver..."
-                                    FynxAdminClient.setMarketplaceDriverApproval(context, user.id, !currentlyApproved)
-                                        .onSuccess {
-                                            statusMessage = if (currentlyApproved) "@${user.username} is no longer an approved driver." else "@${user.username} is an approved driver."
-                                            refreshDrivers++
-                                        }
-                                        .onFailure { statusMessage = it.message ?: "Driver approval could not be changed." }
+                                requestAdminConfirmation(
+                                    if (currentlyApproved) "Revoke delivery-driver approval?" else "Approve this delivery driver?",
+                                    if (currentlyApproved) "This asks the server to revoke @${user.username}'s approval. Revocation may be blocked while the driver has a parcel in active custody." else "This asks the server to approve @${user.username} as a Marketplace delivery driver.",
+                                    if (currentlyApproved) "Revoke driver" else "Approve driver"
+                                ) {
+                                    scope.launch {
+                                        statusMessage = if (currentlyApproved) "Revoking driver approval..." else "Approving delivery driver..."
+                                        FynxAdminClient.setMarketplaceDriverApproval(context, user.id, !currentlyApproved)
+                                            .onSuccess {
+                                                statusMessage = if (currentlyApproved) "@${user.username} is no longer an approved driver." else "@${user.username} is an approved driver."
+                                                refreshDrivers++
+                                            }
+                                            .onFailure { statusMessage = it.message ?: "Driver approval could not be changed." }
+                                    }
                                 }
                             }) { Text(if (marketplaceDrivers.any { it.userId == user.id && it.active }) "Revoke Driver" else "Approve Driver") }
                         }
