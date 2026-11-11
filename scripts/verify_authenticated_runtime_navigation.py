@@ -3065,6 +3065,85 @@ if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
     print("\n".join(report)); raise SystemExit(2)
 
+def capture_home_music_picker_visuals(home_xml: str) -> str:
+    """Capture the real Home composer and shared official-music picker without publishing."""
+    if not is_authenticated_home_surface(home_xml):
+        FAILURES.append("Home was not visible when Music picker visual certification began.")
+        return home_xml
+
+    composer_xml = tap_control(
+        home_xml,
+        ["Create post"],
+        "home-music-composer",
+        ["New post", "Music"],
+        exact_only=True
+    )
+    if not composer_xml:
+        return home_xml
+    (ROOT / "authenticated-home-music-composer.xml").write_text(
+        composer_xml + chr(10), encoding="utf-8"
+    )
+
+    picker_xml = tap_control(
+        composer_xml,
+        ["Music"],
+        "home-music-picker",
+        ["Choose your music"],
+        exact_only=True
+    )
+    if not picker_xml:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        return home_xml
+
+    (ROOT / "authenticated-home-music-picker.xml").write_text(
+        picker_xml + chr(10), encoding="utf-8"
+    )
+    screenshot("authenticated-home-music-picker.png")
+    if not find_control(picker_xml, ["FYNX MUSIC LIBRARY"]):
+        FAILURES.append("The Music picker opened but its official-library heading was not visible.")
+    if not find_control(picker_xml, ["Search song or artist"]):
+        FAILURES.append("The Music picker opened but its song/artist search field was not visible.")
+
+    if find_control(picker_xml, ["Try again"]):
+        report.append("- NOTE: captured the real Music picker in its retry/error state; catalogue availability was not verified.")
+    elif find_control(picker_xml, ["No official tracks have been published yet."]):
+        report.append("- NOTE: captured the real Music picker empty state; no published catalogue tracks were available to preview.")
+    elif find_control(picker_xml, ["Use"]):
+        report.append("- PASS: captured the real Music picker with published catalogue rows and Use actions visible.")
+    else:
+        report.append("- PASS: captured the real shared Music picker shell and search controls; no track was selected or published.")
+
+    composer_restored = tap_control(
+        picker_xml,
+        ["Close music picker"],
+        "home-music-picker-close",
+        ["New post", "Music"],
+        exact_only=True
+    )
+    if not composer_restored:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        return home_xml
+
+    home_restored = tap_control(
+        composer_restored,
+        ["Close"],
+        "home-music-composer-close",
+        ["Create post", "Your feed"],
+        exact_only=True
+    )
+    if not home_restored:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        home_restored = dump_ui("authenticated-home-after-music-picker-close.xml")
+
+    if not home_restored or not is_authenticated_home_surface(home_restored):
+        FAILURES.append("The Home composer did not close safely after Music picker screenshot capture.")
+        return home_xml
+
+    screenshot("authenticated-home-after-music-picker.png")
+    report.append("- PASS: captured the actual Home post composer and shared Music picker, then returned to Home without selecting or publishing a track.")
+    return home_restored
+
+
 def secure_access_token_persisted()->bool|None:
     """Check the encrypted token preference without ever reading or printing its value."""
     prefs_file = "shared_prefs/fynx_secure_auth.xml"
@@ -3234,6 +3313,13 @@ if HOME_FEED_VISUALS_ONLY:
         and is_home_feed_navigation_visible(home_xml)
     )
     if home_visible:
+        home_xml = capture_home_music_picker_visuals(home_xml)
+        home_visible = bool(
+            home_xml
+            and is_authenticated_home_surface(home_xml)
+            and is_home_feed_navigation_visible(home_xml)
+        )
+    if home_visible:
         (ROOT / "authenticated-home-feed-final.xml").write_text(home_xml + chr(10), encoding="utf-8")
         screenshot("authenticated-home-feed-final.png")
         report.append("- PASS: captured the actual Home Feed at its restored top position with the floating Home navigation visible.")
@@ -3257,6 +3343,17 @@ if HOME_FEED_VISUALS_ONLY:
         report.append("- LIMITATION: full-screen video interaction could not be demonstrated without an available Home video or successful local CI fixture.")
     if not (ROOT / "authenticated-home-comments.png").is_file():
         report.append("- LIMITATION: the local read-only comment thread was not captured; no backend comment or reply was created.")
+
+    music_composer_proof = (ROOT / "authenticated-home-music-composer.png").is_file()
+    music_picker_proof = (ROOT / "authenticated-home-music-picker.png").is_file()
+    if not music_composer_proof or not music_picker_proof:
+        missing_music = [
+            name for name, present in (
+                ("authenticated-home-music-composer.png", music_composer_proof),
+                ("authenticated-home-music-picker.png", music_picker_proof),
+            ) if not present
+        ]
+        FAILURES.append("Music picker visual certification is incomplete; missing evidence: " + ", ".join(missing_music))
 
     report += ["", "## Home Feed evidence files"]
     report += [
@@ -3282,7 +3379,13 @@ if HOME_FEED_VISUALS_ONLY:
             ) if not (ROOT / name).is_file()
         ]
         FAILURES.append("Home Feed visual certification is incomplete; missing required evidence: " + ", ".join(missing_evidence))
-    capture_result = "GREEN" if not FAILURES and media_proof_complete else "RED"
+    report += ["", "## Music picker evidence files"]
+    report += [
+        "- authenticated-home-music-composer.png" if music_composer_proof else "- Home composer screenshot unavailable",
+        "- authenticated-home-music-picker.png" if music_picker_proof else "- Music picker screenshot unavailable",
+        "- authenticated-home-after-music-picker.png" if (ROOT / "authenticated-home-after-music-picker.png").is_file() else "- Home return screenshot unavailable",
+    ]
+    capture_result = "GREEN" if not FAILURES and media_proof_complete and music_composer_proof and music_picker_proof else "RED"
     report += ["", f"## Result: {capture_result}"]
     if FAILURES:
         report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
