@@ -580,11 +580,17 @@ fun FynxAdminControlCenterPanel() {
                             modifier = Modifier.fillMaxWidth(),
                             enabled = title.isNotBlank() && body.isNotBlank() && body.length <= 2000,
                             onClick = {
-                                statusMessage = "Publishing..."
-                                scope.launch {
-                                    FynxAdminClient.publishAnnouncement(context, title, body, "NORMAL")
-                                        .onSuccess { title = ""; body = ""; statusMessage = "Announcement published. Refresh the public feed to verify it." }
-                                        .onFailure { statusMessage = it.message ?: "Publish failed." }
+                                requestAdminConfirmation(
+                                    "Publish this official announcement?",
+                                    "This will send ${title.trim()} to the existing FYNX announcements feed. Check the preview and wording before publishing.",
+                                    "Publish announcement"
+                                ) {
+                                    statusMessage = "Publishing..."
+                                    scope.launch {
+                                        FynxAdminClient.publishAnnouncement(context, title.trim(), body.trim(), "NORMAL")
+                                            .onSuccess { title = ""; body = ""; statusMessage = "Announcement published. Refresh the public feed to verify it." }
+                                            .onFailure { statusMessage = it.message ?: "Publish failed." }
+                                    }
                                 }
                             }
                         ) {
