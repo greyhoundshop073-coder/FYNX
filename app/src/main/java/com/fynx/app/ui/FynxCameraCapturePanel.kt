@@ -1315,7 +1315,7 @@ fun FynxCameraCapturePanel(
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .heightIn(max = if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp else LocalConfiguration.current.screenHeightDp.dp * 0.44f)
+                    .fillMaxHeight(if (editingTextOverlayId != null && selectedCameraTool == "Text") 0f else 0.44f)
                     .navigationBarsPadding()
                     .imePadding()
                     .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
@@ -1476,6 +1476,7 @@ fun FynxCameraCapturePanel(
                         selected = selectedOverlay,
                         overlayCount = cameraTextOverlays.size,
                         isVideo = true,
+                        compact = true,
                         onAdd = ::addCameraTextOverlay,
                         onColor = { color -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(color = color)) } },
                         onFont = { font -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(font = font)) } },

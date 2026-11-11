@@ -196,8 +196,8 @@ checks = [
      and "post details scrolled viewport" in runtime),
     ("Camera dialog draws its dark canvas edge-to-edge while controls apply their own safe-area insets",
      "if (showCamera || showFastCamera)" in home
-     and "Surface(Modifier.fillMaxSize(), color = Color(0xFF080A10))" in home
-     and "Box(Modifier.fillMaxSize().background(Color(0xFF080A10)))" in home
+     and "Surface(Modifier.fillMaxSize(), color = Color(0xFF000000))" in home
+     and "Box(Modifier.fillMaxSize().background(Color(0xFF000000)))" in home
      and "Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing))" not in home
      and "statusBarsPadding()" in camera and "windowInsetsTopHeight(WindowInsets.statusBars)" in camera
      and ".navigationBarsPadding()" in camera
