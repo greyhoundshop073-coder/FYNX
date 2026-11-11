@@ -101,7 +101,7 @@ private fun saveRemoteMediaToGallery(context: android.content.Context, source: F
         ascii.substring(4, 8) == "ftyp" -> "video/mp4"
         else -> null
     }
-    val mime = contentType?.takeIf { '/' in it } ?: detectedMime ?: when (type.lowercase()) {
+    val mime = contentType?.takeIf { it.startsWith("image/") || it.startsWith("video/") } ?: detectedMime ?: when (type.lowercase()) {
         "video", "video_note" -> "video/mp4"
         "gif" -> "image/gif"
         else -> "image/jpeg"
