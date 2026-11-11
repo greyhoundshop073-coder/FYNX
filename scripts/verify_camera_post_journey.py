@@ -376,7 +376,7 @@ checks = [
 checks.extend([
     ("While typing, the large media sheet collapses and a two-row glass toolbar stays above the keyboard",
      "compact = true" in camera
-     and 'if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp' in camera
+     and 'if (editingTextOverlayId != null && selectedCameraTool == "Text") 0f' in camera
      and "imePadding()" in camera
      and "if (compact) {" in overlay
      and "Keep the editor actions in two compact rows" in overlay
