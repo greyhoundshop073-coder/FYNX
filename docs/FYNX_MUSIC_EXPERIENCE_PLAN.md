@@ -20,7 +20,10 @@ The catalogue remains controlled by the official FYNX OWNER. Ordinary users can 
 - **Bug found:** Home's composer enables a music-only post, and the server accepts it, but the Android post client rejected blank-caption/no-media posts before considering the selected catalogue track.
 - **Permission mismatch found:** the Admin Control Center displayed `FynxMusicAdminPanel` to both OWNER and ADMIN, while backend write routes enforce OWNER-only access. The UI must match the server's authority. Marketplace seasonal promotion controls are a separate permission surface and must retain their existing OWNER/ADMIN access.
 - The Announcement Center did not yet expose the OWNER music tools in its own surface.
-- Home's feed player is a per-post `MediaPlayer` card with no album artwork or song-detail navigation. Status already has catalogue selection and preview; its composer stores a catalogue track ID separately from voice media.
+- Home's feed player is a per-post `MediaPlayer` card with no album artwork or song-detail navigation. It calls synchronous `prepare()` after cache download, and each post card owns a separate player instance.
+- `FynxRemoteAudio` is a generic per-composable audio player used for remote audio and also for Status catalogue previews/playback. It must not be replaced wholesale by a music-only coordinator because voice notes and recorded speech use the same generic surface.
+- Status already has catalogue selection and preview; its composer stores a catalogue track ID separately from voice media.
+- The current camera capture flow hands a photo/video back to the composer. `FynxMediaComposer` is a simple media review surface; the canonical source does not contain a dedicated video soundtrack timeline or a full video editor with audio mixing controls. Music can be attached in the Home/Status composer after capture. A future timeline is a new capability and must wait for a real render/publish pipeline.
 
 ## Identity model — do not conflate identifiers
 
@@ -67,10 +70,10 @@ FYNX must not label every track commercially cleared by default. Backend metadat
 | Home feed post | Identify and explore a soundtrack | Small circular artwork beside attribution; rotate only while playing; tap opens exact song page |
 | Home composer | Add official music to a post | Shared picker; preserve draft/media; support music-only post |
 | Photo/carousel composer | Give still media a soundtrack | Select track without imposing video editing controls |
-| Video editor | Synchronize soundtrack with clips | Preview, start offset/trim and independent source/music levels when pipeline supports them |
+| Future video-editing extension | Add soundtrack to edited clips | No dedicated soundtrack timeline exists in the current canonical app. Add trim/start offset and independent source/music levels only with a real render/publish pipeline |
 | Status composer | Share music with a photo/video/text status | Same picker and identity; retain selected track while returning to composer |
 | Music-only Status | Share a track as Status | Cover, title, artist and track playback; no voice-note substitution |
-| Camera capture/editor | Add soundtrack during creation | Reuse shared picker and selected-track contract |
+| Camera capture | Capture photo/video for a post | Capture returns to the existing composer; attach catalogue music there using the shared picker |
 | Discovery | Find tracks and public creations | Popular/recent/genre views based on real, eligible usage; exact song page |
 | User profile | Show optional public music activity | Respect profile visibility, post audience and block rules |
 | Announcement Center | Official catalogue management entry | OWNER-only access, server role checked |
@@ -79,7 +82,7 @@ FYNX must not label every track commercially cleared by default. Backend metadat
 
 ## Playback architecture
 
-Use one app-scoped catalogue playback coordinator rather than independent players in every feed card and picker. It owns the active track, playback state, player lifecycle and audio focus. UI surfaces subscribe to that state.
+Use one app-scoped catalogue playback coordinator rather than independent players in every feed card and picker. It owns the active track, playback state, player lifecycle and audio focus. UI surfaces subscribe to that state. Keep it catalogue-specific: do not replace the generic `FynxRemoteAudio` speech/voice path. Replace music call sites with the catalogue player, then explicitly pause catalogue playback when voice notes, calls or audible video take over.
 
 Rules:
 - At most one FYNX catalogue track plays at a time.
