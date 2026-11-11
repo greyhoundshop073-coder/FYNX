@@ -117,7 +117,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicInteger
 
-private const val FYNX_CAMERA_WINDOW_BACKGROUND_ARGB: Int = 0xFF080A10.toInt()
+private const val FYNX_CAMERA_WINDOW_BACKGROUND_ARGB: Int = 0xFF000000.toInt()
 
 /**
  * Resolve the Window that hosts this composition. The camera normally lives inside
