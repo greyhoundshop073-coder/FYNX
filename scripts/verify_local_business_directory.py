@@ -12,6 +12,8 @@ checks = [
     ("Marketplace exposes the Local Businesses destination", "onOpenBusinesses" in marketplace and 'Text("Local businesses",' in marketplace),
     ("Marketplace route opens the dedicated directory panel", '"Local Businesses" -> FynxLocalBusinessesPanel' in app),
     ("directory is reachable from the Marketplace screen", 'onOpenBusinesses = { selected = "Local Businesses" }' in app),
+    ("business profile product cards open the canonical Marketplace listing", 'onClick = { item.optString("id").takeIf { it.isNotBlank() }?.let(onOpenListing) }' in directory and 'onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }' in app),
+    ("Marketplace resolves the selected business product by its exact listing ID", "LaunchedEffect(initialListingId)" in marketplace and "loadExactMarketplaceListing(context, listingId)" in marketplace and "selected = listing" in marketplace),
     ("directory uses the authenticated FYNX backend base client without adding credentials", 'FynxBackendClient.get(context, url)' in directory),
     ("directory supports search, category and area filters", 'query=' in directory and 'category=' in directory and 'location=' in directory),
     ("directory supports pagination and stable business IDs", 'hasMore' in directory and 'items(businesses, key = { it.id })' in directory),
