@@ -578,7 +578,7 @@ fun FynxHomeSocialHubPanel(
                                         Text(music.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                     }
                                     FynxRemoteAudio(
-                                        mediaUrl = "/api/social/music/catalogue/" + music.id + "/media",
+                                        mediaUrl = "/api/social/music/media/" + music.mediaId,
                                         modifier = Modifier.width(120.dp),
                                         maxDurationMs = music.durationMs.coerceAtLeast(1_000L)
                                     )
