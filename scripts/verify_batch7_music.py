@@ -56,6 +56,8 @@ checks = [
     ("Home catalogue search is debounced and authenticated", "kotlinx.coroutines.delay(300)" in home_picker and "FynxBackendClient.hasAccessToken(context)" in home_picker),
     ("Home feed soundtrack opens the song destination", "songDetailsOpen" in feed and "FynxMusicSongDetailSurface(" in feed and "View song details" in feed),
     ("Song destination previews through the shared catalogue player", "FynxCatalogueMusicPlayback.toggle" in song_page and '/api/social/music/media/$mediaId' in song_page),
+    ("Home feed music is downloaded only after explicit play", "fun playOrPause()" in feed and "loadingAudio" in feed and "LaunchedEffect(mediaId)" not in feed[feed.find("private fun MusicPostPlayer"):feed.find("private fun formatMusicDuration", feed.find("private fun MusicPostPlayer"))]),
+    ("Song destination preview download is user initiated", "fun loadAndPreview()" in song_page and "audioLoading" in song_page and "LaunchedEffect(mediaId)" not in song_page),
     ("Song destination hands the exact media asset to the Home composer", "FynxMusicSongNavigation.useTrack" in song_page and "FynxMusicSongNavigation.onUseTrack = handler" in home_picker and "mediaId = mediaId" in home_picker),
     ("Song reuse preserves the existing Home draft and selected media", "showComposer = true" in home_picker and "capturedUris" not in home_picker[home_picker.find("val handler:"):home_picker.find("LaunchedEffect(Unit)")]),
     ("Song destination does not fabricate artwork or public creations", "Public creations will appear here when FYNX's catalogue-linked discovery service is available." in song_page and "FYNX SOUND" in song_page),
