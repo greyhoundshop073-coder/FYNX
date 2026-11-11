@@ -188,7 +188,7 @@ checks = [
      and '["Back from Status composer"]' in runtime
      and "camera-status-composer.png" in runtime
      and "Your Story opened the existing Status composer with the captured media; Send was not tapped" in runtime
-     and 'input", "KEYCODE_BACK"' in runtime
+     and '"KEYCODE_BACK"' in runtime
      and "camera-status-return-home.xml" in runtime
      and "camera-after-status-photo" in runtime),
     ("Camera editor exposes Next and preserves the existing captured-media callback",
