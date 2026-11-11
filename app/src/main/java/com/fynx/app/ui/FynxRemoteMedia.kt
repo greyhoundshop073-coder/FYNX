@@ -88,7 +88,19 @@ private fun saveRemoteMediaToGallery(context: android.content.Context, source: F
     val savedKey = "${account}_${digest.take(32)}"
     val prefs = context.getSharedPreferences("fynx_auto_saved_media", android.content.Context.MODE_PRIVATE)
     if (prefs.getBoolean(savedKey, false)) return true
-    val mime = contentType?.takeIf { '/' in it } ?: when (type.lowercase()) {
+    val header = ByteArray(12)
+    val headerLength = runCatching { source.inputStream().use { it.read(header) } }.getOrDefault(0)
+    val hex = header.take(headerLength.coerceAtLeast(0)).joinToString("") { "%02X".format(it) }
+    val ascii = runCatching { String(header, Charsets.US_ASCII) }.getOrDefault("")
+    val detectedMime = when {
+        hex.startsWith("FFD8FF") -> "image/jpeg"
+        hex.startsWith("89504E47") -> "image/png"
+        ascii.startsWith("GIF8") -> "image/gif"
+        ascii.substring(8).startsWith("WEBP") -> "image/webp"
+        ascii.substring(4, 8) == "ftyp" -> "video/mp4"
+        else -> null
+    }
+    val mime = contentType?.takeIf { '/' in it } ?: detectedMime ?: when (type.lowercase()) {
         "video", "video_note" -> "video/mp4"
         "gif" -> "image/gif"
         else -> "image/jpeg"
