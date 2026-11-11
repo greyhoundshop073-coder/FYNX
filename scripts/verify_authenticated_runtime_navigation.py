@@ -2710,6 +2710,21 @@ def login():
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
     xml=dump_ui("authenticated-before-login.xml"); screenshot("authenticated-before-login.png")
+    # A second focused visual journey may reuse the same debug-local session
+    # after the camera journey has already opened Home. Do not demand a fresh
+    # login gate or force a second sign-in when Home is already the live surface.
+    home_already_visible = bool(
+        xml and find_control(xml, ["Open FYNX camera"])
+        and find_control(xml, ["Chat"]) and find_control(xml, ["Friends"])
+    )
+    if VISUALS_ONLY and home_already_visible:
+        if FORCE_LOCAL_VISUALS or not PASSWORD:
+            LOGIN_MODE="reused debug-only local UI session (not server-authenticated)"
+            return xml, ""
+        token_present = secure_access_token_persisted()
+        if token_present is True:
+            LOGIN_MODE="reused server-authenticated session (encrypted token verified)"
+            return xml, ""
     # A first-run notification modal can own the accessibility hierarchy even
     # though the actual Home screen is already rendered behind it. In the
     # read-only visual-only flow, clear that exact system overlay before treating
