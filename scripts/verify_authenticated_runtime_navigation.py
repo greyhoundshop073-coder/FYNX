@@ -3805,6 +3805,56 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 break
             marketplace_xml = scrolled_xml
 
+        # Exercise the new Local Businesses directory from the real Marketplace shortcut rail.
+        # The screen is useful even when the live backend is unavailable: certify the actual
+        # search/filter UI, but never fabricate a directory result or claim live data loaded.
+        local_business_xml = tap_control(
+            marketplace_xml, ["Local businesses"], "marketplace-local-businesses",
+            ["Search businesses, services or names"]
+        )
+        if local_business_xml:
+            local_business_ready_xml = local_business_xml
+            local_business_deadline = time.monotonic() + 12.0
+            while time.monotonic() < local_business_deadline:
+                local_business_ready_xml = dump_ui("marketplace-local-businesses-settled.xml") or local_business_ready_xml
+                if (
+                    find_control(local_business_ready_xml, ["Local Businesses"])
+                    and find_control(local_business_ready_xml, ["Search businesses, services or names"])
+                    and find_control(local_business_ready_xml, ["Area, city or neighbourhood"])
+                ):
+                    break
+                time.sleep(0.4)
+            if (
+                find_control(local_business_ready_xml, ["Local Businesses"])
+                and find_control(local_business_ready_xml, ["Search businesses, services or names"])
+                and find_control(local_business_ready_xml, ["Area, city or neighbourhood"])
+            ):
+                screenshot("authenticated-marketplace-local-businesses.png")
+                (ROOT/"authenticated-marketplace-local-businesses.xml").write_text(
+                    local_business_ready_xml + chr(10), encoding="utf-8"
+                )
+                report.append("- PASS: Marketplace -> Local businesses opened the real directory search and area-filter UI; no sample business records were inserted.")
+            else:
+                screenshot("authenticated-marketplace-local-businesses-incomplete.png")
+                (ROOT/"authenticated-marketplace-local-businesses-incomplete.xml").write_text(
+                    local_business_ready_xml + chr(10), encoding="utf-8"
+                )
+                FAILURES.append("Local Businesses directory did not settle to its title, business search and area filter")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            local_business_return_xml = ""
+            local_business_return_deadline = time.monotonic() + 10.0
+            while time.monotonic() < local_business_return_deadline:
+                local_business_return_xml = dump_ui("marketplace-local-businesses-return.xml") or local_business_return_xml
+                if find_control(local_business_return_xml, ["Search products, sellers or categories"]):
+                    break
+                time.sleep(0.4)
+            if find_control(local_business_return_xml, ["Search products, sellers or categories"]):
+                marketplace_xml = local_business_return_xml
+            else:
+                FAILURES.append("Local Businesses Back did not return to Marketplace")
+        else:
+            FAILURES.append("Marketplace Local businesses shortcut could not be opened")
+
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
         product_target = marketplace_product_card_target(marketplace_xml)
