@@ -12,9 +12,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,14 +28,14 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -69,6 +70,10 @@ data class FynxBusinessDirectoryItem(
 )
 
 object FynxBusinessDirectoryClient {
+    suspend fun details(context: Context, username: String): Result<JSONObject> =
+        FynxBackendClient.get(context, "/api/business/public/${Uri.encode(username.removePrefix("@"))}")
+            .mapCatching { JSONObject(it) }
+
     suspend fun search(
         context: Context,
         query: String = "",
@@ -122,6 +127,8 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
     var category by remember { mutableStateOf("All") }
     var businesses by remember { mutableStateOf<List<FynxBusinessDirectoryItem>>(emptyList()) }
     var selectedBusiness by remember { mutableStateOf<FynxBusinessDirectoryItem?>(null) }
+    var businessDetails by remember { mutableStateOf<JSONObject?>(null) }
+    var loadingDetails by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(false) }
@@ -149,7 +156,7 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
                     hasMore = more
                 }
             }.onFailure {
-                if (generation == requestGeneration) error = it.message ?: "Business directory is temporarily unavailable."
+                if (generation == requestGeneration) error = "The business directory is temporarily unavailable. Please try again."
             }
             if (generation == requestGeneration) {
                 loading = false
@@ -164,15 +171,9 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
         load(reset = true)
     }
 
+    if (selectedBusiness == null) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Marketplace")
-            }
-            Column(Modifier.weight(1f)) {
-                Text("Local Businesses", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Discover shops and services around your area", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             IconButton(onClick = { load(reset = true) }, enabled = !loading) {
                 Icon(Icons.Default.Refresh, contentDescription = "Refresh businesses")
             }
@@ -230,7 +231,17 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
             ) {
                 items(businesses, key = { it.id }) { business ->
                     Surface(
-                        onClick = { selectedBusiness = business },
+                        onClick = {
+                            selectedBusiness = business
+                            businessDetails = null
+                            loadingDetails = true
+                            scope.launch {
+                                FynxBusinessDirectoryClient.details(context, business.username)
+                                    .onSuccess { businessDetails = it }
+                                    .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
+                                loadingDetails = false
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),
                         color = MaterialTheme.colorScheme.surface,
@@ -284,38 +295,96 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
         }
     }
 
+    }
     selectedBusiness?.let { business ->
-        AlertDialog(
-            onDismissRequest = { selectedBusiness = null },
-            title = {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(business.businessName)
-                    Text("@${business.username}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+        FynxPublicBusinessProfilePanel(
+            business = business,
+            details = businessDetails,
+            loading = loadingDetails,
+            onBack = { selectedBusiness = null; businessDetails = null },
+            onCall = {
+                try { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${business.phone}"))) }
+                catch (_: Exception) { Toast.makeText(context, "Unable to open the phone dialler.", Toast.LENGTH_SHORT).show() }
             },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(business.category, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    if (business.verified) Text("✓ Verified business", color = MaterialTheme.colorScheme.primary)
-                    if (business.description.isNotBlank()) Text(business.description)
-                    if (business.location.isNotBlank()) Text("Location: ${business.location}")
-                    if (business.phone.isNotBlank()) Text("Phone: ${business.phone}")
-                    if (business.website.isNotBlank()) Text("Website: ${business.website}")
-                }
-            },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (business.phone.isNotBlank()) TextButton(onClick = {
-                        try { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${business.phone}"))) }
-                        catch (_: Exception) { Toast.makeText(context, "Unable to open the phone dialler.", Toast.LENGTH_SHORT).show() }
-                    }) { Icon(Icons.Default.Call, contentDescription = null); Text("Call") }
-                    if (business.website.startsWith("https://", true)) TextButton(onClick = {
-                        try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(business.website))) }
-                        catch (_: Exception) { Toast.makeText(context, "Unable to open this website.", Toast.LENGTH_SHORT).show() }
-                    }) { Icon(Icons.Default.Language, contentDescription = null); Text("Website") }
-                }
-            },
-            dismissButton = { TextButton(onClick = { selectedBusiness = null }) { Text("Close") } }
+            onWebsite = {
+                try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(business.website))) }
+                catch (_: Exception) { Toast.makeText(context, "Unable to open this website.", Toast.LENGTH_SHORT).show() }
+            }
         )
+    }
+}
+
+
+@Composable
+private fun FynxPublicBusinessProfilePanel(
+    business: FynxBusinessDirectoryItem,
+    details: JSONObject?,
+    loading: Boolean,
+    onBack: () -> Unit,
+    onCall: () -> Unit,
+    onWebsite: () -> Unit
+) {
+    val profile = details?.optJSONObject("profile")
+    val products = details?.optJSONArray("products")
+    val services = profile?.optJSONArray("services")
+    val areas = profile?.optJSONArray("service_areas")
+    val hours = profile?.optJSONObject("opening_hours")
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null); Text("Businesses") }
+            Spacer(Modifier.weight(1f))
+            if (business.verified) Text("✓ Verified", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        }
+        Text(business.businessName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("@${business.username} • ${business.category}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (business.description.isNotBlank()) Text(business.description, style = MaterialTheme.typography.bodyLarge)
+        if (business.location.isNotBlank()) Text("Location: ${business.location}")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (business.phone.isNotBlank()) Button(onClick = onCall) { Icon(Icons.Default.Call, contentDescription = null); Text("Call") }
+            if (business.website.startsWith("https://", true)) OutlinedButton(onClick = onWebsite) { Icon(Icons.Default.Language, contentDescription = null); Text("Website") }
+        }
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (profile != null) {
+            if (hours != null && hours.length() > 0) {
+                Text("Opening hours", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                for (i in 0 until hours.length()) {
+                    val day = hours.names()?.optString(i).orEmpty()
+                    if (day.isNotBlank()) Text("$day: ${hours.optString(day)}")
+                }
+            }
+            if (areas != null && areas.length() > 0) {
+                Text("Service areas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text((0 until areas.length()).mapNotNull { areas.optString(it).takeIf(String::isNotBlank) }.joinToString(" • "))
+            }
+            if (services != null && services.length() > 0) {
+                Text("Services and prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                for (i in 0 until services.length()) {
+                    val item = services.optJSONObject(i) ?: continue
+                    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text(item.optString("name"), fontWeight = FontWeight.SemiBold)
+                        if (item.optString("description").isNotBlank()) Text(item.optString("description"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (item.optString("price").isNotBlank()) Text("${item.optString("currency", "NGN")} ${item.optString("price")}", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            if (products != null && products.length() > 0) {
+                Text("Marketplace products", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                for (i in 0 until products.length()) {
+                    val item = products.optJSONObject(i) ?: continue
+                    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(item.optString("title"), fontWeight = FontWeight.SemiBold)
+                            Text("${item.optString("currency")} ${item.optString("price")} • ${item.optInt("available_quantity")} available", color = MaterialTheme.colorScheme.primary)
+                            Text(item.optString("category"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        } else if (!loading) {
+            Text("Additional business details are unavailable right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }

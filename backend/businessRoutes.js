@@ -1,5 +1,6 @@
 import { getFynxDatabasePool } from "./databasePool.js";
 import pg from "pg";
+import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -31,6 +32,9 @@ export function registerBusinessRoutes({ app, auth }) {
       );
       CREATE INDEX IF NOT EXISTS business_profiles_category_idx ON business_profiles(category);
       CREATE INDEX IF NOT EXISTS business_profiles_owner_idx ON business_profiles(owner_id);
+      ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS opening_hours JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS service_areas JSONB NOT NULL DEFAULT '[]'::jsonb;
+      ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS services JSONB NOT NULL DEFAULT '[]'::jsonb;
     `);
     return schemaReady;
   };
@@ -70,7 +74,8 @@ export function registerBusinessRoutes({ app, auth }) {
     const offsetIndex = params.length;
     try {
       const result = await pool.query(
-        `SELECT id::text AS id,business_name,business_username,category,description,location,phone,website,verified
+        `SELECT id::text AS id,business_name,business_username,category,description,location,phone,website,verified,
+                opening_hours,service_areas,services
            FROM business_profiles
           WHERE ${where.join(" AND ")}
           ORDER BY verified DESC,updated_at DESC,id DESC
@@ -86,9 +91,50 @@ export function registerBusinessRoutes({ app, auth }) {
     }
   });
 
+  // Public business profile and its active, in-stock Marketplace products.
+  // Never return owner IDs, private account data, or unlinked seller listings.
+  app.get("/api/business/public/:username", async (req, res) => {
+    const username = clean(req.params?.username, 32).replace(/^@+/, "").toLowerCase();
+    if (!/^[a-z0-9_]{3,32}$/.test(username)) return res.status(400).json({ error: "invalid business username" });
+    try {
+      const profileResult = await pool.query(
+        `SELECT id::text AS id,business_name,business_username,category,description,location,phone,website,verified,
+                opening_hours,service_areas,services
+           FROM business_profiles WHERE business_username=$1 AND active=TRUE LIMIT 1`,
+        [username]
+      );
+      const profile = profileResult.rows[0];
+      if (!profile) return res.status(404).json({ error: "business profile not found" });
+      await ensureMarketplaceSchemaForPool(pool);
+      await pool.query("ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS business_id BIGINT REFERENCES business_profiles(id) ON DELETE SET NULL");
+      await pool.query("CREATE INDEX IF NOT EXISTS marketplace_listings_business_idx ON marketplace_listings(business_id,active,created_at DESC)");
+      const productResult = await pool.query(
+        `SELECT id::text AS id,title,description,price,currency,category,condition,
+                GREATEST(0, quantity - COALESCE(reserved_quantity,0))::int AS available_quantity,
+                location,media_ids
+           FROM marketplace_listings
+          WHERE business_id=$1 AND COALESCE(active,TRUE)=TRUE AND quantity>0
+          ORDER BY created_at DESC,id DESC LIMIT 20`,
+        [profile.id]
+      );
+      return res.json({
+        profile,
+        products: productResult.rows.map(row => ({
+          ...row,
+          price: Number(row.price),
+          available_quantity: Number(row.available_quantity),
+          media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : []
+        }))
+      });
+    } catch (error) {
+      console.error("[fynx-business] public profile load failed", error);
+      return res.status(500).json({ error: "business profile is temporarily unavailable" });
+    }
+  });
+
   app.get("/api/business/profile", auth, async (req, res) => {
     try {
-      const result = await pool.query(`SELECT id,business_name,business_username,category,description,location,phone,website,verified,active,created_at,updated_at FROM business_profiles WHERE owner_id=$1`, [req.user.sub]);
+      const result = await pool.query(`SELECT id,business_name,business_username,category,description,location,phone,website,opening_hours,service_areas,services,verified,active,created_at,updated_at FROM business_profiles WHERE owner_id=$1`, [req.user.sub]);
       return res.json({ profile: result.rows[0] || null });
     } catch (error) {
       console.error("[fynx-business] profile load failed", error);
@@ -104,14 +150,29 @@ export function registerBusinessRoutes({ app, auth }) {
     const location = clean(req.body?.location, 160);
     const phone = clean(req.body?.phone, 30);
     const website = clean(req.body?.website, 200);
+    const openingHours = {};
+    if (req.body?.openingHours && typeof req.body.openingHours === "object" && !Array.isArray(req.body.openingHours)) {
+      for (const [day, hours] of Object.entries(req.body.openingHours).slice(0, 7)) {
+        const key = clean(day, 20);
+        const value = clean(hours, 60);
+        if (key && value) openingHours[key] = value;
+      }
+    }
+    const serviceAreas = Array.isArray(req.body?.serviceAreas) ? req.body.serviceAreas.map(value => clean(value, 80)).filter(Boolean).slice(0, 20) : [];
+    const services = Array.isArray(req.body?.services) ? req.body.services.slice(0, 30).map(item => ({
+      name: clean(item?.name, 100),
+      description: clean(item?.description, 240),
+      price: clean(String(item?.price ?? ""), 32),
+      currency: ["NGN","USD"].includes(String(item?.currency || "").toUpperCase()) ? String(item.currency).toUpperCase() : "NGN"
+    })).filter(item => item.name) : [];
     if (businessName.length < 2) return res.status(400).json({ error: "business name is required" });
     if (!/^[a-z0-9_]{3,32}$/.test(businessUsername)) return res.status(400).json({ error: "business username must be 3-32 characters using letters, numbers, or underscore" });
     if (category.length < 2) return res.status(400).json({ error: "business category is required" });
     if (website && !/^https:\/\//i.test(website)) return res.status(400).json({ error: "website must use HTTPS" });
     try {
       const result = await pool.query(`
-        INSERT INTO business_profiles (owner_id,business_name,business_username,category,description,location,phone,website)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        INSERT INTO business_profiles (owner_id,business_name,business_username,category,description,location,phone,website,opening_hours,service_areas,services)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb)
         ON CONFLICT (owner_id) DO UPDATE SET
           business_name=EXCLUDED.business_name,
           business_username=EXCLUDED.business_username,
@@ -120,9 +181,12 @@ export function registerBusinessRoutes({ app, auth }) {
           location=EXCLUDED.location,
           phone=EXCLUDED.phone,
           website=EXCLUDED.website,
+          opening_hours=EXCLUDED.opening_hours,
+          service_areas=EXCLUDED.service_areas,
+          services=EXCLUDED.services,
           updated_at=NOW()
-        RETURNING id,business_name,business_username,category,description,location,phone,website,verified,active,created_at,updated_at`,
-        [req.user.sub,businessName,businessUsername,category,description,location,phone,website]);
+        RETURNING id,business_name,business_username,category,description,location,phone,website,opening_hours,service_areas,services,verified,active,created_at,updated_at`,
+        [req.user.sub,businessName,businessUsername,category,description,location,phone,website,JSON.stringify(openingHours),JSON.stringify(serviceAreas),JSON.stringify(services)]);
       return res.json({ profile: result.rows[0] });
     } catch (error) {
       if (error?.code === "23505") return res.status(409).json({ error: "business username is already in use" });
@@ -135,7 +199,7 @@ export function registerBusinessRoutes({ app, auth }) {
 
   app.get("/api/business/overview", auth, async (req, res) => {
     try {
-      const profile = (await pool.query("SELECT id,business_name,business_username,category,description,location,phone,website,verified,active FROM business_profiles WHERE owner_id=$1", [req.user.sub])).rows[0] || null;
+      const profile = (await pool.query("SELECT id,business_name,business_username,category,description,location,phone,website,opening_hours,service_areas,services,verified,active FROM business_profiles WHERE owner_id=$1", [req.user.sub])).rows[0] || null;
       const listings = (await pool.query("SELECT COUNT(*)::int AS count FROM marketplace_listings WHERE seller_id=$1 AND COALESCE(active,TRUE)=TRUE", [req.user.sub]).catch(() => ({ rows: [{ count: 0 }] }))).rows[0]?.count || 0;
       const campaigns = (await pool.query("SELECT COUNT(*)::int AS count, COALESCE(SUM(total_budget_kobo),0)::bigint AS budget_kobo, COALESCE(SUM(spent_kobo),0)::bigint AS spent_kobo FROM marketplace_ad_campaigns WHERE owner_id=$1", [req.user.sub]).catch(() => ({ rows: [{ count: 0, budget_kobo: 0, spent_kobo: 0 }] }))).rows[0] || { count: 0, budget_kobo: 0, spent_kobo: 0 };
       return res.json({ overview: { profile, activeListings: Number(listings), campaigns: Number(campaigns.count || 0), budgetKobo: Number(campaigns.budget_kobo || 0), spentKobo: Number(campaigns.spent_kobo || 0) } });
