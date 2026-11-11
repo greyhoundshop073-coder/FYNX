@@ -18,6 +18,7 @@ checks = [
     ("directory only displays verified status supplied by backend", 'item.optBoolean("verified")' in directory),
     ("Business Account remains the source for saved business identity", 'FynxBusinessClient.load(context)' in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBusinessAccount.kt").read_text()),
     ("emulator certification opens and screenshots the real Local Businesses directory", "marketplace-local-businesses" in runtime and "authenticated-marketplace-local-businesses.png" in runtime and "Search businesses, services or names" in runtime and "Area, city or neighbourhood" in runtime),
+    ("emulator certification reveals the horizontal Marketplace shortcut without guessed coordinates", "def swipe_horizontal_scroll_container(" in runtime and "marketplace-local-businesses-rail-" in runtime and "marketplace-local-businesses-return-rail-" in runtime),
     ("emulator certification returns from Local Businesses to Marketplace", "Local Businesses Back did not return to Marketplace" in runtime and "marketplace-local-businesses-return.xml" in runtime),
     ("this PR is explicitly included in full emulator runtime certification", "github.event.pull_request.head.ref == 'feat/local-business-discovery-20261111'" in workflow and "Run Android instrumentation tests and capture the real FYNX UI" in workflow),
 ]
