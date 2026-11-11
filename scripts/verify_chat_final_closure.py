@@ -7,7 +7,7 @@ required = {
     "private conversation": APP / "ConversationPanel.kt",
     "group conversation": APP / "FynxGroupsPanel.kt",
     "chat settings": APP / "FynxChatSettingsPanel.kt",
-    "group settings": APP / "FynxGroupsPanel.kt",
+    "group settings": APP / "FynxGroupSettingsPanel.kt",
     "chat wallpaper": APP / "FynxChatWallpaper.kt",
     "chat models": APP / "ChatModels.kt",
     "chat store": APP / "FynxChatStore.kt",
