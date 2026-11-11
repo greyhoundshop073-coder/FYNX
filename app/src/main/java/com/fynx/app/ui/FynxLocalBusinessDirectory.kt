@@ -70,7 +70,7 @@ data class FynxBusinessDirectoryItem(
 
 object FynxBusinessDirectoryClient {
     suspend fun details(context: Context, username: String): Result<JSONObject> =
-        FynxBackendClient.get(context, "/api/business/${Uri.encode(username.removePrefix("@"))}")
+        FynxBackendClient.get(context, "/api/business/public/${Uri.encode(username.removePrefix("@"))}")
             .mapCatching { JSONObject(it) }
 
     suspend fun search(
