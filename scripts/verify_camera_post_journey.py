@@ -89,7 +89,9 @@ checks = [
      "camera-music-open" in runtime
      and "camera-music-select" in runtime
      and "camera-music-remove" in runtime
-     and "No FYNX music is published yet" in runtime),
+     and "No official tracks have been published yet." in runtime
+     and 'find_control(music_state, ["Sign in to FYNX to browse published music"])' in runtime
+     and 'find_control(music_state, ["Use"], exact_only=True)' in runtime),
     ("Post caption helper chips are exercised against the actual caption value",
      "camera-post-hashtag-chip" in runtime
      and "camera-post-mention-chip" in runtime
