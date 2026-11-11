@@ -54,15 +54,15 @@ export function registerBusinessRoutes({ app, auth }) {
     if (query) {
       params.push(`%${query}%`);
       const index = params.length;
-      where.push(`(business_name ILIKE ${index} OR business_username ILIKE ${index} OR category ILIKE ${index} OR description ILIKE ${index})`);
+      where.push(`(business_name ILIKE $${index} OR business_username ILIKE $${index} OR category ILIKE $${index} OR description ILIKE $${index})`);
     }
     if (category) {
       params.push(`%${category}%`);
-      where.push(`category ILIKE ${params.length}`);
+      where.push(`category ILIKE $${params.length}`);
     }
     if (location) {
       params.push(`%${location}%`);
-      where.push(`location ILIKE ${params.length}`);
+      where.push(`location ILIKE $${params.length}`);
     }
     params.push(limit + 1);
     const limitIndex = params.length;
@@ -74,7 +74,7 @@ export function registerBusinessRoutes({ app, auth }) {
            FROM business_profiles
           WHERE ${where.join(" AND ")}
           ORDER BY verified DESC,updated_at DESC,id DESC
-          LIMIT ${limitIndex} OFFSET ${offsetIndex}`,
+          LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
         params
       );
       const hasMore = result.rows.length > limit;
